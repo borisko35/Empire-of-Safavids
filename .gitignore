@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.js.map
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Docker
+.docker/
+
+# Unreal Engine
+UnrealEngine/
+*.uasset
+*.umap
+Saved/
+Intermediate/
+DerivedDataCache/
+
+# Инструментарий (не часть игры)
+legacy/tools/
+*.exe
+
+# Исходники миграций уже в database/, скомпилированное не коммитим

@@ -1,0 +1,16 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "roots": ["<rootDir>/src/tests"],
+  "testMatch": ["**/*.test.ts"],
+  "moduleNameMapper": {
+    "^@shared/(.*)$": "<rootDir>/../shared/$1"
+  },
+  "collectCoverageFrom": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/index/index.ts",
+    "!src/database/migrate.ts"
+  ],
+  "coverageReporters": ["json", "lcov", "text", "text-summary", "cobertura"]
+}

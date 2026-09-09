@@ -1,0 +1,145 @@
+// ============================================================
+// Система кармы и PvP — Empire of Safavids
+// ============================================================
+
+import { DatabaseService } from '../services/DatabaseService';
+import { RedisService } from '../services/RedisService';
+import { logger } from '../utils/logger';
+
+export type PvPZoneType = 'safe' | 'contested' | 'pvp' | 'siege';
+
+export interface KarmaEvent {
+  type: 'pk_kill'        // Убийство мирного игрока
+       | 'pk_kill_red'   // Убийство красного игрока
+       | 'pvp_kill'      // Победа в честном PvP
+       | 'bounty_kill'   // Убийство игрока с наградой
+       | 'npc_kill'      // Убийство NPC-стражника
+       | 'quest_good'    // Выполнение доброго квеста
+       | 'quest_evil';   // Выполнение злого квеста
+  delta: number;
+}
+
+const KARMA_EVENTS: Record<KarmaEvent['type'], number> = {
+  pk_kill:    -300,
+  pk_kill_red: +100,
+  pvp_kill:   +10,
+  bounty_kill: +50,
+  npc_kill:   -50,
+  quest_good: +100,
+  quest_evil: -150,
+};
+
+export type KarmaStatus = 'saint' | 'good' | 'neutral' | 'chaotic' | 'red' | 'outlaw';
+
+export function getKarmaStatus(karma: number): KarmaStatus {
+  if (karma >= 5000)  return 'saint';
+  if (karma >= 1000)  return 'good';
+  if (karma >= -500)  return 'neutral';
+  if (karma >= -2000) return 'chaotic';
+  if (karma >= -5000) return 'red';
+  return 'outlaw';
+}
+
+export const KARMA_PENALTIES: Record<KarmaStatus, {
+  nameRu: string;
+  canBeAttacked: boolean;
+  dropChanceOnDeath: number; // 0–1
+  npcHostile: boolean;
+  guardAttack: boolean;
+  auctionBan: boolean;
+}> = {
+  saint:   { nameRu: 'Святой',    canBeAttacked: false, dropChanceOnDeath: 0,    npcHostile: false, guardAttack: false, auctionBan: false },
+  good:    { nameRu: 'Добрый',    canBeAttacked: false, dropChanceOnDeath: 0,    npcHostile: false, guardAttack: false, auctionBan: false },
+  neutral: { nameRu: 'Нейтральный', canBeAttacked: false, dropChanceOnDeath: 0,    npcHostile: false, guardAttack: false, auctionBan: false },
+  chaotic: { nameRu: 'Хаотичный', canBeAttacked: true,  dropChanceOnDeath: 0.1,  npcHostile: false, guardAttack: false, auctionBan: false },
+  red:     { nameRu: 'Красный',    canBeAttacked: true,  dropChanceOnDeath: 0.3,  npcHostile: true,  guardAttack: true,  auctionBan: false },
+  outlaw:  { nameRu: 'Изгой',     canBeAttacked: true,  dropChanceOnDeath: 0.5,  npcHostile: true,  guardAttack: true,  auctionBan: true  },
+};
+
+export const PVP_ZONES: Record<string, { type: PvPZoneType; nameRu: string; karmaOnKill: boolean }> = {
+  tabriz:       { type: 'safe',      nameRu: 'Тебриз',          karmaOnKill: true  },
+  isfahan:      { type: 'safe',      nameRu: 'Исфахан',         karmaOnKill: true  },
+  shiraz:       { type: 'safe',      nameRu: 'Шираз',           karmaOnKill: true  },
+  caucasus:     { type: 'contested', nameRu: 'Кавказ',          karmaOnKill: false },
+  mesopotamia:  { type: 'pvp',       nameRu: 'Месопотамия',    karmaOnKill: false },
+  khorasan:     { type: 'pvp',       nameRu: 'Хорасан',         karmaOnKill: false },
+  persian_gulf: { type: 'pvp',       nameRu: 'Персидский залив', karmaOnKill: false },
+};
+
+export class KarmaSystem {
+  private db  = DatabaseService.getInstance();
+  private redis = RedisService.getInstance();
+
+  async applyKarmaEvent(
+    characterId: string,
+    eventType: KarmaEvent['type'],
+    region: string
+  ): Promise<{ newKarma: number; newStatus: KarmaStatus; statusChanged: boolean }> {
+    const zone = PVP_ZONES[region];
+    let delta = KARMA_EVENTS[eventType];
+
+    // В PvP-зонах карма не снимается за убийство
+    if (zone && !zone.karmaOnKill && eventType === 'pk_kill') delta = 0;
+
+    const row = await this.db.queryOne<{ karma: number }>(
+      'SELECT karma FROM characters WHERE id = $1', [characterId]
+    );
+    const oldKarma  = row?.karma ?? 0;
+    const newKarma  = Math.max(-10000, Math.min(10000, oldKarma + delta));
+    const oldStatus = getKarmaStatus(oldKarma);
+    const newStatus = getKarmaStatus(newKarma);
+
+    await this.db.query(
+      'UPDATE characters SET karma = $1, updated_at = NOW() WHERE id = $2',
+      [newKarma, characterId]
+    );
+
+    if (newStatus !== oldStatus) {
+      logger.info(`Karma status: ${characterId} ${oldStatus} → ${newStatus} (${newKarma})`);
+      await this.redis.publish('player:karma_changed', { characterId, oldStatus, newStatus, newKarma });
+    }
+
+    return { newKarma, newStatus, statusChanged: newStatus !== oldStatus };
+  }
+
+  /** Постепенное восстановление кармы (вызывать периодически) */
+  async decayKarma(characterId: string): Promise<void> {
+    const row = await this.db.queryOne<{ karma: number }>(
+      'SELECT karma FROM characters WHERE id = $1', [characterId]
+    );
+    if (!row) return;
+    const karma = row.karma;
+    if (karma >= 0) return; // Положительная карма не восстанавливается авто
+    const decay = Math.min(50, Math.abs(karma) * 0.01); // 1% в час
+    await this.db.query(
+      'UPDATE characters SET karma = LEAST(0, karma + $1) WHERE id = $2',
+      [Math.ceil(decay), characterId]
+    );
+  }
+
+  /** Награда за убийство игрока с наградой */
+  async getBounty(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ bounty: number }>(
+      'SELECT COALESCE(SUM(amount), 0) as bounty FROM bounties WHERE target_id = $1 AND is_active = TRUE',
+      [characterId]
+    );
+    return row?.bounty ?? 0;
+  }
+
+  async placeBounty(placerId: string, targetId: string, amount: number): Promise<void> {
+    if (amount < 100) throw new Error('Minimum bounty is 100 gold');
+    await this.db.transaction(async (client) => {
+      await client.query(
+        'UPDATE characters SET gold = gold - $1 WHERE id = $2 AND gold >= $1',
+        [amount, placerId]
+      );
+      await client.query(
+        `INSERT INTO bounties (id, placer_id, target_id, amount, is_active, created_at)
+         VALUES (gen_random_uuid(), $1, $2, $3, TRUE, NOW())`,
+        [placerId, targetId, amount]
+      );
+    });
+    await this.redis.publish('player:bounty_placed', { targetId, amount, placerId });
+    logger.info(`Bounty placed: ${amount}g on ${targetId} by ${placerId}`);
+  }
+}

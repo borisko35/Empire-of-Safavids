@@ -1,0 +1,65 @@
+# 🏰 Empire of Safavids — Action MMORPG
+
+Историческая Action MMORPG, вдохновлённая эпохой Сефевидской империи (1501–1736).
+Игра сочетает реальную историю с механиками современных MMORPG: Black Desert Online, Lost Ark, Throne and Liberty.
+
+## 🎮 Ключевые особенности
+
+- **Открытый мир** — Персия, Кавказ, Месопотамия, Анатолия
+- **Динамичная боевая система** — комбо-атаки, уклонения, навыки классов
+- **Классы персонажей** — Гвардеец Кызылбаш, Суфийский мистик, Персидский лучник, Базарный торговец, Придворный дипломат
+- **Гильдии и кланы** — осады крепостей, территориальные войны
+- **Экономика** — торговля шёлком, коврами, специями по Великому шёлковому пути
+- **PvP/PvE** — битвы с Османской и Могольской империями
+- **Крафтинг** — персидское оружие, доспехи, артефакты
+
+## 🛠️ Технологический стек
+
+| Компонент | Технология |
+|-----------|------------|
+| Backend | Node.js + TypeScript |
+| Database | PostgreSQL + Redis |
+| Networking | WebSocket (Socket.IO) |
+| Auth | JWT + OAuth2 |
+| DevOps | Docker + GitLab CI |
+| Клиент | TypeScript (в разработке) |
+
+## 📁 Структура проекта
+
+```
+empire-of-sefevids/
+├── client/          # Клиент (TypeScript: системы активов)
+├── server/          # Game Server (Node.js + TS). Конфиги в server/
+├── shared/          # Общие типы и константы (server + client)
+├── database/        # SQL-миграции (применяются: npm run migrate)
+├── docs/            # Документация
+├── tools/           # Вспомогательные инструменты (monitoring)
+└── legacy/          # Архив: прототип на BYOND, конфиги автоматизации
+```
+
+## 🚀 Быстрый старт
+
+```bash
+# Клонировать репозиторий
+git clone https://gitlab.com/sigma-arena-games-group/empire-of-sefevids.git
+cd empire-of-sefevids
+
+# Поднять PostgreSQL + Redis (+ pgAdmin: docker-compose --profile dev up -d)
+docker-compose up -d
+
+# Запустить миграции и сервер
+cd server
+npm install
+cp .env.example .env          # затем при необходимости поправьте .env
+npm run migrate
+npm run dev
+
+# Тесты
+npm test
+```
+
+Проверить работоспособность: `curl http://localhost:3000/health`
+
+## 📜 Лицензия
+
+Проприетарная лицензия © 2024 Sigma Arena Games Group
