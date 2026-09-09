@@ -1,9 +1,10 @@
+// .env должен загрузиться ДО импортов сервисов: они создают пул БД на этапе импорта
+import 'dotenv/config';
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import { logger } from '../utils/logger';
 import { authRouter } from '../routes/auth';
 import { characterRouter } from '../routes/character';
@@ -14,8 +15,6 @@ import { DatabaseService } from '../services/DatabaseService';
 import { RedisService } from '../services/RedisService';
 import { GameLoop } from '../systems/GameLoop';
 import { GAME_VERSION } from '../../../shared/constants';
-
-dotenv.config();
 
 const PORT = process.env.PORT || 3000;
 const app = express();

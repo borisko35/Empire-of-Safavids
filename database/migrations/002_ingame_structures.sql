@@ -129,4 +129,5 @@ CREATE TABLE mailbox (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_mailbox_recipient ON mailbox(recipient_id) WHERE expires_at > NOW();
+-- NOW() volatile — нельзя в предикате частичного индекса
+CREATE INDEX idx_mailbox_recipient ON mailbox(recipient_id);

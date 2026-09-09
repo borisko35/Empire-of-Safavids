@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg';
+import '../utils/pgTypes'; // BIGINT -> number (side effect)
 import { logger } from '../utils/logger';
 
 export class DatabaseService {

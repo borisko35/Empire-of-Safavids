@@ -138,7 +138,7 @@ CREATE INDEX idx_auction_expires ON auction_listings(expires_at) WHERE sold_at I
 -- Боевые логи (для аналитики)
 -- ============================================================
 CREATE TABLE combat_logs (
-  id           BIGSERIAL PRIMARY KEY,
+  id           BIGSERIAL,
   attacker_id  UUID NOT NULL,
   target_id    UUID NOT NULL,
   skill_id     VARCHAR(50),
@@ -146,9 +146,14 @@ CREATE TABLE combat_logs (
   is_critical  BOOLEAN NOT NULL DEFAULT FALSE,
   is_pvp       BOOLEAN NOT NULL DEFAULT FALSE,
   region       VARCHAR(30) NOT NULL,
-  logged_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  logged_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- В партиционированной таблице PK обязан включать ключ партиционирования
+  PRIMARY KEY (id, logged_at)
 ) PARTITION BY RANGE (logged_at);
 
 -- Партиция на текущий месяц
 CREATE TABLE combat_logs_2024_01 PARTITION OF combat_logs
   FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+-- Catch-all: логи вне диапазона явных партиций (иначе вставка упадёт)
+CREATE TABLE combat_logs_default PARTITION OF combat_logs DEFAULT;

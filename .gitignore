@@ -47,3 +47,6 @@ legacy/tools/
 *.exe
 
 # Исходники миграций уже в database/, скомпилированное не коммитим
+
+# Портативный PostgreSQL (server/.pg)
+server/.pg/

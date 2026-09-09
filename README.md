@@ -60,6 +60,21 @@ npm test
 
 Проверить работоспособность: `curl http://localhost:3000/health`
 
+### Локальный запуск без Docker (Windows)
+
+Если Docker не установлен, в репозитории есть портативный PostgreSQL 16
+(`server/.pg`, в git не входит). Нужен только Node.js:
+
+```cmd
+dev-db-start.cmd    :: первый запуск инициализирует кластер и создаёт БД
+cd server && npm run migrate && npm run dev
+```
+
+Остановить БД: `dev-db-stop.cmd`. Redis нужен запущенный на `:6379`
+(любой локальный Redis/Memurai). Если у вас установлен «полноценный»
+PostgreSQL — пропишите свои DB_USER/DB_PASSWORD в `server/.env`
+и используйте его вместо портативного.
+
 ## 📜 Лицензия
 
 Проприетарная лицензия © 2024 Sigma Arena Games Group
