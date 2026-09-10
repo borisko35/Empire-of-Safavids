@@ -53,3 +53,9 @@ server/.pg/
 
 # Сборка клиента (vite)
 client/web/game/
+
+# Личные файлы сайта EOSOnline (не часть репозитория)
+site/install/app.js
+site/install/index.html
+site/install/log.html
+site/install/styles.css

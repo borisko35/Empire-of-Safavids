@@ -29,7 +29,7 @@ const repoRoot = [path.resolve(process.cwd(), '..'), process.cwd()].find((dir) =
 );
 const WEB_DIR = path.resolve(repoRoot ?? process.cwd(), 'client', 'web');
 const LOCALES_DIR = path.resolve(repoRoot ?? process.cwd(), 'shared', 'locales');
-const INSTALLER_FILE = path.resolve(repoRoot ?? process.cwd(), 'install', 'install-game.cmd');
+const INSTALLER_FILE = path.resolve(repoRoot ?? process.cwd(), 'site', 'install', 'install-game.cmd');
 
 // Socket.IO для real-time игровой логики
 const io = new SocketIOServer(httpServer, {

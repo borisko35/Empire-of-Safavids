@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const installDir = path.join(root, 'install');
+const installDir = path.join(root, 'site', 'install');
 
 const PAYLOAD_FILES = [
   'game.ico',
