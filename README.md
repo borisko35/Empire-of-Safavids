@@ -22,18 +22,38 @@
 | Networking | WebSocket (Socket.IO) |
 | Auth | JWT + OAuth2 |
 | DevOps | Docker + GitLab CI |
-| Клиент | TypeScript (в разработке) |
+| Клиент | TypeScript + Vite + Canvas (пиксель-арт) |
+
+### Игровой клиент
+
+Клиент собирается Vite (`client/package.json`). В разработке:
+
+```bash
+cd client
+npm install
+npm run dev      # http://localhost:8080 (API/сокеты проксируются на :3000)
+```
+
+Прод-сборка кладётся в `client/web/game` и раздаётся сервером:
+
+```bash
+npm run build    # → http://localhost:3000/game/ (кнопка «Играть» на лендинге)
+```
+
+Спрайты генерируются процедурно: `node tools/generate-sprites.js`
+(тайлы, 5 классов, монстры — из `server/src/data/monsters.ts`).
 
 ## 📁 Структура проекта
 
 ```
 empire-of-sefevids/
-├── client/          # Клиент (TypeScript: системы активов)
+├── client/          # Клиент: src/ (TS: ассеты, иконки) + web/ (лендинг)
 ├── server/          # Game Server (Node.js + TS). Конфиги в server/
-├── shared/          # Общие типы и константы (server + client)
+├── shared/          # Общие типы, константы и локали ru/en/az
+├── install/         # Установщик игры: иконка, ярлыки, лаунчер, деинсталлятор
 ├── database/        # SQL-миграции (применяются: npm run migrate)
 ├── docs/            # Документация
-├── tools/           # Вспомогательные инструменты (monitoring)
+├── tools/           # Генераторы иконок/фона, сборщик установщика, monitoring
 └── legacy/          # Архив: прототип на BYOND, конфиги автоматизации
 ```
 
@@ -59,6 +79,30 @@ npm test
 ```
 
 Проверить работоспособность: `curl http://localhost:3000/health`
+
+Затем откройте веб-страницу игры: **http://localhost:3000** — лендинг с
+историей Сефевидской империи (1501–1736), классами, переключателем
+языков (ru/en/az) и кнопкой скачивания установщика.
+
+### Установка игры на компьютер (Windows)
+
+Сервер раздаёт самораспаковочный установщик:
+`http://localhost:3000/download/installer` (или кнопка «Скачать для
+Windows» на странице). Установщик:
+
+- копирует лаунчер и иконку империи в `%LOCALAPPDATA%\EmpireOfSafavids`;
+- создаёт ярлыки на рабочем столе и в меню «Пуск» (система ярлыков —
+  `install/shortcuts.ps1`);
+- регистрирует игру в «Установка и удаление программ»;
+- лаунчер сам поднимает БД и сервер (если установщик запускался из
+  репозитория) и открывает игру в браузере.
+
+Пересборка установщика после правки `install/`:
+`node tools/build-installer.js`.
+
+Генераторы графических активов (без зависимостей):
+`node tools/generate-icon.js` (favicon/game.ico) и
+`node tools/generate-background.js` (фон-пейзаж Исфахана).
 
 ### Локальный запуск без Docker (Windows)
 

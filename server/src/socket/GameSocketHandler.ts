@@ -18,6 +18,8 @@ interface AuthenticatedSocket extends Socket {
 
 type ChatChannel = 'world' | 'region' | 'guild' | 'party';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class GameSocketHandler {
   private io: SocketIOServer;
   private redis = RedisService.getInstance();
@@ -164,6 +166,22 @@ export class GameSocketHandler {
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
 
+      // Снапшот активных монстров региона (заспавненных до входа игрока)
+      const ai = GameLoop.getInstance().getSpawnSystem().getAI();
+      for (const ctx of ai.getAllInstances()) {
+        if (ctx.definition.region === character.region && ctx.state !== 'dead') {
+          socket.emit(SERVER_EVENTS.MONSTER_SPAWNED, {
+            instanceId: ctx.instanceId,
+            monsterId: ctx.definition.id,
+            nameRu: ctx.definition.nameRu,
+            position: ctx.position,
+            hp: ctx.currentHp,
+            maxHp: ctx.maxHp,
+            type: ctx.definition.type,
+          });
+        }
+      }
+
       // Уведомить других игроков в регионе
       socket.to(`region:${character.region}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
         characterId: character.id,
@@ -263,11 +281,13 @@ export class GameSocketHandler {
         }
       }
 
-      // Цель — игрок?
-      const target = await this.characterService.getCharacterById(action.targetId);
-      if (target) {
-        await this.combatPlayerVsPlayer(socket, attacker, target, action);
-        return;
+      // Цель — игрок? (id монстров не UUID — сразу ищем ИИ-контекст)
+      if (UUID_RE.test(action.targetId)) {
+        const target = await this.characterService.getCharacterById(action.targetId);
+        if (target) {
+          await this.combatPlayerVsPlayer(socket, attacker, target, action);
+          return;
+        }
       }
 
       // Цель — монстр?
@@ -471,7 +491,7 @@ export class GameSocketHandler {
   ): void {
     if (!socket.characterId || !socket.region) return;
 
-    const sanitized = data.message.slice(CHAT_LIMITS.MAX_MESSAGE_LENGTH).trim();
+    const sanitized = data.message.slice(0, CHAT_LIMITS.MAX_MESSAGE_LENGTH).trim();
     if (!sanitized) return;
 
     const payload = {

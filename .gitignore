@@ -50,3 +50,6 @@ legacy/tools/
 
 # Портативный PostgreSQL (server/.pg)
 server/.pg/
+
+# Сборка клиента (vite)
+client/web/game/

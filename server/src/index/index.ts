@@ -1,5 +1,7 @@
 // .env должен загрузиться ДО импортов сервисов: они создают пул БД на этапе импорта
 import 'dotenv/config';
+import path from 'path';
+import fs from 'fs';
 import express from 'express';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -20,6 +22,15 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 const httpServer = createServer(app);
 
+// Корень репозитория: npm-скрипты выполняются из server/, но путь
+// проверяем, чтобы запуск из другого каталога не сломал статику
+const repoRoot = [path.resolve(process.cwd(), '..'), process.cwd()].find((dir) =>
+  fs.existsSync(path.join(dir, 'client', 'web', 'index.html')),
+);
+const WEB_DIR = path.resolve(repoRoot ?? process.cwd(), 'client', 'web');
+const LOCALES_DIR = path.resolve(repoRoot ?? process.cwd(), 'shared', 'locales');
+const INSTALLER_FILE = path.resolve(repoRoot ?? process.cwd(), 'install', 'install-game.cmd');
+
 // Socket.IO для real-time игровой логики
 const io = new SocketIOServer(httpServer, {
   cors: {
@@ -30,8 +41,10 @@ const io = new SocketIOServer(httpServer, {
   pingInterval: 25000,
 });
 
-// Middleware
-app.use(helmet());
+// Middleware. CSP helmet по умолчанию включает upgrade-insecure-requests,
+// который ломает подгрузку ресурсов страницы по http://localhost — отключаем
+// только его, остальные защиты helmet остаются
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN }));
 app.use(express.json({ limit: '10mb' }));
 
@@ -40,6 +53,17 @@ app.use('/api/auth', authRouter);
 app.use('/api/characters', characterRouter);
 app.use('/api/world', worldRouter);
 app.use('/api/game', gameRouter);
+
+// Веб-страница игры (лендинг с историей Сефевидов и загрузкой)
+app.use(express.static(WEB_DIR));
+app.use('/locales', express.static(LOCALES_DIR));
+
+// Файл загрузки и установки игры на компьютер
+app.get('/download/installer', (_req, res) => {
+  res.download(INSTALLER_FILE, 'EmpireOfSafavids-Setup.cmd', (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: 'installer not found' });
+  });
+});
 
 // Health check
 app.get('/health', (_req, res) => {
