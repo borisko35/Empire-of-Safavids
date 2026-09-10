@@ -7,9 +7,9 @@ import { socket } from './net';
 import { api } from './api';
 import { t } from './i18n';
 import { Character, session, Vec3 } from './state';
-import { World, MonsterEntity, PlayerEntity } from './entities';
-import { Renderer } from './renderer';
-import { loadSprites } from './sprites';
+import { World, PlayerEntity } from './entities';
+import { World3D } from './game3d/world3d';
+import { audio } from './audio';
 import {
   chatMessage, chatVisible, closeChat, hideTarget, loadQuests, loadRegions,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
@@ -20,20 +20,15 @@ import { icon, type IconName } from '../ui/icons';
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const MOVE_SEND_MS = 100;   // частота пакетов движения (лимит анти-чита 30/сек)
-const WALK_SPEED = 6;       // юнитов/сек (лимит сервера 12*1.3)
 
-let renderer: Renderer | null = null;
+let world3d: World3D | null = null;
 let world: World | null = null;
 let me: PlayerEntity | null = null;
 let raf = 0;
 let lastFrame = 0;
 let lastMoveSent = 0;
-let moveDir: Vec3 = { x: 0, y: 0, z: 0 };
-let facing: 'left' | 'right' = 'right';
 let night = 0;
 let deathTimer: ReturnType<typeof setTimeout> | null = null;
-
-const keys = new Set<string>();
 
 // ── Вход в мир ───────────────────────────────────────────────
 
@@ -54,9 +49,13 @@ export async function enterWorld(character: Character): Promise<void> {
   void loadRegions();
   void loadQuests();
 
-  await loadSprites();
   world = new World();
-  renderer = new Renderer(document.getElementById('game-canvas') as HTMLCanvasElement, world);
+  world3d = new World3D();
+  world3d.init(document.getElementById('game3d-root') as HTMLElement, {
+    onAttack: () => basicAttack(),
+    onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
+    onTargetCleared: () => hideTarget(),
+  });
 
   me = {
     id: character.id,
@@ -70,12 +69,16 @@ export async function enterWorld(character: Character): Promise<void> {
     isSelf: true,
   };
   world.players.set(me.id, me);
-  renderer.follow(me.pos.x, me.pos.z);
+  world3d.attach(world, me);
+  audio.ensure();
 
   // Отладочный хук для e2e-проверок (не влияет на игру)
   (window as unknown as { __eos: unknown }).__eos = {
     get monsters() { return [...(world?.monsters.values() ?? [])].map((m) => ({ id: m.instanceId, name: m.nameRu, x: Math.round(m.pos.x), z: Math.round(m.pos.z), hp: m.hp })); },
     get me() { return me ? { x: Math.round(me.pos.x), z: Math.round(me.pos.z) } : null; },
+    get cam() { return world3d?.getCameraPose() ?? null; },
+    setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
+    attack(): void { world3d?.attackFromCamera(); },
   };
 
   wireSocket();
@@ -97,8 +100,9 @@ export function leaveWorld(): void {
   cancelAnimationFrame(raf);
   socket.disconnect();
   if (deathTimer) clearTimeout(deathTimer);
-  keys.clear();
-  world = null; me = null; renderer = null;
+  world3d?.dispose();
+  world3d = null;
+  world = null; me = null;
 }
 
 // ── Экраны ───────────────────────────────────────────────────
@@ -195,12 +199,14 @@ function wireSocket(): void {
     m.deadAt = performance.now();
     w.addFloater(m.pos.x, m.pos.z - 1.2, '☠', '#F4D26C');
     setTimeout(() => world?.monsters.delete(instanceId), 950);
+    audio.kill();
     if (killerId === me?.id) {
       session.kills[m.monsterId] = (session.kills[m.monsterId] ?? 0) + 1;
       session.experience += expReward;
       w.addFloater(m.pos.x, m.pos.z - 0.8, `+${expReward} ${t('world.exp')}`, '#F4D26C');
       if (leveledUp && newLevel) {
         session.level = newLevel;
+        audio.levelUp();
         toast(`${t('world.levelup')} ${newLevel}!`, 'success');
         void loadRegions();
         void loadQuests();
@@ -269,6 +275,7 @@ function wireSocket(): void {
   // ── Смерть и возрождение ──
   socket.on('player:died', () => {
     document.getElementById('overlay-death')?.classList.remove('hidden');
+    audio.playerDeath();
     if (me) world?.addFloater(me.pos.x, me.pos.z - 1, t('world.died'), '#ff8d7e');
   });
 
@@ -280,7 +287,6 @@ function wireSocket(): void {
       me.pos = { ...position };
       me.target = { ...position };
     }
-    renderer?.follow(position.x, position.z);
     toast(t('world.respawned'), 'success');
     refreshBars();
   });
@@ -338,49 +344,19 @@ function showLostScreen(reason: string): void {
 // ── Ввод ─────────────────────────────────────────────────────
 
 function wireInput(): void {
-  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
-
   window.onkeydown = (e) => {
     if (chatVisible()) return;
-    keys.add(e.code);
     if (e.code === 'Enter') {
       e.preventDefault();
+      // Чат требует курсора: выходим из pointer lock, если захвачен 3D-движком
+      if (document.pointerLockElement) document.exitPointerLock();
       openChat();
     } else if (e.code === 'Escape') {
       document.getElementById('overlay-menu')?.classList.toggle('hidden');
-    } else if (e.code === 'Space') {
-      e.preventDefault();
-      basicAttack();
     } else if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
       const skill = session.skills[idx];
       if (skill) useSkill(skill.id);
-    }
-  };
-
-  window.onkeyup = (e) => keys.delete(e.code);
-
-  // Потеря фокуса — отпускаем все клавиши, иначе персонаж уходит в закат
-  window.addEventListener('blur', () => keys.clear());
-
-  canvas.onmousedown = (e) => {
-    if (!renderer || !world) return;
-    const worldPt = renderer.screenToWorld(e.clientX, e.clientY);
-    // Ближайший монстр к точке клика (радиус по размеру спрайта)
-    let best: MonsterEntity | null = null;
-    let bestDist = 2.6;
-    for (const m of world.monsters.values()) {
-      if (m.deadAt) continue;
-      const d = Math.hypot(m.pos.x - worldPt.x, m.pos.z - worldPt.y);
-      if (d < bestDist) { best = m; bestDist = d; }
-    }
-    if (best) {
-      world.targetId = best.instanceId;
-      showTarget(best.nameRu, best.hp, best.maxHp);
-      chatMessage(null, `${t('world.attack_hint')} → ${best.nameRu}`, true);
-    } else {
-      world.targetId = null;
-      hideTarget();
     }
   };
 
@@ -435,7 +411,7 @@ function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
     skillId,
     targetId: world.targetId,
     position: me.pos,
-    direction: { x: facing === 'left' ? -1 : 1, y: 0, z: 0 },
+    direction: world3d?.moveDir ?? { x: 0, y: 0, z: 1 },
     timestamp: Date.now(),
   });
 }
@@ -468,31 +444,19 @@ function loop(now: number): void {
 
   if (!world || !me) return;
 
-  // Движение (WASD/стрелки)
-  let dx = 0, dz = 0;
-  if (keys.has('KeyW') || keys.has('ArrowUp')) dz -= 1;
-  if (keys.has('KeyS') || keys.has('ArrowDown')) dz += 1;
-  if (keys.has('KeyA') || keys.has('ArrowLeft')) dx -= 1;
-  if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
-  const len = Math.hypot(dx, dz);
-  if (len > 0) {
-    dx /= len; dz /= len;
-    moveDir = { x: dx, y: 0, z: dz };
-    me.pos.x += dx * WALK_SPEED * dt;
-    me.pos.z += dz * WALK_SPEED * dt;
-    me.moving = true;
-    if (dx !== 0) facing = dx < 0 ? 'left' : 'right';
-    me.flipped = facing === 'left';
+  // Сетевые сущности: интерполяция чужих игроков/монстров, чистка FX
+  world.update(dt);
 
-    if (now - lastMoveSent > MOVE_SEND_MS) {
-      lastMoveSent = now;
-      socket.emit('player:move', {
-        position: { ...me.pos },
-        direction: moveDir,
-      });
-    }
-  } else {
-    me.moving = false;
+  // 3D-движок: управление мной, физика, риги, камера, рендер
+  world3d?.update(dt, now, night);
+
+  // Пакеты движения — по факту позиции, которую задал 3D-движок
+  if (me.moving && now - lastMoveSent > MOVE_SEND_MS) {
+    lastMoveSent = now;
+    socket.emit('player:move', {
+      position: { ...me.pos },
+      direction: world3d?.moveDir ?? { x: 0, y: 0, z: 1 },
+    });
   }
 
   // Ресурсы: медленная регенерация (косметика, сервер перепроверит)
@@ -500,8 +464,5 @@ function loop(now: number): void {
   session.stamina = Math.min(session.maxStamina, session.stamina + session.maxStamina * 0.035 * dt);
   if (Math.random() < dt * 0.5) refreshBars();
 
-  world.update(dt);
-  renderer!.follow(me.pos.x, me.pos.z);
-  renderer!.draw(now, me, night);
   tickCooldowns();
 }

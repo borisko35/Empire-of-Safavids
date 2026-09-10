@@ -18,6 +18,7 @@ const MAT = {
   gold: mat(0xc9a84c, 0.35, 0.75),
   leather: mat(0x6e563a),
   leatherDark: mat(0x4c3a22),
+  wood: mat(0x8a6a42),
   hair: mat(0x2c201a),
   eye: new THREE.MeshBasicMaterial({ color: 0x1a1410 }),
 };

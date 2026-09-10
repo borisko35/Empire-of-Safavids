@@ -7,12 +7,13 @@
 // эффекты и плавающий урон. Сетевые данные читает из entities.World.
 
 import * as THREE from 'three';
-import { World, MonsterEntity, PlayerEntity, tileHash } from '../entities';
+import { World, PlayerEntity, tileHash } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
-  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CITY, CAMP,
+  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CAMP,
 } from './terrain';
 import { audio } from '../audio';
+import { chatVisible } from '../hud';
 
 export interface World3DCallbacks {
   onAttack: () => void;
@@ -65,16 +66,18 @@ export class World3D {
 
   // Служебное
   private raycaster = new THREE.Raycaster();
-  private clock = new THREE.Clock();
   private raf = 0;
   private lastFx = { floater: 0, effect: 0 };
   private targetRing!: THREE.Mesh;
   private targetRingTarget: string | null = null;
-  private night = 0;
+  private wasNight = false;
+  private lastDir: { x: number; y: number; z: number } = { x: 0, y: 0, z: 1 };
   private callbacks: World3DCallbacks | null = null;
-  private disposables: { dispose: () => void }[] = [];
 
   get isLocked() { return this.locked; }
+
+  /** Последнее направление движения в мировых координатах (для пакетов player:move) */
+  get moveDir() { return this.lastDir; }
 
   // ── Инициализация ────────────────────────────────────────────
   init(container: HTMLElement, callbacks: World3DCallbacks): void {
@@ -175,6 +178,22 @@ export class World3D {
     this.me = me;
   }
 
+  /** Поза камеры — для e2e-хука window.__eos */
+  getCameraPose(): { yaw: number; pitch: number; dist: number } {
+    return { yaw: this.yaw, pitch: this.pitch, dist: this.dist };
+  }
+
+  setCameraPose(yaw: number, pitch: number, dist?: number): void {
+    this.yaw = yaw;
+    this.pitch = pitch;
+    if (dist != null) this.dist = Math.min(15, Math.max(3.2, dist));
+  }
+
+  /** Атака лучом из центра экрана без мыши (тот же путь, что у ЛКМ) */
+  attackFromCamera(): void {
+    this.tryAttack();
+  }
+
   // ── События ввода ────────────────────────────────────────────
   private onResize = () => {
     if (!this.container) return;
@@ -213,7 +232,17 @@ export class World3D {
     this.dist = Math.min(15, Math.max(3.2, this.dist + e.deltaY * 0.008));
   };
 
+  /** Пока открыт чат или фокус в поле ввода — движение и прыжок отключены */
+  private isTyping(): boolean {
+    const el = document.activeElement;
+    return chatVisible()
+      || el instanceof HTMLInputElement
+      || el instanceof HTMLTextAreaElement
+      || el instanceof HTMLSelectElement;
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
+    if (this.isTyping()) return;
     if (this.keys.has(e.code)) return;
     this.keys.add(e.code);
     if (e.code === 'Space' && this.me && this.grounded) {
@@ -268,7 +297,10 @@ export class World3D {
       const m = this.entities.monsters.get(id);
       if (m) this.callbacks?.onTarget(m.nameRu, m.hp, m.maxHp);
     }
+    // Замах всегда (отклик на клик); пакет атаки уходит только при цели
     this.attackAnim = true;
+    audio.whoosh();
+    if (this.entities?.targetId) this.callbacks?.onAttack();
   }
 
   // ── Синхронизация ригов ──────────────────────────────────────
@@ -331,18 +363,18 @@ export class World3D {
       el.style.color = f.color;
       el.dataset.born = String(f.born);
       el.dataset.x = String(f.x);
-      el.dataset.z = String(f.z);
+      el.dataset.z = String(f.y); // 2D-конвенция: floater.y хранит координату z
       this.fxLayer.appendChild(el);
       setTimeout(() => el.remove(), 1150);
     }
     if (fl.length === 0) this.lastFx.floater = 0;
 
-    // Новые эффекты -> частицы
+    // Новые эффекты -> частицы (2D-конвенция: y хранит координату z)
     const ef = this.entities.effects;
     while (this.lastFx.effect < ef.length) {
       const e = ef[this.lastFx.effect++];
-      if (e.kind === 'heal') this.burst(e.x2, e.z2, 0x6ecf7a, 10);
-      else this.burst(e.x2, e.z2, e.kind === 'slash' ? 0xf4d26c : 0xe07a4a, 8);
+      if (e.kind === 'heal') this.burst(e.x2, e.y2, 0x6ecf7a, 10);
+      else this.burst(e.x2, e.y2, e.kind === 'slash' ? 0xf4d26c : 0xe07a4a, 8);
     }
     if (ef.length === 0) this.lastFx.effect = 0;
 
@@ -382,7 +414,10 @@ export class World3D {
   // ── Главный апдейт ───────────────────────────────────────────
   update(dt: number, now: number, night: number): void {
     if (!this.entities || !this.me) return;
-    this.night = night;
+    if ((night >= 1) !== this.wasNight) {
+      this.wasNight = night >= 1;
+      audio.setNight(this.wasNight);
+    }
     const me = this.me;
 
     // ── Ввод движения (относительно камеры) ──
@@ -397,14 +432,15 @@ export class World3D {
 
     const len = Math.hypot(ix, iz);
     const speed = this.crouch ? CROUCH_SPEED : this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
+    // Направление камеры в мире (нужно и для поворота рига ниже)
+    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     if (len > 0) {
       ix /= len; iz /= len;
-      // Направление камеры в мире
-      const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
       const wx = ix * cos - iz * sin;
       const wz = -ix * sin - iz * cos;
       me.pos.x += wx * speed * dt;
       me.pos.z += wz * speed * dt;
+      this.lastDir = { x: wx, y: 0, z: wz };
       // Границы мира
       me.pos.x = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.x));
       me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
