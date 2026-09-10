@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Empire of Safavids — Игра</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+  <!-- ═══ Экран входа / регистрации ═══ -->
+  <section class="screen" id="screen-auth">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img src="/assets/icon-256.png" alt="" width="56" height="56">
+        <h1>Empire of <b>Safavids</b></h1>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" id="tab-login" type="button" data-i18n="auth.login"></button>
+        <button class="tab" id="tab-register" type="button" data-i18n="auth.register"></button>
+      </div>
+
+      <form id="form-login" class="auth-form" autocomplete="on">
+        <label><span data-i18n="auth.email"></span><input type="email" id="login-email" required></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="login-password" required minlength="8"></label>
+        <button class="btn btn-gold" type="submit" data-i18n="auth.submit_login"></button>
+      </form>
+
+      <form id="form-register" class="auth-form hidden" autocomplete="off">
+        <label><span data-i18n="auth.username"></span><input type="text" id="reg-username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"></label>
+        <label><span data-i18n="auth.email"></span><input type="email" id="reg-email" required></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="reg-password" required minlength="8">
+          <small data-i18n="auth.password_hint"></small></label>
+        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reg-confirm" required minlength="8"></label>
+        <label><span data-i18n="auth.birth_year"></span><input type="number" id="reg-birth-year" required min="1900" max="2020" placeholder="1990"></label>
+        <label class="check"><input type="checkbox" id="reg-terms" required><span data-i18n="auth.terms"></span></label>
+        <label class="check"><input type="checkbox" id="reg-privacy" required><span data-i18n="auth.privacy"></span></label>
+        <p class="adults">🔞 <span data-i18n="auth.adults_only"></span></p>
+        <button class="btn btn-gold" type="submit" data-i18n="auth.submit_register"></button>
+      </form>
+
+      <p class="form-error hidden" id="auth-error"></p>
+      <a class="back-link" href="/">← Empire of Safavids</a>
+    </div>
+  </section>
+
+  <!-- ═══ Экран выбора персонажа ═══ -->
+  <section class="screen hidden" id="screen-chars">
+    <div class="chars-card">
+      <header class="chars-head">
+        <h1 data-i18n="chars.title"></h1>
+        <span class="user-badge" id="chars-username"></span>
+      </header>
+      <div class="char-list" id="char-list"></div>
+      <form class="char-create" id="form-create">
+        <h2 data-i18n="chars.create"></h2>
+        <label><span data-i18n="chars.name"></span>
+          <input type="text" id="new-name" required minlength="2" maxlength="24">
+          <small data-i18n="chars.name_hint"></small>
+        </label>
+        <div class="class-picker" id="class-picker"></div>
+        <button class="btn btn-gold" type="submit" data-i18n="chars.create"></button>
+      </form>
+      <div class="chars-footer">
+        <button class="btn btn-ghost" id="btn-logout" type="button" data-i18n="menu.logout"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Игровой мир ═══ -->
+  <section class="screen hidden" id="screen-world">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Рамка персонажа -->
+    <div class="hud char-frame">
+      <div class="char-line"><b id="hud-name"></b><span class="lvl" id="hud-level"></span></div>
+      <div class="bar hp"><i id="bar-hp"></i><span id="txt-hp"></span></div>
+      <div class="bar mana"><i id="bar-mana"></i><span id="txt-mana"></span></div>
+      <div class="bar stamina"><i id="bar-stamina"></i><span id="txt-stamina"></span></div>
+      <div class="bar exp"><i id="bar-exp"></i><span id="txt-exp"></span></div>
+      <div class="char-line gold-line"><span id="hud-gold"></span><span id="hud-region"></span></div>
+    </div>
+
+    <!-- Рамка цели -->
+    <div class="hud target-frame hidden" id="target-frame">
+      <b id="target-name"></b>
+      <div class="bar hp"><i id="target-hp"></i><span id="target-hp-txt"></span></div>
+    </div>
+
+    <!-- Панель навыков -->
+    <div class="hud skillbar" id="skillbar"></div>
+
+    <!-- Чат -->
+    <div class="hud chat" id="chat">
+      <div class="chat-log" id="chat-log"></div>
+      <form class="chat-input hidden" id="chat-form">
+        <select id="chat-channel">
+          <option value="region" data-i18n="chat.region"></option>
+          <option value="world" data-i18n="chat.world"></option>
+        </select>
+        <input type="text" id="chat-text" maxlength="500" data-i18n-placeholder="chat.placeholder" autocomplete="off">
+      </form>
+    </div>
+
+    <!-- Панели: регионы / квесты -->
+    <div class="hud side-panel hidden" id="panel-regions">
+      <h3><span data-icon="map"></span><span data-i18n="chars.region"></span></h3>
+      <div id="regions-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-quests">
+      <h3><span data-icon="scroll"></span><span data-i18n="world.quests"></span></h3>
+      <div id="quests-list"></div>
+    </div>
+
+    <!-- Кнопки-переключатели панелей -->
+    <div class="hud panel-toggles">
+      <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
+      <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
+    </div>
+
+    <!-- Мир. время -->
+    <div class="hud world-time" id="world-time"></div>
+
+    <!-- Оверлеи -->
+    <div class="overlay hidden" id="overlay-death">
+      <div class="death-card">
+        <p class="skull">☠</p>
+        <p data-i18n="world.died"></p>
+        <p class="dim" data-i18n="world.respawned"></p>
+      </div>
+    </div>
+    <div class="overlay hidden" id="overlay-menu">
+      <div class="menu-card">
+        <button class="btn btn-gold" id="btn-continue" type="button" data-i18n="menu.play"></button>
+        <button class="btn btn-ghost" id="btn-exit" type="button" data-i18n="world.exit_game"></button>
+      </div>
+    </div>
+    <div class="overlay hidden" id="overlay-lost">
+      <div class="death-card"><p data-i18n="world.connecting"></p><p class="dim" id="lost-reason"></p></div>
+    </div>
+
+    <!-- Подсказка управления -->
+    <div class="hud controls-hint" id="controls-hint" data-i18n="world.move_hint"></div>
+  </section>
+
+  <div class="toasts" id="toasts"></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

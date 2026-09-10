@@ -1,0 +1,158 @@
+{
+  "meta": { "name": "English", "code": "en" },
+  "menu": {
+    "subtitle": "Action MMORPG in the heart of the Persian Empire",
+    "lore_line": "From the fires of Chaldiran to the silks of Isfahan — write your own history",
+    "play": "Play",
+    "history": "History of the Empire",
+    "language": "Language",
+    "download": "Download for Windows",
+    "logout": "Log out",
+    "version": "Version"
+  },
+  "auth": {
+    "login": "Log in",
+    "register": "Sign up",
+    "username": "Player name",
+    "email": "Email",
+    "password": "Password",
+    "confirm_password": "Repeat password",
+    "birth_year": "Birth year",
+    "terms": "I accept the rules of conduct",
+    "privacy": "I accept the privacy policy",
+    "submit_login": "Enter the game",
+    "submit_register": "Create account",
+    "no_account": "No account yet? Sign up",
+    "has_account": "Already have an account? Log in",
+    "password_hint": "At least 8 characters, an uppercase letter and a digit",
+    "adults_only": "This game is for adults only (18+)"
+  },
+  "chars": {
+    "title": "Choose your character",
+    "create": "Create character",
+    "name": "Character name",
+    "name_hint": "2–24 characters: letters, digits, spaces",
+    "class": "Class",
+    "enter_world": "Enter the world",
+    "delete": "Delete",
+    "empty": "You have no characters yet — create your first one",
+    "region": "Region",
+    "level": "Level"
+  },
+  "classes": {
+    "qizilbash": "Qizilbash Guardian",
+    "qizilbash_desc": "Melee tank with saber and shield",
+    "sufi_mystic": "Sufi Mystic",
+    "sufi_mystic_desc": "Mage and healer, dancing the sema",
+    "persian_archer": "Persian Archer",
+    "persian_archer_desc": "Ranged strikes, the Parthian shot",
+    "bazaar_merchant": "Bazaar Merchant",
+    "bazaar_merchant_desc": "Support, crafting and trade",
+    "court_diplomat": "Court Diplomat",
+    "court_diplomat_desc": "Control and court intrigue"
+  },
+  "world": {
+    "loading": "Entering the world…",
+    "connecting": "Connecting to server…",
+    "connected": "Connected",
+    "hp": "Health",
+    "mana": "Mana",
+    "stamina": "Stamina",
+    "gold": "Gold",
+    "exp": "Experience",
+    "online": "Online",
+    "monsters": "Monsters",
+    "attack_hint": "Click a monster to attack it",
+    "move_hint": "WASD / arrows to move, 1–4 skills, Enter for chat",
+    "died": "You have fallen…",
+    "respawned": "Respawned at the starting point",
+    "levelup": "Level up!",
+    "dodge": "Dodged",
+    "quests": "Quests",
+    "block": "Blocked",
+    "crit": "Critical hit!",
+    "exit_game": "Back to menu"
+  },
+  "chat": {
+    "title": "Chat",
+    "placeholder": "Message…",
+    "send": "Send",
+    "world": "World",
+    "region": "Region",
+    "guild": "Guild",
+    "party": "Party",
+    "system": "System"
+  },
+  "history": {
+    "title": "History of the Safavid Empire",
+    "subtitle": "1501 — 1736 · Two hundred thirty-five years of glory",
+    "intro": "From young Ismail, who set Persia ablaze with faith and saber, to the great Abbas, who made Isfahan half the world — the Safavid Empire was the heart of the Silk Road, a cradle of art and a battlefield of great powers. This history is the backdrop of your game.",
+    "back": "Back to menu",
+    "timeline_label": "Timeline"
+  },
+  "history_events": [
+    { "year": "1501", "title": "Birth of an Empire", "text": "Shah Ismail I enters Tabriz and proclaims the Safavid state. Shi'a Islam becomes the state religion — Persia takes on a new face." },
+    { "year": "1514", "title": "Battle of Chaldiran", "text": "Ottoman Sultan Selim I the Grim inflicts Ismail's first defeat. The Empire endures, but its eternal rivalry with the Ottomans is sealed." },
+    { "year": "1548", "title": "The Capital Moves", "text": "Tahmasp I moves the court from vulnerable Tabriz to Qazvin. The frontiers pulse with war in the west and the east alike." },
+    { "year": "1587", "title": "The Rise of Abbas", "text": "Sixteen-year-old Abbas I the Great takes the throne. He will forge a new army — the 'regiments of the shah' — and restore the empire's might." },
+    { "year": "1598", "title": "Isfahan, Half the World", "text": "Abbas moves the capital to Isfahan. The Naqsh-e Jahan square, turquoise domes and bazaars turn the city into legend: 'Isfahan is half the world.'" },
+    { "year": "1603", "title": "The Return of Tabriz", "text": "Abbas I retakes Azerbaijan and Tabriz, shattering the Ottoman armies. The empire reaches its military zenith." },
+    { "year": "1622", "title": "Masters of the Trade Routes", "text": "Kandahar is taken, the Portuguese are expelled from Hormuz. Persian silk flows to Europe; the treasury fills with the gold of the Great Silk Road." },
+    { "year": "1722", "title": "The Fall of Isfahan", "text": "Afghan tribes of Mahmud Hotak take the capital after a long siege. The golden age ends in famine and fire." },
+    { "year": "1736", "title": "Twilight of the Safavids", "text": "Nader Shah is crowned the new ruler of Persia. The Safavid dynasty passes into history — but its art endures for centuries." }
+  ],
+  "badges": {
+    "rarity": {
+      "common": "Common",
+      "uncommon": "Uncommon",
+      "rare": "Rare",
+      "epic": "Epic",
+      "legendary": "Legendary",
+      "artifact": "Artifact"
+    },
+    "karma": {
+      "saint": "Saint",
+      "good": "Good",
+      "neutral": "Neutral",
+      "chaotic": "Chaotic",
+      "red": "Red",
+      "outlaw": "Outlaw"
+    },
+    "statuses": {
+      "online": "Online",
+      "offline": "Offline",
+      "in_battle": "In battle",
+      "dead": "Fallen",
+      "afk": "Away",
+      "novice": "Recruit",
+      "veteran": "Veteran",
+      "legend": "Legend"
+    },
+    "level": "Lv.",
+    "world_boss": "World boss",
+    "elite": "Elite"
+  },
+  "site": {
+    "download_title": "Download the game",
+    "download_desc": "The installer sets the game up on your computer: it copies the launcher and the empire icon, creates shortcuts and registers the game in “Apps & features”.",
+    "download_steps": [
+      "Desktop and Start Menu shortcuts",
+      "Empire icon and game launcher",
+      "The launcher starts the local server and opens the game",
+      "Clean one-click uninstall"
+    ],
+    "requirements": "Requires: Windows 10/11 and Node.js 18+ (for the local server)",
+    "classes_title": "Classes of the Empire",
+    "server_offline": "Server unavailable",
+    "footer_note": "Historical Action MMORPG inspired by the Safavid Empire"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Error",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "back": "Back",
+    "confirm": "Confirm",
+    "close": "Close"
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "meta": { "name": "Azərbaycanca", "code": "az" },
+  "menu": {
+    "subtitle": "Səfəvi imperiyasının ürəyində Action MMORPG",
+    "lore_line": "Çaldıran odlarından İsfahan ipəyinə qədər — öz tarixini yaz",
+    "play": "Oyna",
+    "history": "İmperiyanın tarixi",
+    "language": "Dil",
+    "download": "Windows üçün yüklə",
+    "logout": "Çıxış",
+    "version": "Versiya"
+  },
+  "auth": {
+    "login": "Giriş",
+    "register": "Qeydiyyat",
+    "username": "Oyunçu adı",
+    "email": "Email",
+    "password": "Şifrə",
+    "confirm_password": "Şifrəni təkrar edin",
+    "birth_year": "Doğum ili",
+    "terms": "Oyun qaydalarını qəbul edirəm",
+    "privacy": "Məxfilik siyasətini qəbul edirəm",
+    "submit_login": "Oyuna daxil ol",
+    "submit_register": "Hesab yarat",
+    "no_account": "Hesabın yoxdur? Qeydiyyatdan keç",
+    "has_account": "Hesabın var? Daxil ol",
+    "password_hint": "Ən azı 8 simvol, böyük hərf və rəqəm",
+    "adults_only": "Oyun yalnız yetkinlər üçündür (18+)"
+  },
+  "chars": {
+    "title": "Personaj seçimi",
+    "create": "Personaj yarat",
+    "name": "Personajın adı",
+    "name_hint": "2–24 simvol: hərflər, rəqəmlər, boşluq",
+    "class": "Sinif",
+    "enter_world": "Dünyaya daxil ol",
+    "delete": "Sil",
+    "empty": "Hələ personajın yoxdur — birincisini yarat",
+    "region": "Region",
+    "level": "Səviyyə"
+  },
+  "classes": {
+    "qizilbash": "Qızılbaş Qvardiyası",
+    "qizilbash_desc": "Qılınc və qalxanlı yaxın döyüş tankı",
+    "sufi_mystic": "Sufi Mistiki",
+    "sufi_mystic_desc": "Sema rəqsi edən sehrbaz və şəfaçı",
+    "persian_archer": "Fars Oxçusu",
+    "persian_archer_desc": "Uzaq döyüş, parfiya atışı",
+    "bazaar_merchant": "Bazar Taciri",
+    "bazaar_merchant_desc": "Dəstək, sənətkarlıq və ticarət",
+    "court_diplomat": "Saray Diplomatı",
+    "court_diplomat_desc": "Nəzarət və saray intriqaları"
+  },
+  "world": {
+    "loading": "Dünyaya daxil olunur…",
+    "connecting": "Serverə qoşulur…",
+    "connected": "Qoşuldu",
+    "hp": "Sağlamlıq",
+    "mana": "Mana",
+    "stamina": "Dözümlülük",
+    "gold": "Qızıl",
+    "exp": "Təcrübə",
+    "online": "Onlayn",
+    "monsters": "Canavarlar",
+    "attack_hint": "Hücum üçün canavara klikləyin",
+    "move_hint": "WASD / oxlar — hərəkət, 1–4 — bacarıqlar, Enter — çat",
+    "died": "Siz öldünüz…",
+    "respawned": "Başlanğıc nöqtəsində dirildiniz",
+    "levelup": "Yeni səviyyə!",
+    "dodge": "Yandırıldı",
+    "quests": "Tapşırıqlar",
+    "block": "Bloklandı",
+    "crit": "Kritik zərbə!",
+    "exit_game": "Menyuya qayıt"
+  },
+  "chat": {
+    "title": "Çat",
+    "placeholder": "Mesaj…",
+    "send": "Göndər",
+    "world": "Dünya",
+    "region": "Region",
+    "guild": "Birlik",
+    "party": "Dəstə",
+    "system": "Sistem"
+  },
+  "history": {
+    "title": "Səfəvi imperiyasının tarixi",
+    "subtitle": "1501 — 1736 · İki yüz otuz beş illik əzəmət",
+    "intro": "Gənc İsmayıldan — İranı iman və qılınclovla alovlandırandan, böyük Abbasadək — İsfahanı dünyanın yarısına çevirənə qədər Səfəvi imperiyası İpək Yolunun ürəyi, sənətin beşiyi və böyük dövlətlərin döyüş meydanı idi. Bu tarix — oyununuzun fonudur.",
+    "back": "Menyuya qayıt",
+    "timeline_label": "Xronologiya"
+  },
+  "history_events": [
+    { "year": "1501", "title": "İmperiyanın doğuşu", "text": "Şah I İsmayıl Təbrizə daxil olaraq Səfəvi dövlətini elan edir. Şiəlik dövlət dininə çevrilir — İran yeni üz qazanır." },
+    { "year": "1514", "title": "Çaldıran döyüşü", "text": "Osmanlı sultanı I Səlim Qanı İsmayıla ilk məğlubiyyəti verir. İmperiya ayaqda qalır, lakin Osmanlılarla əbədi rəqabət taleyini müəyyənləşdirir." },
+    { "year": "1548", "title": "Paytaxt köçürülür", "text": "I Təhmasib sarayı müdafiəsi çətin Təbrizdən Qəzvinə köçürür. Sərhədlər qərbdə də, şərqdə də müharibə ilə nəbzdəyir." },
+    { "year": "1587", "title": "Abbasın yüksəlişi", "text": "On altı yaşlı I Abbas Böyük taxta çıxır. O, yeni tip ordu — «şah alaylarını» yaradacaq və imperiyaya qüdrətini qaytaracaq." },
+    { "year": "1598", "title": "İsfahan — dünyanın yarısı", "text": "Abbas paytaxtı İsfahana köçürür. İmam meydanı, firuzəyi günbəzlər və bazarlar şəhəri əfsanəyə çevirir: «İsfahan — dünyanın yarısıdır»." },
+    { "year": "1603", "title": "Təbrizin qayıdışı", "text": "I Abbas Azərbaycanı və Təbrizi osmanlı ordularını məğlub edərək geri alır. İmperiya hərbi zirvəsinə çatır." },
+    { "year": "1622", "title": "Ticarət yollarının ağası", "text": "Qəndəhar alınır, portuqallar Hörmüzdən qovulur. Fars ipəyi Avropaya axır; xəzinə Böyük İpək Yolunun qızılı ilə dolur." },
+    { "year": "1722", "title": "İsfahanın süqutu", "text": "Mahmud Hotəkinin əfqan tayfaları uzun mühasirədən sonra paytaxtı alır. Qızıl dövr aclıq və yanğınlla bitir." },
+    { "year": "1736", "title": "Səfəvilərin qürubu", "text": "Nadir şah İranın yeni hökmdarı kimi tac qoyur. Səfəvi sülaləsi tarixə qovuşur — amma onun sənəti əsrlər boyu yaşayır." }
+  ],
+  "badges": {
+    "rarity": {
+      "common": "Adi",
+      "uncommon": "Qeyri-adi",
+      "rare": "Nadir",
+      "epic": "Epik",
+      "legendary": "Əfsanəvi",
+      "artifact": "Artefakt"
+    },
+    "karma": {
+      "saint": "Müqəddəs",
+      "good": "Xeyirxah",
+      "neutral": "Neytral",
+      "chaotic": "Xaos",
+      "red": "Qırmızı",
+      "outlaw": "Qanundan kənar"
+    },
+    "statuses": {
+      "online": "Onlayn",
+      "offline": "Oflayn",
+      "in_battle": "Döyüşdə",
+      "dead": "Ölü",
+      "afk": "Kənarla",
+      "novice": "Yeni başlayan",
+      "veteran": "Veteran",
+      "legend": "Əfsanə"
+    },
+    "level": "Səv.",
+    "world_boss": "Dünya bossu",
+    "elite": "Elit"
+  },
+  "site": {
+    "download_title": "Oyunu yüklə",
+    "download_desc": "Quraşdırıcı oyunu kompüterinizdə hazırlayır: başladıcı və imperiya ikonunu kopyalayır, qısa yollar yaradır və oyunu “Tətbiqlər və imkanlar” bölməsinə yazır.",
+    "download_steps": [
+      "İş masası və Başlat menyusunda qısa yollar",
+      "İmperiya ikonu və oyun başladıcısı",
+      "Başladıcı lokal serveri qaldırır və oyunu açır",
+      "Bir kliklə təmiz silmə"
+    ],
+    "requirements": "Tələb olunur: Windows 10/11 və Node.js 18+ (lokal server üçün)",
+    "classes_title": "İmperiyanın sinifləri",
+    "server_offline": "Server əlçatmazdır",
+    "footer_note": "Səfəvi imperiyasından ilhamlanan tarixi Action MMORPG"
+  },
+  "common": {
+    "loading": "Yüklənir…",
+    "error": "Xəta",
+    "retry": "Yenidən cəhd et",
+    "cancel": "Ləğv et",
+    "back": "Geri",
+    "confirm": "Təsdiqlə",
+    "close": "Bağla"
+  }
+}
