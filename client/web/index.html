@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Empire of Safavids — историческая Action MMORPG по мотивам Сефевидской империи (1501–1736)">
+  <title>Empire of Safavids — Action MMORPG</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" href="/assets/icon-256.png">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <!-- Верхняя панель: бренд, язык, версия -->
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-icon" data-icon="star8" data-icon-size="26"></span>
+      <span class="brand-name">Empire of <b>Safavids</b></span>
+    </a>
+    <nav class="topnav">
+      <a href="#history" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="menu.history"></span></a>
+      <a href="#download" class="topnav-link"><span data-icon="download" data-icon-size="16"></span><span data-i18n="site.download_title"></span></a>
+    </nav>
+    <div class="topbar-right">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="ru" type="button">Рус</button>
+        <button class="lang-btn" data-lang="en" type="button">Eng</button>
+        <button class="lang-btn" data-lang="az" type="button">Azə</button>
+      </div>
+      <span class="version-badge" id="version-badge"><span data-i18n="menu.version"></span>&nbsp;<b id="version-num">…</b></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Герой: название игры на фоне ночного Исфахана -->
+    <section class="hero">
+      <div class="hero-medal" aria-hidden="true">
+        <img src="/assets/icon-256.png" alt="" width="112" height="112">
+      </div>
+      <h1 class="hero-title">Empire of <b>Safavids</b></h1>
+      <p class="hero-subtitle" data-i18n="menu.subtitle"></p>
+      <p class="hero-lore" data-i18n="menu.lore_line"></p>
+      <div class="hero-actions">
+        <a class="btn btn-gold" href="/game/" id="play-btn">
+          <span data-icon="play" data-icon-size="20"></span>
+          <span data-i18n="menu.play"></span>
+        </a>
+        <a class="btn btn-ghost" href="/download/installer" download>
+          <span data-icon="download" data-icon-size="20"></span>
+          <span data-i18n="menu.download"></span>
+        </a>
+        <a class="btn btn-ghost" href="#history">
+          <span data-icon="scroll" data-icon-size="20"></span>
+          <span data-i18n="menu.history"></span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Скачивание и установка -->
+    <section class="section" id="download">
+      <div class="panel panel-download">
+        <h2 class="panel-title"><span class="panel-title-icon" data-icon="gear" data-icon-size="22"></span><span data-i18n="site.download_title"></span></h2>
+        <p class="panel-desc" data-i18n="site.download_desc"></p>
+        <ul class="steps" id="download-steps"></ul>
+        <div class="download-row">
+          <a class="btn btn-gold btn-big" href="/download/installer" download>
+            <span data-icon="download" data-icon-size="22"></span>
+            <span data-i18n="menu.download"></span>
+          </a>
+          <span class="requirements" data-i18n="site.requirements"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- История Сефевидской империи (фон страницы — ночной Исфахан) -->
+    <section class="section" id="history">
+      <div class="panel">
+        <h2 class="panel-title"><span class="panel-title-icon" data-icon="crown" data-icon-size="22"></span><span data-i18n="history.title"></span></h2>
+        <p class="panel-subtitle" data-i18n="history.subtitle"></p>
+        <p class="panel-desc" data-i18n="history.intro"></p>
+        <p class="timeline-label"><span data-icon="clock" data-icon-size="16"></span>&nbsp;<span data-i18n="history.timeline_label"></span></p>
+        <ol class="timeline" id="timeline"></ol>
+      </div>
+    </section>
+
+    <!-- Классы: витрина системы иконок -->
+    <section class="section" id="classes">
+      <h2 class="section-title"><span data-icon="shield" data-icon-size="22"></span>&nbsp;<span data-i18n="site.classes_title"></span></h2>
+      <div class="class-grid" id="class-grid"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span data-icon="star8" data-icon-size="14"></span>
+    <span data-i18n="site.footer_note"></span>
+    <span class="footer-sep">·</span>
+    <span>© 2024–2026 Sigma Arena Games Group</span>
+  </footer>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
