@@ -136,9 +136,13 @@ export class SpawnSystem {
   }
 
   // ============================================================
-  // Тик ИИ для всех активных монстров
+  // Тик ИИ для всех активных монстров.
+  // Возвращает атакующие действия — по ним GameLoop наносит урон игрокам.
   // ============================================================
-  tickAI(nearbyPlayers: Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>) {
+  tickAI(nearbyPlayers: Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>): {
+    region: Region; instanceId: string; targetId?: string; skillId?: string; type: string;
+  }[] {
+    const attacks: { region: Region; instanceId: string; targetId?: string; skillId?: string; type: string }[] = [];
     for (const ctx of this.ai.getAllInstances()) {
       const players = nearbyPlayers.get(ctx.definition.region) ?? [];
       const action = this.ai.tick(ctx.instanceId, players);
@@ -148,7 +152,17 @@ export class SpawnSystem {
           action,
         }).catch(() => {});
       }
+      if ((action.type === 'attack' || action.type === 'skill') && action.targetId) {
+        attacks.push({
+          region: ctx.definition.region,
+          instanceId: ctx.instanceId,
+          targetId: action.targetId,
+          skillId: action.skillId,
+          type: action.type,
+        });
+      }
     }
+    return attacks;
   }
 
   getAI(): AISystem { return this.ai; }

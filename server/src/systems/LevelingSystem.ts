@@ -94,9 +94,12 @@ export class LevelingSystem {
       const gains = STAT_GAINS_PER_LEVEL[character.class];
       const levelsGained = newLevel - oldLevel;
 
-      // Суммируем прирост характеристик за все уровни
+      // Суммируем прирост характеристик за все уровни и складываем
+      // в JS (jsonb-конкатенация «||» заменяет значения, а не прибавляет)
+      const newStats: CharacterStats = { ...character.stats };
       for (const [stat, gain] of Object.entries(gains) as [keyof CharacterStats, number][]) {
-        statGains[stat] = (statGains[stat] ?? 0) + gain * levelsGained;
+        statGains[stat] = gain * levelsGained;
+        newStats[stat] = (newStats[stat] ?? 0) + gain * levelsGained;
       }
 
       // Разблокируем навыки
@@ -111,14 +114,14 @@ export class LevelingSystem {
         await client.query(
           `UPDATE characters SET
             experience = $1, level = $2,
-            stats = stats || $3::jsonb,
+            stats = $3::jsonb,
             max_hp = max_hp + $4,
             max_mana = max_mana + $5,
             updated_at = NOW()
            WHERE id = $6`,
           [
             newTotalExp, newLevel,
-            JSON.stringify(statGains),
+            JSON.stringify(newStats),
             (statGains.endurance ?? 0) * 10,
             (statGains.intelligence ?? 0) * 8,
             character.id,

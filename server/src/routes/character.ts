@@ -45,3 +45,13 @@ characterRouter.get('/:id/skills', authMiddleware, asyncHandler(async (req: Requ
   const skills = combatService.getClassSkills(character.class);
   return res.json({ skills });
 }));
+
+// GET /api/characters/:id/inventory — инвентарь персонажа
+characterRouter.get('/:id/inventory', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const items = await characterService.getInventory(req.params.id);
+  return res.json({ items });
+}));

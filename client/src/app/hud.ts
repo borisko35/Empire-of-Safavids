@@ -205,6 +205,36 @@ export async function loadQuests(): Promise<void> {
   }
 }
 
+// ── Сумка (инвентарь) ────────────────────────────────────────
+const RARITY_COLOR: Record<string, string> = {
+  common: '#b8bcc4', uncommon: '#6ecf7a', rare: '#4aa3e8',
+  epic: '#b06ae8', legendary: '#e8a84a', artifact: '#e85a4a',
+};
+
+export async function loadInventory(): Promise<void> {
+  if (!session.character) return;
+  try {
+    const { items } = await api.inventory(session.character.id);
+    const box = $('inventory-list');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!items.length) {
+      box.innerHTML = `<div class="inv-empty">—</div>`;
+      return;
+    }
+    for (const it of items) {
+      const row = document.createElement('div');
+      row.className = 'inv-item';
+      row.innerHTML =
+        `<span class="dot" style="background:${RARITY_COLOR[it.rarity] ?? RARITY_COLOR.common}"></span>` +
+        `<span class="inv-name">${it.nameRu}</span><span class="inv-qty">×${it.quantity}</span>`;
+      box.append(row);
+    }
+  } catch {
+    /* инвентарь недоступен — не критично */
+  }
+}
+
 // ── Мировое время ────────────────────────────────────────────
 const TIME_OF_DAY_RU: Record<string, string> = {
   morning: 'утро', noon: 'полдень', afternoon: 'день', evening: 'вечер',

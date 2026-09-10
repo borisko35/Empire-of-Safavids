@@ -11,7 +11,7 @@ import { World, PlayerEntity } from './entities';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
 import {
-  chatMessage, chatVisible, closeChat, hideTarget, loadQuests, loadRegions,
+  chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
   tickCooldowns, toast,
 } from './hud';
@@ -192,7 +192,11 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('monster:killed', ({ instanceId, killerId, expReward, leveledUp, newLevel }: { instanceId: string; killerId: string; expReward: number; leveledUp?: boolean; newLevel?: number }) => {
+  socket.on('monster:killed', ({ instanceId, killerId, expReward, gold, loot, leveledUp, newLevel }: {
+    instanceId: string; killerId: string; expReward: number;
+    gold?: number; loot?: { itemId: string; nameRu: string; qty: number }[];
+    leveledUp?: boolean; newLevel?: number;
+  }) => {
     const w = world;
     const m = w?.monsters.get(instanceId);
     if (!w || !m) return;
@@ -204,6 +208,15 @@ function wireSocket(): void {
       session.kills[m.monsterId] = (session.kills[m.monsterId] ?? 0) + 1;
       session.experience += expReward;
       w.addFloater(m.pos.x, m.pos.z - 0.8, `+${expReward} ${t('world.exp')}`, '#F4D26C');
+      if (gold) {
+        if (session.character) session.character.gold += gold;
+        w.addFloater(m.pos.x, m.pos.z - 0.3, `+${gold} ◉`, '#F4D26C');
+      }
+      if (loot?.length) {
+        const line = `${t('world.loot')}: ${loot.map(l => `${l.nameRu} ×${l.qty}`).join(', ')}`;
+        chatMessage(null, line, true);
+        toast(line, 'success');
+      }
       if (leveledUp && newLevel) {
         session.level = newLevel;
         audio.levelUp();
@@ -212,6 +225,7 @@ function wireSocket(): void {
         void loadQuests();
       }
       void loadQuests();
+      void loadInventory();
       refreshBars();
     }
   });
@@ -248,6 +262,20 @@ function wireSocket(): void {
       if (r.isDodged) world.addFloater(me.pos.x, me.pos.z - 1, t('world.dodge'), '#cfe3f0');
       else world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
     }
+    audio.hit();
+    refreshBars();
+  });
+
+  // Периодический синк ресурсов с сервера (регенерация, золото, уровень)
+  socket.on('player:resources', (r: {
+    hp: number; maxHp: number; mana: number; maxMana: number;
+    stamina: number; maxStamina: number; level: number; experience: number; gold: number;
+  }) => {
+    session.hp = r.hp; session.maxHp = r.maxHp;
+    session.mana = r.mana; session.maxMana = r.maxMana;
+    session.stamina = r.stamina; session.maxStamina = r.maxStamina;
+    session.level = r.level; session.experience = r.experience;
+    if (session.character) session.character.gold = r.gold;
     refreshBars();
   });
 
@@ -393,6 +421,7 @@ function wireInput(): void {
       btn.classList.toggle('active', !panel?.classList.contains('hidden'));
       if (btn.dataset.panel === 'panel-regions') void loadRegions();
       if (btn.dataset.panel === 'panel-quests') void loadQuests();
+      if (btn.dataset.panel === 'panel-inventory') void loadInventory();
     });
   }
 }

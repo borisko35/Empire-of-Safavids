@@ -12,6 +12,13 @@ export const WORLD_HALF = 1200;         // половина стороны ми�
 export const CITY = { x: 34, z: 26, radius: 58 };
 export const CAMP = { x: 104, z: 82, radius: 16 };
 
+/** Цилиндрические коллайдеры построек: персонаж и камера их уважают */
+export const COLLIDERS: { x: number; z: number; r: number }[] = [];
+
+function addCollider(x: number, z: number, r: number): void {
+  COLLIDERS.push({ x, z, r });
+}
+
 function fract(v: number): number { return v - Math.floor(v); }
 
 function hash2(x: number, y: number): number {
@@ -189,6 +196,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   const city = new THREE.Group();
   const baseY = terrainHeight(CITY.x, CITY.z);
   city.position.set(CITY.x, baseY, CITY.z);
+  COLLIDERS.length = 0; // город строится один раз за сессию мира
 
   // Площадь
   const plaza = new THREE.Mesh(new THREE.CylinderGeometry(CITY.radius * 0.92, CITY.radius, 0.5, 36), MAT.sandstone);
@@ -209,6 +217,14 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     w.rotation.y = -a + Math.PI / 2;
     w.castShadow = true; w.receiveShadow = true;
     city.add(w);
+    // Коллайдеры вдоль сегмента (стена ~48 юнитов длиной)
+    const theta = -a + Math.PI / 2;
+    const dirX = Math.cos(theta), dirZ = -Math.sin(theta);
+    const cx0 = CITY.x + Math.cos(a) * CITY.radius;
+    const cz0 = CITY.z + Math.sin(a) * CITY.radius;
+    for (const k of [-20, -10, 0, 10, 20]) {
+      addCollider(cx0 + dirX * k, cz0 + dirZ * k, 2.2);
+    }
   }
   // Башни по углам
   for (let i = 0; i < 8; i++) {
@@ -219,6 +235,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const cap = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.6, 10), MAT.tealDome);
     cap.position.set(Math.cos(a) * CITY.radius, 10.3, Math.sin(a) * CITY.radius);
     city.add(t, cap);
+    addCollider(CITY.x + Math.cos(a) * CITY.radius, CITY.z + Math.sin(a) * CITY.radius, 4.1);
   }
 
   // ── Мечеть в центре ──
@@ -275,6 +292,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     house.position.set(x, 0.25, z);
     house.rotation.y = rng() * Math.PI;
     city.add(house);
+    addCollider(CITY.x + x, CITY.z + z, Math.max(2.4, w * 0.62));
   }
 
   // Базарные прилавки у мечети
@@ -293,6 +311,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     stall.position.set(x, 0.3, z);
     stall.rotation.y = -a + Math.PI / 2;
     city.add(stall);
+    addCollider(CITY.x + x, CITY.z + z, 1.8);
   }
 
   // Городские фонари-чаши (металл) — свет добавляет world3d
@@ -307,6 +326,16 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     city.add(pole, bowl);
     lights.push({ x: CITY.x + x, z: CITY.z + z });
   }
+
+  // Коллайдер мечети (24x18 в локальных -8): сетка цилиндров
+  for (const mx of [-9, -3, 3, 9]) {
+    for (const mz of [-14.5, -8, -1.5]) {
+      addCollider(CITY.x + mx, CITY.z - 8 + mz, 4.4);
+    }
+  }
+  // Портал мечети
+  addCollider(CITY.x, CITY.z + 1.6, 3.4);
+
   city.userData.lights = lights;
   scene.add(city);
   return city;
@@ -327,10 +356,12 @@ export function buildCamp(scene: THREE.Scene): void {
     const flag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.4, 0.9), MAT.clothRed);
     flag.position.set(x, 4.2, z);
     camp.add(tent, flag);
+    addCollider(CAMP.x + x, CAMP.z + z, 2.5);
   }
   // Кострище
   const fire = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 0.4, 9), MAT.dark);
   fire.position.set(0, 0.2, 0);
+  addCollider(CAMP.x, CAMP.z, 1.4);
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 7), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.6 }));
   flame.position.set(0, 1, 0);
   flame.name = 'campfire-flame';

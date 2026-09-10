@@ -10,6 +10,8 @@ import { SpawnSystem } from './SpawnSystem';
 import { KarmaSystem } from './KarmaSystem';
 import { WorldTimeSystem } from './WorldTimeSystem';
 import { RedisService } from '../services/RedisService';
+import { CharacterService } from '../services/CharacterService';
+import { REDIS_CHANNELS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -23,6 +25,7 @@ export class GameLoop {
   private spawnSystem = new SpawnSystem();
   private karmaSystem = new KarmaSystem();
   private worldTime = new WorldTimeSystem();
+  private characters = new CharacterService();
   private redis = RedisService.getInstance();
 
   private timer: NodeJS.Timeout | null = null;
@@ -93,7 +96,36 @@ export class GameLoop {
       }
       nearbyPlayers.set(region, players);
     }
-    this.spawnSystem.tickAI(nearbyPlayers);
+
+    // Тик ИИ + урон монстров по игрокам (публикуется в Redis, сокеты раздают подписчики)
+    const attacks = this.spawnSystem.tickAI(nearbyPlayers);
+    for (const atk of attacks) {
+      const target = nearbyPlayers.get(atk.region)?.find(p => p.id === atk.targetId);
+      if (!target) continue;
+      const damage = this.monsterDamage(atk);
+      const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
+      if (!applied) continue;
+      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_HIT(atk.region), {
+        characterId: target.id,
+        instanceId: atk.instanceId,
+        skillId: atk.skillId ?? null,
+        damage,
+        hp: applied.hp,
+        maxHp: applied.maxHp,
+        died: applied.died,
+      }).catch(() => {});
+    }
+  }
+
+  /** Урон монстра игроку: навык из базы монстров либо удар с руки */
+  private monsterDamage(atk: { skillId?: string; instanceId: string }): number {
+    const ctx = this.spawnSystem.getAI().getContext(atk.instanceId);
+    if (!ctx) return 5;
+    if (atk.skillId) {
+      const skill = ctx.definition.skills.find(s => s.id === atk.skillId);
+      if (skill) return Math.max(3, Math.round(skill.damage));
+    }
+    return Math.max(3, Math.round(ctx.definition.strength * 1.6));
   }
 
   private async decayKarmaOnline(): Promise<void> {

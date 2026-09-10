@@ -80,6 +80,7 @@ export const SERVER_EVENTS = {
   MONSTER_SPAWNED: 'monster:spawned',
   MONSTER_KILLED: 'monster:killed',
   KARMA_CHANGED: 'karma:changed',
+  RESOURCES: 'player:resources',       // периодический синк hp/маны/стамины/золота
 } as const;
 
 // Каналы Redis pub/sub
@@ -95,4 +96,5 @@ export const REDIS_CHANNELS = {
   REGION_AI_ACTION: (region: string) => `region:${region}:ai_action`,
   REGION_NOTIFICATION: (region: string) => `region:${region}:notification`,
   REGION_MONSTER_KILLED: (region: string) => `region:${region}:monster_killed`,
+  REGION_MONSTER_HIT: (region: string) => `region:${region}:monster_hit`, // монстр ударил игрока
 } as const;

@@ -31,6 +31,7 @@ export interface AIContext {
   lastAttackTime: Record<string, number>; // skillId -> timestamp
   aggroTable: Map<string, number>;        // characterId -> threat
   lastStateChange: number;
+  lastTickAt?: number;                    // для расчёта dt серверного движения
 }
 
 export interface AIAction {
@@ -100,7 +101,25 @@ export class AISystem {
       ctx.lastStateChange = now;
     }
 
-    return this.executeState(ctx, nearbyPlayers, now);
+    const action = this.executeState(ctx, nearbyPlayers, now);
+
+    // Серверное движение: монстр реально приближается к цели.
+    // Без этого позиция ИИ остаётся на спавне, и проверки дальности
+    // атаки никогда не проходят (монстр «догоняет» только на клиентах).
+    if (action.destination) {
+      const dt = Math.min(3, (now - (ctx.lastTickAt ?? now)) / 1000);
+      const dx = action.destination.x - ctx.position.x;
+      const dz = action.destination.z - ctx.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.4) {
+        const step = Math.min(dist, ctx.definition.moveSpeed * dt);
+        ctx.position.x += (dx / dist) * step;
+        ctx.position.z += (dz / dist) * step;
+      }
+    }
+    ctx.lastTickAt = now;
+
+    return action;
   }
 
   // ============================================================

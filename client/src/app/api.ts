@@ -53,6 +53,9 @@ export const api = {
 
   skills: (characterId: string) => req<{ skills: SkillDef[] }>(`/api/characters/${characterId}/skills`),
 
+  inventory: (characterId: string) =>
+    req<{ items: { itemId: string; nameRu: string; rarity: string; quantity: number }[] }>(`/api/characters/${characterId}/inventory`),
+
   regions: () => req<{ regions: RegionInfo[] }>('/api/world/regions'),
 
   quests: () => req<{ quests: QuestDef[] }>('/api/game/quests'),

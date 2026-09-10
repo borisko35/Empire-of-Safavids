@@ -3,6 +3,7 @@ import { DatabaseService } from './DatabaseService';
 import { Character, CharacterClass, CharacterStats, Region } from '../types/game.types';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
+import { ITEMS_DATABASE } from '../data/items';
 import { MAX_LEVEL } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
@@ -172,5 +173,80 @@ export class CharacterService {
   /** Максимальный уровень (из общих констант) */
   getMaxLevel(): number {
     return MAX_LEVEL;
+  }
+
+  // ============================================================
+  // Регенерация и ресурсы
+  // ============================================================
+
+  /** Медленная регенерация ресурсов (за 5-секундный тик сервера). */
+  async regenResources(characterId: string): Promise<{
+    hp: number; maxHp: number; mana: number; maxMana: number;
+    stamina: number; maxStamina: number; level: number; experience: number; gold: number;
+  } | null> {
+    const row = await this.db.queryOne<Record<string, number>>(
+      `UPDATE characters SET
+         hp      = LEAST(max_hp,      hp + GREATEST(1, FLOOR(max_hp * 0.012) * 5)),
+         mana    = LEAST(max_mana,    mana + GREATEST(1, FLOOR(max_mana * 0.02) * 5)),
+         stamina = LEAST(max_stamina, stamina + GREATEST(1, FLOOR(max_stamina * 0.04) * 5)),
+         updated_at = NOW()
+       WHERE id = $1
+       RETURNING hp, max_hp, mana, max_mana, stamina, max_stamina, level, experience, gold`,
+      [characterId]
+    );
+    if (!row) return null;
+    return {
+      hp: Number(row.hp), maxHp: Number(row.max_hp),
+      mana: Number(row.mana), maxMana: Number(row.max_mana),
+      stamina: Number(row.stamina), maxStamina: Number(row.max_stamina),
+      level: Number(row.level), experience: Number(row.experience), gold: Number(row.gold),
+    };
+  }
+
+  /** Начислить золото. Возвращает новый баланс. */
+  async addGold(characterId: string, amount: number): Promise<number> {
+    const row = await this.db.queryOne<{ gold: number }>(
+      'UPDATE characters SET gold = gold + $1, updated_at = NOW() WHERE id = $2 RETURNING gold',
+      [Math.max(0, Math.floor(amount)), characterId]
+    );
+    if (!row) throw new Error('Character not found');
+    return Number(row.gold);
+  }
+
+  // ============================================================
+  // Инвентарь (стеки: уникально по персонаж+предмет)
+  // ============================================================
+
+  /** Добавить предметы (лут). */
+  async addItems(characterId: string, items: { itemId: string; qty: number }[]): Promise<void> {
+    for (const it of items) {
+      await this.db.query(
+        `INSERT INTO character_items (character_id, item_id, quantity)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (character_id, item_id)
+         DO UPDATE SET quantity = character_items.quantity + EXCLUDED.quantity`,
+        [characterId, it.itemId, Math.max(1, Math.floor(it.qty))]
+      );
+    }
+  }
+
+  /** Инвентарь с именами/редкостью из ITEMS_DATABASE. */
+  async getInventory(characterId: string): Promise<{ itemId: string; name: string; nameRu: string; type: string; rarity: string; quantity: number }[]> {
+    const rows = await this.db.query<{ item_id: string; quantity: number }>(
+      'SELECT item_id, quantity FROM character_items WHERE character_id = $1 ORDER BY acquired_at DESC',
+      [characterId]
+    );
+    return rows
+      .map(r => {
+        const def = ITEMS_DATABASE[r.item_id];
+        return {
+          itemId: r.item_id,
+          name: def?.name ?? r.item_id,
+          nameRu: def?.nameRu ?? r.item_id,
+          type: def?.type ?? 'material',
+          rarity: def?.rarity ?? 'common',
+          quantity: Number(r.quantity),
+        };
+      });
   }
 }

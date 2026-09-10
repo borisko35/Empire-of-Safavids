@@ -65,7 +65,6 @@ export class World3D {
   private attackCd = 0;
 
   // Служебное
-  private raycaster = new THREE.Raycaster();
   private raf = 0;
   private lastFx = { floater: 0, effect: 0 };
   private targetRing!: THREE.Mesh;
@@ -261,37 +260,45 @@ export class World3D {
   };
 
   // ── Атака и прицеливание ─────────────────────────────────────
-  private monsterMeshes(): THREE.Object3D[] {
-    const list: THREE.Object3D[] = [];
-    if (!this.entities) return list;
+
+  /**
+   * Захват цели: конус прицеливания от камеры (~12°) + запас по близости.
+   * Работает надёжнее луча по мешам: не зависит от высоты прицела.
+   */
+  private acquireTarget(): string | null {
+    if (!this.entities || !this.me) return null;
+    const forward = new THREE.Vector3();
+    this.camera.getWorldDirection(forward);
+    const camPos = this.camera.position;
+    let best: string | null = null;
+    let bestDot = 0.978; // ~12°
     for (const [id, m] of this.entities.monsters) {
       if (m.deadAt) continue;
-      const b = this.rigs.get(id);
-      if (b) list.push(b.rig.group);
+      const y = terrainHeight(m.pos.x, m.pos.z) + 1.1;
+      const to = new THREE.Vector3(m.pos.x - camPos.x, y - camPos.y, m.pos.z - camPos.z);
+      const dist = to.length();
+      if (dist > 26) continue;
+      to.normalize();
+      const dot = to.dot(forward);
+      if (dot > bestDot) { bestDot = dot; best = id; }
     }
-    return list;
-  }
-
-  private findMonsterHit(objects: THREE.Object3D[], ndc?: THREE.Vector2): string | null {
-    if (ndc) {
-      this.raycaster.setFromCamera(ndc, this.camera);
-    } else {
-      this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    if (best) return best;
+    // Фолбэк: ближайший монстр вплотную к игроку (замах «наугад»)
+    let nearest: string | null = null;
+    let nearestD = 3.4;
+    for (const [id, m] of this.entities.monsters) {
+      if (m.deadAt) continue;
+      const d = Math.hypot(m.pos.x - this.me.pos.x, m.pos.z - this.me.pos.z);
+      if (d < nearestD) { nearestD = d; nearest = id; }
     }
-    const hits = this.raycaster.intersectObjects(objects, true);
-    for (const hit of hits) {
-      let o: THREE.Object3D | null = hit.object;
-      while (o && !o.userData.monsterId) o = o.parent;
-      if (o && hit.distance < 26) return String(o.userData.monsterId);
-    }
-    return null;
+    return nearest;
   }
 
   private tryAttack(): void {
     if (this.attackCd > 0) return;
     this.attackCd = 0.45;
-    // Мягкое прицеливание: цель по лучу из центра экрана
-    const id = this.findMonsterHit(this.monsterMeshes());
+    // Мягкое прицеливание: конус от камеры, затем близость
+    const id = this.acquireTarget();
     if (id && this.entities) {
       this.entities.targetId = id;
       const m = this.entities.monsters.get(id);
@@ -478,7 +485,7 @@ export class World3D {
       let moving = false, spd = 0, dead = false;
       if (b.kind === 'player') {
         const p = this.entities.players.get(id)!;
-        moving = p.moving; spd = p.moving ? speed : 0;
+        moving = p.moving; spd = p.moving ? 5.5 : 0;
         if (isMe) dead = document.getElementById('overlay-death')?.classList.contains('hidden') === false;
       } else {
         const m = this.entities.monsters.get(id)!;

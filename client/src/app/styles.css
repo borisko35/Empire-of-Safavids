@@ -487,3 +487,17 @@ input, select { font: inherit; }
   .chat { max-width: 60vw; }
   .controls-hint { display: none; }
 }
+
+/* Сумка */
+.inv-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: 7px; margin-bottom: 5px;
+  background: rgba(7, 15, 27, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12.5px;
+}
+
+.inv-item .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.inv-item .inv-name { flex: 1; }
+.inv-item .inv-qty { color: var(--gold-light); }
+.inv-empty { color: var(--cream-dim); text-align: center; padding: 8px; }

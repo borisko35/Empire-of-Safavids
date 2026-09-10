@@ -8,6 +8,7 @@ import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { Character, CombatAction, Region } from '../types/game.types';
+import { ITEMS_DATABASE } from '../data/items';
 import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS } from '../../../shared/constants';
 
 interface AuthenticatedSocket extends Socket {
@@ -71,6 +72,24 @@ export class GameSocketHandler {
         await this.handleDisconnect(socket);
       });
     });
+
+    // Регенерация ресурсов онлайн-игроков раз в 5 секунд (+ синк клиенту)
+    this.regenTimer = setInterval(() => void this.regenTick(), 5000);
+  }
+
+  private regenTimer: NodeJS.Timeout | null = null;
+
+  /** Медленная регенерация hp/маны/стамины онлайн-игроков + синк состояния */
+  private async regenTick(): Promise<void> {
+    for (const socket of this.activePlayers.values()) {
+      if (!socket.characterId) continue;
+      try {
+        const res = await this.characterService.regenResources(socket.characterId);
+        if (res) socket.emit(SERVER_EVENTS.RESOURCES, res);
+      } catch (error) {
+        logger.debug('Regen tick skipped:', error);
+      }
+    }
   }
 
   // ============================================================
@@ -98,6 +117,26 @@ export class GameSocketHandler {
       });
       await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_KILLED(region), (msg) => {
         this.io.to(`region:${region}`).emit(SERVER_EVENTS.MONSTER_KILLED, msg);
+      });
+      // Монстр ударил игрока: персональный COMBAT_HIT + визуал региону
+      await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_HIT(region), (msg: Record<string, unknown>) => {
+        const socket = this.activePlayers.get(String(msg.characterId));
+        if (socket) {
+          socket.emit(SOCKET_EVENTS.COMBAT_HIT, {
+            attackerId: String(msg.instanceId),
+            damage: Number(msg.damage),
+            isDodged: false,
+            isBlocked: false,
+            hp: Number(msg.hp),
+            maxHp: Number(msg.maxHp),
+          });
+        }
+        this.io.to(`region:${region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+          attackerId: String(msg.instanceId),
+          targetId: String(msg.characterId),
+          actionType: 'attack',
+        });
+        if (msg.died) void this.handleDeathById(String(msg.characterId));
       });
     }
 
@@ -427,19 +466,41 @@ export class GameSocketHandler {
     });
 
     if (died) {
-      // Начисляем награду убийце
-      const reward = await this.characterService.addExperience(attacker.id, monsterCtx.definition.expReward);
+      // Начисляем награду убийце: опыт, золото и лут из таблицы монстра
+      const def = monsterCtx.definition;
+      const reward = await this.characterService.addExperience(attacker.id, def.expReward);
+
+      const gold = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
+      await this.characterService.addGold(attacker.id, gold).catch(() => {});
+
+      const loot: { itemId: string; nameRu: string; qty: number }[] = [];
+      for (const entry of def.lootTable) {
+        if (Math.random() >= entry.chance) continue;
+        const qty = entry.minQty + Math.floor(Math.random() * (entry.maxQty - entry.minQty + 1));
+        await this.characterService.addItems(attacker.id, [{ itemId: entry.itemId, qty }]).catch(() => {});
+        loot.push({ itemId: entry.itemId, nameRu: ITEMS_DATABASE[entry.itemId]?.nameRu ?? entry.itemId, qty });
+      }
+
       GameLoop.getInstance().getSpawnSystem().onInstanceDeath(monsterCtx.instanceId);
 
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.region), {
         instanceId: monsterCtx.instanceId,
-        monsterId: monsterCtx.definition.id,
+        monsterId: def.id,
         killerId: attacker.id,
-        expReward: monsterCtx.definition.expReward,
+        expReward: def.expReward,
+        gold,
+        loot,
         leveledUp: reward.leveledUp,
         newLevel: reward.newLevel,
       }).catch(() => {});
     }
+  }
+
+  /** Смерть персонажа по id (например, от удара монстра) */
+  private async handleDeathById(characterId: string): Promise<void> {
+    const dead = await this.characterService.getCharacterById(characterId);
+    if (!dead || dead.hp > 0) return;
+    await this.handlePlayerDeath(dead, undefined);
   }
 
   /** Смерть игрока: респавн на стартовой точке региона + карма убийце */
