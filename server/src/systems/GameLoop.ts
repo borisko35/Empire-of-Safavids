@@ -102,7 +102,11 @@ export class GameLoop {
     for (const atk of attacks) {
       const target = nearbyPlayers.get(atk.region)?.find(p => p.id === atk.targetId);
       if (!target) continue;
-      const damage = this.monsterDamage(atk);
+      // Защита цели (выносливость) гасит часть урона: половинный вес против
+      // монстров, иначе низкий базовый урон полностью съедается бронёй
+      const victim = await this.characters.getCharacterById(target.id).catch(() => null);
+      if (!victim) continue;
+      const damage = this.monsterDamage(atk, victim.stats.endurance * 0.75);
       const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
       if (!applied) continue;
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_HIT(atk.region), {
@@ -117,15 +121,18 @@ export class GameLoop {
     }
   }
 
-  /** Урон монстра игроку: навык из базы монстров либо удар с руки */
-  private monsterDamage(atk: { skillId?: string; instanceId: string }): number {
+  /** Урон монстра игроку: навык из базы монстров либо удар с руки, минус защита цели */
+  private monsterDamage(atk: { skillId?: string; instanceId: string }, defense = 0): number {
     const ctx = this.spawnSystem.getAI().getContext(atk.instanceId);
     if (!ctx) return 5;
+    let raw: number;
     if (atk.skillId) {
       const skill = ctx.definition.skills.find(s => s.id === atk.skillId);
-      if (skill) return Math.max(3, Math.round(skill.damage));
+      raw = skill ? skill.damage : ctx.definition.strength * 1.6;
+    } else {
+      raw = ctx.definition.strength * 1.6;
     }
-    return Math.max(3, Math.round(ctx.definition.strength * 1.6));
+    return Math.max(3, Math.round(raw - defense));
   }
 
   private async decayKarmaOnline(): Promise<void> {

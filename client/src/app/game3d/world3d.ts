@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { World, PlayerEntity, tileHash } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
-  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CAMP,
+  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CAMP, COLLIDERS,
 } from './terrain';
 import { audio } from '../audio';
 import { chatVisible } from '../hud';
@@ -26,6 +26,8 @@ const JUMP_V = 7.6;
 const WALK_SPEED = 4.2;
 const RUN_SPEED = 7.6;
 const CROUCH_SPEED = 2.2;
+const PLAYER_R = 0.7;   // радиус персонажа для столкновений
+const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
 
 interface BoundRig {
   rig: Rig;
@@ -418,6 +420,29 @@ export class World3D {
     }
   }
 
+  /** Выталкивает точку из цилиндрических коллайдеров построек (проходы — для углов) */
+  private resolveCollisions(p: { x: number; z: number }, radius: number): void {
+    if (!COLLIDERS.length) return;
+    for (let pass = 0; pass < 3; pass++) {
+      let pushed = false;
+      for (const c of COLLIDERS) {
+        const dx = p.x - c.x, dz = p.z - c.z;
+        const d = Math.hypot(dx, dz);
+        const min = c.r + radius;
+        if (d < min) {
+          if (d > 1e-4) {
+            p.x = c.x + (dx / d) * min;
+            p.z = c.z + (dz / d) * min;
+          } else {
+            p.x = c.x + min; // ровно в центре — толкаем на восток
+          }
+          pushed = true;
+        }
+      }
+      if (!pushed) break;
+    }
+  }
+
   // ── Главный апдейт ───────────────────────────────────────────
   update(dt: number, now: number, night: number): void {
     if (!this.entities || !this.me) return;
@@ -453,6 +478,9 @@ export class World3D {
       me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
       me.flipped = false;
     }
+
+    // Столкновения с постройками — каждый кадр (в т.ч. если затолкало в стену)
+    this.resolveCollisions(me.pos, PLAYER_R);
 
     // ── Вертикаль: прыжок и земля ──
     const groundY = terrainHeight(me.pos.x, me.pos.z);
@@ -526,8 +554,11 @@ export class World3D {
     const camY = me.pos.y + 1.55 + Math.sin(this.pitch) * this.dist;
     const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist;
     const camZ = me.pos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.dist;
-    const minY = terrainHeight(camX, camZ) + 0.5;
-    this.camera.position.set(camX, Math.max(camY, minY), camZ);
+    // Камера тоже не должна проникать в здания
+    const cam = { x: camX, z: camZ };
+    this.resolveCollisions(cam, CAMERA_R);
+    const minY = terrainHeight(cam.x, cam.z) + 0.5;
+    this.camera.position.set(cam.x, Math.max(camY, minY), cam.z);
     this.camera.lookAt(me.pos.x, targetY, me.pos.z);
 
     // ── Свет и время суток ──
