@@ -51,6 +51,23 @@ test:server:
         path: server/coverage/cobertura-coverage.xml
 
 # ============================================================
+# Build client (Vite bundle as artifact)
+# ============================================================
+build:client:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  script:
+    - cd client && npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - client/web/game/
+  cache:
+    key: client-$CI_COMMIT_REF_SLUG
+    paths:
+      - client/node_modules/
+
+# ============================================================
 # Build Docker Image
 # ============================================================
 build:server:
@@ -64,6 +81,24 @@ build:server:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - docker push $CI_REGISTRY_IMAGE/server:$CI_COMMIT_SHA
     - docker push $CI_REGISTRY_IMAGE/server:latest
+  only:
+    - main
+    - develop
+
+# ============================================================
+# Build Client Docker Image
+# ============================================================
+build:client-image:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -f client/Dockerfile -t $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/client:latest
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE/client:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/client:latest
   only:
     - main
     - develop

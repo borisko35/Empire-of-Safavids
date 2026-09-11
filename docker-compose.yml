@@ -28,6 +28,17 @@ services:
       - ./server/logs:/app/logs
     restart: unless-stopped
 
+  # Игровой клиент: статика Three.js + прокси API/WS на сервер
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      - server
+    restart: unless-stopped
+
   # PostgreSQL
   postgres:
     image: postgres:16-alpine
