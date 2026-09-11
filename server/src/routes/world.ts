@@ -1,11 +1,21 @@
 import { Router, Request, Response } from 'express';
+import Joi from 'joi';
 import { Region } from '../types/game.types';
 import { RedisService } from '../services/RedisService';
+import { CharacterService } from '../services/CharacterService';
+import { GameSocketHandler } from '../socket/GameSocketHandler';
 import { asyncHandler } from '../utils/asyncHandler';
+import { authMiddleware } from '../middleware/auth';
 import { REGION_LEVEL_REQUIREMENTS } from '../../../shared/constants';
 
 export const worldRouter = Router();
 const redis = RedisService.getInstance();
+const characterService = new CharacterService();
+
+const travelSchema = Joi.object({
+  characterId: Joi.string().uuid().required(),
+  region: Joi.string().valid(...Object.values(Region)).required(),
+});
 
 const REGION_INFO: Record<Region, { name: string; nameRu: string; minLevel: number; description: string }> = {
   [Region.TABRIZ]: { name: 'Tabriz', nameRu: 'Тебриз', minLevel: REGION_LEVEL_REQUIREMENTS.tabriz, description: 'Столица Сефевидской империи. Стартовая зона для новых игроков.' },
@@ -36,4 +46,38 @@ worldRouter.get('/regions/:id', asyncHandler(async (req: Request, res: Response)
 
   const onlinePlayers = await redis.getPlayersInRegion(region);
   return res.json({ id: region, ...info, onlinePlayers: onlinePlayers.length });
+}));
+
+// POST /api/world/travel — путешествие персонажа в другой регион.
+// Мир бесшовный: позиция не меняется, меняется регион (спавн монстров,
+// комнаты сокетов, чат) и проверяется требование по уровню.
+worldRouter.post('/travel', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = travelSchema.validate(req.body);
+  if (error) return res.status(400).json({ error: 'invalid_request' });
+
+  const region = value.region as Region;
+  const info = REGION_INFO[region];
+  if (!info) return res.status(404).json({ error: 'region_not_found' });
+
+  const character = await characterService.getCharacterById(value.characterId);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'character_not_found' });
+  }
+  if (character.region === region) {
+    return res.json({ character, alreadyThere: true });
+  }
+
+  const minLevel = REGION_LEVEL_REQUIREMENTS[region] ?? 1;
+  if (character.level < minLevel) {
+    return res.status(403).json({ error: 'region_locked', minLevel });
+  }
+
+  const oldRegion = character.region;
+  const updated = await characterService.updateRegion(character.id, region);
+  if (!updated) return res.status(500).json({ error: 'server_error' });
+
+  // Комнаты сокета и членство в Redis — чтобы чат/ИИ/онлайн сменили регион сразу
+  await GameSocketHandler.getInstance()?.movePlayerRegion(character.id, oldRegion, region).catch(() => {});
+
+  return res.json({ character: updated });
 }));

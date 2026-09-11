@@ -501,3 +501,19 @@ input, select { font: inherit; }
 .inv-item .inv-name { flex: 1; }
 .inv-item .inv-qty { color: var(--gold-light); }
 .inv-empty { color: var(--cream-dim); text-align: center; padding: 8px; }
+
+/* Квесты: статус и принятие */
+.qstatus { margin-top: 6px; font-size: 12px; color: var(--cream-dim); }
+.qstatus.done { color: #8fe6a0; font-weight: 600; }
+
+.quest-accept, .region-travel {
+  margin-top: 8px; width: 100%; padding: 6px 10px;
+  border: 1px solid rgba(244, 210, 108, 0.35); border-radius: 7px;
+  background: rgba(244, 210, 108, 0.12); color: var(--gold-light);
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.quest-accept:hover:not(:disabled), .region-travel:hover:not(:disabled) {
+  background: rgba(244, 210, 108, 0.22);
+}
+.quest-accept:disabled, .region-travel:disabled { opacity: 0.45; cursor: default; }
+.region-row.current { border-color: rgba(244, 210, 108, 0.4); }

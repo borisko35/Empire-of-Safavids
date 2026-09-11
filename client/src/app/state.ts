@@ -77,6 +77,8 @@ export const session = {
   level: 0, experience: 0,
   /** Убийства за сессию: monsterId -> количество (для прогресса квестов) */
   kills: {} as Record<string, number>,
+  /** Прогресс квестов с сервера: questId -> { status, progress } */
+  questState: {} as Record<string, { status: string; progress: Record<string, number> }>,
   worldTime: '' as string,
 };
 

@@ -81,6 +81,7 @@ export const SERVER_EVENTS = {
   MONSTER_KILLED: 'monster:killed',
   KARMA_CHANGED: 'karma:changed',
   RESOURCES: 'player:resources',       // периодический синк hp/маны/стамины/золота
+  QUEST_COMPLETED: 'quest:completed',  // квест завершён: награды начислены
 } as const;
 
 // Каналы Redis pub/sub

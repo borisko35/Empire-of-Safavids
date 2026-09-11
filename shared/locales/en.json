@@ -1,5 +1,8 @@
 {
-  "meta": { "name": "English", "code": "en" },
+  "meta": {
+    "name": "English",
+    "code": "en"
+  },
   "menu": {
     "subtitle": "Action MMORPG in the heart of the Persian Empire",
     "lore_line": "From the fires of Chaldiran to the silks of Isfahan — write your own history",
@@ -73,7 +76,16 @@
     "loot": "Loot",
     "block": "Blocked",
     "crit": "Critical hit!",
-    "exit_game": "Back to menu"
+    "exit_game": "Back to menu",
+    "accept": "Accept",
+    "completed": "Completed",
+    "in_progress": "In progress",
+    "travel": "Travel",
+    "travel_done": "You set off",
+    "travel_here": "You are already here",
+    "quest_accepted": "Quest accepted",
+    "quest_completed": "Quest completed",
+    "quest_reward": "Reward"
   },
   "chat": {
     "title": "Chat",
@@ -93,15 +105,51 @@
     "timeline_label": "Timeline"
   },
   "history_events": [
-    { "year": "1501", "title": "Birth of an Empire", "text": "Shah Ismail I enters Tabriz and proclaims the Safavid state. Shi'a Islam becomes the state religion — Persia takes on a new face." },
-    { "year": "1514", "title": "Battle of Chaldiran", "text": "Ottoman Sultan Selim I the Grim inflicts Ismail's first defeat. The Empire endures, but its eternal rivalry with the Ottomans is sealed." },
-    { "year": "1548", "title": "The Capital Moves", "text": "Tahmasp I moves the court from vulnerable Tabriz to Qazvin. The frontiers pulse with war in the west and the east alike." },
-    { "year": "1587", "title": "The Rise of Abbas", "text": "Sixteen-year-old Abbas I the Great takes the throne. He will forge a new army — the 'regiments of the shah' — and restore the empire's might." },
-    { "year": "1598", "title": "Isfahan, Half the World", "text": "Abbas moves the capital to Isfahan. The Naqsh-e Jahan square, turquoise domes and bazaars turn the city into legend: 'Isfahan is half the world.'" },
-    { "year": "1603", "title": "The Return of Tabriz", "text": "Abbas I retakes Azerbaijan and Tabriz, shattering the Ottoman armies. The empire reaches its military zenith." },
-    { "year": "1622", "title": "Masters of the Trade Routes", "text": "Kandahar is taken, the Portuguese are expelled from Hormuz. Persian silk flows to Europe; the treasury fills with the gold of the Great Silk Road." },
-    { "year": "1722", "title": "The Fall of Isfahan", "text": "Afghan tribes of Mahmud Hotak take the capital after a long siege. The golden age ends in famine and fire." },
-    { "year": "1736", "title": "Twilight of the Safavids", "text": "Nader Shah is crowned the new ruler of Persia. The Safavid dynasty passes into history — but its art endures for centuries." }
+    {
+      "year": "1501",
+      "title": "Birth of an Empire",
+      "text": "Shah Ismail I enters Tabriz and proclaims the Safavid state. Shi'a Islam becomes the state religion — Persia takes on a new face."
+    },
+    {
+      "year": "1514",
+      "title": "Battle of Chaldiran",
+      "text": "Ottoman Sultan Selim I the Grim inflicts Ismail's first defeat. The Empire endures, but its eternal rivalry with the Ottomans is sealed."
+    },
+    {
+      "year": "1548",
+      "title": "The Capital Moves",
+      "text": "Tahmasp I moves the court from vulnerable Tabriz to Qazvin. The frontiers pulse with war in the west and the east alike."
+    },
+    {
+      "year": "1587",
+      "title": "The Rise of Abbas",
+      "text": "Sixteen-year-old Abbas I the Great takes the throne. He will forge a new army — the 'regiments of the shah' — and restore the empire's might."
+    },
+    {
+      "year": "1598",
+      "title": "Isfahan, Half the World",
+      "text": "Abbas moves the capital to Isfahan. The Naqsh-e Jahan square, turquoise domes and bazaars turn the city into legend: 'Isfahan is half the world.'"
+    },
+    {
+      "year": "1603",
+      "title": "The Return of Tabriz",
+      "text": "Abbas I retakes Azerbaijan and Tabriz, shattering the Ottoman armies. The empire reaches its military zenith."
+    },
+    {
+      "year": "1622",
+      "title": "Masters of the Trade Routes",
+      "text": "Kandahar is taken, the Portuguese are expelled from Hormuz. Persian silk flows to Europe; the treasury fills with the gold of the Great Silk Road."
+    },
+    {
+      "year": "1722",
+      "title": "The Fall of Isfahan",
+      "text": "Afghan tribes of Mahmud Hotak take the capital after a long siege. The golden age ends in famine and fire."
+    },
+    {
+      "year": "1736",
+      "title": "Twilight of the Safavids",
+      "text": "Nader Shah is crowned the new ruler of Persia. The Safavid dynasty passes into history — but its art endures for centuries."
+    }
   ],
   "badges": {
     "rarity": {
@@ -156,5 +204,25 @@
     "back": "Back",
     "confirm": "Confirm",
     "close": "Close"
+  },
+  "errors": {
+    "invalid_credentials": "Wrong email or password",
+    "user_not_found": "User not found",
+    "email_taken": "This email is already registered",
+    "username_taken": "This username is already taken",
+    "weak_password": "Password is too weak (minimum 8 characters)",
+    "underage": "You must be of legal age",
+    "terms_not_accepted": "You must accept the terms",
+    "account_banned": "Account is banned",
+    "session_expired": "Session expired. Please sign in again",
+    "network_error": "Network error. Check your connection",
+    "server_error": "Server error. Try again later",
+    "region_locked": "Region is locked: level too low",
+    "quest_level_low": "Your level is too low for this quest",
+    "quest_locked": "Quest locked: finish previous quests first",
+    "quest_already_completed": "Quest is already completed",
+    "quest_class_mismatch": "Quest is not available to your class",
+    "quest_not_found": "Quest not found",
+    "character_not_found": "Character not found"
   }
 }

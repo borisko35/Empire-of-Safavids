@@ -213,6 +213,16 @@ export class CharacterService {
     return Number(row.gold);
   }
 
+  /** Сменить регион персонажа (путешествие). Возвращает обновлённого персонажа. */
+  async updateRegion(characterId: string, region: Region): Promise<Character | null> {
+    const row = await this.db.queryOne<{ id: string }>(
+      'UPDATE characters SET region = $2, updated_at = NOW() WHERE id = $1 RETURNING id',
+      [characterId, region]
+    );
+    if (!row) return null;
+    return this.getCharacterById(characterId);
+  }
+
   // ============================================================
   // Инвентарь (стеки: уникально по персонаж+предмет)
   // ============================================================

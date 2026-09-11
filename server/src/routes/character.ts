@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
+import { QuestService } from '../services/QuestService';
 import { CharacterClass } from '../types/game.types';
 import { authMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -10,6 +11,7 @@ import { MAX_CHARACTERS_PER_ACCOUNT } from '../../../shared/constants';
 export const characterRouter = Router();
 const characterService = new CharacterService();
 const combatService = new CombatService();
+const questService = new QuestService();
 
 const createCharacterSchema = Joi.object({
   name: Joi.string().min(2).max(24).pattern(/^[a-zA-Zа-яА-Я0-9_\- ]+$/).required(),
@@ -54,4 +56,25 @@ characterRouter.get('/:id/inventory', authMiddleware, asyncHandler(async (req: R
   }
   const items = await characterService.getInventory(req.params.id);
   return res.json({ items });
+}));
+
+// GET /api/characters/:id/quests — прогресс квестов персонажа
+characterRouter.get('/:id/quests', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const quests = await questService.getState(req.params.id);
+  return res.json({ quests });
+}));
+
+// POST /api/characters/:id/quests/:questId/accept — взять квест
+characterRouter.post('/:id/quests/:questId/accept', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const result = await questService.accept(req.params.id, req.params.questId);
+  if (!result.ok) return res.status(400).json({ error: result.code });
+  return res.json({ success: true });
 }));

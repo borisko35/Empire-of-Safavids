@@ -5,6 +5,7 @@ import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
+import { QuestService } from '../services/QuestService';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { Character, CombatAction, Region } from '../types/game.types';
@@ -22,12 +23,15 @@ type ChatChannel = 'world' | 'region' | 'guild' | 'party';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class GameSocketHandler {
+  private static instance: GameSocketHandler | null = null;
+
   private io: SocketIOServer;
   private redis = RedisService.getInstance();
   private characterService = new CharacterService();
   private combatService = new CombatService();
   private antiCheat = new AntiCheatSystem();
   private karmaSystem = new KarmaSystem();
+  private questService = new QuestService();
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
@@ -38,6 +42,36 @@ export class GameSocketHandler {
 
   constructor(io: SocketIOServer) {
     this.io = io;
+    GameSocketHandler.instance = this;
+  }
+
+  /** Доступ из REST-роутов (например, travel): текущий обработчик сокетов */
+  static getInstance(): GameSocketHandler | null {
+    return GameSocketHandler.instance;
+  }
+
+  /**
+   * Переместить онлайн-игрока в новый регион: комнаты сокета + членство в Redis.
+   * Вызывается REST-эндпоинтом /api/world/travel после смены региона в БД.
+   */
+  async movePlayerRegion(characterId: string, oldRegion: Region, newRegion: Region): Promise<void> {
+    const socket = this.activePlayers.get(characterId);
+    if (socket) {
+      socket.leave(`region:${oldRegion}`);
+      socket.join(`region:${newRegion}`);
+      socket.region = newRegion;
+      socket.to(`region:${oldRegion}`).emit(SOCKET_EVENTS.PLAYER_LEFT, { characterId });
+      // Позиция персонажа в новом регионе — текущая в мире (мир бесшовный)
+      const character = await this.characterService.getCharacterById(characterId).catch(() => null);
+      this.io.to(`region:${newRegion}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
+        characterId,
+        name: character?.name ?? '',
+        class: character?.class ?? '',
+        position: character?.position ?? { x: 0, y: 0, z: 0 },
+      });
+    }
+    await this.redis.removePlayerFromRegion(oldRegion, characterId).catch(() => {});
+    await this.redis.addPlayerToRegion(newRegion, characterId).catch(() => {});
   }
 
   initialize(): void {
@@ -482,6 +516,15 @@ export class GameSocketHandler {
       }
 
       GameLoop.getInstance().getSpawnSystem().onInstanceDeath(monsterCtx.instanceId);
+
+      // Прогресс квестов: kill-цели; завершившиеся квесты — с наградами
+      const completedQuests = await this.questService.recordKill(attacker.id, def.id).catch((e: unknown) => {
+        logger.debug('Quest recordKill failed:', e);
+        return [];
+      });
+      if (completedQuests.length) {
+        socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: completedQuests });
+      }
 
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.region), {
         instanceId: monsterCtx.instanceId,

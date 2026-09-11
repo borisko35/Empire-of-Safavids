@@ -151,14 +151,42 @@ export async function loadRegions(): Promise<void> {
     box.innerHTML = '';
     for (const r of regions) {
       const locked = (session.level ?? 0) < r.minLevel;
+      const here = r.id === session.character?.region;
       const row = document.createElement('div');
-      row.className = 'region-row' + (r.id === session.character?.region ? ' current' : '') + (locked ? ' locked' : '');
+      row.className = 'region-row' + (here ? ' current' : '') + (locked ? ' locked' : '');
       row.innerHTML =
         `<div class="rname"><b>${r.nameRu}</b><span class="ronline">${r.onlinePlayers} ${t('world.online')}</span></div>` +
         `<div class="rdesc">${locked ? '🔒 ' : ''}${r.description}</div>` +
         `<div class="rdesc">${t('badges.level')} ${r.minLevel}+</div>`;
+      if (!here) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'region-travel';
+        btn.dataset.region = r.id;
+        btn.disabled = locked;
+        btn.textContent = t('world.travel');
+        row.append(btn);
+      }
       box.append(row);
     }
+
+    // Путешествие: смена региона персонажа на сервере
+    box.querySelectorAll<HTMLButtonElement>('button.region-travel').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!session.character) return;
+        btn.disabled = true;
+        try {
+          const { character } = await api.travel(session.character.id, btn.dataset.region!);
+          session.character.region = character.region;
+          toast(t('world.travel_done'), 'success');
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          toast(code ? t(`errors.${code}`) : (err as Error).message, 'error');
+        }
+        void loadRegions();
+        void loadQuests();
+      });
+    });
   } catch {
     /* регионы недоступны — не критично */
   }
@@ -171,6 +199,17 @@ export async function loadQuests(): Promise<void> {
     box.innerHTML = '';
     const level = session.level ?? 1;
     const region = session.character?.region;
+
+    // Прогресс с сервера — источник истины для принятых квестов
+    if (session.character) {
+      try {
+        const { quests: state } = await api.questState(session.character.id);
+        session.questState = Object.fromEntries(state.map((s) => [s.questId, s]));
+      } catch {
+        /* прогресс недоступен — показываем локальный */
+      }
+    }
+
     const available = quests.filter(
       (q) => q.minLevel <= level + 2 && (!q.requiredRegion || q.requiredRegion === region),
     );
@@ -183,23 +222,58 @@ export async function loadQuests(): Promise<void> {
       const card = document.createElement('div');
       card.className = 'quest-card';
       const title = (session as unknown as { lang?: string }).lang === 'en' ? q.title : q.titleRu;
+      const st = session.questState[q.id];
+      const status: 'active' | 'completed' | undefined = st?.status as 'active' | 'completed' | undefined;
+
       const objectives = q.objectives
         .map((o) => {
-          const have = session.kills[o.target] ?? 0;
-          const done = have >= o.required && o.type === 'kill';
+          // Принятый квест — счётчик сервера; ещё не принятый — локальный превью-счётчик
+          const have = status ? (st?.progress[o.id] ?? 0) : (session.kills[o.target] ?? 0);
+          const done = status === 'completed' || (o.type === 'kill' && have >= o.required);
           return o.type === 'kill'
             ? `<div class="qobj ${done ? 'done' : ''}">✦ ${o.description}: ${Math.min(have, o.required)}/${o.required}</div>`
-            : `<div class="qobj">✦ ${o.description}</div>`;
+            : `<div class="qobj ${done ? 'done' : ''}">✦ ${o.description}</div>`;
         })
         .join('');
+
+      let statusLine = '';
+      if (status === 'completed') statusLine = `<div class="qstatus done">✓ ${t('world.completed')}</div>`;
+      else if (status === 'active') statusLine = `<div class="qstatus">${t('world.in_progress')}</div>`;
+
       card.innerHTML =
         `<div class="qtype">${q.type} · ${t('badges.level')} ${q.minLevel}+</div>` +
         `<b>${title}</b>` +
         `<div class="qdesc">${q.description}</div>` +
         objectives +
-        `<div class="qreward">✦ ${q.rewards.experience} ${t('world.exp')} · ◉ ${q.rewards.gold}</div>`;
+        `<div class="qreward">✦ ${q.rewards.experience} ${t('world.exp')} · ◉ ${q.rewards.gold}</div>` +
+        statusLine;
+
+      if (!status && session.character) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'quest-accept';
+        btn.dataset.quest = q.id;
+        btn.textContent = t('world.accept');
+        card.append(btn);
+      }
       box.append(card);
     }
+
+    // Принятие квестов (делегирование, т.к. список перерисовывается)
+    box.querySelectorAll<HTMLButtonElement>('button.quest-accept').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!session.character) return;
+        btn.disabled = true;
+        try {
+          await api.acceptQuest(session.character.id, btn.dataset.quest!);
+          toast(t('world.quest_accepted'), 'success');
+        } catch (err) {
+          const code = (err as { code?: string }).code;
+          toast(code ? t(`errors.${code}`) : (err as Error).message, 'error');
+        }
+        void loadQuests();
+      });
+    });
   } catch {
     /* квесты недоступны */
   }

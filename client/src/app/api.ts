@@ -4,8 +4,8 @@
 
 import { Character, RegionInfo, QuestDef, SkillDef } from './state';
 
-class ApiError extends Error {
-  constructor(message: string, public status: number) {
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public code?: string) {
     super(message);
   }
 }
@@ -17,10 +17,11 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(path, { ...options, headers });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const message = (body as { message?: string; error?: string }).message
-      ?? (body as { error?: string }).error
-      ?? `HTTP ${res.status}`;
-    throw new ApiError(message, res.status);
+    const b = body as { message?: string; error?: string; code?: string };
+    // Код ошибки: явный code либо одиночный токен в error («username_taken»)
+    const code = b.code
+      ?? (b.error && !b.error.includes(' ') ? b.error : undefined);
+    throw new ApiError(b.message ?? b.error ?? `HTTP ${res.status}`, res.status, code);
   }
   return body as T;
 }
@@ -58,5 +59,19 @@ export const api = {
 
   regions: () => req<{ regions: RegionInfo[] }>('/api/world/regions'),
 
+  travel: (characterId: string, region: string) =>
+    req<{ character: Character }>('/api/world/travel', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, region }),
+    }),
+
   quests: () => req<{ quests: QuestDef[] }>('/api/game/quests'),
+
+  questState: (characterId: string) =>
+    req<{ quests: { questId: string; status: string; progress: Record<string, number> }[] }>(
+      `/api/characters/${characterId}/quests`,
+    ),
+
+  acceptQuest: (characterId: string, questId: string) =>
+    req<{ success: boolean }>(`/api/characters/${characterId}/quests/${questId}/accept`, { method: 'POST' }),
 };

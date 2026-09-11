@@ -1,5 +1,8 @@
 {
-  "meta": { "name": "Azərbaycanca", "code": "az" },
+  "meta": {
+    "name": "Azərbaycanca",
+    "code": "az"
+  },
   "menu": {
     "subtitle": "Səfəvi imperiyasının ürəyində Action MMORPG",
     "lore_line": "Çaldıran odlarından İsfahan ipəyinə qədər — öz tarixini yaz",
@@ -73,7 +76,16 @@
     "loot": "Qənimət",
     "block": "Bloklandı",
     "crit": "Kritik zərbə!",
-    "exit_game": "Menyuya qayıt"
+    "exit_game": "Menyuya qayıt",
+    "accept": "Qəbul et",
+    "completed": "Tamamlandı",
+    "in_progress": "Davam edir",
+    "travel": "Yola çıx",
+    "travel_done": "Yola çıxdınız",
+    "travel_here": "Siz artıq buradasınız",
+    "quest_accepted": "Tapşırıq qəbul edildi",
+    "quest_completed": "Tapşırıq tamamlandı",
+    "quest_reward": "Mükafat"
   },
   "chat": {
     "title": "Çat",
@@ -93,15 +105,51 @@
     "timeline_label": "Xronologiya"
   },
   "history_events": [
-    { "year": "1501", "title": "İmperiyanın doğuşu", "text": "Şah I İsmayıl Təbrizə daxil olaraq Səfəvi dövlətini elan edir. Şiəlik dövlət dininə çevrilir — İran yeni üz qazanır." },
-    { "year": "1514", "title": "Çaldıran döyüşü", "text": "Osmanlı sultanı I Səlim Qanı İsmayıla ilk məğlubiyyəti verir. İmperiya ayaqda qalır, lakin Osmanlılarla əbədi rəqabət taleyini müəyyənləşdirir." },
-    { "year": "1548", "title": "Paytaxt köçürülür", "text": "I Təhmasib sarayı müdafiəsi çətin Təbrizdən Qəzvinə köçürür. Sərhədlər qərbdə də, şərqdə də müharibə ilə nəbzdəyir." },
-    { "year": "1587", "title": "Abbasın yüksəlişi", "text": "On altı yaşlı I Abbas Böyük taxta çıxır. O, yeni tip ordu — «şah alaylarını» yaradacaq və imperiyaya qüdrətini qaytaracaq." },
-    { "year": "1598", "title": "İsfahan — dünyanın yarısı", "text": "Abbas paytaxtı İsfahana köçürür. İmam meydanı, firuzəyi günbəzlər və bazarlar şəhəri əfsanəyə çevirir: «İsfahan — dünyanın yarısıdır»." },
-    { "year": "1603", "title": "Təbrizin qayıdışı", "text": "I Abbas Azərbaycanı və Təbrizi osmanlı ordularını məğlub edərək geri alır. İmperiya hərbi zirvəsinə çatır." },
-    { "year": "1622", "title": "Ticarət yollarının ağası", "text": "Qəndəhar alınır, portuqallar Hörmüzdən qovulur. Fars ipəyi Avropaya axır; xəzinə Böyük İpək Yolunun qızılı ilə dolur." },
-    { "year": "1722", "title": "İsfahanın süqutu", "text": "Mahmud Hotəkinin əfqan tayfaları uzun mühasirədən sonra paytaxtı alır. Qızıl dövr aclıq və yanğınlla bitir." },
-    { "year": "1736", "title": "Səfəvilərin qürubu", "text": "Nadir şah İranın yeni hökmdarı kimi tac qoyur. Səfəvi sülaləsi tarixə qovuşur — amma onun sənəti əsrlər boyu yaşayır." }
+    {
+      "year": "1501",
+      "title": "İmperiyanın doğuşu",
+      "text": "Şah I İsmayıl Təbrizə daxil olaraq Səfəvi dövlətini elan edir. Şiəlik dövlət dininə çevrilir — İran yeni üz qazanır."
+    },
+    {
+      "year": "1514",
+      "title": "Çaldıran döyüşü",
+      "text": "Osmanlı sultanı I Səlim Qanı İsmayıla ilk məğlubiyyəti verir. İmperiya ayaqda qalır, lakin Osmanlılarla əbədi rəqabət taleyini müəyyənləşdirir."
+    },
+    {
+      "year": "1548",
+      "title": "Paytaxt köçürülür",
+      "text": "I Təhmasib sarayı müdafiəsi çətin Təbrizdən Qəzvinə köçürür. Sərhədlər qərbdə də, şərqdə də müharibə ilə nəbzdəyir."
+    },
+    {
+      "year": "1587",
+      "title": "Abbasın yüksəlişi",
+      "text": "On altı yaşlı I Abbas Böyük taxta çıxır. O, yeni tip ordu — «şah alaylarını» yaradacaq və imperiyaya qüdrətini qaytaracaq."
+    },
+    {
+      "year": "1598",
+      "title": "İsfahan — dünyanın yarısı",
+      "text": "Abbas paytaxtı İsfahana köçürür. İmam meydanı, firuzəyi günbəzlər və bazarlar şəhəri əfsanəyə çevirir: «İsfahan — dünyanın yarısıdır»."
+    },
+    {
+      "year": "1603",
+      "title": "Təbrizin qayıdışı",
+      "text": "I Abbas Azərbaycanı və Təbrizi osmanlı ordularını məğlub edərək geri alır. İmperiya hərbi zirvəsinə çatır."
+    },
+    {
+      "year": "1622",
+      "title": "Ticarət yollarının ağası",
+      "text": "Qəndəhar alınır, portuqallar Hörmüzdən qovulur. Fars ipəyi Avropaya axır; xəzinə Böyük İpək Yolunun qızılı ilə dolur."
+    },
+    {
+      "year": "1722",
+      "title": "İsfahanın süqutu",
+      "text": "Mahmud Hotəkinin əfqan tayfaları uzun mühasirədən sonra paytaxtı alır. Qızıl dövr aclıq və yanğınlla bitir."
+    },
+    {
+      "year": "1736",
+      "title": "Səfəvilərin qürubu",
+      "text": "Nadir şah İranın yeni hökmdarı kimi tac qoyur. Səfəvi sülaləsi tarixə qovuşur — amma onun sənəti əsrlər boyu yaşayır."
+    }
   ],
   "badges": {
     "rarity": {
@@ -156,5 +204,25 @@
     "back": "Geri",
     "confirm": "Təsdiqlə",
     "close": "Bağla"
+  },
+  "errors": {
+    "invalid_credentials": "E-poçt və ya şifrə yanlışdır",
+    "user_not_found": "İstifadəçi tapılmadı",
+    "email_taken": "Bu e-poçt artıq qeydiyyatdan keçib",
+    "username_taken": "Bu ad artıq məşğuldur",
+    "weak_password": "Şifrə çox sadədir (ən azı 8 simvol)",
+    "underage": "Yalnız yetkinlərə icazə verilir",
+    "terms_not_accepted": "Şərtləri qəbul etməlisiniz",
+    "account_banned": "Hesab bloklanıb",
+    "session_expired": "Sessiya bitib. Yenidən daxil olun",
+    "network_error": "Şəbəkə xətası. Bağlantını yoxlayın",
+    "server_error": "Server xətası. Sonra cəhd edin",
+    "region_locked": "Region bağlıdır: səviyyə çox aşağıdır",
+    "quest_level_low": "Bu tapşırıq üçün səviyyəniz aşağıdır",
+    "quest_locked": "Tapşırıq bağlıdır: əvvəlkiləri tamamlayın",
+    "quest_already_completed": "Tapşırıq artıq tamamlandı",
+    "quest_class_mismatch": "Tapşırıq sinifiniz üçün deyil",
+    "quest_not_found": "Tapşırıq tapılmadı",
+    "character_not_found": "Karakter tapılmadı"
   }
 }

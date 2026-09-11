@@ -2,7 +2,7 @@
 // Экран аутентификации — Empire of Safavids
 // ============================================================
 
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { persistAuth } from '../state';
 import { t } from '../i18n';
 import { showScreen } from '../world';
@@ -13,6 +13,13 @@ function showError(message: string): void {
   const el = $('auth-error');
   el.textContent = message;
   el.classList.remove('hidden');
+}
+
+/** Ошибка авторизации: код сервера -> локализованный текст */
+function showAuthError(err: unknown): void {
+  const code = err instanceof ApiError ? err.code : undefined;
+  const localized = code ? t(`errors.${code}`) : '';
+  showError(localized && localized !== `errors.${code}` ? localized : ((err as Error).message || t('common.error')));
 }
 
 export function initAuthScreen(onSuccess: () => void): void {
@@ -39,7 +46,7 @@ export function initAuthScreen(onSuccess: () => void): void {
       persistAuth(data.token, data.userId, data.username);
       onSuccess();
     } catch (err) {
-      showError((err as Error).message || t('common.error'));
+      showAuthError(err);
     }
   };
 
@@ -64,7 +71,7 @@ export function initAuthScreen(onSuccess: () => void): void {
       persistAuth(data.token, data.userId, data.username);
       onSuccess();
     } catch (err) {
-      showError((err as Error).message || t('common.error'));
+      showAuthError(err);
     }
   };
 
