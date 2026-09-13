@@ -45,10 +45,10 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_poet', nameRu: 'Поэт Хафиз', panel: 'panel-quests', quest: false, dx: 6, dz: -20, look: { robe: 0xe8e0d0, robeDark: 0xbdb4a2, hat: 'turban', hatColor: 0x2e8b8b, weapon: 'none', scale: 0.96 } },
       { id: 'npc_guard_gate', nameRu: 'Привратник', panel: 'panel-party', quest: false, dx: 26, dz: 6, look: GUARD(0x50565e) },
   // ── Стражники городских ворот (проход на юго-западе) ──
-  { id: 'npc_gate_guard_l', nameRu: 'Стражник Фарид', panel: 'panel-dungeons', quest: false, dx: -43.1, dz: -36.5, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
-  { id: 'npc_gate_guard_r', nameRu: 'Стражник Кавус', panel: 'panel-dungeons', quest: false, dx: -46.5, dz: -32.1, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
-  { id: 'npc_gate_archer_l', nameRu: 'Лучник Марван', panel: 'panel-party', quest: false, dx: -46.0, dz: -39.5, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
-  { id: 'npc_gate_archer_r', nameRu: 'Лучник Данияр', panel: 'panel-party', quest: false, dx: -50.1, dz: -34.1, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
+  { id: 'npc_gate_guard_l', nameRu: 'Стражник Фарид', panel: 'panel-dungeons', quest: false, dx: -41.2, dz: -35.9, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
+  { id: 'npc_gate_guard_r', nameRu: 'Стражник Кавус', panel: 'panel-dungeons', quest: false, dx: -45.4, dz: -30.3, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
+  { id: 'npc_gate_archer_l', nameRu: 'Лучник Марван', panel: 'panel-party', quest: false, dx: -46.5, dz: -41.2, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
+  { id: 'npc_gate_archer_r', nameRu: 'Лучник Данияр', panel: 'panel-party', quest: false, dx: -52.0, dz: -34.1, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
       { id: 'npc_mystic', nameRu: 'Суфий Мевлана', panel: 'panel-quests', quest: true, dx: 2, dz: -26, look: { robe: 0xd9c27a, robeDark: 0xa8954f, hat: 'hood', hatColor: 0x7a5f3c, weapon: 'staff', scale: 0.98 } },
     ],
   },
@@ -137,6 +137,14 @@ function questMarker(): THREE.Sprite {
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
   sprite.scale.set(0.85, 0.85, 1);
   return sprite;
+}
+
+/** Мировые позиции NPC: id -> координаты (для стрелки-навигатора) */
+export const NPC_WORLD_POSITIONS: Record<string, { x: number; z: number; nameRu: string }> = {};
+for (const { origin, npcs } of NPC_GROUPS) {
+  for (const def of npcs) {
+    NPC_WORLD_POSITIONS[def.id] = { x: origin.x + def.dx, z: origin.z + def.dz, nameRu: def.nameRu };
+  }
 }
 
 export interface NpcsHandle {

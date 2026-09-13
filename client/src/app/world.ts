@@ -9,6 +9,9 @@ import { t } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
 import { loadPanelContent } from './panels';
+import { NPC_WORLD_POSITIONS } from './game3d/npc';
+import { GATE } from './game3d/terrain';
+import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
 import {
@@ -32,6 +35,76 @@ let lastMinimapDraw = 0;
 let night = 0;
 let deathTimer: ReturnType<typeof setTimeout> | null = null;
 
+
+// ── Стрелка-навигатор: цель активного квеста ─────────────────
+let navDefs: QuestDef[] | null = null;
+let navTimer: ReturnType<typeof setInterval> | null = null;
+
+const REGION_ANCHORS: Record<string, { x: number; z: number }> = {
+  tabriz: { x: 34, z: 26 }, isfahan: { x: 34, z: 26 }, shiraz: { x: 90, z: -60 },
+  caucasus: { x: 60, z: 140 }, mesopotamia: { x: 200, z: 50 },
+  khorasan: { x: 150, z: 200 }, persian_gulf: { x: -60, z: -170 },
+};
+const EXPLORE_ANCHORS: Record<string, { x: number; z: number }> = {
+  tabriz_gate: GATE, isfahan_bazaar: { x: 34, z: 34 }, ottoman_camp_isfahan: { x: 34, z: 26 },
+};
+
+function resolveQuestTarget(obj: QuestObjectiveDef, def: QuestDef): { x: number; z: number; label: string } | null {
+  if (!me) return null;
+  const withDist = (x: number, z: number) =>
+    ({ x, z, label: `${obj.description} · ${Math.round(Math.hypot(x - me!.pos.x, z - me!.pos.z))} ${t('nav.m')}` });
+
+  if (obj.type === 'kill') {
+    let best: { x: number; z: number } | null = null;
+    let bestD = Infinity;
+    if (world) {
+      for (const m of world.monsters.values()) {
+        if (m.monsterId !== obj.target || m.deadAt) continue;
+        const d = Math.hypot(m.pos.x - me.pos.x, m.pos.z - me.pos.z);
+        if (d < bestD) { bestD = d; best = { x: m.pos.x, z: m.pos.z }; }
+      }
+    }
+    if (best) return withDist(best.x, best.z);
+    return null; // монстров этого вида пока нет в мире — стрелку прячем
+  }
+  if (obj.type === 'talk') {
+    const npc = NPC_WORLD_POSITIONS[obj.target];
+    if (npc) return withDist(npc.x, npc.z);
+  }
+  if (obj.type === 'explore') {
+    const a = EXPLORE_ANCHORS[obj.target];
+    if (a) return withDist(a.x, a.z);
+  }
+  const anchor = REGION_ANCHORS[def.npcGiverRegion];
+  return anchor ? withDist(anchor.x, anchor.z) : null;
+}
+
+async function refreshNavTarget(): Promise<void> {
+  if (!session.character || !world3d) return;
+  try {
+    if (!navDefs) navDefs = (await api.quests()).quests;
+    const { quests: state } = await api.questState(session.character.id);
+    const active = state.filter((q) => q.status === 'active');
+    let target: { x: number; z: number; label: string } | null = null;
+    for (const st of active) {
+      const def = navDefs.find((q) => q.id === st.questId);
+      if (!def) continue;
+      const obj = def.objectives.find((o) => (st.progress[o.id] ?? 0) < o.required);
+      if (!obj) continue;
+      target = resolveQuestTarget(obj, def);
+      if (target) break;
+    }
+    world3d.setNavTarget(target);
+    const el = document.getElementById('nav-hud');
+    if (el) {
+      el.classList.toggle('hidden', !target);
+      el.textContent = target ? ('🎯 ' + target.label) : '';
+    }
+  } catch {
+    /* навигация не критична */
+  }
+}
+
 // ── Вход в мир ───────────────────────────────────────────────
 
 export async function enterWorld(character: Character): Promise<void> {
@@ -48,6 +121,9 @@ export async function enterWorld(character: Character): Promise<void> {
   });
   refreshBars();
   void loadSkillbar();
+  void refreshNavTarget();
+  if (navTimer) clearInterval(navTimer);
+  navTimer = setInterval(() => void refreshNavTarget(), 3000);
   void loadRegions();
   void loadQuests();
 
@@ -119,6 +195,8 @@ export async function enterWorld(character: Character): Promise<void> {
 export function leaveWorld(): void {
   cancelAnimationFrame(raf);
   audio.ensureAuth();
+  if (navTimer) { clearInterval(navTimer); navTimer = null; }
+  world3d?.setNavTarget(null);
   socket.disconnect();
   if (deathTimer) clearTimeout(deathTimer);
   world3d?.dispose();
@@ -273,6 +351,7 @@ function wireSocket(): void {
     }
     void loadQuests();
     void loadInventory();
+    void refreshNavTarget();
     refreshBars();
   });
 
@@ -441,6 +520,7 @@ function wireInput(): void {
   };
 
   window.addEventListener('game:skill', (e) => useSkill((e as CustomEvent<string>).detail));
+  window.addEventListener('quest:accepted', () => void refreshNavTarget());
 
   $('btn-continue')?.addEventListener('click', () => document.getElementById('overlay-menu')?.classList.add('hidden'));
   $('btn-exit')?.addEventListener('click', () => {

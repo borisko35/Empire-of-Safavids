@@ -36,6 +36,12 @@ export const CARAVANSERAI = { x: 505, z: 55, radius: 30, level: 1.2 }; // кар
 export const VILLAGE = { x: -495, z: -415, radius: 26, level: 2.0 };   // лесная деревня
 export const FORT = { x: -320, z: -705, radius: 28, level: 22 };       // горный форт
 
+/** Мировые координаты городских ворот (якорь навигации) */
+export const GATE = (() => {
+  const a = Math.atan2(-CITY.z, -CITY.x);
+  return { x: CITY.x + Math.cos(a) * CITY.radius, z: CITY.z + Math.sin(a) * CITY.radius };
+})();
+
 export type Biome = 'desert' | 'forest' | 'field' | 'mountain' | 'water';
 
 /** Цилиндрические коллайдеры построек: персонаж и камера их уважают */

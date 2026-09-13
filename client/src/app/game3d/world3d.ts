@@ -16,6 +16,7 @@ import {
 import { createSky, SkyHandle } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
+import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { audio } from '../audio';
 import { chatVisible } from '../hud';
 
@@ -51,6 +52,7 @@ export class World3D {
   private sky!: SkyHandle;
   private fauna!: FaunaHandle;
   private npcs!: NpcsHandle;
+  private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
 
@@ -148,6 +150,7 @@ export class World3D {
     this.sky = createSky(this.scene);
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
+    this.navigator = createNavigator(this.scene);
 
     // Кольцо цели
     this.targetRing = new THREE.Mesh(
@@ -195,6 +198,11 @@ export class World3D {
     this.yaw = yaw;
     this.pitch = pitch;
     if (dist != null) this.dist = Math.min(15, Math.max(3.2, dist));
+  }
+
+  /** Цель стрелки-навигатора над игроком */
+  setNavTarget(target: NavTarget | null): void {
+    this.navigator?.setTarget(target);
   }
 
   /** Игровой час (0–23) от world:time — ведёт солнце/луну/звёзды */
@@ -595,6 +603,7 @@ export class World3D {
     this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
     this.fauna.update(dt, now);
     this.npcs.update(dt, now);
+    this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
     // Солнце/луна по дуге: источник света следует за светилом
     const sunDir = this.sky.sunDirection;
@@ -654,6 +663,7 @@ export class World3D {
     this.sky?.dispose();
     this.fauna?.dispose();
     this.npcs?.dispose();
+    this.navigator?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fxLayer?.remove();

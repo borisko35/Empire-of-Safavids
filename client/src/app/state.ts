@@ -63,6 +63,7 @@ export interface QuestDef {
   minLevel: number;
   requiredRegion?: string;
   objectives: QuestObjectiveDef[];
+  npcGiverRegion: string;
   rewards: { experience: number; gold: number; items?: { itemId: string; quantity: number }[] };
 }
 

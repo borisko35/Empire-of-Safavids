@@ -273,5 +273,8 @@
     "trade_cancelled": "Müqavilə ləğv edildi, yük qaytarıldı",
     "trade_hint": "Təyinat şəhərində:",
     "npc_greeting": "sizi salamlayır"
+  },
+  "nav": {
+    "m": "m"
   }
 }
