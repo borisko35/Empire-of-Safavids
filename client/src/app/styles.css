@@ -73,7 +73,7 @@ input, select { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg) url('/assets/bg-history.png') center / cover no-repeat;
+  background: var(--bg) url('./assets/bg-history.png') center / cover no-repeat;
 }
 
 .auth-card {
@@ -144,7 +144,7 @@ input, select { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg) url('/assets/bg-history.png') center / cover no-repeat;
+  background: var(--bg) url('./assets/bg-history.png') center / cover no-repeat;
   overflow-y: auto;
 }
 
@@ -501,6 +501,37 @@ input, select { font: inherit; }
 .inv-item .inv-name { flex: 1; }
 .inv-item .inv-qty { color: var(--gold-light); }
 .inv-empty { color: var(--cream-dim); text-align: center; padding: 8px; }
+
+/* Экипировка и действия с предметами */
+.equip-summary { margin-bottom: 8px; }
+.equip-row { display: flex; align-items: center; gap: 6px; padding: 3px 2px; font-size: 12px; }
+.equip-slot { color: var(--cream-dim); min-width: 68px; flex: none; }
+.equip-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.equip-bonus { color: var(--gold-light); font-size: 11.5px; margin-top: 4px; }
+.inv-actions { display: flex; gap: 4px; flex: none; }
+.inv-action {
+  font: inherit; font-size: 10.5px; padding: 2px 7px; border-radius: 5px;
+  background: rgba(201, 168, 76, 0.15); color: var(--gold-light);
+  border: 1px solid rgba(201, 168, 76, 0.35); cursor: pointer;
+}
+.inv-action:hover { background: rgba(201, 168, 76, 0.3); }
+
+/* Новые панели: подзаголовки, статус данжа, мини-карта */
+.panel-subhead {
+  font-size: 11.5px; color: var(--gold-light); margin: 8px 0 4px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+.dungeon-status { border-color: rgba(201, 168, 76, 0.35); }
+.minimap {
+  position: absolute; top: 14px; right: 14px;
+  border-radius: 10px; overflow: hidden;
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+.minimap canvas { display: block; }
+
+/* Панели не должны перекрывать мини-карту */
+.side-panel { max-height: 62vh; overflow-y: auto; }
 
 /* Квесты: статус и принятие */
 .qstatus { margin-top: 6px; font-size: 12px; color: var(--cream-dim); }

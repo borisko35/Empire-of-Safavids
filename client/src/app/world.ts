@@ -8,10 +8,11 @@ import { api } from './api';
 import { t } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
+import { loadPanelContent } from './panels';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
 import {
-  chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions,
+  chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
   tickCooldowns, toast,
 } from './hud';
@@ -27,6 +28,7 @@ let me: PlayerEntity | null = null;
 let raf = 0;
 let lastFrame = 0;
 let lastMoveSent = 0;
+let lastMinimapDraw = 0;
 let night = 0;
 let deathTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -443,6 +445,7 @@ function wireInput(): void {
       if (btn.dataset.panel === 'panel-regions') void loadRegions();
       if (btn.dataset.panel === 'panel-quests') void loadQuests();
       if (btn.dataset.panel === 'panel-inventory') void loadInventory();
+      loadPanelContent(btn.dataset.panel);
     });
   }
 }
@@ -515,4 +518,13 @@ function loop(now: number): void {
   if (Math.random() < dt * 0.5) refreshBars();
 
   tickCooldowns();
+
+  // Мини-карта: игрок в центре, монстры вокруг (раз в ~0.5с)
+  if (now - lastMinimapDraw > 500) {
+    lastMinimapDraw = now;
+    updateMinimap(
+      { x: me.pos.x, z: me.pos.z },
+      [...world.monsters.values()].map((m) => ({ x: m.pos.x, z: m.pos.z })),
+    );
+  }
 }

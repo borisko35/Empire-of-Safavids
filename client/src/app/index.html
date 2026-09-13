@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Empire of Safavids — Игра</title>
-  <link rel="icon" href="/favicon.ico">
+  <link rel="icon" href="./favicon.ico">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <section class="screen" id="screen-auth">
     <div class="auth-card">
       <div class="auth-brand">
-        <img src="/assets/icon-256.png" alt="" width="56" height="56">
+        <img src="./assets/icon-256.png" alt="" width="56" height="56">
         <h1>Empire of <b>Safavids</b></h1>
       </div>
 
@@ -115,7 +115,32 @@
     </div>
     <div class="hud side-panel hidden" id="panel-inventory">
       <h3><span data-icon="chest"></span><span data-i18n="world.inventory"></span></h3>
+      <div id="equipment-summary" class="equip-summary"></div>
       <div id="inventory-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-dungeons">
+      <h3><span data-icon="swords"></span><span data-i18n="panels.dungeons"></span></h3>
+      <div id="dungeons-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-shop">
+      <h3><span data-icon="coin"></span><span data-i18n="panels.shop"></span></h3>
+      <div id="shop-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-craft">
+      <h3><span data-icon="gear"></span><span data-i18n="panels.craft"></span></h3>
+      <div id="craft-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-auction">
+      <h3><span data-icon="coin"></span><span data-i18n="panels.auction"></span></h3>
+      <div id="auction-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-party">
+      <h3><span data-icon="user"></span><span data-i18n="panels.party"></span></h3>
+      <div id="party-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-trade">
+      <h3><span data-icon="silk"></span><span data-i18n="panels.trade"></span></h3>
+      <div id="trade-list"></div>
     </div>
 
     <!-- Кнопки-переключатели панелей -->
@@ -123,6 +148,17 @@
       <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
       <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
       <button data-panel="panel-inventory" data-icon="chest" title="Сумка" type="button"></button>
+      <button data-panel="panel-dungeons" data-icon="swords" title="Данжи" type="button"></button>
+      <button data-panel="panel-shop" data-icon="coin" title="Магазин" type="button"></button>
+      <button data-panel="panel-craft" data-icon="gear" title="Крафт" type="button"></button>
+      <button data-panel="panel-auction" data-icon="coin" title="Аукцион" type="button"></button>
+      <button data-panel="panel-party" data-icon="user" title="Группа" type="button"></button>
+      <button data-panel="panel-trade" data-icon="silk" title="Караваны" type="button"></button>
+    </div>
+
+    <!-- Мини-карта -->
+    <div class="hud minimap" id="minimap">
+      <canvas id="minimap-canvas" width="150" height="150"></canvas>
     </div>
 
     <!-- Мир. время -->

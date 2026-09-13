@@ -14,6 +14,14 @@ export default defineConfig({
     outDir: '../../web/game',
     emptyOutDir: true,
     assetsInlineLimit: 0,
+    rollupOptions: {
+      output: {
+        // three.js — тяжёлый вендор: отдельный чанк для кэширования
+        manualChunks: {
+          'vendor-three': ['three'],
+        },
+      },
+    },
   },
   server: {
     port: 8080,

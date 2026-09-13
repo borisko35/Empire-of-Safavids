@@ -285,10 +285,75 @@ const RARITY_COLOR: Record<string, string> = {
   epic: '#b06ae8', legendary: '#e8a84a', artifact: '#e85a4a',
 };
 
+const EQUIPPABLE_TYPES = new Set(['weapon', 'armor', 'accessory']);
+const SLOT_KEYS: Record<string, string> = {
+  weapon: 'world.slot_weapon', armor: 'world.slot_armor', accessory: 'world.slot_accessory',
+};
+
+function invBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'inv-action';
+  b.textContent = label;
+  b.addEventListener('click', async () => {
+    try {
+      await onClick();
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    }
+  });
+  return b;
+}
+
+export function renderEquipment(equipment: {
+  items: { slot: string; nameRu: string; rarity: string; enhancement: number }[];
+  stats: Record<string, number>;
+}): void {
+  const box = $('equipment-summary');
+  if (!box) return;
+  box.innerHTML = '';
+  const bySlot = new Map(equipment.items.map(i => [i.slot, i]));
+  for (const slot of ['weapon', 'armor', 'accessory']) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'equip-row';
+    const label = document.createElement('span');
+    label.className = 'equip-slot';
+    label.textContent = t(SLOT_KEYS[slot]);
+    rowEl.append(label);
+    const value = document.createElement('span');
+    value.className = 'equip-value';
+    const item = bySlot.get(slot);
+    if (item) {
+      value.textContent = item.enhancement > 0 ? `${item.nameRu} +${item.enhancement}` : item.nameRu;
+      value.style.color = RARITY_COLOR[item.rarity] ?? RARITY_COLOR.common;
+      rowEl.append(invBtn(t('world.unequip'), async () => {
+        renderEquipment(await api.unequip(session.character!.id, slot));
+        await loadInventory();
+      }));
+    } else {
+      value.textContent = '—';
+    }
+    rowEl.append(value);
+    box.append(rowEl);
+  }
+  const total = Object.values(equipment.stats).reduce((sum, v) => sum + v, 0);
+  if (total > 0) {
+    const hint = document.createElement('div');
+    hint.className = 'equip-bonus';
+    hint.textContent = `+${total} · ${t('world.stat_bonus')}`;
+    box.append(hint);
+  }
+}
+
 export async function loadInventory(): Promise<void> {
   if (!session.character) return;
+  const cid = session.character.id;
   try {
-    const { items } = await api.inventory(session.character.id);
+    const [{ items }, equipment] = await Promise.all([
+      api.inventory(cid),
+      api.equipment(cid),
+    ]);
+    renderEquipment(equipment);
     const box = $('inventory-list');
     if (!box) return;
     box.innerHTML = '';
@@ -299,14 +364,92 @@ export async function loadInventory(): Promise<void> {
     for (const it of items) {
       const row = document.createElement('div');
       row.className = 'inv-item';
+      const label = it.enhancement > 0 ? `${it.nameRu} +${it.enhancement}` : it.nameRu;
       row.innerHTML =
         `<span class="dot" style="background:${RARITY_COLOR[it.rarity] ?? RARITY_COLOR.common}"></span>` +
-        `<span class="inv-name">${it.nameRu}</span><span class="inv-qty">×${it.quantity}</span>`;
+        `<span class="inv-name">${label}</span><span class="inv-qty">×${it.quantity}</span>`;
+      const actions = document.createElement('span');
+      actions.className = 'inv-actions';
+      if (EQUIPPABLE_TYPES.has(it.type)) {
+        actions.append(invBtn(t('world.equip'), async () => {
+          renderEquipment(await api.equip(cid, it.itemId));
+          toast(t('world.equipped'), 'success');
+          await loadInventory();
+        }));
+        actions.append(invBtn(t('world.enhance'), async () => {
+          const out = await api.enhance(cid, it.itemId);
+          const kind = out.result === 'success' ? 'success' : out.result === 'fail' ? 'info' : 'error';
+          toast(out.messageRu || out.message, kind);
+          await loadInventory();
+        }));
+      } else if (it.type === 'consumable') {
+        actions.append(invBtn(t('world.use'), async () => {
+          const res = await api.useItem(cid, it.itemId);
+          session.hp = res.resources.hp; session.maxHp = res.resources.maxHp;
+          session.mana = res.resources.mana; session.maxMana = res.resources.maxMana;
+          session.stamina = res.resources.stamina; session.maxStamina = res.resources.maxStamina;
+          refreshBars();
+          toast(t('world.item_used'), 'success');
+          await loadInventory();
+        }));
+      }
+      row.append(actions);
       box.append(row);
     }
   } catch {
     /* инвентарь недоступен — не критично */
   }
+}
+
+// ── Мини-карта ───────────────────────────────────────────────
+const MINIMAP_RANGE = 120; // мировых единиц по горизонтали от игрока
+
+export function updateMinimap(
+  me: { x: number; z: number },
+  monsters: { x: number; z: number }[],
+): void {
+  const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const size = canvas.width;
+  const scale = size / (MINIMAP_RANGE * 2);
+  const toPx = (wx: number, wz: number) => ({
+    x: size / 2 + (wx - me.x) * scale,
+    y: size / 2 + (wz - me.z) * scale,
+  });
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = 'rgba(7, 15, 27, 0.72)';
+  ctx.fillRect(0, 0, size, size);
+
+  // Сетка
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const p = (size / 4) * i;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, size); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
+  }
+
+  // Монстры
+  for (const m of monsters) {
+    const { x, y } = toPx(m.x, m.z);
+    if (x < 2 || y < 2 || x > size - 2 || y > size - 2) continue;
+    ctx.fillStyle = '#e85a4a';
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Игрок в центре
+  ctx.fillStyle = '#f5f0e8';
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#c9a84c';
+  ctx.stroke();
 }
 
 // ── Мировое время ────────────────────────────────────────────
