@@ -124,6 +124,34 @@ cd server && npm run migrate && npm run dev
 PostgreSQL — пропишите свои DB_USER/DB_PASSWORD в `server/.env`
 и используйте его вместо портативного.
 
+## 🪟 Службы Windows (автозапуск сервера)
+
+Игра может работать как пара служб Windows — сервер и база стартуют
+сами при загрузке системы и перезапускаются при падении.
+
+```cmd
+:: Один раз, из каталога server (запросит права администратора):
+cd server && npm run build
+scripts\install-services.cmd
+```
+
+Устанавливаются две службы:
+
+| Служба | Что делает |
+|--------|-----------|
+| **EOS-PostgreSQL** | портативный PostgreSQL из `server/.pg` (порт 5432) |
+| **eosserver.exe** (отображается как «Empire of Safavids — Game Server») | собранный сервер из `server/dist` (порт 3000), зависит от EOS-PostgreSQL |
+
+Управление: `services.msc`, либо `net start/stop eosserver.exe`.
+Логи службы — в журнале Windows и в `server/daemon` (node-windows).
+
+Удалить обе службы: `scripts\uninstall-services.cmd` (от администратора).
+Удалить только службу сервера: `node scripts/service-install.js uninstall`.
+
+Примечание: Redis на `:6379` должен работать независимо (сейчас на этой
+машине его роль выполняет служба IncrediBuild build-cache; для продакшена
+поставьте Memurai/Redis и добавьте его в автозагрузку).
+
 ## 📜 Лицензия
 
 Проприетарная лицензия © 2024 Sigma Arena Games Group
