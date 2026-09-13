@@ -19,24 +19,35 @@ export interface CraftingJob {
 export class CraftingService {
   private db = DatabaseService.getInstance();
 
+  /** Уровень ремесла из накопленного опыта (сервер — источник истины) */
+  static craftingLevelFromXp(xp: number): number {
+    return Math.max(1, Math.min(100, 1 + Math.floor(xp / 100)));
+  }
+
   async startCrafting(
     characterId: string,
-    recipeId: string,
-    craftingSkillLevel: number
+    recipeId: string
   ): Promise<CraftingJob> {
     const recipe = CRAFTING_RECIPES[recipeId];
     if (!recipe) throw new Error('Recipe not found');
+
+    // Уровень крафта берём из БД — клиентское значение не доверенно
+    const char = await this.db.queryOne<{ crafting_xp: string | number }>(
+      'SELECT crafting_xp FROM characters WHERE id = $1',
+      [characterId]
+    );
+    const craftingSkillLevel = CraftingService.craftingLevelFromXp(Number(char?.crafting_xp ?? 0));
     if (recipe.requiredLevel > craftingSkillLevel) {
       throw new Error(`Required crafting level: ${recipe.requiredLevel}`);
     }
 
-    // Проверить инвентарь
-    const inventoryRows = await this.db.query<{ item_id: string; quantity: number }>(
-      'SELECT item_id, SUM(quantity) as quantity FROM inventory WHERE character_id = $1 GROUP BY item_id',
+    // Проверить инвентарь (суммарное количество по всем стекам предмета)
+    const inventoryRows = await this.db.query<{ item_id: string; quantity: string }>(
+      'SELECT item_id, SUM(quantity) as quantity FROM character_items WHERE character_id = $1 GROUP BY item_id',
       [characterId]
     );
     const inventory: Record<string, number> = {};
-    inventoryRows.forEach(r => { inventory[r.item_id] = r.quantity; });
+    inventoryRows.forEach(r => { inventory[r.item_id] = Number(r.quantity); });
 
     const { canCraft: possible, missing } = canCraft(recipeId, inventory);
     if (!possible) {
@@ -53,16 +64,24 @@ export class CraftingService {
     };
 
     await this.db.transaction(async (client) => {
-      // Списать материалы
+      // Списать материалы (проверка с блокировкой строки — защита от гонки)
       for (const ing of recipe.ingredients) {
-        await client.query(
-          `UPDATE inventory SET quantity = quantity - $1
-           WHERE character_id = $2 AND item_id = $3`,
+        const res = await client.query(
+          `UPDATE character_items SET quantity = quantity - $1
+           WHERE id = (
+             SELECT id FROM character_items
+             WHERE character_id = $2 AND item_id = $3 AND quantity >= $1
+             ORDER BY enhancement DESC LIMIT 1
+             FOR UPDATE
+           )`,
           [ing.quantity, characterId, ing.itemId]
         );
-        // Удалить пустые слоты
+        if (res.rowCount === 0) {
+          throw new Error(`Missing materials: ${ing.itemId} (need ${ing.quantity})`);
+        }
+        // Удалить опустевшие стеки
         await client.query(
-          'DELETE FROM inventory WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
+          'DELETE FROM character_items WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
           [characterId, ing.itemId]
         );
       }
@@ -80,14 +99,18 @@ export class CraftingService {
   }
 
   async completeCrafting(jobId: string): Promise<{ success: boolean; itemId: string; quantity: number }> {
-    const job = await this.db.queryOne<CraftingJob>(
+    // Строки crafting_jobs приходят в snake_case
+    const job = await this.db.queryOne<{
+      id: string; character_id: string; recipe_id: string; completes_at: Date; status: string;
+    }>(
       'SELECT * FROM crafting_jobs WHERE id = $1 AND status = $2',
       [jobId, 'in_progress']
     );
     if (!job) throw new Error('Crafting job not found');
-    if (new Date() < job.completesAt) throw new Error('Crafting not yet complete');
+    if (new Date() < new Date(job.completes_at)) throw new Error('Crafting not yet complete');
 
-    const recipe = CRAFTING_RECIPES[job.recipeId];
+    const recipe = CRAFTING_RECIPES[job.recipe_id];
+    if (!recipe) throw new Error('Recipe not found');
     const success = Math.random() < recipe.successRate;
 
     await this.db.transaction(async (client) => {
@@ -99,30 +122,37 @@ export class CraftingService {
       if (success) {
         // Добавить предмет в инвентарь
         await client.query(
-          `INSERT INTO inventory (id, character_id, slot_index, item_id, quantity, enhancement)
-           SELECT $1, $2,
-             COALESCE((SELECT MAX(slot_index) + 1 FROM inventory WHERE character_id = $2), 0),
-             $3, $4, 0
-           ON CONFLICT (character_id, slot_index) DO UPDATE SET quantity = inventory.quantity + $4`,
-          [uuidv4(), job.characterId, recipe.resultItemId, recipe.resultQuantity]
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, $3, 0)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + $3`,
+          [job.character_id, recipe.resultItemId, recipe.resultQuantity]
         );
-        // Начислить опыт крафтинга
+        // Начислить опыт ремесла
         await client.query(
-          `UPDATE characters SET updated_at = NOW() WHERE id = $1`,
-          [job.characterId]
+          'UPDATE characters SET crafting_xp = crafting_xp + $2 WHERE id = $1',
+          [job.character_id, recipe.experienceGain]
         );
       }
     });
 
-    logger.info(`Crafting ${success ? 'succeeded' : 'failed'}: ${recipe.resultItemId} for ${job.characterId}`);
+    logger.info(`Crafting ${success ? 'succeeded' : 'failed'}: ${recipe.resultItemId} for ${job.character_id}`);
     return { success, itemId: recipe.resultItemId, quantity: success ? recipe.resultQuantity : 0 };
   }
 
   async getActiveJobs(characterId: string): Promise<CraftingJob[]> {
-    return this.db.query<CraftingJob>(
+    const rows = await this.db.query<Record<string, unknown>>(
       'SELECT * FROM crafting_jobs WHERE character_id = $1 AND status = $2 ORDER BY started_at DESC',
       [characterId, 'in_progress']
     );
+    return rows.map(r => ({
+      id: String(r.id),
+      characterId: String(r.character_id),
+      recipeId: String(r.recipe_id),
+      startedAt: new Date(r.started_at as string),
+      completesAt: new Date(r.completes_at as string),
+      status: r.status as CraftingJob['status'],
+    }));
   }
 
   getRecipesByCategory(category: CraftingCategory) {

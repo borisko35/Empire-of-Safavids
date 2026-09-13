@@ -56,8 +56,13 @@ const CLASS_SKILLS: Record<CharacterClass, SkillDefinition[]> = {
 };
 
 export class CombatService {
-  calculateDamage(attacker: Character, target: Character, action: CombatAction): DamageResult {
-    const baseDamage = this.getBaseDamage(attacker, action);
+  /**
+   * comboMultiplier — множитель цепочки лёгких атак (каждый третий удар
+   * серии бьёт тяжелее). Передаётся сокет-обработчиком, у монстров и PvP
+   * он одинаково легитимен: состояние серии считает сервер.
+   */
+  calculateDamage(attacker: Character, target: Character, action: CombatAction, comboMultiplier = 1): DamageResult {
+    const baseDamage = this.getBaseDamage(attacker, action) * comboMultiplier;
     const defense = this.getDefense(target);
 
     // Шанс уклонения

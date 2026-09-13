@@ -26,13 +26,24 @@ const SPAWN_POINTS: SpawnPoint[] = [
   // ─ Тебриз
   { id: 'sp_tabriz_01', monsterId: 'mob_bandit_scout',   region: Region.TABRIZ,      position: { x: 100, y: 0, z: 80  }, maxCount: 5, currentCount: 0, respawnTime: 60,   lastDeath: 0, weatherBonus: {} },
   { id: 'sp_tabriz_02', monsterId: 'mob_bandit_warrior', region: Region.TABRIZ,      position: { x: -80, y: 0, z: 120 }, maxCount: 3, currentCount: 0, respawnTime: 90,   lastDeath: 0, weatherBonus: { fog: 1.5 } },
+  // ─ Шираз
+  { id: 'sp_shir_01',   monsterId: 'mob_bandit_scout',   region: Region.SHIRAZ,      position: { x: 90,  y: 0, z: -60 }, maxCount: 4, currentCount: 0, respawnTime: 75,   lastDeath: 0, weatherBonus: {} },
+  { id: 'sp_shir_02',   monsterId: 'mob_fog_assassin',   region: Region.SHIRAZ,      position: { x: -110, y: 0, z: -90 }, maxCount: 2, currentCount: 0, respawnTime: 240,  lastDeath: 0, weatherBonus: { fog: 2.0 } },
+  // ─ Кавказ
+  { id: 'sp_cauc_01',   monsterId: 'mob_mongol_raider',  region: Region.CAUCASUS,    position: { x: 60,  y: 0, z: 140 }, maxCount: 4, currentCount: 0, respawnTime: 120,  lastDeath: 0, weatherBonus: { snow: 1.4 } },
+  { id: 'sp_cauc_02',   monsterId: 'mob_bandit_warrior', region: Region.CAUCASUS,    position: { x: -140, y: 0, z: 160 }, maxCount: 3, currentCount: 0, respawnTime: 150,  lastDeath: 0, weatherBonus: {} },
   // ─ Месопотамия
   { id: 'sp_meso_01',   monsterId: 'mob_ottoman_janissary', region: Region.MESOPOTAMIA, position: { x: 200, y: 0, z: 50  }, maxCount: 4, currentCount: 0, respawnTime: 300,  lastDeath: 0, weatherBonus: { sandstorm: 1.3 } },
   // ─ Хорасан
   { id: 'sp_khor_01',   monsterId: 'mob_mongol_raider',    region: Region.KHORASAN,    position: { x: -150, y: 0, z: 200 }, maxCount: 3, currentCount: 0, respawnTime: 600,  lastDeath: 0, weatherBonus: {} },
   { id: 'sp_khor_02',   monsterId: 'mob_div_fire',         region: Region.KHORASAN,    position: { x: 300, y: 0, z: -100 }, maxCount: 2, currentCount: 0, respawnTime: 1800, lastDeath: 0, weatherBonus: { storm: 2.0 } },
+  { id: 'sp_khor_03',   monsterId: 'mob_sand_div',         region: Region.KHORASAN,    position: { x: 180, y: 0, z: 230 }, maxCount: 2, currentCount: 0, respawnTime: 900,  lastDeath: 0, weatherBonus: { sandstorm: 3.0 } },
+  // ─ Персидский залив
+  { id: 'sp_gulf_01',   monsterId: 'mob_ottoman_janissary', region: Region.PERSIAN_GULF, position: { x: -60, y: 0, z: -170 }, maxCount: 4, currentCount: 0, respawnTime: 180,  lastDeath: 0, weatherBonus: {} },
+  { id: 'sp_gulf_02',   monsterId: 'mob_bandit_warrior',    region: Region.PERSIAN_GULF, position: { x: 140, y: 0, z: -190 }, maxCount: 3, currentCount: 0, respawnTime: 150,  lastDeath: 0, weatherBonus: { storm: 1.6 } },
   // ─ Мировые боссы
   { id: 'sp_wb_simurgh', monsterId: 'world_boss_simurgh',  region: Region.KHORASAN,    position: { x: 0, y: 100, z: 0 },   maxCount: 1, currentCount: 0, respawnTime: 604800, lastDeath: 0, weatherBonus: {} },
+  { id: 'sp_wb_rustam',  monsterId: 'world_boss_rustam_reborn', region: Region.PERSIAN_GULF, position: { x: 40, y: 0, z: -230 }, maxCount: 1, currentCount: 0, respawnTime: 1209600, lastDeath: 0, weatherBonus: {} },
 ];
 
 export class SpawnSystem {

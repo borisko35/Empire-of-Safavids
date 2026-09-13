@@ -3,11 +3,17 @@ import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
 import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
+import { EquipmentCache } from '../services/EquipmentCache';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
+import { DefenseStates } from '../systems/DefenseStates';
+import { DungeonService } from '../systems/DungeonService';
+import { WorldEventSystem } from '../systems/WorldEventSystem';
+import { PartySystem } from '../systems/PartySystem';
+import { LevelingSystem } from '../systems/LevelingSystem';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
 import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS } from '../../../shared/constants';
@@ -32,6 +38,11 @@ export class GameSocketHandler {
   private antiCheat = new AntiCheatSystem();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
+  private equipment = EquipmentCache.getInstance();
+  private defenseStates = DefenseStates.getInstance();
+  private dungeons = DungeonService.getInstance();
+  private worldEvents = WorldEventSystem.getInstance();
+  private partySystem = new PartySystem();
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
@@ -39,6 +50,13 @@ export class GameSocketHandler {
   private skillCooldowns = new Map<string, Map<string, number>>();
   // Троттлинг записи позиции в PostgreSQL: characterId -> последняя запись
   private lastPositionPersist = new Map<string, number>();
+  // Серия лёгких атак (комбо): characterId -> { count, lastAt }
+  private comboChains = new Map<string, { count: number; lastAt: number }>();
+
+  /** Широковещательное объявление мирового события (вызывается из GameLoop) */
+  broadcastWorldEvent(payload: Record<string, unknown>): void {
+    this.io.emit(SERVER_EVENTS.WORLD_EVENT, payload);
+  }
 
   constructor(io: SocketIOServer) {
     this.io = io;
@@ -235,6 +253,9 @@ export class GameSocketHandler {
         socket.join(`guild:${character.guildId}`);
       }
       await this.redis.addPlayerToRegion(character.region, character.id);
+      // Позиция в Redis сразу: иначе стоящий игрок невидим для ИИ,
+      // пока клиент не пошлёт первый player:move
+      await this.redis.setPlayerPosition(character.id, character.position).catch(() => {});
       this.activePlayers.set(character.id, socket);
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
@@ -317,12 +338,66 @@ export class GameSocketHandler {
   // ============================================================
   // Бой: ресурсы, кулдауны, лечение, урон, смерть, карма
   // ============================================================
+
+  /** Персонаж с учётом боевых бонусов экипировки (копия статов) */
+  private async withEquipment(character: Character): Promise<Character> {
+    const stats = await this.equipment.mergeInto(character);
+    return { ...character, stats };
+  }
+
+  /**
+   * Активная защита: dodge (1.5с неуязвимости) и block (2с −60% урона).
+   * Тратят стамину, цели не требуют; состояние читает боевой цикл.
+   */
+  private async handleDefensiveAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
+    if (!socket.characterId) return;
+    const character = await this.characterService.getCharacterById(socket.characterId);
+    if (!character) return;
+
+    const staminaCost = action.actionType === 'dodge' ? 15 : 10;
+    const ok = await this.characterService.spendResources(character.id, 0, staminaCost);
+    if (!ok) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Not enough stamina' });
+      return;
+    }
+
+    if (action.actionType === 'dodge') this.defenseStates.activateDodge(character.id);
+    else this.defenseStates.activateBlock(character.id);
+
+    socket.emit(SERVER_EVENTS.COMBAT_BLOCKED, {
+      actionType: action.actionType,
+      characterId: character.id,
+    });
+  }
+
+  /** Множитель серии лёгких атак: каждый третий удар серии бьёт в 1.5× */
+  private comboMultiplier(characterId: string, action: CombatAction): number {
+    if (action.actionType !== 'attack' || action.skillId) return 1;
+    const now = Date.now();
+    const chain = this.comboChains.get(characterId);
+    if (!chain || now - chain.lastAt > 4000) {
+      this.comboChains.set(characterId, { count: 1, lastAt: now });
+      return 1;
+    }
+    chain.count++;
+    chain.lastAt = now;
+    return chain.count % 3 === 0 ? 1.5 : 1;
+  }
+
   private async handleCombatAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
     if (!socket.characterId || !socket.region) return;
+
+    // Защитные действия выполняются без цели
+    if (action.actionType === 'dodge' || action.actionType === 'block') {
+      await this.handleDefensiveAction(socket, action);
+      return;
+    }
     if (!action.targetId) return;
 
     try {
-      const attacker = await this.characterService.getCharacterById(socket.characterId);
+      const attacker = await this.withEquipment(
+        await this.characterService.getCharacterById(socket.characterId).then(c => c!)
+      ).catch(() => null);
       if (!attacker) return;
 
       // Частота боевых пакетов
@@ -332,7 +407,7 @@ export class GameSocketHandler {
         return;
       }
 
-      // Проверка навыка и кулдауна
+      // Проверка навыка, уровня разблокировки и кулдауна
       const skill = action.skillId
         ? this.combatService.getSkill(attacker.class, action.skillId)
         : undefined;
@@ -340,9 +415,19 @@ export class GameSocketHandler {
         socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Unknown skill' });
         return;
       }
-      if (skill && !this.checkCooldown(attacker.id, skill.id, skill.cooldown)) {
-        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Skill is on cooldown', skillId: skill.id });
-        return;
+      if (skill) {
+        const unlockLevel = LevelingSystem.getSkillUnlockLevel(attacker.class, skill.id);
+        if (attacker.level < unlockLevel) {
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, {
+            message: `Skill unlocks at level ${unlockLevel}`,
+            skillId: skill.id,
+          });
+          return;
+        }
+        if (!this.checkCooldown(attacker.id, skill.id, skill.cooldown)) {
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Skill is on cooldown', skillId: skill.id });
+          return;
+        }
       }
 
       // Ресурсы: мана/стамина
@@ -354,11 +439,14 @@ export class GameSocketHandler {
         }
       }
 
+      const comboMult = this.comboMultiplier(attacker.id, action);
+
       // Цель — игрок? (id монстров не UUID — сразу ищем ИИ-контекст)
       if (UUID_RE.test(action.targetId)) {
-        const target = await this.characterService.getCharacterById(action.targetId);
-        if (target) {
-          await this.combatPlayerVsPlayer(socket, attacker, target, action);
+        const targetRow = await this.characterService.getCharacterById(action.targetId);
+        if (targetRow) {
+          const target = await this.withEquipment(targetRow);
+          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult);
           return;
         }
       }
@@ -366,7 +454,7 @@ export class GameSocketHandler {
       // Цель — монстр?
       const monsterCtx = GameLoop.getInstance().getSpawnSystem().getAI().getContext(action.targetId);
       if (monsterCtx) {
-        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action);
+        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult);
         return;
       }
 
@@ -381,7 +469,8 @@ export class GameSocketHandler {
     socket: AuthenticatedSocket,
     attacker: Character,
     target: Character,
-    action: CombatAction
+    action: CombatAction,
+    comboMult = 1
   ): Promise<void> {
     // Лечащий навык: восстанавливает HP цели (масштаб от интеллекта мистика)
     if (action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId)) {
@@ -400,7 +489,17 @@ export class GameSocketHandler {
       return;
     }
 
-    const result = this.combatService.calculateDamage(attacker, target, action);
+    // Активная защита цели поглощает/отменяет удар
+    const defenseMult = this.defenseStates.getIncomingMultiplier(target.id);
+    if (defenseMult === 0) {
+      socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
+        attackerId: attacker.id, targetId: target.id, damage: 0, isCritical: false, isBlocked: false, isDodged: true,
+      });
+      return;
+    }
+
+    const result = this.combatService.calculateDamage(attacker, target, action, comboMult);
+    result.damage = Math.floor(result.damage * defenseMult);
 
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
@@ -443,13 +542,21 @@ export class GameSocketHandler {
     socket: AuthenticatedSocket,
     attacker: Character,
     monsterCtx: AIContext,
-    action: CombatAction
+    action: CombatAction,
+    comboMult = 1
   ): Promise<void> {
     if (monsterCtx.state === 'dead') return;
 
     // Лечение монстра недопустимо
     if (action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId)) {
       socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Cannot heal a monster' });
+      return;
+    }
+
+    // Монстры данжа бьют только участники его сессии
+    const dungeonSession = this.dungeons.getSessionByMonster(monsterCtx.instanceId);
+    if (dungeonSession && !dungeonSession.members.has(attacker.id)) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'You are not in this dungeon group' });
       return;
     }
 
@@ -471,7 +578,7 @@ export class GameSocketHandler {
       maxHp: monsterCtx.maxHp,
     } as unknown as Character;
 
-    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action);
+    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult);
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result });
       return;
@@ -493,6 +600,7 @@ export class GameSocketHandler {
       attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result,
       targetHp: Math.max(0, monsterCtx.currentHp),
       targetMaxHp: monsterCtx.maxHp,
+      comboFinisher: comboMult > 1,
     });
 
     socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
@@ -515,15 +623,41 @@ export class GameSocketHandler {
         loot.push({ itemId: entry.itemId, nameRu: ITEMS_DATABASE[entry.itemId]?.nameRu ?? entry.itemId, qty });
       }
 
+      // Партия: союзники в том же регионе получают 50% опыта
+      await this.sharePartyExperience(attacker, def.expReward).catch((e: unknown) => {
+        logger.debug('Party XP share failed:', e);
+      });
+
       GameLoop.getInstance().getSpawnSystem().onInstanceDeath(monsterCtx.instanceId);
 
-      // Прогресс квестов: kill-цели; завершившиеся квесты — с наградами
+      // Мировой босс события: объявление победы + награда
+      if (this.worldEvents.isActiveBoss(monsterCtx.instanceId)) {
+        await this.worldEvents.onBossDefeated(attacker.id).catch((e: unknown) => {
+          logger.error('World event reward failed:', e);
+        });
+      }
+
+      // Данж: прогресс боссов, завершение с наградой
+      const dungeonDone = await this.dungeons.onMonsterKilled(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
+        logger.debug('Dungeon progress failed:', e);
+        return null;
+      });
+      if (dungeonDone) {
+        socket.emit(SERVER_EVENTS.DUNGEON_COMPLETED, dungeonDone);
+      }
+
+      // Прогресс квестов: kill-цели + завершение смешанных квестов
       const completedQuests = await this.questService.recordKill(attacker.id, def.id).catch((e: unknown) => {
         logger.debug('Quest recordKill failed:', e);
         return [];
       });
-      if (completedQuests.length) {
-        socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: completedQuests });
+      const evaluated = await this.questService.evaluateQuests(attacker.id).catch((e: unknown) => {
+        logger.debug('Quest evaluate failed:', e);
+        return [];
+      });
+      const allCompleted = [...completedQuests, ...evaluated.filter(e => !completedQuests.some(c => c.questId === e.questId))];
+      if (allCompleted.length) {
+        socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: allCompleted });
       }
 
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.region), {
@@ -536,6 +670,23 @@ export class GameSocketHandler {
         leveledUp: reward.leveledUp,
         newLevel: reward.newLevel,
       }).catch(() => {});
+    }
+  }
+
+  /** Опыт членам партии в том же регионе: 50% от награды за убийство */
+  private async sharePartyExperience(attacker: Character, expReward: number): Promise<void> {
+    if (expReward <= 0) return;
+    const partyId = await this.redis.get(`player:party:${attacker.id}`);
+    if (!partyId) return;
+
+    const party = await this.partySystem.getPartyInfo(partyId);
+    if (!party) return;
+
+    for (const member of party.members) {
+      if (member.characterId === attacker.id) continue;
+      const memberChar = await this.characterService.getCharacterById(member.characterId).catch(() => null);
+      if (!memberChar || memberChar.region !== attacker.region) continue;
+      await this.characterService.addExperience(member.characterId, Math.floor(expReward * 0.5)).catch(() => {});
     }
   }
 
@@ -552,12 +703,19 @@ export class GameSocketHandler {
     deadSocket?.emit(SOCKET_EVENTS.PLAYER_DIED, { killerId: killer?.id });
 
     const respawned = await this.characterService.respawn(dead.id);
+    // Синк позиции в Redis: клиент телепортируется на стартовую точку,
+    // и ИИ должен видеть игрока там же, а не на месте смерти
+    await this.redis.setPlayerPosition(dead.id, { x: 0, y: 0, z: 0 }).catch(() => {});
     deadSocket?.emit(SOCKET_EVENTS.PLAYER_RESPAWNED, {
       hp: respawned.hp,
       maxHp: respawned.maxHp,
       position: { x: 0, y: 0, z: 0 },
       region: dead.region,
     });
+
+    // Монстры забывают погибшего и возвращаются на спавн — иначе
+    // аггро висит вечно и добивает игрока после каждого респавна
+    GameLoop.getInstance().getSpawnSystem().getAI().clearThreatAndReturn(dead.id);
 
     // Карма: в безопасных зонах убийство мирного игрока карается,
     // в PvP-зонах — честная победа
@@ -674,8 +832,13 @@ export class GameSocketHandler {
     this.activePlayers.delete(socket.characterId);
     this.skillCooldowns.delete(socket.characterId);
     this.lastPositionPersist.delete(socket.characterId);
+    this.comboChains.delete(socket.characterId);
+    this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
     await this.redis.removePlayerFromRegion(socket.region, socket.characterId);
+
+    // Вышедший игрок пропадает из поля зрения монстров навсегда
+    GameLoop.getInstance().getSpawnSystem().getAI().clearThreatAndReturn(socket.characterId);
 
     socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.PLAYER_LEFT, {
       characterId: socket.characterId,

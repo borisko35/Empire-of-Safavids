@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from './DatabaseService';
-import { Character, CharacterClass, CharacterStats, Region } from '../types/game.types';
+import { Character, CharacterClass, CharacterStats, Region, ItemType } from '../types/game.types';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ITEMS_DATABASE } from '../data/items';
@@ -206,10 +206,21 @@ export class CharacterService {
   /** Начислить золото. Возвращает новый баланс. */
   async addGold(characterId: string, amount: number): Promise<number> {
     const row = await this.db.queryOne<{ gold: number }>(
-      'UPDATE characters SET gold = gold + $1, updated_at = NOW() WHERE id = $2 RETURNING gold',
+      'UPDATE characters SET gold = gold + $1 WHERE id = $2 RETURNING gold',
       [Math.max(0, Math.floor(amount)), characterId]
     );
     if (!row) throw new Error('Character not found');
+    return Number(row.gold);
+  }
+
+  /** Атомарно списать золото. Бросает ошибку, если средств недостаточно. Возвращает остаток. */
+  async spendGold(characterId: string, amount: number): Promise<number> {
+    const cost = Math.max(0, Math.floor(amount));
+    const row = await this.db.queryOne<{ gold: number }>(
+      'UPDATE characters SET gold = gold - $1 WHERE id = $2 AND gold >= $1 RETURNING gold',
+      [cost, characterId]
+    );
+    if (!row) throw new Error('Insufficient gold');
     return Number(row.gold);
   }
 
@@ -224,26 +235,68 @@ export class CharacterService {
   }
 
   // ============================================================
-  // Инвентарь (стеки: уникально по персонаж+предмет)
+  // Инвентарь (стеки: персонаж + предмет + уровень заточки)
   // ============================================================
 
-  /** Добавить предметы (лут). */
-  async addItems(characterId: string, items: { itemId: string; qty: number }[]): Promise<void> {
+  /** Добавить предметы (лут, награды). Стеки разводятся по уровню заточки. */
+  async addItems(characterId: string, items: { itemId: string; qty: number; enhancement?: number }[]): Promise<void> {
     for (const it of items) {
+      const enhancement = Math.max(0, Math.min(20, Math.floor(it.enhancement ?? 0)));
       await this.db.query(
-        `INSERT INTO character_items (character_id, item_id, quantity)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (character_id, item_id)
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (character_id, item_id, enhancement)
          DO UPDATE SET quantity = character_items.quantity + EXCLUDED.quantity`,
-        [characterId, it.itemId, Math.max(1, Math.floor(it.qty))]
+        [characterId, it.itemId, Math.max(1, Math.floor(it.qty)), enhancement]
       );
     }
   }
 
+  /** Списать предметы (сначала из более заточенных стеков). Бросает ошибку при нехватке. */
+  async removeItems(characterId: string, items: { itemId: string; qty: number }[]): Promise<void> {
+    await this.db.transaction(async (client) => {
+      for (const it of items) {
+        const qty = Math.max(1, Math.floor(it.qty));
+        const res = await client.query(
+          `UPDATE character_items SET quantity = quantity - $1
+           WHERE id = (
+             SELECT id FROM character_items
+             WHERE character_id = $2 AND item_id = $3 AND quantity >= $1
+             ORDER BY enhancement DESC LIMIT 1
+             FOR UPDATE
+           )`,
+          [qty, characterId, it.itemId]
+        );
+        if (res.rowCount === 0) {
+          const have = await client.query(
+            'SELECT COALESCE(SUM(quantity), 0) AS total FROM character_items WHERE character_id = $1 AND item_id = $2',
+            [characterId, it.itemId]
+          );
+          throw new Error(`Not enough items: ${it.itemId} (need ${qty}, have ${Number(have.rows[0].total)})`);
+        }
+        await client.query(
+          'DELETE FROM character_items WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
+          [characterId, it.itemId]
+        );
+      }
+    });
+  }
+
+  /** Суммарное количество предмета по всем стекам: { itemId: qty } */
+  async getItemQuantities(characterId: string): Promise<Record<string, number>> {
+    const rows = await this.db.query<{ item_id: string; total: string | number }>(
+      'SELECT item_id, SUM(quantity) AS total FROM character_items WHERE character_id = $1 GROUP BY item_id',
+      [characterId]
+    );
+    const map: Record<string, number> = {};
+    for (const r of rows) map[r.item_id] = Number(r.total);
+    return map;
+  }
+
   /** Инвентарь с именами/редкостью из ITEMS_DATABASE. */
-  async getInventory(characterId: string): Promise<{ itemId: string; name: string; nameRu: string; type: string; rarity: string; quantity: number }[]> {
-    const rows = await this.db.query<{ item_id: string; quantity: number }>(
-      'SELECT item_id, quantity FROM character_items WHERE character_id = $1 ORDER BY acquired_at DESC',
+  async getInventory(characterId: string): Promise<InventoryEntry[]> {
+    const rows = await this.db.query<{ item_id: string; quantity: number; enhancement: number }>(
+      'SELECT item_id, quantity, enhancement FROM character_items WHERE character_id = $1 ORDER BY acquired_at DESC',
       [characterId]
     );
     return rows
@@ -256,7 +309,189 @@ export class CharacterService {
           type: def?.type ?? 'material',
           rarity: def?.rarity ?? 'common',
           quantity: Number(r.quantity),
+          enhancement: Number(r.enhancement),
         };
       });
   }
+
+  // ============================================================
+  // Экипировка (оружие / броня / аксессуар)
+  // ============================================================
+
+  private static SLOT_BY_TYPE: Partial<Record<ItemType, 'weapon' | 'armor' | 'accessory'>> = {
+    [ItemType.WEAPON]: 'weapon',
+    [ItemType.ARMOR]: 'armor',
+    [ItemType.ACCESSORY]: 'accessory',
+  };
+
+  /** Экипированные предметы и агрегированные бонусы характеристик (+5% за уровень заточки). */
+  async getEquipment(characterId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats }> {
+    const rows = await this.db.query<{ slot: string; item_id: string; enhancement: number }>(
+      'SELECT slot, item_id, enhancement FROM character_equipment WHERE character_id = $1',
+      [characterId]
+    );
+    const items: EquippedItem[] = [];
+    const stats: CharacterStats = { strength: 0, agility: 0, intelligence: 0, endurance: 0, charisma: 0 };
+    for (const r of rows) {
+      const def = ITEMS_DATABASE[r.item_id];
+      const enhancement = Number(r.enhancement);
+      const mult = 1 + 0.05 * enhancement;
+      items.push({
+        slot: r.slot as EquippedItem['slot'],
+        itemId: r.item_id,
+        name: def?.name ?? r.item_id,
+        nameRu: def?.nameRu ?? r.item_id,
+        rarity: def?.rarity ?? 'common',
+        enhancement,
+        stats: def?.stats,
+      });
+      for (const [key, value] of Object.entries(def?.stats ?? {})) {
+        if (key in stats) stats[key as keyof CharacterStats] += Math.round(Number(value) * mult);
+      }
+    }
+    return { items, stats };
+  }
+
+  /** Надеть предмет: списывается из сумки, предыдущий предмет слота возвращается в неё. */
+  async equipItem(characterId: string, itemId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats }> {
+    const def = ITEMS_DATABASE[itemId];
+    if (!def) throw new Error('Item not found');
+    const slot = CharacterService.SLOT_BY_TYPE[def.type];
+    if (!slot) throw new Error('Item cannot be equipped');
+    const character = await this.getCharacterById(characterId);
+    if (!character) throw new Error('Character not found');
+    if (def.level > character.level) throw new Error(`Requires level ${def.level}`);
+
+    await this.db.transaction(async (client) => {
+      // Взять один экземпляр из сумки (сверху — самый заточенный)
+      const taken = await client.query(
+        `UPDATE character_items SET quantity = quantity - 1
+         WHERE id = (
+           SELECT id FROM character_items
+           WHERE character_id = $1 AND item_id = $2 AND quantity >= 1
+           ORDER BY enhancement DESC LIMIT 1
+           FOR UPDATE
+         )
+         RETURNING enhancement`,
+        [characterId, itemId]
+      );
+      if (taken.rowCount === 0) throw new Error('Item not in inventory');
+      const enhancement = Number(taken.rows[0].enhancement);
+      await client.query(
+        'DELETE FROM character_items WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
+        [characterId, itemId]
+      );
+
+      // Снять предыдущий предмет слота обратно в сумку
+      const prev = await client.query(
+        'SELECT item_id, enhancement FROM character_equipment WHERE character_id = $1 AND slot = $2 FOR UPDATE',
+        [characterId, slot]
+      );
+      if (prev.rows[0]) {
+        await client.query(
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, 1, $3)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + 1`,
+          [characterId, prev.rows[0].item_id, Number(prev.rows[0].enhancement)]
+        );
+      }
+
+      await client.query(
+        `INSERT INTO character_equipment (character_id, slot, item_id, enhancement, equipped_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (character_id, slot)
+         DO UPDATE SET item_id = EXCLUDED.item_id, enhancement = EXCLUDED.enhancement, equipped_at = NOW()`,
+        [characterId, slot, itemId, enhancement]
+      );
+    });
+
+    return this.getEquipment(characterId);
+  }
+
+  /** Снять предмет слота обратно в сумку. */
+  async unequipItem(characterId: string, slot: 'weapon' | 'armor' | 'accessory'): Promise<{ items: EquippedItem[]; stats: CharacterStats }> {
+    await this.db.transaction(async (client) => {
+      const row = await client.query(
+        'SELECT item_id, enhancement FROM character_equipment WHERE character_id = $1 AND slot = $2 FOR UPDATE',
+        [characterId, slot]
+      );
+      if (!row.rows[0]) throw new Error('Nothing equipped in slot');
+      await client.query(
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, 1, $3)
+         ON CONFLICT (character_id, item_id, enhancement)
+         DO UPDATE SET quantity = character_items.quantity + 1`,
+        [characterId, row.rows[0].item_id, Number(row.rows[0].enhancement)]
+      );
+      await client.query(
+        'DELETE FROM character_equipment WHERE character_id = $1 AND slot = $2',
+        [characterId, slot]
+      );
+    });
+    return this.getEquipment(characterId);
+  }
+
+  // ============================================================
+  // Расходники
+  // ============================================================
+
+  private static USE_ITEM_EFFECTS: Record<string, { hp?: number; mana?: number; stamina?: number }> = {
+    con_health_potion_s: { hp: 200 },
+    con_health_potion_m: { hp: 800 },
+    con_mana_potion: { mana: 300 },
+    con_stamina_food: { stamina: 150 },
+  };
+
+  /** Использовать расходник: списывает предмет и применяет эффект восстановления. */
+  async useItem(characterId: string, itemId: string): Promise<{
+    hp: number; maxHp: number; mana: number; maxMana: number; stamina: number; maxStamina: number;
+  }> {
+    const def = ITEMS_DATABASE[itemId];
+    if (!def) throw new Error('Item not found');
+    if (def.type !== ItemType.CONSUMABLE) throw new Error('Item is not consumable');
+    const effect = CharacterService.USE_ITEM_EFFECTS[itemId];
+    if (!effect) throw new Error('Item has no usable effect');
+
+    await this.removeItems(characterId, [{ itemId, qty: 1 }]);
+
+    const sets: string[] = [];
+    const params: number[] = [];
+    let i = 2; // $1 = characterId
+    if (effect.hp)      { sets.push(`hp = LEAST(max_hp, hp + $${i})`);          params.push(effect.hp); i++; }
+    if (effect.mana)    { sets.push(`mana = LEAST(max_mana, mana + $${i})`);    params.push(effect.mana); i++; }
+    if (effect.stamina) { sets.push(`stamina = LEAST(max_stamina, stamina + $${i})`); params.push(effect.stamina); i++; }
+    const row = await this.db.queryOne<Record<string, number>>(
+      `UPDATE characters SET ${sets.join(', ')}, updated_at = NOW()
+       WHERE id = $1
+       RETURNING hp, max_hp, mana, max_mana, stamina, max_stamina`,
+      [characterId, ...params]
+    );
+    if (!row) throw new Error('Character not found');
+    return {
+      hp: Number(row.hp), maxHp: Number(row.max_hp),
+      mana: Number(row.mana), maxMana: Number(row.max_mana),
+      stamina: Number(row.stamina), maxStamina: Number(row.max_stamina),
+    };
+  }
+}
+
+export interface InventoryEntry {
+  itemId: string;
+  name: string;
+  nameRu: string;
+  type: string;
+  rarity: string;
+  quantity: number;
+  enhancement: number;
+}
+
+export interface EquippedItem {
+  slot: 'weapon' | 'armor' | 'accessory';
+  itemId: string;
+  name: string;
+  nameRu: string;
+  rarity: string;
+  enhancement: number;
+  stats?: Partial<CharacterStats>;
 }

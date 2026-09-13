@@ -97,14 +97,34 @@ export class AuctionService {
       createdAt: new Date(),
     };
 
-    await this.db.query(
-      `INSERT INTO auction_listings
-        (id, seller_id, item_id, quantity, enhancement, price, buyout_price, expires_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [listing.id, listing.sellerId, listing.itemId, listing.quantity,
-       listing.enhancement, listing.price, listing.buyoutPrice,
-       listing.expiresAt, listing.createdAt]
-    );
+    await this.db.transaction(async (client) => {
+      // Эскроу: предмет списывается с продавца при выставлении лота.
+      // Без проверки продавец мог выставлять предметы, которых у него нет.
+      const taken = await client.query(
+        `UPDATE character_items SET quantity = quantity - $1
+         WHERE id = (
+           SELECT id FROM character_items
+           WHERE character_id = $2 AND item_id = $3 AND enhancement = $4 AND quantity >= $1
+           FOR UPDATE
+         )`,
+        [quantity, sellerId, itemId, enhancement]
+      );
+      if (taken.rowCount === 0) throw new Error('Not enough items to list');
+      await client.query(
+        `DELETE FROM character_items
+         WHERE character_id = $1 AND item_id = $2 AND enhancement = $3 AND quantity <= 0`,
+        [sellerId, itemId, enhancement]
+      );
+
+      await client.query(
+        `INSERT INTO auction_listings
+          (id, seller_id, item_id, quantity, enhancement, price, buyout_price, expires_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [listing.id, listing.sellerId, listing.itemId, listing.quantity,
+         listing.enhancement, listing.price, listing.buyoutPrice,
+         listing.expiresAt, listing.createdAt]
+      );
+    });
 
     // Инвалидировать кэш поиска
     await this.redis.publish('auction:new_listing', { itemId, price });
@@ -161,6 +181,15 @@ export class AuctionService {
         [buyerId, listingId]
       );
 
+      // Передать предмет покупателю (он был в эскроу с момента выставления)
+      await client.query(
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (character_id, item_id, enhancement)
+         DO UPDATE SET quantity = character_items.quantity + $3`,
+        [buyerId, item.itemId, item.quantity, item.enhancement]
+      );
+
       // Уведомить продавца о продаже
       await this.notifications.send(item.sellerId, 'auction_sold', {
         listingId, itemId: item.itemId, price: item.price, buyerId,
@@ -172,11 +201,26 @@ export class AuctionService {
   }
 
   async cancelListing(listingId: string, sellerId: string): Promise<boolean> {
-    const result = await this.db.query(
-      'DELETE FROM auction_listings WHERE id = $1 AND seller_id = $2 AND sold_at IS NULL',
-      [listingId, sellerId]
-    );
-    return (result as unknown[]).length > 0;
+    return this.db.transaction(async (client) => {
+      const res = await client.query(
+        `DELETE FROM auction_listings
+         WHERE id = $1 AND seller_id = $2 AND sold_at IS NULL
+         RETURNING item_id, quantity, enhancement`,
+        [listingId, sellerId]
+      );
+      if (res.rows.length === 0) return false;
+
+      // Вернуть предмет из эскроу продавцу
+      const l = res.rows[0];
+      await client.query(
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (character_id, item_id, enhancement)
+         DO UPDATE SET quantity = character_items.quantity + $3`,
+        [sellerId, l.item_id, l.quantity, l.enhancement]
+      );
+      return true;
+    });
   }
 
   async getSellerListings(sellerId: string): Promise<AuctionListing[]> {

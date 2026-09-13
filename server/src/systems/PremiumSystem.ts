@@ -169,8 +169,10 @@ export class PremiumSystem {
         await client.query('UPDATE characters SET gold = gold + $1 WHERE id = $2', [reward.amount, characterId]);
       } else if (reward.type === 'item' && reward.id && reward.amount) {
         await client.query(
-          `INSERT INTO inventory (id, character_id, slot_index, item_id, quantity, enhancement)
-           SELECT gen_random_uuid(), $1, COALESCE((SELECT MAX(slot_index)+1 FROM inventory WHERE character_id=$1),0), $2, $3, 0`,
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, $3, 0)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + $3`,
           [characterId, reward.id, reward.amount]
         );
       } else if (reward.type === 'title' && reward.id) {

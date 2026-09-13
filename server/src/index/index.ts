@@ -86,7 +86,12 @@ async function bootstrap() {
     // Подписчики Redis pub/sub (уведомления, кики, спавн, ИИ)
     await gameSocketHandler.subscribeToRedisEvents();
 
-    // Игровой цикл: спавн монстров + тик ИИ
+    // Объявления мировых событий — всем онлайн-игрокам
+    GameLoop.getInstance().setWorldEventBroadcaster((payload) => {
+      gameSocketHandler.broadcastWorldEvent(payload);
+    });
+
+    // Игровой цикл: спавн монстров + тик ИИ + мировые события
     GameLoop.getInstance().start();
 
     httpServer.listen(PORT, () => {

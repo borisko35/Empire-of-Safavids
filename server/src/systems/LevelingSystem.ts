@@ -54,12 +54,27 @@ const LEVEL_TITLES: Record<number, string> = {
   20:  'Воин Шаха',
   30:  'Ветеран Кызылбаш',
   50:  'Герой Персии',
+  60:  'Пробуждённый',
   70:  'Легенда Сефевидов',
   100: 'Бессмертный Шаха',
 };
 
+// Пробуждение (GDD п.10): на 60-м уровне — новая сила
+const AWAKENING_LEVEL = 60;
+const AWAKENING_BONUS: CharacterStats = {
+  strength: 5, agility: 5, intelligence: 5, endurance: 5, charisma: 5,
+};
+
 export class LevelingSystem {
   private db = DatabaseService.getInstance();
+
+  /** Уровень, с которого доступен навык (0 — доступен с начала) */
+  static getSkillUnlockLevel(characterClass: CharacterClass, skillId: string): number {
+    for (const [lvl, byClass] of Object.entries(LEVEL_UNLOCK_SKILLS)) {
+      if (byClass[characterClass]?.includes(skillId)) return Number(lvl);
+    }
+    return 0;
+  }
 
   /** Формула опыта: exp = level² × 100 */
   static expForLevel(level: number): number {
@@ -103,10 +118,20 @@ export class LevelingSystem {
       }
 
       // Разблокируем навыки
+      let awakened = false;
       for (let lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
         const skills = LEVEL_UNLOCK_SKILLS[lvl]?.[character.class];
         if (skills) unlockedSkills.push(...skills);
         if (LEVEL_TITLES[lvl]) newTitle = LEVEL_TITLES[lvl];
+        if (lvl === AWAKENING_LEVEL) awakened = true;
+      }
+
+      // Пробуждение: разовый бонус ко всем характеристикам
+      if (awakened) {
+        for (const [stat, bonus] of Object.entries(AWAKENING_BONUS) as [keyof CharacterStats, number][]) {
+          statGains[stat] = (statGains[stat] ?? 0) + bonus;
+          newStats[stat] = (newStats[stat] ?? 0) + bonus;
+        }
       }
 
       // Обновляем БД
@@ -136,7 +161,7 @@ export class LevelingSystem {
         }
       });
 
-      logger.info(`Level up: ${character.name} ${oldLevel} → ${newLevel} (${source})`);
+      logger.info(`Level up: ${character.name} ${oldLevel} → ${newLevel} (${source})${awakened ? ' — AWAKENED' : ''}`);
     } else {
       await this.db.query(
         'UPDATE characters SET experience = $1, updated_at = NOW() WHERE id = $2',

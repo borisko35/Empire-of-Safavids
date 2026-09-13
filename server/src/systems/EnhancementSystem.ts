@@ -2,8 +2,11 @@
 // Система улучшения снаряжения — Empire of Safavids
 // ============================================================
 
+import { PoolClient } from 'pg';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
+import { ITEMS_DATABASE } from '../data/items';
+import { ItemType } from '../types/game.types';
 
 export type EnhancementResult = 'success' | 'fail' | 'downgrade' | 'destroy';
 
@@ -49,20 +52,30 @@ const ENHANCEMENT_RATES: Record<number, {
 export class EnhancementSystem {
   private db = DatabaseService.getInstance();
 
-  async enhance(
-    characterId: string,
-    inventorySlot: number,
-    useProtectionScroll: boolean = false
-  ): Promise<EnhancementOutcome> {
-    return this.db.transaction(async (client) => {
-      // Получаем предмет
-      const slot = await client.query(
-        'SELECT * FROM inventory WHERE character_id = $1 AND slot_index = $2 FOR UPDATE',
-        [characterId, inventorySlot]
-      );
-      if (!slot.rows[0]) throw new Error('Item not found in slot');
+  /**
+   * Заточить предмет из сумки.
+   * Стек предмета хранится по (персонаж, предмет, уровень заточки):
+   * успех переносит один экземпляр из яруса +N в ярус +(N+1),
+   * downgrade — в +(N−1), destroy — уничтожает экземпляр.
+   */
+  async enhance(characterId: string, itemId: string): Promise<EnhancementOutcome> {
+    const def = ITEMS_DATABASE[itemId];
+    if (!def) throw new Error('Item not found');
+    if (def.type !== ItemType.WEAPON && def.type !== ItemType.ARMOR && def.type !== ItemType.ACCESSORY) {
+      throw new Error('Only equipment can be enhanced');
+    }
 
-      const currentEnh = slot.rows[0].enhancement as number;
+    return this.db.transaction(async (client) => {
+      // Верхний (самый заточенный) стек предмета
+      const stack = await client.query(
+        `SELECT enhancement, quantity FROM character_items
+         WHERE character_id = $1 AND item_id = $2
+         ORDER BY enhancement DESC LIMIT 1 FOR UPDATE`,
+        [characterId, itemId]
+      );
+      if (!stack.rows[0]) throw new Error('Item not in inventory');
+
+      const currentEnh = Number(stack.rows[0].enhancement);
       if (currentEnh >= 20) throw new Error('Item is already at maximum enhancement (+20)');
 
       const rate = ENHANCEMENT_RATES[currentEnh];
@@ -75,19 +88,16 @@ export class EnhancementSystem {
 
       // Проверяем материалы
       const matRow = await client.query(
-        'SELECT quantity FROM inventory WHERE character_id = $1 AND item_id = $2',
+        'SELECT SUM(quantity) AS total FROM character_items WHERE character_id = $1 AND item_id = $2',
         [characterId, rate.materialId]
       );
-      if (!matRow.rows[0] || matRow.rows[0].quantity < rate.materialQty) {
+      if (!matRow.rows[0] || Number(matRow.rows[0].total) < rate.materialQty) {
         throw new Error(`Need ${rate.materialQty}x ${rate.materialId}`);
       }
 
       // Списываем ресурсы
       await client.query('UPDATE characters SET gold = gold - $1 WHERE id = $2', [rate.goldCost, characterId]);
-      await client.query(
-        'UPDATE inventory SET quantity = quantity - $1 WHERE character_id = $2 AND item_id = $3',
-        [rate.materialQty, characterId, rate.materialId]
-      );
+      await this.consumeMaterials(client, characterId, rate.materialId, rate.materialQty);
 
       // Бросаем кубик
       const roll = Math.random();
@@ -99,26 +109,28 @@ export class EnhancementSystem {
         newEnh = currentEnh + 1;
       } else if (roll < rate.success + rate.fail) {
         outcome = 'fail';
-        // Свиток защиты предотвращает понижение/уничтожение
       } else if (roll < rate.success + rate.fail + rate.downgrade) {
-        outcome = useProtectionScroll ? 'fail' : 'downgrade';
-        if (!useProtectionScroll) newEnh = Math.max(0, currentEnh - 1);
+        outcome = 'downgrade';
+        newEnh = Math.max(0, currentEnh - 1);
       } else {
-        outcome = useProtectionScroll ? 'fail' : 'destroy';
-        if (!useProtectionScroll) newEnh = 0;
+        outcome = 'destroy';
+        newEnh = 0;
       }
 
       if (outcome === 'destroy') {
+        await this.consumeMaterials(client, characterId, itemId, 1);
+      } else if (outcome === 'success' || outcome === 'downgrade') {
+        // Переносим экземпляр между ярусами заточки
+        await this.consumeMaterials(client, characterId, itemId, 1);
         await client.query(
-          'DELETE FROM inventory WHERE character_id = $1 AND slot_index = $2',
-          [characterId, inventorySlot]
-        );
-      } else {
-        await client.query(
-          'UPDATE inventory SET enhancement = $1 WHERE character_id = $2 AND slot_index = $3',
-          [newEnh, characterId, inventorySlot]
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, 1, $3)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + 1`,
+          [characterId, itemId, newEnh]
         );
       }
+      // outcome === 'fail': предмет остаётся без изменений
 
       const messages: Record<EnhancementResult, [string, string]> = {
         success:   [`Enhancement succeeded! +${newEnh}`,       `Улучшение успешно! +${newEnh}`],
@@ -127,7 +139,7 @@ export class EnhancementSystem {
         destroy:   ['Enhancement failed. Item was destroyed!',  'Провал! Предмет уничтожен!'],
       };
 
-      logger.info(`Enhancement: ${characterId} slot ${inventorySlot} +${currentEnh} → ${outcome} (+${newEnh})`);
+      logger.info(`Enhancement: ${characterId} ${itemId} +${currentEnh} → ${outcome} (+${newEnh})`);
       return {
         result: outcome,
         newEnhancement: newEnh,
@@ -135,6 +147,29 @@ export class EnhancementSystem {
         messageRu: messages[outcome][1],
       };
     });
+  }
+
+  /** Списать quantity экземпляров предмета, удаляя опустевшие стеки. */
+  private async consumeMaterials(
+    client: PoolClient,
+    characterId: string,
+    itemId: string,
+    quantity: number
+  ): Promise<void> {
+    await client.query(
+      `UPDATE character_items SET quantity = quantity - $1
+       WHERE id = (
+         SELECT id FROM character_items
+         WHERE character_id = $2 AND item_id = $3 AND quantity >= $1
+         ORDER BY enhancement DESC LIMIT 1
+         FOR UPDATE
+       )`,
+      [quantity, characterId, itemId]
+    );
+    await client.query(
+      'DELETE FROM character_items WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
+      [characterId, itemId]
+    );
   }
 
   getEnhancementInfo(currentLevel: number) {

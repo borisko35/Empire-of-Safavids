@@ -234,6 +234,26 @@ export class AISystem {
     ctx.aggroTable.set(characterId, current + amount);
   }
 
+  /**
+   * Игрок умер или вышел: монстры забывают его и возвращаются на спавн.
+   * Без этого аггро висит вечно, и ИИ добивает игрока после каждого
+   * респавна (death-loop), в том числе уже офлайн.
+   */
+  clearThreatAndReturn(characterId: string): void {
+    for (const ctx of this.contexts.values()) {
+      if (!ctx.aggroTable.has(characterId)) continue;
+      ctx.aggroTable.delete(characterId);
+      if (ctx.targetId === characterId) {
+        ctx.targetId = null;
+        ctx.targetPosition = null;
+      }
+      if (ctx.aggroTable.size === 0) {
+        ctx.position = { ...ctx.spawnPoint };
+        ctx.state = 'patrol';
+      }
+    }
+  }
+
   takeDamage(instanceId: string, damage: number, attackerId: string): boolean {
     const ctx = this.contexts.get(instanceId);
     if (!ctx || ctx.state === 'dead') return false;
@@ -280,6 +300,11 @@ export class AISystem {
 
   getContext(instanceId: string): AIContext | undefined {
     return this.contexts.get(instanceId);
+  }
+
+  /** Убрать инстанс монстра из мира (деспавн данжевых монстров) */
+  removeInstance(instanceId: string): void {
+    this.contexts.delete(instanceId);
   }
 
   getAllInstances(): AIContext[] {

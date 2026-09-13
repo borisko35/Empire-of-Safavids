@@ -3,6 +3,8 @@ import Joi from 'joi';
 import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
 import { QuestService } from '../services/QuestService';
+import { EnhancementSystem } from '../systems/EnhancementSystem';
+import { EquipmentCache } from '../services/EquipmentCache';
 import { CharacterClass } from '../types/game.types';
 import { authMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -12,6 +14,8 @@ export const characterRouter = Router();
 const characterService = new CharacterService();
 const combatService = new CombatService();
 const questService = new QuestService();
+const enhancementSystem = new EnhancementSystem();
+const equipmentCache = EquipmentCache.getInstance();
 
 const createCharacterSchema = Joi.object({
   name: Joi.string().min(2).max(24).pattern(/^[a-zA-Zа-яА-Я0-9_\- ]+$/).required(),
@@ -56,6 +60,84 @@ characterRouter.get('/:id/inventory', authMiddleware, asyncHandler(async (req: R
   }
   const items = await characterService.getInventory(req.params.id);
   return res.json({ items });
+}));
+
+// GET /api/characters/:id/equipment — экипировка и бонусы характеристик
+characterRouter.get('/:id/equipment', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const equipment = await characterService.getEquipment(req.params.id);
+  return res.json(equipment);
+}));
+
+// POST /api/characters/:id/equipment/equip — надеть предмет { itemId }
+characterRouter.post('/:id/equipment/equip', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const itemId = req.body?.itemId;
+  if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+  try {
+    const equipment = await characterService.equipItem(req.params.id, itemId);
+    equipmentCache.invalidate(req.params.id);
+    return res.json(equipment);
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
+}));
+
+// POST /api/characters/:id/equipment/unequip — снять предмет { slot }
+characterRouter.post('/:id/equipment/unequip', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const slot = req.body?.slot;
+  if (!['weapon', 'armor', 'accessory'].includes(slot)) {
+    return res.status(400).json({ error: 'Invalid slot' });
+  }
+  try {
+    const equipment = await characterService.unequipItem(req.params.id, slot);
+    equipmentCache.invalidate(req.params.id);
+    return res.json(equipment);
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
+}));
+
+// POST /api/characters/:id/inventory/use — использовать расходник { itemId }
+characterRouter.post('/:id/inventory/use', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const itemId = req.body?.itemId;
+  if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+  try {
+    const resources = await characterService.useItem(req.params.id, itemId);
+    return res.json({ success: true, resources });
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
+}));
+
+// POST /api/characters/:id/enhance — заточить предмет { itemId }
+characterRouter.post('/:id/enhance', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const itemId = req.body?.itemId;
+  if (!itemId) return res.status(400).json({ error: 'Missing itemId' });
+  try {
+    const outcome = await enhancementSystem.enhance(req.params.id, itemId);
+    return res.json(outcome);
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
 }));
 
 // GET /api/characters/:id/quests — прогресс квестов персонажа

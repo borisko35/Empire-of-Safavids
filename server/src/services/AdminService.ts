@@ -100,10 +100,10 @@ export class AdminService {
     enhancement = 0
   ): Promise<void> {
     await this.db.query(
-      `INSERT INTO inventory (id, character_id, slot_index, item_id, quantity, enhancement)
-       SELECT gen_random_uuid(), $1,
-         COALESCE((SELECT MAX(slot_index) + 1 FROM inventory WHERE character_id = $1), 0),
-         $2, $3, $4`,
+      `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (character_id, item_id, enhancement)
+       DO UPDATE SET quantity = character_items.quantity + $3`,
       [characterId, itemId, quantity, enhancement]
     );
     await this.redis.publish('admin:give_item', { characterId, itemId, quantity });

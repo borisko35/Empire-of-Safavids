@@ -231,6 +231,127 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     repeatable: true,
     repeatCooldown: 168,
   },
+
+  // ── ДОПОЛНИТЕЛЬНЫЕ КВЕСТЫ (Фаза 1) ──────────────────────────────
+
+  'side_tabriz_caravan_guard': {
+    id: 'side_tabriz_caravan_guard',
+    title: 'Guard the Caravan Gates',
+    titleRu: 'Страж Караванных Ворот',
+    description: 'Разбойники-воины давят на подступах к Тебризу. Разгоните их лагерь.',
+    type: 'side',
+    minLevel: 5,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_warriors', type: 'kill', description: 'Разогнать разбойников-воинов', target: 'mob_bandit_warrior', required: 5, optional: false },
+    ],
+    rewards: { experience: 900, gold: 120, items: [{ itemId: 'con_stamina_food', quantity: 5 }] },
+    npcGiver: 'npc_guard_captain',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+
+  'side_isfahan_silk_order': {
+    id: 'side_isfahan_silk_order',
+    title: 'Silk for the Workshop',
+    titleRu: 'Шёлк для Мастерской',
+    description: 'Ремесленные цеха Исфахана ждут партию шёлка. Доставьте 3 рулона со склада.',
+    type: 'side',
+    minLevel: 20,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_collect_silk', type: 'collect', description: 'Собрать шёлк', target: 'mat_silk', required: 3, optional: false },
+      { id: 'obj_visit_isfahan', type: 'explore', description: 'Доставить заказ в Исфахан', target: 'isfahan_bazaar', required: 1, optional: false },
+    ],
+    rewards: { experience: 2200, gold: 300, items: [{ itemId: 'con_mana_potion', quantity: 5 }] },
+    npcGiver: 'npc_grand_vizier',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+
+  'side_shiraz_hafiz_manuscript': {
+    id: 'side_shiraz_hafiz_manuscript',
+    title: 'The Poet Lost Manuscript',
+    titleRu: 'Потерянная Рукопись Поэта',
+    description: 'Хафиз ищет свою рукопись, украденную контрабандистами. Верните свиток и убийц накажите.',
+    type: 'side',
+    minLevel: 40,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_collect_scroll', type: 'collect', description: 'Вернуть свиток Хафиза', target: 'qst_hafiz_scroll', required: 1, optional: false },
+      { id: 'obj_kill_fog', type: 'kill', description: 'Наказать ассасинов из тумана', target: 'mob_fog_assassin', required: 3, optional: true },
+    ],
+    rewards: {
+      experience: 6500, gold: 500,
+      items: [{ itemId: 'acc_turquoise_ring', quantity: 1 }],
+      title: 'Друг Хафиза',
+    },
+    npcGiver: 'npc_shiraz_librarian',
+    npcGiverRegion: Region.SHIRAZ,
+    repeatable: false,
+  },
+
+  'side_caucasus_tower_defense': {
+    id: 'side_caucasus_tower_defense',
+    title: 'Towers of the Caucasus',
+    titleRu: 'Башни Кавказа',
+    description: 'Горные крепости теряют дозорных. Очистите перевалы от налётчиков.',
+    type: 'side',
+    minLevel: 50,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_raiders', type: 'kill', description: 'Разбить монгольских наездников', target: 'mob_mongol_raider', required: 10, optional: false },
+      { id: 'obj_collect_ore', type: 'collect', description: 'Собрать железо для ремонта ворот', target: 'mat_iron_ore', required: 10, optional: false },
+    ],
+    rewards: { experience: 12000, gold: 800, items: [{ itemId: 'con_health_potion_m', quantity: 10 }] },
+    npcGiver: 'npc_guard_captain',
+    npcGiverRegion: Region.CAUCASUS,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+
+  'side_gulf_smuggler_rings': {
+    id: 'side_gulf_smuggler_rings',
+    title: 'Smuggler Rings of the Gulf',
+    titleRu: 'Кольца Контрабандистов Залива',
+    description: 'Пираты и янычары делят Персидский залив. Прервите их союз.',
+    type: 'side',
+    minLevel: 80,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_janissaries', type: 'kill', description: 'Потопить десанты янычар', target: 'mob_ottoman_janissary', required: 15, optional: false },
+      { id: 'obj_collect_turquoise', type: 'collect', description: 'Изъять контрабандную бирюзу', target: 'mat_turquoise', required: 3, optional: true },
+    ],
+    rewards: { experience: 80000, gold: 3000, items: [{ itemId: 'con_exp_scroll', quantity: 2 }] },
+    npcGiver: 'npc_gulf_harbor-master',
+    npcGiverRegion: Region.PERSIAN_GULF,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+
+  'daily_rustam_offer': {
+    id: 'daily_rustam_offer',
+    title: 'Rustam the Undying Stirs',
+    titleRu: 'Рустам Бессмертный Пробуждается',
+    description: 'В заливе слышен рог Рустама. Соберите группу и уложите легенду обратно спать.',
+    type: 'daily',
+    minLevel: 85,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_rustam', type: 'kill', description: 'Одолеть Рустама Бессмертного', target: 'world_boss_rustam_reborn', required: 1, optional: false },
+    ],
+    rewards: {
+      experience: 400000, gold: 8000,
+      items: [{ itemId: 'mat_dragon_scale', quantity: 3 }],
+      title: 'Поборник Рустама',
+    },
+    npcGiver: 'npc_gulf_harbor-master',
+    npcGiverRegion: Region.PERSIAN_GULF,
+    repeatable: true,
+    repeatCooldown: 336,
+  },
 };
 
 export function getQuest(id: string): QuestDefinition | undefined {
