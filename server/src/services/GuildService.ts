@@ -112,6 +112,19 @@ export class GuildService {
     });
   }
 
+  /** Список всех гильдий: имя, лидер, число членов (для панели гильдий) */
+  async listGuilds(): Promise<{ id: string; name: string; description: string; leaderName: string; members: number }[]> {
+    const rows = await this.db.query<Record<string, unknown>>(
+          );
+    return rows.map((r) => ({
+      id: String(r.id),
+      name: String(r.name),
+      description: String(r.description),
+      leaderName: String(r.leader_name),
+      members: Number(r.members),
+    }));
+  }
+
   async getGuildInfo(guildId: string): Promise<Guild | null> {
     const row = await this.db.queryOne<Record<string, unknown>>(
       'SELECT * FROM guilds WHERE id = $1', [guildId]

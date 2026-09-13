@@ -351,6 +351,12 @@ gameRouter.post('/crafting/:jobId/complete', authMiddleware,
 // ГИЛЬДИИ
 // ============================================================
 
+// GET /api/game/guilds — список всех гильдий
+gameRouter.get('/guilds', authMiddleware, asyncHandler(async (_req: Request, res: Response) => {
+  const guilds = await guildService.listGuilds();
+  return res.json({ guilds });
+}));
+
 gameRouter.post('/guilds', authMiddleware, requireBodyField('leaderId'),
   asyncHandler(async (req: Request, res: Response) => {
     // Лидер гильдии должен быть собственным персонажем

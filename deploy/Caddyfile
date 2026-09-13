@@ -1,0 +1,19 @@
+# Empire of Safavids — TLS-прокси
+# Домен и сертификаты Let's Encrypt настраиваются автоматически;
+# переменная DOMAIN приходит из deploy/.env (окружение контейнера).
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Всё — на nginx клиента: лендинг на /, игра на /game/,
+	# api/locales/socket.io/download он проксирует на игровой сервер.
+	# WebSocket'ы Caddy проксирует автоматически.
+	reverse_proxy client:80
+}
