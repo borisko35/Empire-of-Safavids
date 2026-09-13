@@ -191,6 +191,19 @@ await psql(`UPDATE characters SET region = 'isfahan' WHERE id = '${cid}'`);
 const deliver = await api('POST', '/api/game/trade/deliver', { characterId: cid }, token);
 check('deliver rewards in target region', deliver.status === 200 && deliver.json.gold > 0, JSON.stringify(deliver.json));
 
+// ── Игровые серверы (шарды) ────────────────────────────────────
+const srvs = await api('GET', '/api/game/servers', null, token);
+check('servers list has 8 shards', srvs.status === 200 && srvs.json.servers.length === 8,
+  srvs.json.servers.map(x => x.nameRu).join(','));
+check('server online counts numeric', srvs.json.servers.every(x => Number.isFinite(x.online)));
+const badSrv = await api('POST', '/api/characters', { name: 'BadSrv' + ts, class: 'qizilbash', serverId: 'atlantis' }, token);
+check('unknown server rejected', badSrv.status === 400);
+const srvChar = await api('POST', '/api/characters', { name: 'BakuHero' + ts, class: 'persian_archer', serverId: 'baku' }, token);
+check('character created on chosen server', srvChar.status === 201 && srvChar.json.character.serverId === 'baku',
+  srvChar.json.character.serverId);
+const listed = (await api('GET', '/api/characters', null, token)).json.characters;
+check('old characters default to isfahan', listed.some(c => c.serverId === 'isfahan'));
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} FAILURES`);
 if (dbClient) await dbClient.end();
 process.exit(failures === 0 ? 0 : 1);

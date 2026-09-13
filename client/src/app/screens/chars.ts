@@ -32,13 +32,15 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
   $('chars-username').textContent = session.username;
   showScreen('screen-chars');
   await buildClassPicker();
+  await buildServerPicker();
   await refreshList(onEnter);
 
   ($('form-create') as HTMLFormElement).onsubmit = async (e) => {
     e.preventDefault();
     const name = ($('new-name') as HTMLInputElement).value.trim();
+    const serverId = ($('new-server') as HTMLSelectElement).value;
     try {
-      const { character } = await api.createCharacter(name, selectedClass);
+      const { character } = await api.createCharacter(name, selectedClass, serverId);
       ($('new-name') as HTMLInputElement).value = '';
       onEnter(character);
     } catch (err) {
@@ -51,6 +53,31 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
     location.reload();
   });
 }
+
+/** Выпадающий список игровых серверов с онлайном */
+async function buildServerPicker(): Promise<void> {
+  const select = $('new-server') as HTMLSelectElement | null;
+  if (!select) return;
+  try {
+    const { servers } = await api.gameServers();
+    select.innerHTML = '';
+    for (const srv of servers) {
+      const opt = document.createElement('option');
+      opt.value = srv.id;
+      opt.textContent = `${srv.nameRu} — ${t('chars.online')}: ${srv.online}${srv.recommended ? ` ★ ${t('chars.recommended')}` : ''}`;
+      if (srv.recommended) opt.selected = true;
+      select.append(opt);
+    }
+  } catch {
+    select.innerHTML = '<option value="isfahan">Исфахан</option>';
+  }
+}
+
+/** Названия игровых серверов (по id из shared/constants) */
+const SERVER_NAMES: Record<string, string> = {
+  baku: 'Баку', nakhchivan: 'Нахчивань', ganja: 'Гянджа', tebriz: 'Тебриз',
+  khoy: 'Хой', rasht: 'Решт', isfahan: 'Исфахан', derbent: 'Дербент',
+};
 
 async function refreshList(onEnter: (c: Character) => void): Promise<void> {
   const list = $('char-list');
@@ -69,9 +96,11 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
       img.alt = '';
       const info = document.createElement('div');
       info.className = 'info';
+      const serverName = SERVER_NAMES[c.serverId] ?? c.serverId;
       info.innerHTML =
         `<div class="name" style="color:${CLASS_COLORS[c.class] ?? 'var(--gold-light)'}">${c.name}</div>` +
-        `<div class="meta">${t(`classes.${c.class}`)} · ${t('badges.level')} ${c.level} · ${regionLabel(c.region)}</div>`;
+        `<div class="meta">${t(`classes.${c.class}`)} · ${t('badges.level')} ${c.level} · ${regionLabel(c.region)}</div>` +
+        `<div class="meta server-badge">${t('chars.server')}: ${serverName}</div>`;
       const enter = document.createElement('span');
       enter.className = 'enter';
       enter.textContent = `▶ ${t('chars.enter_world')}`;

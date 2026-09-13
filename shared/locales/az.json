@@ -40,7 +40,11 @@
     "delete": "Sil",
     "empty": "Hələ personajın yoxdur — birincisini yarat",
     "region": "Region",
-    "level": "Səviyyə"
+    "level": "Səviyyə",
+    "server": "Oyun serveri",
+    "server_hint": "Obraz seçilmiş serverdə yaşayır",
+    "online": "onlayn",
+    "recommended": "yeni başlayanlar üçün"
   },
   "classes": {
     "qizilbash": "Qızılbaş Qvardiyası",

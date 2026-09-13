@@ -88,6 +88,34 @@ export const SERVER_EVENTS = {
 } as const;
 
 // Каналы Redis pub/sub
+
+// ============================================================
+// Игровые серверы (шарды): персонаж привязан к серверу при создании.
+// ============================================================
+export interface GameServerDef {
+  id: string;
+  nameRu: string;
+  /** Рекомендуемый для новичков */
+  recommended?: boolean;
+}
+
+export const GAME_SERVERS: GameServerDef[] = [
+  { id: 'baku', nameRu: 'Баку', recommended: true },
+  { id: 'nakhchivan', nameRu: 'Нахчивань' },
+  { id: 'ganja', nameRu: 'Гянджа' },
+  { id: 'tebriz', nameRu: 'Тебриз' },
+  { id: 'khoy', nameRu: 'Хой' },
+  { id: 'rasht', nameRu: 'Решт' },
+  { id: 'isfahan', nameRu: 'Исфахан' },
+  { id: 'derbent', nameRu: 'Дербент' },
+];
+
+export const DEFAULT_SERVER_ID = 'isfahan';
+
+export function isValidServerId(id: string): boolean {
+  return GAME_SERVERS.some(s => s.id === id);
+}
+
 export const REDIS_CHANNELS = {
   PLAYER_NOTIFICATION: 'player:notification',
   ANTI_CHEAT_KICK: 'anticheat:kick',
@@ -96,9 +124,10 @@ export const REDIS_CHANNELS = {
   AUTH_LOGOUT_ALL: 'auth:logout_all',
   WORLD_TIME_UPDATE: 'world:time_update',
   PLAYER_KARMA_CHANGED: 'player:karma_changed',
-  REGION_SPAWN: (region: string) => `region:${region}:spawn`,
-  REGION_AI_ACTION: (region: string) => `region:${region}:ai_action`,
-  REGION_NOTIFICATION: (region: string) => `region:${region}:notification`,
-  REGION_MONSTER_KILLED: (region: string) => `region:${region}:monster_killed`,
-  REGION_MONSTER_HIT: (region: string) => `region:${region}:monster_hit`, // монстр ударил игрока
+  // Каналы регионов изолированы по шардам (игровым серверам)
+  REGION_SPAWN: (shardId: string, region: string) => `region:${shardId}:${region}:spawn`,
+  REGION_AI_ACTION: (shardId: string, region: string) => `region:${shardId}:${region}:ai_action`,
+  REGION_NOTIFICATION: (shardId: string, region: string) => `region:${shardId}:${region}:notification`,
+  REGION_MONSTER_KILLED: (shardId: string, region: string) => `region:${shardId}:${region}:monster_killed`,
+  REGION_MONSTER_HIT: (shardId: string, region: string) => `region:${shardId}:${region}:monster_hit`, // монстр ударил игрока
 } as const;

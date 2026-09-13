@@ -16,12 +16,14 @@ import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
-import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS } from '../../../shared/constants';
+import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS } from '../../../shared/constants';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   characterId?: string;
   region?: Region;
+  /** Игровой сервер (шард) персонажа */
+  shardId?: string;
 }
 
 type ChatChannel = 'world' | 'region' | 'guild' | 'party';
@@ -53,9 +55,11 @@ export class GameSocketHandler {
   // Серия лёгких атак (комбо): characterId -> { count, lastAt }
   private comboChains = new Map<string, { count: number; lastAt: number }>();
 
-  /** Широковещательное объявление мирового события (вызывается из GameLoop) */
+  /** Широковещательное объявление мирового события — только шарду события */
   broadcastWorldEvent(payload: Record<string, unknown>): void {
-    this.io.emit(SERVER_EVENTS.WORLD_EVENT, payload);
+    const room = payload.shardId ? `shard:${String(payload.shardId)}` : undefined;
+    if (room) this.io.to(room).emit(SERVER_EVENTS.WORLD_EVENT, payload);
+    else this.io.emit(SERVER_EVENTS.WORLD_EVENT, payload);
   }
 
   constructor(io: SocketIOServer) {
@@ -73,23 +77,24 @@ export class GameSocketHandler {
    * Вызывается REST-эндпоинтом /api/world/travel после смены региона в БД.
    */
   async movePlayerRegion(characterId: string, oldRegion: Region, newRegion: Region): Promise<void> {
-    const socket = this.activePlayers.get(characterId);
+    const socket = this.activePlayers.get(characterId) as (AuthenticatedSocket & { shardId?: string }) | undefined;
+    const shardId = socket?.shardId ?? 'isfahan';
     if (socket) {
-      socket.leave(`region:${oldRegion}`);
-      socket.join(`region:${newRegion}`);
+      socket.leave(`shard:${shardId}:region:${oldRegion}`);
+      socket.join(`shard:${shardId}:region:${newRegion}`);
       socket.region = newRegion;
-      socket.to(`region:${oldRegion}`).emit(SOCKET_EVENTS.PLAYER_LEFT, { characterId });
+      socket.to(`shard:${shardId}:region:${oldRegion}`).emit(SOCKET_EVENTS.PLAYER_LEFT, { characterId });
       // Позиция персонажа в новом регионе — текущая в мире (мир бесшовный)
       const character = await this.characterService.getCharacterById(characterId).catch(() => null);
-      this.io.to(`region:${newRegion}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
+      this.io.to(`shard:${shardId}:region:${newRegion}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
         characterId,
         name: character?.name ?? '',
         class: character?.class ?? '',
         position: character?.position ?? { x: 0, y: 0, z: 0 },
       });
     }
-    await this.redis.removePlayerFromRegion(oldRegion, characterId).catch(() => {});
-    await this.redis.addPlayerToRegion(newRegion, characterId).catch(() => {});
+    await this.redis.removePlayerFromRegion(shardId, oldRegion, characterId).catch(() => {});
+    await this.redis.addPlayerToRegion(shardId, newRegion, characterId).catch(() => {});
   }
 
   initialize(): void {
@@ -154,42 +159,44 @@ export class GameSocketHandler {
       if (socket) socket.emit(SERVER_EVENTS.NOTIFICATION, msg);
     });
 
-    // Уведомления регионам
-    for (const region of Object.values(Region)) {
-      await this.redis.subscribe(REDIS_CHANNELS.REGION_NOTIFICATION(region), (msg) => {
-        this.io.to(`region:${region}`).emit(SERVER_EVENTS.NOTIFICATION, msg);
-      });
-
-      // Спавн монстров и действия ИИ — клиентам региона
-      await this.redis.subscribe(REDIS_CHANNELS.REGION_SPAWN(region), (msg) => {
-        this.io.to(`region:${region}`).emit(SERVER_EVENTS.MONSTER_SPAWNED, msg);
-      });
-      await this.redis.subscribe(REDIS_CHANNELS.REGION_AI_ACTION(region), (msg) => {
-        this.io.to(`region:${region}`).emit('monster:ai_action', msg);
-      });
-      await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_KILLED(region), (msg) => {
-        this.io.to(`region:${region}`).emit(SERVER_EVENTS.MONSTER_KILLED, msg);
-      });
-      // Монстр ударил игрока: персональный COMBAT_HIT + визуал региону
-      await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_HIT(region), (msg: Record<string, unknown>) => {
-        const socket = this.activePlayers.get(String(msg.characterId));
-        if (socket) {
-          socket.emit(SOCKET_EVENTS.COMBAT_HIT, {
-            attackerId: String(msg.instanceId),
-            damage: Number(msg.damage),
-            isDodged: false,
-            isBlocked: false,
-            hp: Number(msg.hp),
-            maxHp: Number(msg.maxHp),
-          });
-        }
-        this.io.to(`region:${region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
-          attackerId: String(msg.instanceId),
-          targetId: String(msg.characterId),
-          actionType: 'attack',
+    // Уведомления регионам, спавн и ИИ — игрокам шарда в регионе.
+    // Регионы изолированы по шардам: 8 серверов × 7 регионов.
+    for (const shardId of GAME_SERVERS.map(s => s.id)) {
+      for (const region of Object.values(Region)) {
+        const room = `shard:${shardId}:region:${region}`;
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_NOTIFICATION(shardId, region), (msg) => {
+          this.io.to(room).emit(SERVER_EVENTS.NOTIFICATION, msg);
         });
-        if (msg.died) void this.handleDeathById(String(msg.characterId));
-      });
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_SPAWN(shardId, region), (msg) => {
+          this.io.to(room).emit(SERVER_EVENTS.MONSTER_SPAWNED, msg);
+        });
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_AI_ACTION(shardId, region), (msg) => {
+          this.io.to(room).emit('monster:ai_action', msg);
+        });
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_KILLED(shardId, region), (msg) => {
+          this.io.to(room).emit(SERVER_EVENTS.MONSTER_KILLED, msg);
+        });
+        // Монстр ударил игрока: персональный COMBAT_HIT + визуал региону
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_MONSTER_HIT(shardId, region), (msg: Record<string, unknown>) => {
+          const socket = this.activePlayers.get(String(msg.characterId));
+          if (socket) {
+            socket.emit(SOCKET_EVENTS.COMBAT_HIT, {
+              attackerId: String(msg.instanceId),
+              damage: Number(msg.damage),
+              isDodged: Boolean(msg.isDodged),
+              isBlocked: Boolean(msg.isBlocked),
+              hp: Number(msg.hp),
+              maxHp: Number(msg.maxHp),
+            });
+          }
+          this.io.to(room).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+            attackerId: String(msg.instanceId),
+            targetId: String(msg.characterId),
+            actionType: 'attack',
+          });
+          if (msg.died) void this.handleDeathById(String(msg.characterId));
+        });
+      }
     }
 
     // Санкции анти-чита: кик/бан активной сессии
@@ -246,13 +253,22 @@ export class GameSocketHandler {
       socket.userId = userId;
       socket.characterId = character.id;
       socket.region = character.region;
+      // Шард из привязки персонажа (по умолчанию — Исфахан для старых персонажей)
+      (socket as AuthenticatedSocket & { shardId?: string }).shardId =
+        character.serverId && GAME_SERVERS.some(s => s.id === character.serverId)
+          ? character.serverId
+          : 'isfahan';
+      const shardId = (socket as AuthenticatedSocket & { shardId?: string }).shardId!;
 
-      // Присоединить к комнате региона
-      socket.join(`region:${character.region}`);
+      // Присоединить к комнатам шарда и региона
+      socket.join(`shard:${shardId}`);
+      socket.join(`shard:${shardId}:region:${character.region}`);
       if (character.guildId) {
         socket.join(`guild:${character.guildId}`);
       }
-      await this.redis.addPlayerToRegion(character.region, character.id);
+      // Активировать шард: заселить монстрами, если он ещё пуст
+      GameLoop.getInstance().getSpawnSystem().activateShard(shardId);
+      await this.redis.addPlayerToRegion(shardId, character.region, character.id);
       // Позиция в Redis сразу: иначе стоящий игрок невидим для ИИ,
       // пока клиент не пошлёт первый player:move
       await this.redis.setPlayerPosition(character.id, character.position).catch(() => {});
@@ -260,10 +276,10 @@ export class GameSocketHandler {
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
 
-      // Снапшот активных монстров региона (заспавненных до входа игрока)
+      // Снапшот активных монстров этого шарда в регионе (заспавненных до входа)
       const ai = GameLoop.getInstance().getSpawnSystem().getAI();
       for (const ctx of ai.getAllInstances()) {
-        if (ctx.definition.region === character.region && ctx.state !== 'dead') {
+        if (ctx.shardId === shardId && ctx.definition.region === character.region && ctx.state !== 'dead') {
           socket.emit(SERVER_EVENTS.MONSTER_SPAWNED, {
             instanceId: ctx.instanceId,
             monsterId: ctx.definition.id,
@@ -276,15 +292,15 @@ export class GameSocketHandler {
         }
       }
 
-      // Уведомить других игроков в регионе
-      socket.to(`region:${character.region}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
+      // Уведомить других игроков шарда в регионе
+      socket.to(`shard:${shardId}:region:${character.region}`).emit(SOCKET_EVENTS.PLAYER_JOINED, {
         characterId: character.id,
         name: character.name,
         class: character.class,
         position: character.position,
       });
 
-      logger.info(`Player authenticated: ${character.name} (${character.class}) in ${character.region}`);
+      logger.info(`Player authenticated: ${character.name} (${character.class}) on ${shardId} in ${character.region}`);
     } catch (error) {
       logger.error('Auth error:', error);
       socket.emit(SOCKET_EVENTS.AUTH_ERROR, { message: 'Authentication failed' });
@@ -327,7 +343,7 @@ export class GameSocketHandler {
     }
 
     // Транслировать другим игрокам в регионе
-    socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.PLAYER_MOVED, {
+    socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.PLAYER_MOVED, {
       characterId,
       position: data.position,
       direction: data.direction,
@@ -483,7 +499,7 @@ export class GameSocketHandler {
       const healPayload = { healerId: attacker.id, targetId: target.id, heal: healAmount, hp: healed.hp, maxHp: healed.maxHp };
       socket.emit(SOCKET_EVENTS.COMBAT_HEAL, healPayload);
       this.activePlayers.get(target.id)?.emit(SOCKET_EVENTS.COMBAT_HEAL, healPayload);
-      socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+      socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
         attackerId: attacker.id, targetId: target.id, actionType: action.actionType, skillId: action.skillId, position: action.position,
       });
       return;
@@ -528,7 +544,7 @@ export class GameSocketHandler {
       attackerId: attacker.id, ...result, hp: applied.hp, maxHp: applied.maxHp,
     });
 
-    socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+    socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
       attackerId: attacker.id, targetId: target.id, actionType: action.actionType, skillId: action.skillId, position: action.position,
     });
 
@@ -603,7 +619,7 @@ export class GameSocketHandler {
       comboFinisher: comboMult > 1,
     });
 
-    socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+    socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
       attackerId: attacker.id, targetId: monsterCtx.instanceId, actionType: action.actionType, skillId: action.skillId, position: action.position,
     });
 
@@ -632,7 +648,7 @@ export class GameSocketHandler {
 
       // Мировой босс события: объявление победы + награда
       if (this.worldEvents.isActiveBoss(monsterCtx.instanceId)) {
-        await this.worldEvents.onBossDefeated(attacker.id).catch((e: unknown) => {
+        await this.worldEvents.onBossDefeated(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
           logger.error('World event reward failed:', e);
         });
       }
@@ -660,7 +676,7 @@ export class GameSocketHandler {
         socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: allCompleted });
       }
 
-      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.region), {
+      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.serverId ?? 'isfahan', attacker.region), {
         instanceId: monsterCtx.instanceId,
         monsterId: def.id,
         killerId: attacker.id,
@@ -764,10 +780,10 @@ export class GameSocketHandler {
 
     switch (data.channel) {
       case 'world':
-        this.io.emit(SOCKET_EVENTS.CHAT_WORLD, payload);
+        this.io.to(`shard:${socket.shardId}`).emit(SOCKET_EVENTS.CHAT_WORLD, payload);
         break;
       case 'region':
-        this.io.to(`region:${socket.region}`).emit(SOCKET_EVENTS.CHAT_REGION, payload);
+        this.io.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.CHAT_REGION, payload);
         break;
       case 'guild': {
         const guildRoom = Array.from(socket.rooms).find(r => r.startsWith('guild:'));
@@ -835,12 +851,17 @@ export class GameSocketHandler {
     this.comboChains.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
-    await this.redis.removePlayerFromRegion(socket.region, socket.characterId);
+    const shardId = socket.shardId ?? 'isfahan';
+    await this.redis.removePlayerFromRegion(shardId, socket.region, socket.characterId);
+    // Шард опустел — выгрузить его монстров
+    if (await this.redis.getShardOnline(shardId) === 0) {
+      GameLoop.getInstance().getSpawnSystem().deactivateShard(shardId);
+    }
 
     // Вышедший игрок пропадает из поля зрения монстров навсегда
     GameLoop.getInstance().getSpawnSystem().getAI().clearThreatAndReturn(socket.characterId);
 
-    socket.to(`region:${socket.region}`).emit(SOCKET_EVENTS.PLAYER_LEFT, {
+    socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.PLAYER_LEFT, {
       characterId: socket.characterId,
     });
 

@@ -8,7 +8,7 @@ import { EquipmentCache } from '../services/EquipmentCache';
 import { CharacterClass } from '../types/game.types';
 import { authMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
-import { MAX_CHARACTERS_PER_ACCOUNT } from '../../../shared/constants';
+import { MAX_CHARACTERS_PER_ACCOUNT, DEFAULT_SERVER_ID, isValidServerId } from '../../../shared/constants';
 
 export const characterRouter = Router();
 const characterService = new CharacterService();
@@ -20,6 +20,7 @@ const equipmentCache = EquipmentCache.getInstance();
 const createCharacterSchema = Joi.object({
   name: Joi.string().min(2).max(24).pattern(/^[a-zA-Zа-яА-Я0-9_\- ]+$/).required(),
   class: Joi.string().valid(...Object.values(CharacterClass)).required(),
+  serverId: Joi.string().default(DEFAULT_SERVER_ID),
 });
 
 // GET /api/characters — список персонажей пользователя
@@ -38,7 +39,11 @@ characterRouter.post('/', authMiddleware, asyncHandler(async (req: Request, res:
     return res.status(400).json({ error: `Maximum ${MAX_CHARACTERS_PER_ACCOUNT} characters per account` });
   }
 
-  const character = await characterService.createCharacter(req.userId!, value.name, value.class);
+  if (!isValidServerId(value.serverId)) {
+    return res.status(400).json({ error: 'Unknown game server' });
+  }
+
+  const character = await characterService.createCharacter(req.userId!, value.name, value.class, value.serverId);
   return res.status(201).json({ character });
 }));
 

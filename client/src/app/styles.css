@@ -522,6 +522,12 @@ input, select { font: inherit; }
   text-transform: uppercase; letter-spacing: 0.4px;
 }
 .dungeon-status { border-color: rgba(201, 168, 76, 0.35); }
+.server-badge { color: var(--gold-light); opacity: 0.85; }
+#new-server {
+  width: 100%; margin-top: 4px; padding: 8px 10px; border-radius: 7px;
+  background: rgba(7, 15, 27, 0.55); color: var(--cream);
+  border: 1px solid rgba(201, 168, 76, 0.4); font: inherit; font-size: 13px;
+}
 .minimap {
   position: absolute; top: 14px; right: 14px;
   border-radius: 10px; overflow: hidden;

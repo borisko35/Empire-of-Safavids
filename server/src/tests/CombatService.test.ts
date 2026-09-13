@@ -6,6 +6,7 @@ import { CombatService } from '../services/CombatService';
 import { Character, CharacterClass, Region } from '../types/game.types';
 
 const makeCharacter = (overrides: Partial<Character> = {}): Character => ({
+  serverId: 'isfahan',
   id: 'test-id',
   userId: 'user-id',
   name: 'TestChar',

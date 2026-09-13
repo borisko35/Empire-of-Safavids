@@ -6,7 +6,7 @@ import { CharacterService } from '../services/CharacterService';
 import { GameSocketHandler } from '../socket/GameSocketHandler';
 import { asyncHandler } from '../utils/asyncHandler';
 import { authMiddleware } from '../middleware/auth';
-import { REGION_LEVEL_REQUIREMENTS } from '../../../shared/constants';
+import { REGION_LEVEL_REQUIREMENTS, GAME_SERVERS } from '../../../shared/constants';
 
 export const worldRouter = Router();
 const redis = RedisService.getInstance();
@@ -31,7 +31,7 @@ const REGION_INFO: Record<Region, { name: string; nameRu: string; minLevel: numb
 worldRouter.get('/regions', asyncHandler(async (_req: Request, res: Response) => {
   const regions = await Promise.all(
     Object.entries(REGION_INFO).map(async ([key, info]) => {
-      const onlinePlayers = await redis.getPlayersInRegion(key);
+      const onlinePlayers = (await Promise.all(GAME_SERVERS.map(sh => redis.getPlayersInRegion(sh.id, key)))).flat();
       return { id: key, ...info, onlinePlayers: onlinePlayers.length };
     })
   );
@@ -44,7 +44,7 @@ worldRouter.get('/regions/:id', asyncHandler(async (req: Request, res: Response)
   const info = REGION_INFO[region];
   if (!info) return res.status(404).json({ error: 'Region not found' });
 
-  const onlinePlayers = await redis.getPlayersInRegion(region);
+  const onlinePlayers = (await Promise.all(GAME_SERVERS.map(sh => redis.getPlayersInRegion(sh.id, region)))).flat();
   return res.json({ id: region, ...info, onlinePlayers: onlinePlayers.length });
 }));
 

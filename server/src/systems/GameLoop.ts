@@ -62,9 +62,13 @@ export class GameLoop {
 
     // Данжи и мировые события работают на том же ИИ игрового цикла
     DungeonService.getInstance().attachAI(this.spawnSystem.getAI());
-    WorldEventSystem.getInstance().init(this.spawnSystem.getAI(), (payload) => {
-      this.worldEventBroadcaster?.(payload);
-    });
+    WorldEventSystem.getInstance().init(
+      this.spawnSystem.getAI(),
+      () => this.spawnSystem.getActiveShards(),
+      (payload) => {
+        this.worldEventBroadcaster?.(payload);
+      },
+    );
     WorldEventSystem.getInstance().start();
 
     this.timer = setInterval(() => this.tick(), TICK_INTERVAL_MS);
@@ -107,18 +111,21 @@ export class GameLoop {
   }
 
   private async tickAI(): Promise<void> {
-    // Собираем онлайн-игроков по регионам из Redis
+    // Собираем онлайн-игроков по шардам и регионам из Redis
     const nearbyPlayers = new Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>();
     const allIds: string[] = [];
-    for (const region of Object.values(Region)) {
-      const ids = await this.redis.getPlayersInRegion(region);
-      allIds.push(...ids);
-      const players: { id: string; position: { x: number; y: number; z: number }; hp: number }[] = [];
-      for (const id of ids) {
-        const pos = await this.redis.getPlayerPosition(id) as { x: number; y: number; z: number } | null;
-        if (pos) players.push({ id, position: pos, hp: 1 });
+    const shards = this.spawnSystem.getActiveShards();
+    for (const shardId of shards) {
+      for (const region of Object.values(Region)) {
+        const ids = await this.redis.getPlayersInRegion(shardId, region);
+        allIds.push(...ids);
+        const players: { id: string; position: { x: number; y: number; z: number }; hp: number }[] = [];
+        for (const id of ids) {
+          const pos = await this.redis.getPlayerPosition(id) as { x: number; y: number; z: number } | null;
+          if (pos) players.push({ id, position: pos, hp: 1 });
+        }
+        nearbyPlayers.set(`${shardId}:${region}`, players);
       }
-      nearbyPlayers.set(region, players);
     }
 
     // Реальный HP одним запросом: ИИ не должен таргетить павших
@@ -145,7 +152,7 @@ export class GameLoop {
     // Тик ИИ + урон монстров по игрокам (публикуется в Redis, сокеты раздают подписчики)
     const attacks = this.spawnSystem.tickAI(nearbyPlayers);
     for (const atk of attacks) {
-      const target = nearbyPlayers.get(atk.region)?.find(p => p.id === atk.targetId);
+      const target = nearbyPlayers.get(`${atk.shardId}:${atk.region}`)?.find(p => p.id === atk.targetId);
       if (!target) continue;
       // Защита цели (выносливость + броня экипировки) гасит часть урона
       const victim = await this.characters.getCharacterById(target.id).catch(() => null);
@@ -161,7 +168,7 @@ export class GameLoop {
 
       const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
       if (!applied) continue;
-      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_HIT(atk.region), {
+      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_HIT(atk.shardId, atk.region), {
         characterId: target.id,
         instanceId: atk.instanceId,
         skillId: atk.skillId ?? null,
@@ -190,10 +197,12 @@ export class GameLoop {
   }
 
   private async decayKarmaOnline(): Promise<void> {
-    for (const region of Object.values(Region)) {
-      const ids = await this.redis.getPlayersInRegion(region);
-      for (const id of ids) {
-        await this.karmaSystem.decayKarma(id);
+    for (const shardId of this.spawnSystem.getActiveShards()) {
+      for (const region of Object.values(Region)) {
+        const ids = await this.redis.getPlayersInRegion(shardId, region);
+        for (const id of ids) {
+          await this.karmaSystem.decayKarma(id);
+        }
       }
     }
   }

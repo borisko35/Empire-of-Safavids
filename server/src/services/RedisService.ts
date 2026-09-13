@@ -72,17 +72,27 @@ export class RedisService {
   }
 
   // Онлайн-игроки в регионе
-  async addPlayerToRegion(region: string, characterId: string): Promise<void> {
-    await this.client.sAdd(`region:players:${region}`, characterId);
-    await this.client.expire(`region:players:${region}`, 3600);
+  /** Членство в регионе конкретного шарда (игрового сервера) */
+  async addPlayerToRegion(shardId: string, region: string, characterId: string): Promise<void> {
+    const key = `region:players:${shardId}:${region}`;
+    await this.client.sAdd(key, characterId);
+    await this.client.expire(key, 3600);
+    await this.client.sAdd(`shard:members:${shardId}`, characterId);
+    await this.client.expire(`shard:members:${shardId}`, 7200);
   }
 
-  async removePlayerFromRegion(region: string, characterId: string): Promise<void> {
-    await this.client.sRem(`region:players:${region}`, characterId);
+  async removePlayerFromRegion(shardId: string, region: string, characterId: string): Promise<void> {
+    await this.client.sRem(`region:players:${shardId}:${region}`, characterId);
+    await this.client.sRem(`shard:members:${shardId}`, characterId);
   }
 
-  async getPlayersInRegion(region: string): Promise<string[]> {
-    return this.client.sMembers(`region:players:${region}`);
+  async getPlayersInRegion(shardId: string, region: string): Promise<string[]> {
+    return this.client.sMembers(`region:players:${shardId}:${region}`);
+  }
+
+  /** Сколько игроков сейчас в мире данного шарда */
+  async getShardOnline(shardId: string): Promise<number> {
+    return this.client.sCard(`shard:members:${shardId}`);
   }
 
   // Сессии

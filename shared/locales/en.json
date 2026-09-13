@@ -40,7 +40,11 @@
     "delete": "Delete",
     "empty": "You have no characters yet — create your first one",
     "region": "Region",
-    "level": "Level"
+    "level": "Level",
+    "server": "Game server",
+    "server_hint": "The character lives on the selected server",
+    "online": "online",
+    "recommended": "recommended for beginners"
   },
   "classes": {
     "qizilbash": "Qizilbash Guardian",

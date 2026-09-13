@@ -31,6 +31,8 @@ export interface AIContext {
   lastAttackTime: Record<string, number>; // skillId -> timestamp
   aggroTable: Map<string, number>;        // characterId -> threat
   lastStateChange: number;
+  /** Игровой сервер (шард), в котором живёт экземпляр */
+  shardId: string;
   lastTickAt?: number;                    // для расчёта dt серверного движения
 }
 
@@ -47,7 +49,7 @@ export class AISystem {
   // ============================================================
   // Создание экземпляра монстра
   // ============================================================
-  spawnMonster(definition: MonsterDefinition, position: Vector3): AIContext {
+  spawnMonster(definition: MonsterDefinition, position: Vector3, shardId = "isfahan"): AIContext {
     const instanceId = `${definition.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     // Генерируем точки патруля вокруг спавна
@@ -69,6 +71,7 @@ export class AISystem {
       lastAttackTime: {},
       aggroTable: new Map(),
       lastStateChange: Date.now(),
+      shardId,
     };
 
     this.contexts.set(instanceId, ctx);

@@ -18,6 +18,7 @@ export interface DungeonSession {
   id: string;
   dungeonId: string;
   region: Region;
+  shardId: string;
   leaderId: string;
   members: Set<string>;
   monsterIds: Set<string>;
@@ -85,6 +86,7 @@ export class DungeonService {
       id: `dg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       dungeonId,
       region: def.region,
+      shardId: character.serverId ?? 'isfahan',
       leaderId: characterId,
       members: new Set([characterId]),
       monsterIds: new Set(),
@@ -98,7 +100,7 @@ export class DungeonService {
         for (const pos of group.positions) {
           const monsterDef = MONSTERS_DATABASE[group.monsterId];
           if (!monsterDef) continue;
-          const ctx = this.ai.spawnMonster(monsterDef, pos);
+          const ctx = this.ai.spawnMonster(monsterDef, pos, session.shardId);
           session.monsterIds.add(ctx.instanceId);
           this.monsterToSession.set(ctx.instanceId, session.id);
           if (room.isBossRoom && room.bossId === group.monsterId) {

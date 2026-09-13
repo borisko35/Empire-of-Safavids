@@ -68,6 +68,8 @@ export interface Character {
   maxStamina: number;
   position: Vector3;
   region: Region;
+  /** Игровой сервер (шард), на котором живёт персонаж */
+  serverId: string;
   guildId?: string;
   gold: number;
   createdAt: Date;

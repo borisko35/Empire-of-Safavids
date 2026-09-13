@@ -57,11 +57,14 @@ export const api = {
 
   characters: () => req<{ characters: Character[] }>('/api/characters'),
 
-  createCharacter: (name: string, characterClass: string) =>
+  createCharacter: (name: string, characterClass: string, serverId: string) =>
     req<{ character: Character }>('/api/characters', {
       method: 'POST',
-      body: JSON.stringify({ name, class: characterClass }),
+      body: JSON.stringify({ name, class: characterClass, serverId }),
     }),
+
+  gameServers: () =>
+    req<{ servers: { id: string; nameRu: string; online: number; recommended?: boolean }[] }>('/api/game/servers'),
 
   skills: (characterId: string) => req<{ skills: SkillDef[] }>(`/api/characters/${characterId}/skills`),
 

@@ -4,7 +4,7 @@ import { Character, CharacterClass, CharacterStats, Region, ItemType } from '../
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ITEMS_DATABASE } from '../data/items';
-import { MAX_LEVEL } from '../../../shared/constants';
+import { MAX_LEVEL, DEFAULT_SERVER_ID } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -31,7 +31,8 @@ export class CharacterService {
   async createCharacter(
     userId: string,
     name: string,
-    characterClass: CharacterClass
+    characterClass: CharacterClass,
+    serverId: string = DEFAULT_SERVER_ID
   ): Promise<Character> {
     const stats = BASE_STATS[characterClass];
     const maxHp = 100 + stats.endurance * 10;
@@ -54,6 +55,7 @@ export class CharacterService {
       maxStamina,
       position: { x: 0, y: 0, z: 0 }, // Стартовая позиция в Тебризе
       region: Region.TABRIZ,
+      serverId,
       gold: 100,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -62,14 +64,14 @@ export class CharacterService {
     await this.db.query(
       `INSERT INTO characters
         (id, user_id, name, class, level, experience, stats, hp, max_hp,
-         mana, max_mana, stamina, max_stamina, position, region, gold, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+         mana, max_mana, stamina, max_stamina, position, region, server_id, gold, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
       [
         character.id, character.userId, character.name, character.class,
         character.level, character.experience, JSON.stringify(character.stats),
         character.hp, character.maxHp, character.mana, character.maxMana,
         character.stamina, character.maxStamina, JSON.stringify(character.position),
-        character.region, character.gold, character.createdAt, character.updatedAt,
+        character.region, character.serverId, character.gold, character.createdAt, character.updatedAt,
       ]
     );
 

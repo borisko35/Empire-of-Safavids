@@ -21,6 +21,7 @@ export interface Character {
   stamina: number; maxStamina: number;
   position: Vec3;
   region: string;
+  serverId: string;
   gold: number;
 }
 

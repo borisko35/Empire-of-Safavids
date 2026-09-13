@@ -10,6 +10,9 @@ import { getWorldBosses } from '../data/monsters';
 import { CharacterService } from '../services/CharacterService';
 import { PartySystem } from '../systems/PartySystem';
 import { DungeonService } from '../systems/DungeonService';
+import { GAME_SERVERS } from '../../../shared/constants';
+import { RedisService } from '../services/RedisService';
+const redis = RedisService.getInstance();
 import { TradeService } from '../systems/TradeService';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { CRAFTING_RECIPES } from '../data/crafting';
@@ -204,6 +207,15 @@ gameRouter.post('/shops/:shopId/sell', authMiddleware, requireCharacterOwnership
     return res.json({ success: true, goldGained: totalGain, gold });
   })
 );
+
+// GET /api/game/servers — список игровых серверов и онлайн на каждом
+gameRouter.get('/servers', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const servers = await Promise.all(GAME_SERVERS.map(async (srv) => ({
+    ...srv,
+    online: await redis.getShardOnline(srv.id),
+  })));
+  return res.json({ servers });
+}));
 
 // ============================================================
 // ДАНЖИ

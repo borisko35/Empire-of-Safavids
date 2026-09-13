@@ -1,9 +1,9 @@
 // ============================================================
 // Мировые события — Empire of Safavids
 // ============================================================
-// Периодический спавн мирового босса с объявлением всем игрокам
-// и наградой за победу. Одно активное событие за раз; следующее
-// стартует по расписанию после завершения предыдущего.
+// Периодический спавн мирового босса на каждом активном шарде
+// (игровом сервере) с объявлением его игрокам и наградой за победу.
+// Одно активное событие на шард за раз; следующее — по расписанию.
 
 import { MONSTERS_DATABASE, MonsterDefinition } from '../data/monsters';
 import { Region } from '../types/game.types';
@@ -31,10 +31,12 @@ export class WorldEventSystem {
   private ai: AISystem | null = null;
   private characters = new CharacterService();
   private timer: NodeJS.Timeout | null = null;
-  private instanceId: string | null = null;
+  /** Активные боссы по шардам: shardId -> instanceId */
+  private bosses = new Map<string, string>();
   private startedAt: number | null = null;
   private nextEventAt = Date.now() + FIRST_EVENT_DELAY_MS;
   private onAnnounce: ((payload: Record<string, unknown>) => void) | null = null;
+  private getActiveShards: () => string[] = () => [];
 
   static getInstance(): WorldEventSystem {
     if (!WorldEventSystem.instance) {
@@ -43,16 +45,21 @@ export class WorldEventSystem {
     return WorldEventSystem.instance;
   }
 
-  /** Привязать ИИ игрового цикла и функцию объявлений (GameLoop/SocketHandler) */
-  init(ai: AISystem, announce: (payload: Record<string, unknown>) => void): void {
+  /** Привязать ИИ игрового цикла, список активных шардов и функцию объявлений */
+  init(
+    ai: AISystem,
+    getActiveShards: () => string[],
+    announce: (payload: Record<string, unknown>) => void,
+  ): void {
     this.ai = ai;
+    this.getActiveShards = getActiveShards;
     this.onAnnounce = announce;
   }
 
   start(): void {
     if (this.timer) return;
     this.timer = setInterval(() => void this.tick(), 30 * 1000);
-    logger.info('[WorldEvent] Scheduler started (world boss every 3h, first in 10m)');
+    logger.info('[WorldEvent] Scheduler started (world boss every 3h per shard, first in 10m)');
   }
 
   stop(): void {
@@ -60,54 +67,49 @@ export class WorldEventSystem {
     this.timer = null;
   }
 
-  getState(): WorldEventState {
-    return {
-      active: !!this.instanceId,
-      bossNameRu: this.instanceId
-        ? MONSTERS_DATABASE['world_boss_simurgh']?.nameRu ?? null
-        : null,
-      instanceId: this.instanceId,
-      startedAt: this.startedAt,
-      nextEventAt: this.nextEventAt,
-    };
-  }
-
   /** Активный босс события? */
   isActiveBoss(instanceId: string): boolean {
-    return !!instanceId && instanceId === this.instanceId;
+    return instanceId != null && [...this.bosses.values()].includes(instanceId);
   }
 
-  /** Победа над боссом события: награда и объявление */
-  async onBossDefeated(killerId: string): Promise<void> {
-    if (!this.instanceId) return;
-    this.instanceId = null;
-    this.startedAt = null;
-    this.nextEventAt = Date.now() + EVENT_INTERVAL_MS;
+  /** Победа над боссом события: награда и объявление шарду */
+  async onBossDefeated(instanceId: string, killerId: string): Promise<void> {
+    let shardId: string | undefined;
+    for (const [sid, id] of this.bosses) {
+      if (id === instanceId) shardId = sid;
+    }
+    if (!shardId) return;
+    this.bosses.delete(shardId);
+    if (this.bosses.size === 0) this.nextEventAt = Date.now() + EVENT_INTERVAL_MS;
 
     // Награда победителю: золото и перо Симурга (легендарный материал)
     await this.characters.addGold(killerId, 5000).catch(() => {});
     await this.characters.addItems(killerId, [{ itemId: 'mat_dragon_scale', qty: 1 }]).catch(() => {});
-    this.announce({ status: 'defeated', killerId });
-    logger.info(`[WorldEvent] Boss defeated by ${killerId}, next event in 3h`);
+    this.announce({ status: 'defeated', killerId, shardId });
+    logger.info(`[WorldEvent] Boss defeated by ${killerId} on ${shardId}`);
   }
 
   private async tick(): Promise<void> {
-    if (this.instanceId || !this.ai || Date.now() < this.nextEventAt) return;
-    this.spawnBoss();
+    if (!this.ai || Date.now() < this.nextEventAt) return;
+    for (const shardId of this.getActiveShards()) {
+      if (!this.bosses.has(shardId)) {
+        this.spawnBoss(shardId);
+      }
+    }
   }
 
-  private spawnBoss(): void {
+  private spawnBoss(shardId: string): void {
     const def: MonsterDefinition | undefined = MONSTERS_DATABASE['world_boss_simurgh'];
     if (!def || !this.ai) return;
 
     // Гнездо Симурга — горы Хорасана
     const position: Vector3 = { x: 0, y: 100, z: 0 };
-    const ctx = this.ai.spawnMonster(def, position);
-    this.instanceId = ctx.instanceId;
+    const ctx = this.ai.spawnMonster(def, position, shardId);
+    this.bosses.set(shardId, ctx.instanceId);
     this.startedAt = Date.now();
 
-    this.announce({ status: 'started', nameRu: def.nameRu, region: Region.KHORASAN, position });
-    logger.info(`[WorldEvent] ${def.nameRu} spawned (${ctx.instanceId})`);
+    this.announce({ status: 'started', nameRu: def.nameRu, region: Region.KHORASAN, position, shardId });
+    logger.info(`[WorldEvent] ${def.nameRu} spawned on ${shardId} (${ctx.instanceId})`);
   }
 
   private announce(payload: Record<string, unknown>): void {
