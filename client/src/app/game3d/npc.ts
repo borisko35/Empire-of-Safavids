@@ -38,7 +38,7 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_quest_crier', nameRu: 'Глашатай Шаха', panel: 'panel-quests', quest: true, dx: -8, dz: 10, look: { robe: 0x3f5a7a, robeDark: 0x2c4258, hat: 'turban', hatColor: 0xd9c27a, weapon: 'none', scale: 1 } },
       { id: 'npc_guard_east', nameRu: 'Стражник Рустам', panel: 'panel-dungeons', quest: true, dx: 20, dz: 16, look: GUARD() },
       { id: 'npc_guard_west', nameRu: 'Стражник Бахрам', panel: 'panel-dungeons', quest: false, dx: -24, dz: -6, look: GUARD() },
-      { id: 'npc_bazaar_merchant', nameRu: 'Торговец Джафар', panel: 'panel-shop', quest: true, dx: 12, dz: -2, look: { robe: 0x2e8b8b, robeDark: 0x1f6161, hat: 'turban', hatColor: 0xe8e0d0, weapon: 'dagger', scale: 1 } },
+      { id: 'npc_bazaar_merchant', nameRu: 'Торговец Джафар', panel: 'panel-shop', quest: true, dx: 15, dz: 2, look: { robe: 0x2e8b8b, robeDark: 0x1f6161, hat: 'turban', hatColor: 0xe8e0d0, weapon: 'dagger', scale: 1 } },
       { id: 'npc_auctioneer', nameRu: 'Аукционист', panel: 'panel-auction', quest: false, dx: 16, dz: -10, look: { robe: 0x7a5fd0, robeDark: 0x5a449c, hat: 'turban', hatColor: 0xc9a84c, weapon: 'none', scale: 0.98 } },
       { id: 'npc_craftsman', nameRu: 'Кузнец Омар', panel: 'panel-craft', quest: true, dx: -14, dz: -14, look: { robe: 0x6e563a, robeDark: 0x4c3a22, hat: 'cap', hatColor: 0x2a2a30, weapon: 'none', scale: 1.05 } },
       { id: 'npc_caravan_master', nameRu: 'Караван-баши Юсуф', panel: 'panel-trade', quest: true, dx: -4, dz: 22, look: { robe: 0x9c6b2f, robeDark: 0x6e4a20, hat: 'turban', hatColor: 0xb59d72, weapon: 'sword', scale: 1.02 } },
