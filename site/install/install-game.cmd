@@ -1,16 +1,16 @@
 @echo off
 rem ============================================================
-rem –£—Å—Ç–∞–Ω–æ–≤—â–∏–∫ Empire of Safavids ‚Äî —Å–∞–º–æ—Ä–∞—Å–ø–∞–∫–æ–≤–∫–∞
+rem ”ÒÚ‡ÌÓ‚˘ËÍ Empire of Safavids ó Ò‡ÏÓ‡ÒÔ‡ÍÓ‚Í‡
 rem ============================================================
-rem –í–ù–ò–ú–ê–ù–ò–ï: —Ñ–∞–π–ª –°–ì–ï–ù–ï–†–ò–†–û–í–ê–ù —Å–∫—Ä–∏–ø—Ç–æ–º tools/build-installer.js.
-rem –ù–µ —Ä–µ–¥–∞–∫—Ç–∏—Ä–æ–≤–∞—Ç—å –≤—Ä—É—á–Ω—É—é: –ø—Ä–∞–≤—å—Ç–µ install/installer-template.cmd
-rem –∏ –ø–µ—Ä–µ—Å–æ–±–µ—Ä–∏—Ç–µ (node tools/build-installer.js).
-rem –ö–æ–º–ø–ª–µ–∫—Ç (game.ico, —è—Ä–ª—ã–∫–∏, –ª–∞—É–Ω—á–µ—Ä, –¥–µ–∏–Ω—Å—Ç–∞–ª–ª—è—Ç–æ—Ä) —É–ø–∞–∫–æ–≤–∞–Ω
-rem –≤ base64-–∫–æ–Ω—Ç–µ–π–Ω–µ—Ä –Ω–∏–∂–µ –º–∞—Ä–∫–µ—Ä–∞ :::PAYLOAD:::
+rem ¬Õ»Ã¿Õ»≈: Ù‡ÈÎ —√≈Õ≈–»–Œ¬¿Õ ÒÍËÔÚÓÏ tools/build-installer.js.
+rem ÕÂ Â‰‡ÍÚËÓ‚‡Ú¸ ‚Û˜ÌÛ˛: Ô‡‚¸ÚÂ install/installer-template.cmd
+rem Ë ÔÂÂÒÓ·ÂËÚÂ (node tools/build-installer.js).
+rem  ÓÏÔÎÂÍÚ (game.ico, ˇÎ˚ÍË, Î‡ÛÌ˜Â, ‰ÂËÌÒÚ‡ÎÎˇÚÓ) ÛÔ‡ÍÓ‚‡Ì
+rem ‚ base64-ÍÓÌÚÂÈÌÂ ÌËÊÂ Ï‡ÍÂ‡ :::PAYLOAD:::
 rem ============================================================
 setlocal EnableExtensions
-chcp 65001 >nul
-title Empire of Safavids ‚Äî –£—Å—Ç–∞–Ω–æ–≤–∫–∞ –∏–≥—Ä—ã
+chcp 1251 >nul
+title Empire of Safavids ó ”ÒÚ‡ÌÓ‚Í‡ Ë„˚
 
 set "PAYLOAD_DIR=%TEMP%\eos-install"
 set "EOS_PAYLOAD=%TEMP%\eos-install"
@@ -19,25 +19,25 @@ set "INSTALL_DIR=%LOCALAPPDATA%\EmpireOfSafavids"
 echo.
 echo   ============================================================
 echo     EMPIRE OF SAFAVIDS
-echo     –£—Å—Ç–∞–Ω–æ–≤–∫–∞ –∏–≥—Ä—ã –Ω–∞ –∫–æ–º–ø—å—é—Ç–µ—Ä
-echo     –ò—Å—Ç–æ—Ä–∏—á–µ—Å–∫–∞—è Action MMORPG: –°–µ—Ñ–µ–≤–∏–¥—Å–∫–∞—è –∏–º–ø–µ—Ä–∏—è, 1501-1736
+echo     ”ÒÚ‡ÌÓ‚Í‡ Ë„˚ Ì‡ ÍÓÏÔ¸˛ÚÂ
+echo     »ÒÚÓË˜ÂÒÍ‡ˇ Action MMORPG: —ÂÙÂ‚Ë‰ÒÍ‡ˇ ËÏÔÂËˇ, 1501-1736
 echo   ============================================================
 echo.
-echo   –ö–∞—Ç–∞–ª–æ–≥ —É—Å—Ç–∞–Ω–æ–≤–∫–∏: %INSTALL_DIR%
+echo    ‡Ú‡ÎÓ„ ÛÒÚ‡ÌÓ‚ÍË: %INSTALL_DIR%
 echo.
 
-rem ‚îÄ‚îÄ 1. –†–∞—Å–ø–∞–∫–æ–≤–∫–∞ –∫–æ–º–ø–ª–µ–∫—Ç–∞ –∏–∑ —Ç–µ–ª–∞ —É—Å—Ç–∞–Ω–æ–≤—â–∏–∫–∞ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-echo   [1/4] –†–∞—Å–ø–∞–∫–æ–≤–∫–∞ –∫–æ–º–ø–ª–µ–∫—Ç–∞...
+rem ‚îÄ‚îÄ 1. –‡ÒÔ‡ÍÓ‚Í‡ ÍÓÏÔÎÂÍÚ‡ ËÁ ÚÂÎ‡ ÛÒÚ‡ÌÓ‚˘ËÍ‡ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+echo   [1/4] –‡ÒÔ‡ÍÓ‚Í‡ ÍÓÏÔÎÂÍÚ‡...
 if exist "%PAYLOAD_DIR%" rmdir /s /q "%PAYLOAD_DIR%"
 mkdir "%PAYLOAD_DIR%" 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop';$raw=[IO.File]::ReadAllText('%~f0');$i=$raw.LastIndexOf(':::PAYLOAD:::');if($i -lt 0){exit 3};$b=[Convert]::FromBase64String((($raw.Substring($i+13)) -replace '\s',''));$o=0;while($o -lt $b.Length){$nl=[BitConverter]::ToUInt16($b,$o);$o+=2;$n=[Text.Encoding]::UTF8.GetString($b,$o,$nl);$o+=$nl;$dl=[BitConverter]::ToUInt32($b,$o);$o+=4;$p=Join-Path $env:EOS_PAYLOAD $n;New-Item -ItemType Directory -Force -Path ([IO.Path]::GetDirectoryName($p)) | Out-Null;[IO.File]::WriteAllBytes($p,$b[$o..($o+$dl-1)]);$o+=$dl}"
 if errorlevel 1 (
-  echo   [–û–®–ò–ë–ö–ê] –ù–µ —É–¥–∞–ª–æ—Å—å —Ä–∞—Å–ø–∞–∫–æ–≤–∞—Ç—å –∫–æ–º–ø–ª–µ–∫—Ç —É—Å—Ç–∞–Ω–æ–≤—â–∏–∫–∞.
+  echo   [Œÿ»¡ ¿] ÕÂ Û‰‡ÎÓÒ¸ ‡ÒÔ‡ÍÓ‚‡Ú¸ ÍÓÏÔÎÂÍÚ ÛÒÚ‡ÌÓ‚˘ËÍ‡.
   goto :fail
 )
 
-rem ‚îÄ‚îÄ 2. –ö–æ–ø–∏—Ä–æ–≤–∞–Ω–∏–µ —Ñ–∞–π–ª–æ–≤ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-echo   [2/4] –ö–æ–ø–∏—Ä–æ–≤–∞–Ω–∏–µ —Ñ–∞–π–ª–æ–≤...
+rem ‚îÄ‚îÄ 2.  ÓÔËÓ‚‡ÌËÂ Ù‡ÈÎÓ‚ ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+echo   [2/4]  ÓÔËÓ‚‡ÌËÂ Ù‡ÈÎÓ‚...
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 copy /y "%PAYLOAD_DIR%\game.ico"           "%INSTALL_DIR%\game.ico" >nul
 copy /y "%PAYLOAD_DIR%\launcher.cmd"       "%INSTALL_DIR%\launcher.cmd" >nul
@@ -45,26 +45,28 @@ copy /y "%PAYLOAD_DIR%\shortcuts.ps1"      "%INSTALL_DIR%\shortcuts.ps1" >nul
 copy /y "%PAYLOAD_DIR%\uninstall-game.cmd" "%INSTALL_DIR%\uninstall.cmd" >nul
 copy /y "%PAYLOAD_DIR%\readme.txt"         "%INSTALL_DIR%\readme.txt" >nul
 
-rem ‚îÄ‚îÄ 3. –ö–æ–Ω—Ñ–∏–≥—É—Ä–∞—Ü–∏—è –ª–∞—É–Ω—á–µ—Ä–∞ (game.ini) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-rem –ï—Å–ª–∏ —É—Å—Ç–∞–Ω–æ–≤—â–∏–∫ –∑–∞–ø—É—â–µ–Ω –∏–∑ —Ä–µ–ø–æ–∑–∏—Ç–æ—Ä–∏—è ‚Äî –∑–∞–ø–æ–º–∏–Ω–∞–µ–º –µ–≥–æ –∫–æ—Ä–µ–Ω—å:
-rem –ª–∞—É–Ω—á–µ—Ä —Å–º–æ–∂–µ—Ç —Å–∞–º –ø–æ–¥–Ω–∏–º–∞—Ç—å –ë–î –∏ —Å–µ—Ä–≤–µ—Ä
+rem ‚îÄ‚îÄ 3.  ÓÌÙË„Û‡ˆËˇ Î‡ÛÌ˜Â‡ (game.ini) ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+rem ≈ÒÎË ÛÒÚ‡ÌÓ‚˘ËÍ Á‡ÔÛ˘ÂÌ ËÁ ÂÔÓÁËÚÓËˇ ó Á‡ÔÓÏËÌ‡ÂÏ Â„Ó ÍÓÂÌ¸
+rem (Ë˘ÂÏ Ì‡ ‰‚‡ ÛÓ‚Ìˇ ‚‚Âı: site\install -> ÂÔÓÁËÚÓËÈ):
+rem Î‡ÛÌ˜Â ÒÏÓÊÂÚ Ò‡Ï ÔÓ‰ÌËÏ‡Ú¸ ¡ƒ Ë ÒÂ‚Â
 set "REPO_LINE="
 for %%I in ("%~dp0.") do set "EOS_SRC=%%~fI"
 for %%I in ("%EOS_SRC%\..") do set "EOS_REPO=%%~fI"
+if not exist "%EOS_REPO%\server\package.json" for %%I in ("%EOS_SRC%\..\..") do set "EOS_REPO=%%~fI"
 if exist "%EOS_REPO%\server\package.json" set "REPO_LINE=REPO=%EOS_REPO%"
 > "%INSTALL_DIR%\game.ini" echo URL=http://localhost:3000
 if defined REPO_LINE >> "%INSTALL_DIR%\game.ini" echo %REPO_LINE%
 
-rem ‚îÄ‚îÄ 4. –°–∏—Å—Ç–µ–º–∞ —è—Ä–ª—ã–∫–æ–≤: —Ä–∞–±–æ—á–∏–π —Å—Ç–æ–ª + –º–µ–Ω—é ¬´–ü—É—Å–∫¬ª ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-echo   [3/4] –°–æ–∑–¥–∞–Ω–∏–µ —è—Ä–ª—ã–∫–æ–≤...
+rem ‚îÄ‚îÄ 4. —ËÒÚÂÏ‡ ˇÎ˚ÍÓ‚: ‡·Ó˜ËÈ ÒÚÓÎ + ÏÂÌ˛ ´œÛÒÍª ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+echo   [3/4] —ÓÁ‰‡ÌËÂ ˇÎ˚ÍÓ‚...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PAYLOAD_DIR%\shortcuts.ps1" -Action create -InstallDir "%INSTALL_DIR%" -Launcher "%INSTALL_DIR%\launcher.cmd" -Icon "%INSTALL_DIR%\game.ico" -Uninstaller "%INSTALL_DIR%\uninstall.cmd"
 if errorlevel 1 (
-  echo   [–û–®–ò–ë–ö–ê] –ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —è—Ä–ª—ã–∫–∏.
+  echo   [Œÿ»¡ ¿] ÕÂ Û‰‡ÎÓÒ¸ ÒÓÁ‰‡Ú¸ ˇÎ˚ÍË.
   goto :fail
 )
 
-rem ‚îÄ‚îÄ 5. –†–µ–≥–∏—Å—Ç—Ä–∞—Ü–∏—è –≤ ¬´–£—Å—Ç–∞–Ω–æ–≤–∫–∞ –∏ —É–¥–∞–ª–µ–Ω–∏–µ –ø—Ä–æ–≥—Ä–∞–º–º¬ª ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-echo   [4/4] –†–µ–≥–∏—Å—Ç—Ä–∞—Ü–∏—è –≤ —Å–∏—Å—Ç–µ–º–µ...
+rem ‚îÄ‚îÄ 5. –Â„ËÒÚ‡ˆËˇ ‚ ´”ÒÚ‡ÌÓ‚Í‡ Ë Û‰‡ÎÂÌËÂ ÔÓ„‡ÏÏª ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+echo   [4/4] –Â„ËÒÚ‡ˆËˇ ‚ ÒËÒÚÂÏÂ...
 set "UNINST_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\EmpireOfSafavids"
 reg add "%UNINST_KEY%" /v DisplayName     /d "Empire of Safavids" /f >nul
 reg add "%UNINST_KEY%" /v DisplayVersion  /d "0.1.0" /f >nul
@@ -79,22 +81,22 @@ rmdir /s /q "%PAYLOAD_DIR%" 2>nul
 
 echo.
 echo   ============================================================
-echo     –£–°–¢–ê–ù–û–í–ö–ê –ó–ê–í–ï–†–®–ï–ù–ê
+echo     ”—“¿ÕŒ¬ ¿ «¿¬≈–ÿ≈Õ¿
 echo   ============================================================
 echo.
-echo   –Ø—Ä–ª—ã–∫ ¬´Empire of Safavids¬ª —Å–æ–∑–¥–∞–Ω:
-echo     * –Ω–∞ —Ä–∞–±–æ—á–µ–º —Å—Ç–æ–ª–µ;
-echo     * –≤ –º–µ–Ω—é ¬´–ü—É—Å–∫¬ª (—Ç–∞–º –∂–µ ‚Äî ¬´Uninstall Empire of Safavids¬ª).
+echo   ﬂÎ˚Í ´Empire of Safavidsª ÒÓÁ‰‡Ì:
+echo     * Ì‡ ‡·Ó˜ÂÏ ÒÚÓÎÂ;
+echo     * ‚ ÏÂÌ˛ ´œÛÒÍª (Ú‡Ï ÊÂ ó ´Uninstall Empire of Safavidsª).
 echo.
-echo   –ó–∞–ø—É—Å—Ç–∏—Ç–µ —è—Ä–ª—ã–∫: –ª–∞—É–Ω—á–µ—Ä –ø–æ–¥–Ω–∏–º–µ—Ç –ª–æ–∫–∞–ª—å–Ω—ã–π —Å–µ—Ä–≤–µ—Ä
-echo   –∏ –æ—Ç–∫—Ä–æ–µ—Ç –∏–≥—Ä—É –≤ –±—Ä–∞—É–∑–µ—Ä–µ –ø–æ –∞–¥—Ä–µ—Å—É http://localhost:3000
+echo   «‡ÔÛÒÚËÚÂ ˇÎ˚Í: Î‡ÛÌ˜Â ÔÓ‰ÌËÏÂÚ ÎÓÍ‡Î¸Ì˚È ÒÂ‚Â
+echo   Ë ÓÚÍÓÂÚ Ë„Û ‚ ·‡ÛÁÂÂ ÔÓ ‡‰ÂÒÛ http://localhost:3000
 echo.
 pause
 exit /b 0
 
 :fail
 echo.
-echo   –£—Å—Ç–∞–Ω–æ–≤–∫–∞ –ø—Ä–µ—Ä–≤–∞–Ω–∞. –ü–æ–¥—Ä–æ–±–Ω–æ—Å—Ç–∏ ‚Äî –≤ —Å–æ–æ–±—â–µ–Ω–∏—è—Ö –≤—ã—à–µ.
+echo   ”ÒÚ‡ÌÓ‚Í‡ ÔÂ‚‡Ì‡. œÓ‰Ó·ÌÓÒÚË ó ‚ ÒÓÓ·˘ÂÌËˇı ‚˚¯Â.
 pause
 exit /b 1
 
@@ -620,91 +622,83 @@ IChUZXN0LVBhdGggJHNjLlBhdGgpIHsgUmVtb3ZlLUl0ZW0gLUZvcmNlICRzYy5QYXRoOyBXcml0
 ZS1Ib3N0ICIgIC0g0Y/RgNC70YvQujogJCgkc2MuUGF0aCkiIH0KICB9CiAgaWYgKFRlc3QtUGF0
 aCAkR3JvdXApIHsgUmVtb3ZlLUl0ZW0gLVJlY3Vyc2UgLUZvcmNlICRHcm91cDsgV3JpdGUtSG9z
 dCAiICAtINCz0YDRg9C/0L/QsCDQvNC10L3RjiDQn9GD0YHQujogJEdyb3VwIiB9CiAgV3JpdGUt
-SG9zdCAn0K/RgNC70YvQutC4INGD0LTQsNC70LXQvdGLLicKfQoMAGxhdW5jaGVyLmNtZMQHAABA
-ZWNobyBvZmYKcmVtID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
-PT09PT09PT09PT09PT09PQpyZW0g0JvQsNGD0L3Rh9C10YAgRW1waXJlIG9mIFNhZmF2aWRzCnJl
-bSA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
-PT09PT0KcmVtINCe0YLQutGA0YvQstCw0LXRgiDQuNCz0YDRgyDQsiDQsdGA0LDRg9C30LXRgNC1
-OyDQtdGB0LvQuCDQu9C+0LrQsNC70YzQvdGL0Lkg0YHQtdGA0LLQtdGAINC90LUg0L7RgtCy0LXR
-h9Cw0LXRgiDigJQKcmVtINC/0L7QtNC90LjQvNCw0LXRgiDQsdCw0LfRgyDQtNCw0L3QvdGL0YUg
-0Lgg0YHQtdGA0LLQtdGAINC40Lcg0LrQsNGC0LDQu9C+0LPQsCDRgNC10L/QvtC30LjRgtC+0YDQ
-uNGPLApyZW0g0LfQsNC/0LjRgdCw0L3QvdC+0LPQviDRg9GB0YLQsNC90L7QstGJ0LjQutC+0Lwg
-0LIgZ2FtZS5pbmkuCnJlbSDQpNCw0LnQuyDQutC70LDQtNGR0YLRgdGPINGD0YHRgtCw0L3QvtCy
-0YnQuNC60L7QvCDQsiAlTE9DQUxBUFBEQVRBJVxFbXBpcmVPZlNhZmF2aWRzCnJlbSA9PT09PT09
-PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0Kc2V0
-bG9jYWwgRW5hYmxlRXh0ZW5zaW9ucwpjaGNwIDY1MDAxID5udWwKdGl0bGUgRW1waXJlIG9mIFNh
-ZmF2aWRzCgpzZXQgIkRJUj0lfmRwMCIKc2V0ICJVUkw9aHR0cDovL2xvY2FsaG9zdDozMDAwIgpz
-ZXQgIlJFUE89IgoKaWYgZXhpc3QgIiVESVIlZ2FtZS5pbmkiICgKICBmb3IgL2YgInVzZWJhY2tx
-IGVvbD07IHRva2Vucz0xLCogZGVsaW1zPT0iICUlQSBpbiAoIiVESVIlZ2FtZS5pbmkiKSBkbyAo
-CiAgICBpZiAvaSAiJSVBIj09IlVSTCIgc2V0ICJVUkw9JSVCIgogICAgaWYgL2kgIiUlQSI9PSJS
-RVBPIiBzZXQgIlJFUE89JSVCIgogICkKKQoKcmVtIOKUgOKUgCDQn9GA0L7QstC10YDQutCwINGB
-0LXRgNCy0LXRgNCwIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
-gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
-gOKUgOKUgOKUgOKUgOKUgOKUgOKUgApjdXJsIC1zIC1vIG51bCAtbSAyICIlVVJMJS9oZWFsdGgi
-ID5udWwgMj4mMQppZiBlcnJvcmxldmVsIDEgKAogIGVjaG8gICDQodC10YDQstC10YAg0LjQs9GA
-0Ysg0L3QtSDQvtGC0LLQtdGH0LDQtdGCINC90LAgJVVSTCUKICBpZiBkZWZpbmVkIFJFUE8gaWYg
-ZXhpc3QgIiVSRVBPJVxkZXYtZGItc3RhcnQuY21kIiAoCiAgICBlY2hvICAg0JfQsNC/0YPRgdC6
-0LDRjiDQsdCw0LfRgyDQtNCw0L3QvdGL0YUg0Lgg0YHQtdGA0LLQtdGAINC40Lc6ICVSRVBPJQog
-ICAgY2FsbCAiJVJFUE8lXGRldi1kYi1zdGFydC5jbWQiCiAgICBjZCAvZCAiJURJUiUiCiAgICBz
-dGFydCAiRW1waXJlIG9mIFNhZmF2aWRzIFNlcnZlciIgY21kIC9jICJjZCAvZCAiJVJFUE8lXHNl
-cnZlciIgJiYgbnBtIHJ1biBkZXYiCiAgICBlY2hvICAg0J7QttC40LTQsNC90LjQtSDQt9Cw0L/R
-g9GB0LrQsCDRgdC10YDQstC10YDQsCwgfjEyINGB0LXQutGD0L3QtC4uLgogICAgcGluZyAtbiAx
-MyAxMjcuMC4wLjEgPm51bAogICkgZWxzZSAoCiAgICBlY2hvICAg0JrQsNGC0LDQu9C+0LMg0YDQ
-tdC/0L7Qt9C40YLQvtGA0LjRjyDQvdC1INC90LDQudC00LXQvSDQsiBnYW1lLmluaS4KICAgIGVj
-aG8gICDQl9Cw0L/Rg9GB0YLQuNGC0LUg0YHQtdGA0LLQtdGAINCy0YDRg9GH0L3Rg9GOOiBjZCBz
-ZXJ2ZXIgXiZeJiBucG0gcnVuIGRldgogICAgdGltZW91dCAvdCA0ID5udWwKICApCikKCnJlbSDi
-lIDilIAg0J7RgtC60YDRi9GC0LjQtSDQuNCz0YDRiyDQsiDQsdGA0LDRg9C30LXRgNC1INC/0L4g
-0YPQvNC+0LvRh9Cw0L3QuNGOIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
-gOKUgOKUgOKUgOKUgOKUgOKUgOKUgApzdGFydCAiIiAiJVVSTCUiCmVuZGxvY2FsChIAdW5pbnN0
-YWxsLWdhbWUuY21k6wYAAEBlY2hvIG9mZgpyZW0gPT09PT09PT09PT09PT09PT09PT09PT09PT09
-PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09CnJlbSDQlNC10LjQvdGB0YLQsNC70LvR
-j9GC0L7RgCBFbXBpcmUgb2YgU2FmYXZpZHMKcmVtID09PT09PT09PT09PT09PT09PT09PT09PT09
-PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PQpyZW0g0KPQtNCw0LvRj9C10YIg0Y/R
-gNC70YvQutC4LCDQt9Cw0L/QuNGB0Ywg0YDQtdC10YHRgtGA0LAgwqvQo9GB0YLQsNC90L7QstC6
-0LAg0Lgg0YPQtNCw0LvQtdC90LjQtSDQv9GA0L7Qs9GA0LDQvNC8wrsKcmVtINC4INC60LDRgtCw
-0LvQvtCzINGD0YHRgtCw0L3QvtCy0LrQuC4g0JrQu9Cw0LTRkdGC0YHRjyDRg9GB0YLQsNC90L7Q
-stGJ0LjQutC+0Lwg0LIKcmVtICVMT0NBTEFQUERBVEElXEVtcGlyZU9mU2FmYXZpZHMg0YDRj9C0
-0L7QvCDRgSBnYW1lLmljbwpyZW0gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
-PT09PT09PT09PT09PT09PT09PT09PT09CnNldGxvY2FsIEVuYWJsZUV4dGVuc2lvbnMKY2hjcCA2
-NTAwMSA+bnVsCnRpdGxlIEVtcGlyZSBvZiBTYWZhdmlkcyDigJQg0KPQtNCw0LvQtdC90LjQtSDQ
-uNCz0YDRiwoKc2V0ICJJTlNUQUxMX0RJUj0lfmRwMCIKc2V0ICJLRVk9SEtDVVxTb2Z0d2FyZVxN
-aWNyb3NvZnRcV2luZG93c1xDdXJyZW50VmVyc2lvblxVbmluc3RhbGxcRW1waXJlT2ZTYWZhdmlk
-cyIKCmVjaG8uCmVjaG8gICDQo9C00LDQu9C10L3QuNC1IEVtcGlyZSBvZiBTYWZhdmlkcy4uLgpl
-Y2hvLgoKcmVtIOKUgOKUgCDQr9GA0LvRi9C60LggKNGA0LDQsdC+0YfQuNC5INGB0YLQvtC7ICsg
-0LzQtdC90Y4gwqvQn9GD0YHQusK7KSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
-lIDilIDilIDilIDilIDilIDilIDilIDilIDilIAKaWYgZXhpc3QgIiVJTlNUQUxMX0RJUiVzaG9y
-dGN1dHMucHMxIiAoCiAgcG93ZXJzaGVsbCAtTm9Qcm9maWxlIC1FeGVjdXRpb25Qb2xpY3kgQnlw
-YXNzIC1GaWxlICIlSU5TVEFMTF9ESVIlc2hvcnRjdXRzLnBzMSIgLUFjdGlvbiByZW1vdmUgLUlu
-c3RhbGxEaXIgIiVJTlNUQUxMX0RJUiUiCikKCnJlbSDilIDilIAg0JfQsNC/0LjRgdGMINCyINGA
-0LXQtdGB0YLRgNC1IOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
-gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
-gOKUgOKUgOKUgOKUgOKUgOKUgOKUgApyZWcgZGVsZXRlICIlS0VZJSIgL2YgPm51bCAyPiYxCmVj
-aG8gICDQl9Cw0L/QuNGB0Ywg0YDQtdC10YHRgtGA0LAg0YPQtNCw0LvQtdC90LAuCgpyZW0g4pSA
-4pSAINCa0LDRgtCw0LvQvtCzINGD0YHRgtCw0L3QvtCy0LrQuCDRg9C00LDQu9GP0LXQvCDRgSDQ
-t9Cw0LTQtdGA0LbQutC+0LkgKNGB0LDQvNC+0YPQtNCw0LvQtdC90LjQtSkg4pSA4pSA4pSA4pSA
-CmVjaG8gICDQpNCw0LnQu9GLINC40LPRgNGLINCx0YPQtNGD0YIg0YPQtNCw0LvQtdC90Ysg0YfQ
-tdGA0LXQtyDQvdC10YHQutC+0LvRjNC60L4g0YHQtdC60YPQvdC0Li4uCnBvd2Vyc2hlbGwgLU5v
-UHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtQ29tbWFuZCAiU3RhcnQtUHJvY2VzcyBj
-bWQuZXhlIC1XaW5kb3dTdHlsZSBIaWRkZW4gLUFyZ3VtZW50TGlzdCAoJy9jIHRpbWVvdXQgL3Qg
-MiAvbm9icmVhayA+bnVsICYgcmQgL3MgL3EgXCInICsgJGVudjpJTlNUQUxMX0RJUi5UcmltRW5k
-KCdcJykgKyAnXCInKSIKZXhpdAoKAHJlYWRtZS50eHSABAAARW1waXJlIG9mIFNhZmF2aWRzIOKA
-lCDQuNCz0YDQsCDRg9GB0YLQsNC90L7QstC70LXQvdCwCj09PT09PT09PT09PT09PT09PT09PT09
-PT09PT09PT09PT09PT0KCtCn0YLQviDRgdC00LXQu9Cw0Lsg0YPRgdGC0LDQvdC+0LLRidC40Lo6
-CiAgKiDRgdC60L7Qv9C40YDQvtCy0LDQuyDQu9Cw0YPQvdGH0LXRgCAobGF1bmNoZXIuY21kKSDQ
-uCDQuNC60L7QvdC60YMg0LjQvNC/0LXRgNC40LggKGdhbWUuaWNvKTsKICAqINGB0L7Qt9C00LDQ
-uyDRj9GA0LvRi9C60Lg6INGA0LDQsdC+0YfQuNC5INGB0YLQvtC7ICsg0LPRgNGD0L/Qv9CwINCy
-INC80LXQvdGOIMKr0J/Rg9GB0LrCuzsKICAqINC30LDRgNC10LPQuNGB0YLRgNC40YDQvtCy0LDQ
-uyDQuNCz0YDRgyDQsiDCq9Cj0YHRgtCw0L3QvtCy0LrQsCDQuCDRg9C00LDQu9C10L3QuNC1INC/
-0YDQvtCz0YDQsNC80LzCuy4KCtCa0LDQuiDQuNCz0YDQsNGC0Yw6CiAgMS4g0JfQsNC/0YPRgdGC
-0LjRgtC1INGP0YDQu9GL0LogwqtFbXBpcmUgb2YgU2FmYXZpZHPCuy4KICAyLiDQldGB0LvQuCDQ
-u9C+0LrQsNC70YzQvdGL0Lkg0YHQtdGA0LLQtdGAINC90LUg0LfQsNC/0YPRidC10L0sINC70LDR
-g9C90YfQtdGAINGB0LDQvCDQv9C+0LTQvdC40LzQtdGCCiAgICAg0LHQsNC30YMg0LTQsNC90L3R
-i9GFINC4INGB0LXRgNCy0LXRgCAo0L3Rg9C20LXQvSBOb2RlLmpzIDE4KyDQuCDRgNC10L/QvtC3
-0LjRgtC+0YDQuNC5INC40LPRgNGLKS4KICAzLiDQmNCz0YDQsCDQvtGC0LrRgNC+0LXRgtGB0Y8g
-0LIg0LHRgNCw0YPQt9C10YDQtTogaHR0cDovL2xvY2FsaG9zdDozMDAwCgrQo9C00LDQu9C10L3Q
-uNC1OgogINCf0LDRgNCw0LzQtdGC0YDRiyAtPiDQn9GA0LjQu9C+0LbQtdC90LjRjyAtPiBFbXBp
-cmUgb2YgU2FmYXZpZHMgLT4g0KPQtNCw0LvQuNGC0YwsCiAg0LvQuNCx0L4g0LzQtdC90Y4gwqvQ
-n9GD0YHQusK7IC0+IEVtcGlyZSBvZiBTYWZhdmlkcyAtPiBVbmluc3RhbGwuCgpFbXBpcmUgb2Yg
-U2FmYXZpZHMg4oCUINC40YHRgtC+0YDQuNGH0LXRgdC60LDRjyBBY3Rpb24gTU1PUlBHINC/0L4g
-0LzQvtGC0LjQstCw0LwK0KHQtdGE0LXQstC40LTRgdC60L7QuSDQuNC80L/QtdGA0LjQuCAoMTUw
-MS0xNzM2KS4KCihjKSAyMDI0LTIwMjYgU2lnbWEgQXJlbmEgR2FtZXMgR3JvdXAK
+SG9zdCAn0K/RgNC70YvQutC4INGD0LTQsNC70LXQvdGLLicKfQoMAGxhdW5jaGVyLmNtZMcGAABA
+ZWNobyBvZmYNCnJlbSA9PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
+PT09PT09PT09PT09PT09PT0NCnJlbSDL4PPt9+XwIEVtcGlyZSBvZiBTYWZhdmlkcw0KcmVtID09
+PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
+PQ0KcmVtIM7y6vD74uDl8iDo4/DzIOIg4fDg8+fl8OU7IOXx6+gg6+7q4Ov87fvpIPHl8OLl8CDt
+5SDu8uLl9+Dl8iCXDQpyZW0g7+7k7ejs4OXyIOHg5/Mg5ODt7fv1IOgg8eXw4uXwIOjnIOrg8uDr
+7uPgIPDl7+7n6PLu8Oj/LA0KcmVtIOfg7+jx4O3t7uPuIPPx8uDt7uL56Oru7CDiIGdhbWUuaW5p
+Lg0KcmVtINTg6esg6uvg5Ljy8f8g8/Hy4O3u4vno6u7sIOIgJUxPQ0FMQVBQREFUQSVcRW1waXJl
+T2ZTYWZhdmlkcw0KcmVtID09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
+PT09PT09PT09PT09PT09PT09PQ0Kc2V0bG9jYWwgRW5hYmxlRXh0ZW5zaW9ucw0KY2hjcCAxMjUx
+ID5udWwNCnRpdGxlIEVtcGlyZSBvZiBTYWZhdmlkcw0KDQpzZXQgIkRJUj0lfmRwMCINCnNldCAi
+VVJMPWh0dHA6Ly9sb2NhbGhvc3Q6MzAwMCINCnNldCAiUkVQTz0iDQoNCmlmIGV4aXN0ICIlRElS
+JWdhbWUuaW5pIiAoDQogIGZvciAvZiAidXNlYmFja3EgZW9sPTsgdG9rZW5zPTEsKiBkZWxpbXM9
+PSIgJSVBIGluICgiJURJUiVnYW1lLmluaSIpIGRvICgNCiAgICBpZiAvaSAiJSVBIj09IlVSTCIg
+c2V0ICJVUkw9JSVCIg0KICAgIGlmIC9pICIlJUEiPT0iUkVQTyIgc2V0ICJSRVBPPSUlQiINCiAg
+KQ0KKQ0KDQpyZW0g4pSA4pSAIM/w7uLl8OrgIPHl8OLl8OAgKFBvd2VyU2hlbGwg5fHy/CDt4CDr
+/uHu6SBXaW5kb3dzKSDilIDilIDilIDilIDilIDilIANCnBvd2Vyc2hlbGwgLU5vUHJvZmlsZSAt
+Q29tbWFuZCAidHJ5eyhJbnZva2UtV2ViUmVxdWVzdCAtVXNlQmFzaWNQYXJzaW5nIC1UaW1lb3V0
+U2VjIDIgJyVVUkwlL2hlYWx0aCcpLlN0YXR1c0NvZGV8T3V0LU51bGx9Y2F0Y2h7ZXhpdCAxfSIg
+Pm51bCAyPiYxDQppZiBlcnJvcmxldmVsIDEgKA0KICBlY2hvICAg0eXw4uXwIOjj8Psg7eUg7vLi
+5ffg5fIg7eAgJVVSTCUNCiAgaWYgZGVmaW5lZCBSRVBPIGlmIGV4aXN0ICIlUkVQTyVcZGV2LWRi
+LXN0YXJ0LmNtZCIgKA0KICAgIGVjaG8gICDH4O/z8erg/iDh4OfzIOTg7e379SDoIPHl8OLl8CDo
+5zogJVJFUE8lDQogICAgY2FsbCAiJVJFUE8lXGRldi1kYi1zdGFydC5jbWQiDQogICAgY2QgL2Qg
+IiVESVIlIg0KICAgIHN0YXJ0ICJFbXBpcmUgb2YgU2FmYXZpZHMgU2VydmVyIiBjbWQgL2MgImNk
+IC9kICIlUkVQTyVcc2VydmVyIiAmJiBucG0gcnVuIGRldiINCiAgICBlY2hvICAgzubo5ODt6OUg
+5+Dv8/Hq4CDx5fDi5fDgLCB+MTIg8eXq8+3kLi4uDQogICAgcGluZyAtbiAxMyAxMjcuMC4wLjEg
+Pm51bA0KICApIGVsc2UgKA0KICAgIGVjaG8gICDK4PLg6+7jIPDl7+7n6PLu8Oj/IO3lIO3g6eTl
+7SDiIGdhbWUuaW5pLg0KICAgIGVjaG8gICDH4O/z8fLo8uUg8eXw4uXwIOLw8/ft8/46IGNkIHNl
+cnZlciBeJl4mIG5wbSBydW4gZGV2DQogICAgdGltZW91dCAvdCA0ID5udWwNCiAgKQ0KKQ0KDQpy
+ZW0g4pSA4pSAIM7y6vD78ujlIOjj8Psg4iDh8ODz5+Xw5SDv7iDz7O7r9+Dt6P4g4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSADQpzdGFy
+dCAiIiAiJVVSTCUiDQplbmRsb2NhbA0KEgB1bmluc3RhbGwtZ2FtZS5jbWTyBQAAQGVjaG8gb2Zm
+DQpyZW0gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
+PT09PT09PT09DQpyZW0gxOXo7fHy4Ovr//Lu8CBFbXBpcmUgb2YgU2FmYXZpZHMNCnJlbSA9PT09
+PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT0N
+CnJlbSDT5ODr/+XyIP/w6/vq6Cwg5+Dv6PH8IPDl5fHy8OAgq9Px8uDt7uLq4CDoIPPk4Ovl7ejl
+IO/w7uPw4Ozsuw0KcmVtIOgg6uDy4Ovu4yDz8fLg7e7i6uguIMrr4OS48vH/IPPx8uDt7uL56Oru
+7CDiDQpyZW0gJUxPQ0FMQVBQREFUQSVcRW1waXJlT2ZTYWZhdmlkcyDw/+Tu7CDxIGdhbWUuaWNv
+DQpyZW0gPT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09PT09
+PT09PT09PT09DQpzZXRsb2NhbCBFbmFibGVFeHRlbnNpb25zDQpjaGNwIDEyNTEgPm51bA0KdGl0
+bGUgRW1waXJlIG9mIFNhZmF2aWRzIJcg0+Tg6+Xt6OUg6OPw+w0KDQpzZXQgIklOU1RBTExfRElS
+PSV+ZHAwIg0Kc2V0ICJLRVk9SEtDVVxTb2Z0d2FyZVxNaWNyb3NvZnRcV2luZG93c1xDdXJyZW50
+VmVyc2lvblxVbmluc3RhbGxcRW1waXJlT2ZTYWZhdmlkcyINCg0KZWNoby4NCmVjaG8gICDT5ODr
+5e3o5SBFbXBpcmUgb2YgU2FmYXZpZHMuLi4NCmVjaG8uDQoNCnJlbSDilIDilIAg3/Dr++roICjw
+4OHu9+jpIPHy7usgKyDs5e3+IKvP8/Hquykg4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSADQppZiBleGlzdCAiJUlOU1RBTExfRElS
+JXNob3J0Y3V0cy5wczEiICgNCiAgcG93ZXJzaGVsbCAtTm9Qcm9maWxlIC1FeGVjdXRpb25Qb2xp
+Y3kgQnlwYXNzIC1GaWxlICIlSU5TVEFMTF9ESVIlc2hvcnRjdXRzLnBzMSIgLUFjdGlvbiByZW1v
+dmUgLUluc3RhbGxEaXIgIiVJTlNUQUxMX0RJUiUiDQopDQoNCnJlbSDilIDilIAgx+Dv6PH8IOIg
+8OXl8fLw5SDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+lIDilIDilIDilIDilIDilIANCnJlZyBkZWxldGUgIiVLRVklIiAvZiA+bnVsIDI+JjENCmVjaG8g
+ICDH4O/o8fwg8OXl8fLw4CDz5ODr5e3gLg0KDQpyZW0g4pSA4pSAIMrg8uDr7uMg8/Hy4O3u4uro
+IPPk4Ov/5ewg8SDn4OTl8Obq7ukgKPHg7O7z5ODr5e3o5Skg4pSA4pSA4pSA4pSADQplY2hvICAg
+1ODp6/sg6OPw+yDh8+Tz8iDz5ODr5e37IPfl8OXnIO3l8eru6/zq7iDx5erz7eQuLi4NCnBvd2Vy
+c2hlbGwgLU5vUHJvZmlsZSAtRXhlY3V0aW9uUG9saWN5IEJ5cGFzcyAtQ29tbWFuZCAiU3RhcnQt
+UHJvY2VzcyBjbWQuZXhlIC1XaW5kb3dTdHlsZSBIaWRkZW4gLUFyZ3VtZW50TGlzdCAoJy9jIHRp
+bWVvdXQgL3QgMiAvbm9icmVhayA+bnVsICYgcmQgL3MgL3EgXCInICsgJGVudjpJTlNUQUxMX0RJ
+Ui5UcmltRW5kKCdcJykgKyAnXCInKSINCmV4aXQNCgoAcmVhZG1lLnR4dIAEAABFbXBpcmUgb2Yg
+U2FmYXZpZHMg4oCUINC40LPRgNCwINGD0YHRgtCw0L3QvtCy0LvQtdC90LAKPT09PT09PT09PT09
+PT09PT09PT09PT09PT09PT09PT09PT09PQoK0KfRgtC+INGB0LTQtdC70LDQuyDRg9GB0YLQsNC9
+0L7QstGJ0LjQujoKICAqINGB0LrQvtC/0LjRgNC+0LLQsNC7INC70LDRg9C90YfQtdGAIChsYXVu
+Y2hlci5jbWQpINC4INC40LrQvtC90LrRgyDQuNC80L/QtdGA0LjQuCAoZ2FtZS5pY28pOwogICog
+0YHQvtC30LTQsNC7INGP0YDQu9GL0LrQuDog0YDQsNCx0L7Rh9C40Lkg0YHRgtC+0LsgKyDQs9GA
+0YPQv9C/0LAg0LIg0LzQtdC90Y4gwqvQn9GD0YHQusK7OwogICog0LfQsNGA0LXQs9C40YHRgtGA
+0LjRgNC+0LLQsNC7INC40LPRgNGDINCyIMKr0KPRgdGC0LDQvdC+0LLQutCwINC4INGD0LTQsNC7
+0LXQvdC40LUg0L/RgNC+0LPRgNCw0LzQvMK7LgoK0JrQsNC6INC40LPRgNCw0YLRjDoKICAxLiDQ
+l9Cw0L/Rg9GB0YLQuNGC0LUg0Y/RgNC70YvQuiDCq0VtcGlyZSBvZiBTYWZhdmlkc8K7LgogIDIu
+INCV0YHQu9C4INC70L7QutCw0LvRjNC90YvQuSDRgdC10YDQstC10YAg0L3QtSDQt9Cw0L/Rg9GJ
+0LXQvSwg0LvQsNGD0L3Rh9C10YAg0YHQsNC8INC/0L7QtNC90LjQvNC10YIKICAgICDQsdCw0LfR
+gyDQtNCw0L3QvdGL0YUg0Lgg0YHQtdGA0LLQtdGAICjQvdGD0LbQtdC9IE5vZGUuanMgMTgrINC4
+INGA0LXQv9C+0LfQuNGC0L7RgNC40Lkg0LjQs9GA0YspLgogIDMuINCY0LPRgNCwINC+0YLQutGA
+0L7QtdGC0YHRjyDQsiDQsdGA0LDRg9C30LXRgNC1OiBodHRwOi8vbG9jYWxob3N0OjMwMDAKCtCj
+0LTQsNC70LXQvdC40LU6CiAg0J/QsNGA0LDQvNC10YLRgNGLIC0+INCf0YDQuNC70L7QttC10L3Q
+uNGPIC0+IEVtcGlyZSBvZiBTYWZhdmlkcyAtPiDQo9C00LDQu9C40YLRjCwKICDQu9C40LHQviDQ
+vNC10L3RjiDCq9Cf0YPRgdC6wrsgLT4gRW1waXJlIG9mIFNhZmF2aWRzIC0+IFVuaW5zdGFsbC4K
+CkVtcGlyZSBvZiBTYWZhdmlkcyDigJQg0LjRgdGC0L7RgNC40YfQtdGB0LrQsNGPIEFjdGlvbiBN
+TU9SUEcg0L/QviDQvNC+0YLQuNCy0LDQvArQodC10YTQtdCy0LjQtNGB0LrQvtC5INC40LzQv9C1
+0YDQuNC4ICgxNTAxLTE3MzYpLgoKKGMpIDIwMjQtMjAyNiBTaWdtYSBBcmVuYSBHYW1lcyBHcm91
+cAo=

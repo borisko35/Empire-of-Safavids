@@ -46,11 +46,13 @@ copy /y "%PAYLOAD_DIR%\uninstall-game.cmd" "%INSTALL_DIR%\uninstall.cmd" >nul
 copy /y "%PAYLOAD_DIR%\readme.txt"         "%INSTALL_DIR%\readme.txt" >nul
 
 rem ── 3. Конфигурация лаунчера (game.ini) ──────────────────────
-rem Если установщик запущен из репозитория — запоминаем его корень:
+rem Если установщик запущен из репозитория — запоминаем его корень
+rem (ищем на два уровня вверх: site\install -> репозиторий):
 rem лаунчер сможет сам поднимать БД и сервер
 set "REPO_LINE="
 for %%I in ("%~dp0.") do set "EOS_SRC=%%~fI"
 for %%I in ("%EOS_SRC%\..") do set "EOS_REPO=%%~fI"
+if not exist "%EOS_REPO%\server\package.json" for %%I in ("%EOS_SRC%\..\..") do set "EOS_REPO=%%~fI"
 if exist "%EOS_REPO%\server\package.json" set "REPO_LINE=REPO=%EOS_REPO%"
 > "%INSTALL_DIR%\game.ini" echo URL=http://localhost:3000
 if defined REPO_LINE >> "%INSTALL_DIR%\game.ini" echo %REPO_LINE%

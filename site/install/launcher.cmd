@@ -22,8 +22,8 @@ if exist "%DIR%game.ini" (
   )
 )
 
-rem ── Проверка сервера ─────────────────────────────────────────
-curl -s -o nul -m 2 "%URL%/health" >nul 2>&1
+rem ── Проверка сервера (PowerShell есть на любой Windows) ──────
+powershell -NoProfile -Command "try{(Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 '%URL%/health').StatusCode|Out-Null}catch{exit 1}" >nul 2>&1
 if errorlevel 1 (
   echo   Сервер игры не отвечает на %URL%
   if defined REPO if exist "%REPO%\dev-db-start.cmd" (
