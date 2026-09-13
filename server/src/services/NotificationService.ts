@@ -76,9 +76,9 @@ export class NotificationService {
     logger.debug(`[Notification] ${type} -> ${characterId}`);
   }
 
-  async sendToRegion(region: string, type: NotificationType, data?: Record<string, unknown>): Promise<void> {
+  async sendToRegion(shardId: string, region: string, type: NotificationType, data?: Record<string, unknown>): Promise<void> {
     const template = NOTIFICATION_TEMPLATES[type];
-    await this.redis.publish(`region:${region}:notification`, { type, ...template, data });
+    await this.redis.publish(`region:${shardId}:${region}:notification`, { type, ...template, data });
   }
 
   async sendGlobal(type: NotificationType, data?: Record<string, unknown>): Promise<void> {

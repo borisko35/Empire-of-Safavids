@@ -569,6 +569,12 @@ export class GameSocketHandler {
       return;
     }
 
+    // Монстр принадлежит другому серверу — атаковать нельзя
+    if (monsterCtx.shardId !== socket.shardId) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Target is on another game server' });
+      return;
+    }
+
     // Монстры данжа бьют только участники его сессии
     const dungeonSession = this.dungeons.getSessionByMonster(monsterCtx.instanceId);
     if (dungeonSession && !dungeonSession.members.has(attacker.id)) {

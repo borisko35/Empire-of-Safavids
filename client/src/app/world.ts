@@ -337,7 +337,11 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:error', ({ message }: { message: string }) => toast(message, 'error'));
+  socket.on('combat:error', ({ message }: { message: string }) => {
+    // Шум боя: добивание мёртвой цели — обычная ситуация, не ошибка игрока
+    if (message === 'Target not found') return;
+    toast(message, 'error');
+  });
 
   socket.on('combat:visual', (v: { attackerId: string; targetId: string }) => {
     if (!world || v.attackerId === me?.id) return; // свой урон уже отрисован по combat:result

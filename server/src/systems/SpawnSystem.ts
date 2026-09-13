@@ -7,7 +7,7 @@
 
 import { Region } from '../types/game.types';
 import { MONSTERS_DATABASE } from '../data/monsters';
-import { AISystem, AIContext } from './AISystem';
+import { AISystem } from './AISystem';
 import { WorldTimeSystem, Weather } from './WorldTimeSystem';
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';

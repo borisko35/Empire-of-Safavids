@@ -35,7 +35,7 @@ export interface FactionDefinition {
   rewards: Record<ReputationRank, string[]>; // разблокируемые предметы/скидки
 }
 
-const REPUTATION_THRESHOLDS: Record<ReputationRank, number> = {
+export const REPUTATION_THRESHOLDS: Record<ReputationRank, number> = {
   hated:      -6000,
   hostile:    -3000,
   unfriendly: 0,

@@ -14,7 +14,6 @@ import { GAME_SERVERS } from '../../../shared/constants';
 import { RedisService } from '../services/RedisService';
 const redis = RedisService.getInstance();
 import { TradeService } from '../systems/TradeService';
-import { EquipmentCache } from '../services/EquipmentCache';
 import { CRAFTING_RECIPES } from '../data/crafting';
 import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler, errorResponse } from '../utils/asyncHandler';
@@ -37,7 +36,6 @@ const characterService = new CharacterService();
 const partySystem = new PartySystem();
 const dungeonService = DungeonService.getInstance();
 const tradeService = new TradeService();
-const equipmentCache = EquipmentCache.getInstance();
 
 // ============================================================
 // Защита: персонаж в запросе должен принадлежать авторизованному

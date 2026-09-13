@@ -1,4 +1,4 @@
-import { Region, CharacterClass } from '../types/game.types';
+import { Region } from '../types/game.types';
 
 // ============================================================
 // База данных данжей — Empire of Safavids
