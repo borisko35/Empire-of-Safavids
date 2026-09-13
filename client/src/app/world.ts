@@ -70,6 +70,15 @@ function resolveQuestTarget(obj: QuestObjectiveDef, def: QuestDef): { x: number;
   if (obj.type === 'talk') {
     const npc = NPC_WORLD_POSITIONS[obj.target];
     if (npc) return withDist(npc.x, npc.z);
+    // Цели-спутника нет в мире: ведём к ближайшему квестному NPC региона
+    let best: { x: number; z: number } | null = null;
+    let bestD = Infinity;
+    for (const npc of Object.values(NPC_WORLD_POSITIONS)) {
+      if (!npc.quest) continue;
+      const d = Math.hypot(npc.x - me.pos.x, npc.z - me.pos.z);
+      if (d < bestD) { bestD = d; best = npc; }
+    }
+    if (best) return withDist(best.x, best.z);
   }
   if (obj.type === 'explore') {
     const a = EXPLORE_ANCHORS[obj.target];
@@ -89,7 +98,7 @@ async function refreshNavTarget(): Promise<void> {
     for (const st of active) {
       const def = navDefs.find((q) => q.id === st.questId);
       if (!def) continue;
-      const obj = def.objectives.find((o) => (st.progress[o.id] ?? 0) < o.required);
+      const obj = def.objectives.find((o) => !o.optional && (st.progress[o.id] ?? 0) < o.required);
       if (!obj) continue;
       target = resolveQuestTarget(obj, def);
       if (target) break;

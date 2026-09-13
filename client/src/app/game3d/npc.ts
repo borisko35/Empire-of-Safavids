@@ -140,10 +140,10 @@ function questMarker(): THREE.Sprite {
 }
 
 /** Мировые позиции NPC: id -> координаты (для стрелки-навигатора) */
-export const NPC_WORLD_POSITIONS: Record<string, { x: number; z: number; nameRu: string }> = {};
+export const NPC_WORLD_POSITIONS: Record<string, { x: number; z: number; nameRu: string; quest: boolean }> = {};
 for (const { origin, npcs } of NPC_GROUPS) {
   for (const def of npcs) {
-    NPC_WORLD_POSITIONS[def.id] = { x: origin.x + def.dx, z: origin.z + def.dz, nameRu: def.nameRu };
+    NPC_WORLD_POSITIONS[def.id] = { x: origin.x + def.dx, z: origin.z + def.dz, nameRu: def.nameRu, quest: def.quest };
   }
 }
 

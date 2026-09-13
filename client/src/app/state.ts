@@ -52,6 +52,7 @@ export interface QuestObjectiveDef {
   description: string;
   target: string;
   required: number;
+  optional: boolean;
 }
 
 export interface QuestDef {
