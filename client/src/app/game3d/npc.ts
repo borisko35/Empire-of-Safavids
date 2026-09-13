@@ -90,22 +90,27 @@ export const NPC_GROUPS: NpcGroup[] = [
 ];
 
 function textSprite(text: string): THREE.Sprite {
+  // Холст с запасом: длинные имена («Караван-баши Юсуф») не должны
+  // обрезаться краем текстуры
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
+  canvas.width = 512;
   canvas.height = 64;
   const ctx = canvas.getContext('2d')!;
   ctx.font = 'bold 26px Georgia';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  const textWidth = ctx.measureText(text).width;
   ctx.lineWidth = 5;
   ctx.strokeStyle = '#1a1208';
-  ctx.strokeText(text, 128, 34);
+  ctx.strokeText(text, 256, 34);
   ctx.fillStyle = '#f5f0e8';
-  ctx.fillText(text, 128, 34);
+  ctx.fillText(text, 256, 34);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
-  sprite.scale.set(3.1, 0.78, 1);
+  // Ширина в мире — по фактической длине текста (короткие имена не тянутся)
+  const worldW = Math.max(2.4, ((textWidth + 34) / 64) * 0.78);
+  sprite.scale.set(worldW, 0.78, 1);
   return sprite;
 }
 
