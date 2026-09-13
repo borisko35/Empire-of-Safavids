@@ -133,7 +133,7 @@ export function terrainHeight(x: number, z: number): number {
   const dm = desertMask(x, z);
   h = h * (1 - dm * 0.55) + dm * 0.55 * (1.5 + Math.sin(x * 0.021 + fbm(x / 60, z / 60) * 4) * 2.6 + (fbm(x / 25, z / 25) - 0.5) * 3);
   // Плоские площадки: город, возрождение, лагерь, поселения
-  h = flatten(h, x, z, CITY.x, CITY.z, 62, 0.4);
+  h = flatten(h, x, z, CITY.x, CITY.z, 100, 0.4); // плато накрывает кольцо стены (r=58)
   h = flatten(h, x, z, 0, 0, 26, 0.4); // уровень = базе города: иначе у ворот земля ниже и город «висит»
   h = flatten(h, x, z, CAMP.x, CAMP.z, 22, h * 0.35 + 0.3);
   h = flatten(h, x, z, PORT.x, PORT.z, PORT.radius, PORT.level);
@@ -650,7 +650,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   const wallMat = new THREE.MeshStandardMaterial({
     color: 0xb09468, roughness: 0.9, map: stoneTexture(6), side: THREE.DoubleSide,
   });
-  const thetaStart = Math.PI / 2 - (gateAngle + OPEN); // стандартный угол φ = π/2 − θ
+  const thetaStart = Math.PI / 2 - gateAngle + OPEN; // стандартный угол φ = π/2 − θ (mod 2π)
   const thetaLength = Math.PI * 2 - OPEN * 2;
   const wall = new THREE.Mesh(
     new THREE.CylinderGeometry(CITY.radius, CITY.radius, 6, 96, 1, true, thetaStart, thetaLength),
@@ -672,7 +672,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const stepA = (Math.PI * 2 - OPEN * 2) / merlonCount;
     for (let m = 0; m < merlonCount; m++) {
       const phi = gateAngle + OPEN + stepA * (m + 0.5);
-      mv.set(CITY.x + Math.cos(phi) * CITY.radius, 6.35, CITY.z + Math.sin(phi) * CITY.radius);
+      mv.set(Math.cos(phi) * CITY.radius, 6.35, Math.sin(phi) * CITY.radius);
       mq.setFromEuler(new THREE.Euler(0, -phi, 0));
       mm.compose(mv, mq, ms);
       merlons.setMatrixAt(m, mm);
