@@ -644,14 +644,33 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   // Жилые дома: купольные одно- и двухэтажные, с балконами
   const rng = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const canopies = [MAT.clothRed, MAT.clothTeal, MAT.clothPurple];
+  // Занятые места площади: мечеть, фонтан, прилавки, аркада, NPC —
+  // дома ставятся только с учётом дистанции до них (см. проверку ниже)
+  const placed: { x: number; z: number; r: number }[] = [
+    { x: 0, z: -8, r: 13.5 }, // мечеть
+    { x: 6, z: 6, r: 5.5 },   // фонтан
+    ...[0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const a = Math.PI * 0.6 + (i / 7) * Math.PI * 0.8;
+      return { x: Math.cos(a) * 20, z: -8 + Math.sin(a) * 20, r: 2.6 };
+    }),
+    ...[1, 2, 3, 4, 5].map((i) => {
+      const t = -i * 7.5;
+      return { x: Math.cos(gateAngle) * t * 0.4, z: Math.sin(gateAngle) * t * 0.4 + 26, r: 5 };
+    }),
+    ...[[-8, 10], [20, 16], [-24, -6], [12, -2], [16, -10], [-14, -14], [-4, 22], [6, -20], [26, 6], [2, -26]]
+      .map(([x, z]) => ({ x, z, r: 2 })), // NPC Исфахана (npc.ts)
+  ];
   for (let i = 0; i < 20; i++) {
     const a = rng() * Math.PI * 2;
     const r = 16 + rng() * 30;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (Math.hypot(x, z + 8) < 17) continue;
-    if (Math.hypot(x - 6, z - 6) < 6.5) continue;
-    const house = new THREE.Group();
     const w = 4 + rng() * 4, h = 3 + rng() * 2.5;
+    // Занятые места: мечеть, фонтан, прилавки, аркада, NPC (npc.ts).
+    // Дома не должны прилипать друг к другу и к постройкам.
+    const houseR = Math.max(2.4, w * 0.62);
+    if (placed.some(p => Math.hypot(p.x - x, p.z - z) < p.r + houseR + 1.4)) continue;
+    placed.push({ x, z, r: houseR });
+    const house = new THREE.Group();
     const twoStory = rng() < 0.35;
     const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.9), MAT.sandstone);
     body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true;
@@ -711,13 +730,17 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     lights.push({ x: CITY.x + x, z: CITY.z + z });
   }
 
-  // Коллайдер мечети
+  // Коллайдер мечети — строго по корпусу здания (24×18 в локальных -8):
+  // ряды внутри контура, ничего не торчит за стену (иначе «невидимая
+  // стена» сзади мечети, где стоят Хафиз и Мевлана)
   for (const mx of [-9, -3, 3, 9]) {
-    for (const mz of [-14.5, -8, -1.5]) {
+    for (const mz of [-5, 0, 5]) {
       addCollider(CITY.x + mx, CITY.z - 8 + mz, 4.4);
     }
   }
-  addCollider(CITY.x, CITY.z + 1.6, 3.4);
+  // Портал-арка — коллайдер по её положению (локальный z 9.4), а не
+  // между аркой и зданием (перекрывал проход)
+  addCollider(CITY.x, CITY.z + 9.4, 2.2);
 
   city.userData.lights = lights;
   scene.add(city);
