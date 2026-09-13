@@ -51,6 +51,31 @@ test:server:
         path: server/coverage/cobertura-coverage.xml
 
 # ============================================================
+# End-to-end smoke: живой сервер + БД/Redis, полный игровой цикл
+# ============================================================
+test:smoke:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  services:
+    - postgres:16-alpine
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: empire_smoke
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_pass
+    DB_HOST: postgres
+    DB_NAME: empire_smoke
+    DB_USER: test_user
+    DB_PASSWORD: test_pass
+    REDIS_URL: redis://redis:6379
+  script:
+    - cd server && npm ci
+    - npm run migrate
+    - npx ts-node src/index/index.ts &   # сервер в фоне
+    - sleep 12
+    - node ../tools/smoke-test-inventory.mjs
+
+# ============================================================
 # Build client (Vite bundle as artifact)
 # ============================================================
 build:client:

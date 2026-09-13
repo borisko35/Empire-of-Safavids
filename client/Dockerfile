@@ -10,14 +10,16 @@ WORKDIR /app
 COPY client/vite.config.ts ./client/
 COPY client/tsconfig.json ./client/
 COPY client/src ./client/src
+COPY client/web ./client/web
 
 WORKDIR /app/client
 RUN npm run build
 
-# Production: nginx раздаёт статику игры, API/сокеты/локали проксирует на сервер
+# Production: nginx раздаёт лендинг + игру, API/сокеты/локали проксирует на сервер
 FROM nginx:1.27-alpine AS production
 
-COPY --from=builder /app/client/web/game /usr/share/nginx/html/game
+# client/web уже содержит собранную игру в web/game (outDir Vite)
+COPY --from=builder /app/client/web /usr/share/nginx/html
 COPY client/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
