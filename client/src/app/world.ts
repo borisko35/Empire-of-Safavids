@@ -92,6 +92,7 @@ export async function enterWorld(character: Character): Promise<void> {
     socket.connect(); // по 'connect' обработчик сам пришлёт auth
   }
   chatMessage(null, t('world.connecting'), true);
+  document.getElementById('chat-log')?.lastElementChild?.setAttribute('data-conn-status', '');
 
   lastFrame = performance.now();
   cancelAnimationFrame(raf);
@@ -127,6 +128,10 @@ function wireSocket(): void {
   });
 
   socket.on('auth:success', ({ character }: { character: Character }) => {
+    // Снять строку «Подключение к серверу…» и подтвердить вход в мир
+    const log = document.getElementById('chat-log');
+    log?.querySelector('[data-conn-status]')?.remove();
+    chatMessage(null, t('world.connected'), true);
     if (me && world) {
       me.target = { ...character.position };
       me.pos = { ...character.position };
