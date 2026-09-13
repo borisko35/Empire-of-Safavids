@@ -91,6 +91,12 @@ export async function enterWorld(character: Character): Promise<void> {
     setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
     attack(): void { world3d?.attackFromCamera(); },
     setHour(hour: number): void { world3d?.setClock(hour); },
+    tp(x: number, z: number): void {
+      if (me && world) {
+        me.pos.x = x; me.pos.z = z;
+        me.target = { ...me.pos };
+      }
+    },
   };
 
   wireSocket();

@@ -194,3 +194,53 @@ export function woodTexture(repeat = 2): THREE.CanvasTexture {
   }
   return toTexture(canvas, repeat);
 }
+
+/** Вода: светлые проблски и рябь для озёр и реки */
+export function waterTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#3d7fae';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 90; i++) {
+    const y = Math.random() * size;
+    const x = Math.random() * size;
+    const w = 20 + Math.random() * 70;
+    ctx.fillStyle = `rgba(255,255,255,${0.05 + Math.random() * 0.1})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, w / 2, 1.2 + Math.random() * 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < 26; i++) {
+    ctx.strokeStyle = `rgba(210,240,255,${0.1 + Math.random() * 0.14})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let x = Math.random() * size, y = Math.random() * size;
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 5; s++) {
+      x += 14 + Math.random() * 18;
+      y += (Math.random() - 0.5) * 8;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  return toTexture(canvas, repeat);
+}
+
+/** Падающая вода: вертикальные струи (прокручивается в world3d) */
+export function waterfallTexture(repeat = 2): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#9fc8e0';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const w = 2 + Math.random() * 7;
+    ctx.fillStyle = `rgba(255,255,255,${0.14 + Math.random() * 0.3})`;
+    ctx.fillRect(x, 0, w, size);
+  }
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = `rgba(160,200,230,${0.2 + Math.random() * 0.3})`;
+    ctx.fillRect(Math.random() * size, Math.random() * size, 3 + Math.random() * 8, 20 + Math.random() * 60);
+  }
+  return toTexture(canvas, repeat);
+}

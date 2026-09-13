@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { World, PlayerEntity } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
-  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CITY, CAMP, COLLIDERS,
+  groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements,
+  WORLD_HALF, CITY, CAMP, COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
@@ -127,16 +128,18 @@ export class World3D {
     const city = buildCity(this.scene);
     for (const l of city.userData.lights as { x: number; z: number }[]) {
       const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
-      light.position.set(l.x, terrainHeight(l.x, l.z) + 5.2, l.z);
+      light.position.set(l.x, groundHeight(l.x, l.z) + 5.2, l.z);
       this.scene.add(light);
       this.torches.push({ light, base: 1.6 });
     }
     buildCamp(this.scene);
+    buildWater(this.scene);
+    buildSettlements(this.scene);
     const flame = this.scene.getObjectByName('campfire-flame');
     if (flame) {
       this.flames.push(flame as THREE.Mesh);
       const fireLight = new THREE.PointLight(0xff7a20, 0, 26, 1.6);
-      fireLight.position.set(CAMP.x, terrainHeight(CAMP.x, CAMP.z) + 1.6, CAMP.z);
+      fireLight.position.set(CAMP.x, groundHeight(CAMP.x, CAMP.z) + 1.6, CAMP.z);
       this.scene.add(fireLight);
       this.torches.push({ light: fireLight, base: 3.2 });
     }
@@ -285,7 +288,7 @@ export class World3D {
     let bestDot = 0.978; // ~12°
     for (const [id, m] of this.entities.monsters) {
       if (m.deadAt) continue;
-      const y = terrainHeight(m.pos.x, m.pos.z) + 1.1;
+      const y = groundHeight(m.pos.x, m.pos.z) + 1.1;
       const to = new THREE.Vector3(m.pos.x - camPos.x, y - camPos.y, m.pos.z - camPos.z);
       const dist = to.length();
       if (dist > 26) continue;
@@ -352,7 +355,7 @@ export class World3D {
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
       }
-      const y = terrainHeight(p.pos.x, p.pos.z);
+      const y = groundHeight(p.pos.x, p.pos.z);
       b.rig.group.position.set(p.pos.x, y, p.pos.z);
     }
 
@@ -365,7 +368,7 @@ export class World3D {
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
       }
-      const y = terrainHeight(m.pos.x, m.pos.z);
+      const y = groundHeight(m.pos.x, m.pos.z);
       b.rig.group.position.set(m.pos.x, y, m.pos.z);
       // Поворот к направлению движения
       const dx = m.target.x - m.pos.x, dz = m.target.z - m.pos.z;
@@ -417,14 +420,14 @@ export class World3D {
     for (const el of Array.from(this.fxLayer.children) as HTMLElement[]) {
       const age = (now - Number(el.dataset.born)) / 1100;
       const x = Number(el.dataset.x), z = Number(el.dataset.z);
-      const p = new THREE.Vector3(x, terrainHeight(x, z) + 2.1 + age * 1.1, z).project(this.camera);
+      const p = new THREE.Vector3(x, groundHeight(x, z) + 2.1 + age * 1.1, z).project(this.camera);
       el.style.transform = `translate(-50%,-50%) translate(${(p.x * 0.5 + 0.5) * this.container.clientWidth}px, ${(-p.y * 0.5 + 0.5) * this.container.clientHeight}px)`;
       el.style.opacity = String(1 - age);
     }
   }
 
   private burst(x: number, z: number, color: number, count: number): void {
-    const y = terrainHeight(x, z) + 1.3;
+    const y = groundHeight(x, z) + 1.3;
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
     const geo = new THREE.SphereGeometry(0.09, 6, 6);
     for (let i = 0; i < count; i++) {
@@ -509,7 +512,7 @@ export class World3D {
     this.resolveCollisions(me.pos, PLAYER_R);
 
     // ── Вертикаль: прыжок и земля ──
-    const groundY = terrainHeight(me.pos.x, me.pos.z);
+    const groundY = groundHeight(me.pos.x, me.pos.z);
     if (!this.grounded) {
       this.vy -= GRAVITY * dt;
       me.pos.y += this.vy * dt;
@@ -547,7 +550,7 @@ export class World3D {
         spd = moving ? 3.4 : 0;
         dead = m.deadAt > 0;
         if (this.targetRingTarget === id && !dead) {
-          this.targetRing.position.set(m.pos.x, terrainHeight(m.pos.x, m.pos.z) + 0.06, m.pos.z);
+          this.targetRing.position.set(m.pos.x, groundHeight(m.pos.x, m.pos.z) + 0.06, m.pos.z);
           this.targetRing.rotation.z = now / 900;
         }
       }
@@ -576,14 +579,14 @@ export class World3D {
     }
 
     // ── Камера ──
-    const targetY = terrainHeight(me.pos.x, me.pos.z) + 1.55 + (this.crouch ? -0.4 : 0);
+    const targetY = groundHeight(me.pos.x, me.pos.z) + 1.55 + (this.crouch ? -0.4 : 0);
     const camY = me.pos.y + 1.55 + Math.sin(this.pitch) * this.dist;
     const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist;
     const camZ = me.pos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.dist;
     // Камера тоже не должна проникать в здания
     const cam = { x: camX, z: camZ };
     this.resolveCollisions(cam, CAMERA_R);
-    const minY = terrainHeight(cam.x, cam.z) + 0.5;
+    const minY = groundHeight(cam.x, cam.z) + 0.5;
     this.camera.position.set(cam.x, Math.max(camY, minY), cam.z);
     this.camera.lookAt(me.pos.x, targetY, me.pos.z);
 
@@ -614,6 +617,12 @@ export class World3D {
     if (inCity !== this.lastInCity) {
       this.lastInCity = inCity;
       audio.setCity(inCity);
+    }
+    // Водопад: прокрутка текстуры струй
+    const waterfall = this.scene.getObjectByName('waterfall');
+    if (waterfall) {
+      const mat = (waterfall as THREE.Mesh).material as THREE.MeshBasicMaterial;
+      if (mat.map) mat.map.offset.y = (mat.map.offset.y - dt * 0.55) % 1;
     }
     // Факелы и костёр
     const torchOn = 0.35 + night * 0.65;
