@@ -25,14 +25,32 @@ class AudioEngine {
   private step = 0;
   private night = false;
   private inCity = false;
+  private mode: 'auth' | 'game' = 'auth';   // тема: экраны входа / игровой мир
+  /** Текущая тема (для отладочного хука) */
+  get currentMode(): 'auth' | 'game' { return this.mode; }
+  private ambienceOn = false;
+  private ambienceStarted = false;
   private _muted = localStorage.getItem('eos_mute') === '1';
 
   get muted() { return this._muted; }
+
+  /**
+   * Создать контекст и включить тему экранов входа/регистрации.
+   * Браузер разрешает звук только после жеста пользователя — вызывается
+   * из глобального слушателя installAuthMusicTrigger().
+   */
+  ensureAuth(): void {
+    this.ensure();
+    this.mode = 'auth';
+    (window as unknown as Record<string, unknown>).__eosAudio = 'auth';
+    this.setAmbienceEnabled(false);
+  }
 
   /** Создать контекст (только после жеста пользователя) */
   ensure(): void {
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
+      if (!this.musicTimer) this.startMusic();
       return;
     }
     const ctx = new AudioContext();
@@ -58,7 +76,14 @@ class AudioEngine {
     this.noiseBuf = buf;
 
     this.startMusic();
-    this.startAmbience();
+  }
+
+  /** Полный игровой звук: боевая тема + эмбиент (ветер/птицы/гомон) */
+  ensureGame(): void {
+    this.ensure();
+    this.mode = 'game';
+    (window as unknown as Record<string, unknown>).__eosAudio = 'game';
+    this.setAmbienceEnabled(true);
   }
 
   /** Остановить все таймеры (выход из мира) */
@@ -79,6 +104,27 @@ class AudioEngine {
     this.night = night;
   }
 
+  /** Эмбиент звучит только в игровом мире; на экранах входа заглушается */
+  private setAmbienceEnabled(on: boolean): void {
+    this.ambienceOn = on;
+    if (on && this.ctx && !this.ambienceStarted) this.startAmbience();
+    if (this.ambienceGain && this.ctx) {
+      this.ambienceGain.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.6);
+    }
+  }
+
+  /**
+   * Глобальный триггер: первый клик/клавиша на экранах входа, регистрации
+   * и выбора персонажа запускает тему авторизации (политика автовоспроизведения).
+   */
+  installAuthMusicTrigger(): void {
+    const trigger = () => {
+      if (this.mode !== 'game') this.ensureAuth();
+    };
+    document.addEventListener('pointerdown', trigger);
+    document.addEventListener('keydown', trigger);
+  }
+
   /** Персонаж в городе — включить гомон базара */
   setCity(inCity: boolean): void {
     if (this.inCity === inCity) return;
@@ -91,7 +137,8 @@ class AudioEngine {
   // ── Эмбиент: ветер, птицы, сверчки, гомон ────────────────────
   private startAmbience(): void {
     const ctx = this.ctx, out = this.ambienceGain;
-    if (!ctx || !out) return;
+    if (!ctx || !out || this.ambienceStarted) return;
+    this.ambienceStarted = true;
 
     // Ветер: зацикленный шум через lowpass с медленным «дыханием»
     const wind = ctx.createBufferSource();
@@ -128,7 +175,7 @@ class AudioEngine {
     // Расписание птиц/сверчков
     const scheduleChirps = () => {
       this.chirpTimer = setTimeout(() => {
-        if (this.ctx && !this._muted) {
+        if (this.ctx && !this._muted && this.ambienceOn) {
           if (this.night) this.cricket();
           else { this.birdChirp(); if (Math.random() < 0.4) this.birdChirp(); }
         }

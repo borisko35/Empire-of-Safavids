@@ -81,7 +81,7 @@ export async function enterWorld(character: Character): Promise<void> {
   };
   world.players.set(me.id, me);
   world3d.attach(world, me);
-  audio.ensure();
+  audio.ensureGame();
 
   // Отладочный хук для e2e-проверок (не влияет на игру)
   (window as unknown as { __eos: unknown }).__eos = {
@@ -91,6 +91,7 @@ export async function enterWorld(character: Character): Promise<void> {
     setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
     attack(): void { world3d?.attackFromCamera(); },
     setHour(hour: number): void { world3d?.setClock(hour); },
+    get audioMode() { return audio.currentMode; },
     tp(x: number, z: number): void {
       if (me && world) {
         me.pos.x = x; me.pos.z = z;
@@ -117,7 +118,7 @@ export async function enterWorld(character: Character): Promise<void> {
 
 export function leaveWorld(): void {
   cancelAnimationFrame(raf);
-  audio.dispose();
+  audio.ensureAuth();
   socket.disconnect();
   if (deathTimer) clearTimeout(deathTimer);
   world3d?.dispose();

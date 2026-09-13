@@ -8,9 +8,13 @@ import { clearAuth, session, Character } from './state';
 import { enterWorld, showScreen } from './world';
 import { initAuthScreen } from './screens/auth';
 import { initCharsScreen } from './screens/chars';
+import { audio } from './audio';
 
 async function boot(): Promise<void> {
   await loadLocale(detectLocale());
+
+  // Музыка на экранах входа/регистрации/персонажей — после первого жеста
+  audio.installAuthMusicTrigger();
 
   initAuthScreen(() => void gotoCharacters());
 
