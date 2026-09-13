@@ -4,6 +4,8 @@
 // Всё синтезируется WebAudio (без внешних файлов):
 //  * музыка: пэд + ней-подобныйLead в ладу Хиджаз,_frame drum;
 //    днём — спокойная, ночью — напряжённая;
+//  * эмбиент: ветер (шумовой слой), птицы днём, сверчки ночью,
+//    гомон базара в городе;
 //  * SFX: шаги, взмах, удар, блок, убийство, уровень, смерть.
 // Запуск — после первого жеста пользователя (клик по «Войти в мир»).
 
@@ -15,10 +17,14 @@ class AudioEngine {
   private master: GainNode | null = null;
   private musicGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
+  private ambienceGain: GainNode | null = null;
+  private murmurGain: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
+  private chirpTimer: ReturnType<typeof setTimeout> | null = null;
   private step = 0;
   private night = false;
+  private inCity = false;
   private _muted = localStorage.getItem('eos_mute') === '1';
 
   get muted() { return this._muted; }
@@ -40,15 +46,25 @@ class AudioEngine {
     this.sfxGain = ctx.createGain();
     this.sfxGain.gain.value = 0.5;
     this.sfxGain.connect(this.master);
+    this.ambienceGain = ctx.createGain();
+    this.ambienceGain.gain.value = 0.9;
+    this.ambienceGain.connect(this.master);
 
-    // общий буфер шума для перкуссии/шагов/взмахов
-    const len = ctx.sampleRate * 1.2;
+    // общий буфер шума для перкуссии/шагов/взмахов/эмбиента
+    const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
     this.noiseBuf = buf;
 
     this.startMusic();
+    this.startAmbience();
+  }
+
+  /** Остановить все таймеры (выход из мира) */
+  dispose(): void {
+    if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; }
+    if (this.chirpTimer) { clearTimeout(this.chirpTimer); this.chirpTimer = null; }
   }
 
   setMuted(m: boolean): void {
@@ -61,6 +77,109 @@ class AudioEngine {
 
   setNight(night: boolean): void {
     this.night = night;
+  }
+
+  /** Персонаж в городе — включить гомон базара */
+  setCity(inCity: boolean): void {
+    if (this.inCity === inCity) return;
+    this.inCity = inCity;
+    if (this.murmurGain && this.ctx) {
+      this.murmurGain.gain.setTargetAtTime(inCity ? 0.045 : 0, this.ctx.currentTime, 0.8);
+    }
+  }
+
+  // ── Эмбиент: ветер, птицы, сверчки, гомон ────────────────────
+  private startAmbience(): void {
+    const ctx = this.ctx, out = this.ambienceGain;
+    if (!ctx || !out) return;
+
+    // Ветер: зацикленный шум через lowpass с медленным «дыханием»
+    const wind = ctx.createBufferSource();
+    wind.buffer = this.noiseBuf!;
+    wind.loop = true;
+    const windFilter = ctx.createBiquadFilter();
+    windFilter.type = 'lowpass';
+    windFilter.frequency.value = 240;
+    const windGain = ctx.createGain();
+    windGain.gain.value = 0.035;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.07;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.018;
+    lfo.connect(lfoGain); lfoGain.connect(windGain.gain);
+    wind.connect(windFilter); windFilter.connect(windGain); windGain.connect(out);
+    wind.start();
+    lfo.start();
+
+    // Гомон базара (только в городе): приглушённый «жужжащий» шум
+    const murmur = ctx.createBufferSource();
+    murmur.buffer = this.noiseBuf!;
+    murmur.loop = true;
+    murmur.playbackRate.value = 0.6;
+    const murmurFilter = ctx.createBiquadFilter();
+    murmurFilter.type = 'bandpass';
+    murmurFilter.frequency.value = 620;
+    murmurFilter.Q.value = 0.6;
+    this.murmurGain = ctx.createGain();
+    this.murmurGain.gain.value = 0;
+    murmur.connect(murmurFilter); murmurFilter.connect(this.murmurGain); this.murmurGain.connect(out);
+    murmur.start();
+
+    // Расписание птиц/сверчков
+    const scheduleChirps = () => {
+      this.chirpTimer = setTimeout(() => {
+        if (this.ctx && !this._muted) {
+          if (this.night) this.cricket();
+          else { this.birdChirp(); if (Math.random() < 0.4) this.birdChirp(); }
+        }
+        scheduleChirps();
+      }, this.night ? 1800 + Math.random() * 3200 : 2600 + Math.random() * 5200);
+    };
+    scheduleChirps();
+  }
+
+  /** Птица: 2–4 щелчка с падающей высотой */
+  private birdChirp(): void {
+    const ctx = this.ctx, out = this.ambienceGain;
+    if (!ctx || !out) return;
+    const base = 2400 + Math.random() * 1800;
+    const t0 = ctx.currentTime;
+    const n = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      const t = t0 + i * (0.09 + Math.random() * 0.05);
+      const hz = base * (1 - i * 0.09) * (0.92 + Math.random() * 0.16);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(hz, t);
+      o.frequency.exponentialRampToValueAtTime(hz * 1.35, t + 0.03);
+      o.frequency.exponentialRampToValueAtTime(hz * 0.85, t + 0.07);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.028, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + 0.1);
+    }
+  }
+
+  /** Сверчок: серия коротких высоких трелей */
+  private cricket(): void {
+    const ctx = this.ctx, out = this.ambienceGain;
+    if (!ctx || !out) return;
+    const t0 = ctx.currentTime;
+    const pulses = 4 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < pulses; i++) {
+      const t = t0 + i * 0.11;
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = 4300 + Math.random() * 300;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.011, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + 0.08);
+    }
   }
 
   // ── Музыка ───────────────────────────────────────────────────

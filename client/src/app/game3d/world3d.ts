@@ -7,11 +7,14 @@
 // эффекты и плавающий урон. Сетевые данные читает из entities.World.
 
 import * as THREE from 'three';
-import { World, PlayerEntity, tileHash } from '../entities';
+import { World, PlayerEntity } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
-  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CAMP, COLLIDERS,
+  terrainHeight, buildTerrain, buildScatter, buildCity, buildCamp, WORLD_HALF, CITY, CAMP, COLLIDERS,
 } from './terrain';
+import { createSky, SkyHandle } from './sky';
+import { createFauna, FaunaHandle } from './fauna';
+import { createNpcs, NpcsHandle } from './npc';
 import { audio } from '../audio';
 import { chatVisible } from '../hud';
 
@@ -19,6 +22,8 @@ export interface World3DCallbacks {
   onAttack: () => void;
   onTarget: (name: string, hp: number, maxHp: number) => void;
   onTargetCleared: () => void;
+  /** Клик по NPC: открыть связанную панель */
+  onNpc?: (panel: string, nameRu: string) => void;
 }
 
 const GRAVITY = 20;
@@ -42,7 +47,11 @@ export class World3D {
   private hemi!: THREE.HemisphereLight;
   private torches: { light: THREE.PointLight; base: number }[] = [];
   private flames: THREE.Mesh[] = [];
-  private clouds: THREE.Mesh[] = [];
+  private sky!: SkyHandle;
+  private fauna!: FaunaHandle;
+  private npcs!: NpcsHandle;
+  private clockHour = 12;          // игровые сутки: 0–23
+  private lastInCity = false;
 
   private container!: HTMLElement;
   private fxLayer!: HTMLElement;
@@ -132,6 +141,11 @@ export class World3D {
       this.torches.push({ light: fireLight, base: 3.2 });
     }
 
+    // Небо, фауна и NPC города
+    this.sky = createSky(this.scene);
+    this.fauna = createFauna(this.scene);
+    this.npcs = createNpcs(this.scene);
+
     // Кольцо цели
     this.targetRing = new THREE.Mesh(
       new THREE.RingGeometry(0.55, 0.72, 28),
@@ -140,16 +154,6 @@ export class World3D {
     this.targetRing.rotation.x = -Math.PI / 2;
     this.targetRing.visible = false;
     this.scene.add(this.targetRing);
-
-    // Облака
-    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, transparent: true, opacity: 0.85, flatShading: true });
-    for (let i = 0; i < 9; i++) {
-      const cloud = new THREE.Mesh(new THREE.SphereGeometry(10 + i * 2, 8, 6), cloudMat);
-      cloud.scale.set(1.8, 0.42, 1);
-      cloud.position.set((tileHash(i, 7) * 2 - 1) * 900, 78 + tileHash(i, 3) * 40, (tileHash(i, 11) * 2 - 1) * 900);
-      this.clouds.push(cloud);
-      this.scene.add(cloud);
-    }
 
     // FX-слой и прицел
     this.fxLayer = document.createElement('div');
@@ -188,6 +192,11 @@ export class World3D {
     this.yaw = yaw;
     this.pitch = pitch;
     if (dist != null) this.dist = Math.min(15, Math.max(3.2, dist));
+  }
+
+  /** Игровой час (0–23) от world:time — ведёт солнце/луну/звёзды */
+  setClock(hour: number): void {
+    if (Number.isFinite(hour)) this.clockHour = ((hour % 24) + 24) % 24;
   }
 
   /** Атака лучом из центра экрана без мыши (тот же путь, что у ЛКМ) */
@@ -299,6 +308,10 @@ export class World3D {
   private tryAttack(): void {
     if (this.attackCd > 0) return;
     this.attackCd = 0.45;
+
+    // Клик по NPC открывает связанную панель (приоритет над боем)
+    if (this.pickNpc()) return;
+
     // Мягкое прицеливание: конус от камеры, затем близость
     const id = this.acquireTarget();
     if (id && this.entities) {
@@ -310,6 +323,19 @@ export class World3D {
     this.attackAnim = true;
     audio.whoosh();
     if (this.entities?.targetId) this.callbacks?.onAttack();
+  }
+
+  /** Луч из центра экрана по NPC; при попадании — открыть панель */
+  private pickNpc(): boolean {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hits = ray.intersectObjects(this.npcs.clickTargets, true);
+    if (!hits.length || hits[0].distance > 22) return false;
+    const panel = hits[0].object.userData.npcPanel as string | undefined;
+    const name = hits[0].object.userData.npcName as string | undefined;
+    if (!panel) return false;
+    this.callbacks?.onNpc?.(panel, name ?? '');
+    return true;
   }
 
   // ── Синхронизация ригов ──────────────────────────────────────
@@ -563,16 +589,32 @@ export class World3D {
 
     // ── Свет и время суток ──
     const dayI = 1 - night;
-    this.sun.intensity = 0.25 + dayI * 1.35;
+    this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
+    this.fauna.update(dt, now);
+    this.npcs.update(dt, now);
+
+    // Солнце/луна по дуге: источник света следует за светилом
+    const sunDir = this.sky.sunDirection;
+    const useMoon = sunDir.y < 0.05;
+    const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
+    this.sun.intensity = useMoon ? 0.32 : 0.25 + dayI * 1.35;
     this.hemi.intensity = 0.28 + dayI * 0.55;
-    const skyDay = new THREE.Color(0x8fb8d4), skyNight = new THREE.Color(0x0a1428);
-    const sky = skyNight.lerp(skyDay, dayI);
-    this.scene.background = sky;
-    (this.scene.fog as THREE.Fog).color = sky;
-    this.sun.color.setHex(night > 0.7 ? 0x9db4e8 : 0xffe8c0);
-    // Солнце следует за игроком (тени рядом)
-    this.sun.position.set(me.pos.x + 60, 90, me.pos.z + 30);
+    this.sun.color.setHex(useMoon ? 0x9db4e8 : night > 0.4 ? 0xffc98a : 0xffe8c0);
+    this.sun.position.set(
+      me.pos.x + lightDir.x * 120,
+      Math.max(24, lightDir.y * 120),
+      me.pos.z + lightDir.z * 120,
+    );
     this.sun.target.position.set(me.pos.x, 0, me.pos.z);
+    // Туман под цвет горизонта — сцена сливается с куполом
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.copy(this.sky.horizonColor);
+    // Гомон базара — только в городе
+    const inCity = Math.hypot(me.pos.x - CITY.x, me.pos.z - CITY.z) < CITY.radius + 12;
+    if (inCity !== this.lastInCity) {
+      this.lastInCity = inCity;
+      audio.setCity(inCity);
+    }
     // Факелы и костёр
     const torchOn = 0.35 + night * 0.65;
     for (const t of this.torches) {
@@ -581,10 +623,6 @@ export class World3D {
     for (const f of this.flames) {
       f.scale.y = 1 + Math.sin(now / 70) * 0.18;
     }
-    this.clouds.forEach((c, i) => {
-      c.position.x += dt * (1.2 + i * 0.14);
-      if (c.position.x > WORLD_HALF + 100) c.position.x = -WORLD_HALF - 100;
-    });
 
     if (this.attackCd > 0) this.attackCd -= dt;
     this.renderer.render(this.scene, this.camera);
@@ -604,6 +642,9 @@ export class World3D {
     if (document.pointerLockElement) document.exitPointerLock();
     for (const [, b] of this.rigs) b.rig.dispose();
     this.rigs.clear();
+    this.sky?.dispose();
+    this.fauna?.dispose();
+    this.npcs?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fxLayer?.remove();

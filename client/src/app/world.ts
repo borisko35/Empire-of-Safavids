@@ -57,6 +57,15 @@ export async function enterWorld(character: Character): Promise<void> {
     onAttack: () => basicAttack(),
     onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
     onTargetCleared: () => hideTarget(),
+    onNpc: (panel, name) => {
+      // Клик по NPC: открыть связанную панель (кнопкой-переключателем,
+      // чтобы не ломать состояние .hidden/.active)
+      const btn = document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`);
+      const el = document.getElementById(panel);
+      if (btn && el?.classList.contains('hidden')) btn.click();
+      else loadPanelContent(panel);
+      if (name) toast(`${name} — ${t('panels.npc_greeting')}`, 'info');
+    },
   });
 
   me = {
@@ -81,6 +90,7 @@ export async function enterWorld(character: Character): Promise<void> {
     get cam() { return world3d?.getCameraPose() ?? null; },
     setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
     attack(): void { world3d?.attackFromCamera(); },
+    setHour(hour: number): void { world3d?.setClock(hour); },
   };
 
   wireSocket();
@@ -101,6 +111,7 @@ export async function enterWorld(character: Character): Promise<void> {
 
 export function leaveWorld(): void {
   cancelAnimationFrame(raf);
+  audio.dispose();
   socket.disconnect();
   if (deathTimer) clearTimeout(deathTimer);
   world3d?.dispose();
@@ -364,6 +375,8 @@ function wireSocket(): void {
     setWorldTime(payload);
     const tod = String(payload.timeOfDay ?? '');
     night = tod === 'night' || tod === 'midnight' ? 1 : tod === 'evening' || tod === 'dawn' ? 0.5 : 0;
+    const hour = Number(payload.gameHour ?? payload.hour);
+    if (Number.isFinite(hour)) world3d?.setClock(hour);
   });
 
   socket.on('move:rejected', ({ reason }: { reason?: string }) => {

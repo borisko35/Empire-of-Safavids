@@ -267,6 +267,7 @@
     "trade_done": "Contract fulfilled",
     "trade_cancel": "Cancel",
     "trade_cancelled": "Contract cancelled, cargo returned",
-    "trade_hint": "In the destination city:"
+    "trade_hint": "In the destination city:",
+    "npc_greeting": "greets you"
   }
 }

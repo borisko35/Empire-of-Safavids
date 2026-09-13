@@ -42,7 +42,7 @@ export interface Rig {
   dispose: () => void;
 }
 
-interface HumanoidCfg {
+export interface HumanoidCfg {
   robe: number;
   robeDark: number;
   hat: Hat;
