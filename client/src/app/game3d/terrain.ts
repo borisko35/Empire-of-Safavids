@@ -498,6 +498,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   COLLIDERS.length = 0; // город строится один раз за сессию мира
 
   const gateAngle = Math.atan2(-CITY.z, -CITY.x); // направление к точке возрождения (0,0)
+  const lights: { x: number; z: number; y?: number }[] = []; // фонари (свет — в world3d)
 
   // Площадь (плитка с узором)
   const plaza = new THREE.Mesh(
@@ -528,19 +529,45 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   city.add(fountain);
   addCollider(CITY.x + 6, CITY.z + 6, 4.2);
 
-  // Городские ворота: две башни + арка в сторону точки возрождения
+  // Городские ворота: обзорные башни по бокам, арка, створки и зубцы
   {
     const gx = Math.cos(gateAngle) * CITY.radius, gz = Math.sin(gateAngle) * CITY.radius;
     const dirX = Math.cos(gateAngle + Math.PI / 2), dirZ = Math.sin(gateAngle + Math.PI / 2);
+    const inward = (k: number) => ({ x: gx - Math.cos(gateAngle) * k, z: gz - Math.sin(gateAngle) * k });
     for (const side of [-1, 1]) {
-      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 12, 10), MAT.sandstoneDark);
-      tower.position.set(gx + dirX * side * 5.2, 6, gz + dirZ * side * 5.2);
+      const tx = gx + dirX * side * 5.6, tz = gz + dirZ * side * 5.6;
+      // Корпус обзорной башни
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 10), MAT.sandstoneDark);
+      tower.position.set(tx, 7.5, tz);
       tower.castShadow = true;
+      // Площадка с перилами и зубцами по кругу
+      const deck = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.0, 0.7, 10), MAT.sandstone);
+      deck.position.set(tx, 15.2, tz);
+      deck.castShadow = true;
+      const railing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.14, 6, 12), MAT.wood);
+      railing.position.set(tx, 16.1, tz);
+      railing.rotation.x = Math.PI / 2;
+      for (let m = 0; m < 8; m++) {
+        const ma = (m / 8) * Math.PI * 2;
+        const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 0.5), MAT.sandstoneDark);
+        merlon.position.set(tx + Math.cos(ma) * 3.2, 16.0, tz + Math.sin(ma) * 3.2);
+        merlon.rotation.y = -ma;
+        merlon.castShadow = true;
+        city.add(merlon);
+      }
+      // Шатёр и чаша огня (свет добавляет world3d по lights)
       const cap = new THREE.Mesh(new THREE.ConeGeometry(3.1, 2.6, 10), MAT.tealDome);
-      cap.position.set(gx + dirX * side * 5.2, 13.3, gz + dirZ * side * 5.2);
-      city.add(tower, cap);
-      addCollider(CITY.x + gx + dirX * side * 5.2, CITY.z + gz + dirZ * side * 5.2, 3.4);
+      cap.position.set(tx, 17.2, tz);
+      cap.castShadow = true;
+      const brazier = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.3, 0.5, 8), MAT.gold);
+      brazier.position.set(tx, 15.9, tz);
+      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 6), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.8 }));
+      fire.position.set(tx, 16.5, tz);
+      city.add(tower, deck, railing, cap, brazier, fire);
+      addCollider(CITY.x + tx, CITY.z + tz, 3.4);
+      lights.push({ x: CITY.x + tx, z: CITY.z + tz, y: baseY + 16.2 });
     }
+    // Арка с зубцами
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(11.6, 1.8, 2.6), MAT.sandstone);
     lintel.position.set(gx, 10.5, gz);
     lintel.rotation.y = -gateAngle;
@@ -550,6 +577,34 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     keystone.rotation.x = Math.PI / 2;
     keystone.rotation.z = -gateAngle;
     city.add(lintel, keystone);
+    for (let m = -2; m <= 2; m++) {
+      if (m === 0) continue; // место под шахский герб
+      const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.5), MAT.sandstoneDark);
+      merlon.position.set(gx + dirX * m * 2.4, 11.8, gz + dirZ * m * 2.4);
+      merlon.rotation.y = -gateAngle;
+      merlon.castShadow = true;
+      city.add(merlon);
+    }
+    // Створки ворот: тёмное дерево, приоткрыты для прохода по центру
+    for (const side of [-1, 1]) {
+      const inner = inward(0.4);
+      const door = new THREE.Mesh(new THREE.BoxGeometry(3.4, 8.5, 0.4), MAT.wood);
+      door.position.set(inner.x + dirX * side * 2.6, 4.2, inner.z + dirZ * side * 2.6);
+      door.rotation.y = -gateAngle + side * 0.22;
+      door.castShadow = true;
+      // оковка створок
+      for (let b = 0; b < 3; b++) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.18, 0.5), MAT.dark);
+        band.position.set(0, -2.6 + b * 2.4, 0.05);
+        door.add(band);
+      }
+      city.add(door);
+    }
+    // фонарь над проходом
+    const gateLamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshStandardMaterial({ color: 0xffd980, emissive: 0xffa530, emissiveIntensity: 1.3 }));
+    gateLamp.position.set(gx, 9.4, gz);
+    city.add(gateLamp);
+    lights.push({ x: CITY.x + gx, z: CITY.z + gz, y: baseY + 9.4 });
   }
 
   // Базарная аркада
@@ -718,7 +773,6 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   addPalm(city, -12, 24, 0.95);
 
   // Городские фонари-чаши
-  const lights: { x: number; z: number }[] = [];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 + 0.4;
     const x = Math.cos(a) * CITY.radius * 0.55, z = Math.sin(a) * CITY.radius * 0.55;

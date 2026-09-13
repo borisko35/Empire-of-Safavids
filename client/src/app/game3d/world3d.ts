@@ -128,7 +128,7 @@ export class World3D {
     const city = buildCity(this.scene);
     for (const l of city.userData.lights as { x: number; z: number }[]) {
       const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
-      light.position.set(l.x, groundHeight(l.x, l.z) + 5.2, l.z);
+      light.position.set(l.x, (l as { y?: number }).y ?? groundHeight(l.x, l.z) + 5.2, l.z);
       this.scene.add(light);
       this.torches.push({ light, base: 1.6 });
     }
