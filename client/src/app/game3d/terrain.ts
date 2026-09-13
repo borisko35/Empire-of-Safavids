@@ -134,7 +134,7 @@ export function terrainHeight(x: number, z: number): number {
   h = h * (1 - dm * 0.55) + dm * 0.55 * (1.5 + Math.sin(x * 0.021 + fbm(x / 60, z / 60) * 4) * 2.6 + (fbm(x / 25, z / 25) - 0.5) * 3);
   // Плоские площадки: город, возрождение, лагерь, поселения
   h = flatten(h, x, z, CITY.x, CITY.z, 62, 0.4);
-  h = flatten(h, x, z, 0, 0, 26, 0.15);
+  h = flatten(h, x, z, 0, 0, 26, 0.4); // уровень = базе города: иначе у ворот земля ниже и город «висит»
   h = flatten(h, x, z, CAMP.x, CAMP.z, 22, h * 0.35 + 0.3);
   h = flatten(h, x, z, PORT.x, PORT.z, PORT.radius, PORT.level);
   h = flatten(h, x, z, CARAVANSERAI.x, CARAVANSERAI.z, CARAVANSERAI.radius, CARAVANSERAI.level);
@@ -152,11 +152,10 @@ export function terrainHeight(x: number, z: number): number {
 const TERRAIN_SEG = 170;
 
 /**
- * Высота видимой поверхности в точке: билинейная интерполяция вершин
- * меша рельефа + плита городской площади. Именно её должны использовать
- * персонажи, NPC и животные — иначе проваливаются между вершинами.
+ * Высота видимого меша рельефа в точке: билинейная интерполяция вершин.
+ * Без городской плиты — используется для постановки построек города.
  */
-export function groundHeight(x: number, z: number): number {
+export function meshHeight(x: number, z: number): number {
   const half = WORLD_HALF;
   const step = (WORLD_HALF * 2) / TERRAIN_SEG;
   const fx = clamp01((x + half) / (WORLD_HALF * 2)) * TERRAIN_SEG;
@@ -168,7 +167,16 @@ export function groundHeight(x: number, z: number): number {
   const z0 = -half + j * step, z1 = z0 + step;
   const h00 = terrainHeight(x0, z0), h10 = terrainHeight(x1, z0);
   const h01 = terrainHeight(x0, z1), h11 = terrainHeight(x1, z1);
-  let h = (h00 * (1 - lx) + h10 * lx) * (1 - lz) + (h01 * (1 - lx) + h11 * lx) * lz;
+  return (h00 * (1 - lx) + h10 * lx) * (1 - lz) + (h01 * (1 - lx) + h11 * lx) * lz;
+}
+
+/**
+ * Высота для сущностей: меш рельефа + плита городской площади.
+ * Именно её должны использовать персонажи, NPC и животные — иначе
+ * проваливаются между вершинами.
+ */
+export function groundHeight(x: number, z: number): number {
+  let h = meshHeight(x, z);
 
   // Плита площади Исфахана стоит над землёй — сущности стоят на ней
   const dCity = Math.hypot(x - CITY.x, z - CITY.z);
@@ -493,7 +501,9 @@ function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1): void {
 // ── Город Исфахан ────────────────────────────────────────────
 export function buildCity(scene: THREE.Scene): THREE.Group {
   const city = new THREE.Group();
-  const baseY = groundHeight(CITY.x, CITY.z);
+  // База города — сам меш: бугор плиты учитывается отдельно в groundHeight,
+  // иначе весь город (стены/ворота) висит над землёй
+  const baseY = meshHeight(CITY.x, CITY.z);
   city.position.set(CITY.x, baseY, CITY.z);
   COLLIDERS.length = 0; // город строится один раз за сессию мира
 
@@ -634,24 +644,44 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     }
   }
 
-  // Стены восьмиугольником с воротами к точке возрождения
-  const wallSeg = new THREE.BoxGeometry(CITY.radius * 0.82, 6, 2.4);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    let da = Math.abs(((a - gateAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-    if (da < 0.45) continue;
-    const w = new THREE.Mesh(wallSeg, MAT.sandstoneDark);
-    w.position.set(Math.cos(a) * CITY.radius, 3, Math.sin(a) * CITY.radius);
-    w.rotation.y = -a + Math.PI / 2;
-    w.castShadow = true; w.receiveShadow = true;
-    city.add(w);
-    const theta = -a + Math.PI / 2;
-    const dirX = Math.cos(theta), dirZ = -Math.sin(theta);
-    const cx0 = CITY.x + Math.cos(a) * CITY.radius;
-    const cz0 = CITY.z + Math.sin(a) * CITY.radius;
-    for (const k of [-20, -10, 0, 10, 20]) {
-      addCollider(cx0 + dirX * k, cz0 + dirZ * k, 2.2);
+  // Стены: непрерывная дуга по кругу с проёмом ровно под ворота
+  // (дискретные сегменты оставляли дыры по бокам ворот)
+  const OPEN = 0.16; // половина угла проёма ворот (рад)
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0xb09468, roughness: 0.9, map: stoneTexture(6), side: THREE.DoubleSide,
+  });
+  const thetaStart = Math.PI / 2 - (gateAngle + OPEN); // стандартный угол φ = π/2 − θ
+  const thetaLength = Math.PI * 2 - OPEN * 2;
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(CITY.radius, CITY.radius, 6, 96, 1, true, thetaStart, thetaLength),
+    wallMat,
+  );
+  wall.position.y = 3;
+  wall.castShadow = true; wall.receiveShadow = true;
+  city.add(wall);
+  // Зубцы по гребню стены
+  const merlonCount = 84;
+  const merlonGeo = new THREE.BoxGeometry(1.6, 0.8, 0.6);
+  const merlons = new THREE.InstancedMesh(merlonGeo, MAT.sandstoneDark, merlonCount);
+  merlons.castShadow = true;
+  {
+    const mq = new THREE.Quaternion();
+    const mv = new THREE.Vector3();
+    const ms = new THREE.Vector3(1, 1, 1);
+    const mm = new THREE.Matrix4();
+    const stepA = (Math.PI * 2 - OPEN * 2) / merlonCount;
+    for (let m = 0; m < merlonCount; m++) {
+      const phi = gateAngle + OPEN + stepA * (m + 0.5);
+      mv.set(CITY.x + Math.cos(phi) * CITY.radius, 6.35, CITY.z + Math.sin(phi) * CITY.radius);
+      mq.setFromEuler(new THREE.Euler(0, -phi, 0));
+      mm.compose(mv, mq, ms);
+      merlons.setMatrixAt(m, mm);
     }
+  }
+  city.add(merlons);
+  // Коллайдеры вдоль дуги (шаг ~5 юнитов)
+  for (let phi = gateAngle + OPEN; phi < gateAngle + Math.PI * 2 - OPEN; phi += 5 / CITY.radius) {
+    addCollider(CITY.x + Math.cos(phi) * CITY.radius, CITY.z + Math.sin(phi) * CITY.radius, 2.2);
   }
   // Башни по углам
   for (let i = 0; i < 8; i++) {
