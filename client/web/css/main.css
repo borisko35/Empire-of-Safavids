@@ -441,6 +441,17 @@ body {
 
 .footer .icon { color: var(--gold); }
 .footer-sep { color: var(--gold); }
+.footer-link {
+  color: var(--cream-dim);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.footer-link:hover,
+.footer-link:focus-visible {
+  color: var(--gold-light);
+  border-bottom-color: var(--gold);
+}
 
 /* ── Адаптивность ───────────────────────────────────────────── */
 
@@ -463,5 +474,486 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .btn, .class-card { transition: none; }
+  .btn, .class-card, .screenshot-card { transition: none; }
 }
+
+/* Screenshots & gameplay */
+.screenshots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.screenshot-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.screenshot-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--gold);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+.screenshot-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+.screenshot-caption {
+  padding: 10px 14px 14px;
+  font-size: 14px;
+  color: var(--cream-dim);
+}
+
+/* Статус серверов */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b6b6b;
+  flex-shrink: 0;
+}
+.status-card.online .status-dot {
+  background: #6ecf7a;
+  box-shadow: 0 0 8px #6ecf7a;
+}
+.status-name {
+  font-weight: bold;
+  flex-grow: 1;
+}
+.status-count {
+  color: var(--cream-dim);
+  font-size: 13px;
+}
+.status-offline {
+  color: var(--cream-dim);
+  padding: 12px 4px;
+}
+
+/* Рейтинг */
+.rating-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+.rating-tab {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--cream);
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.rating-tab.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.rating-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rating-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.rating-row.top1 .rating-rank { color: #ffd700; }
+.rating-row.top2 .rating-rank { color: #c0c0c0; }
+.rating-row.top3 .rating-rank { color: #cd7f32; }
+.rating-rank {
+  font-weight: bold;
+  min-width: 28px;
+  color: var(--gold);
+}
+.rating-name {
+  font-weight: bold;
+  flex-grow: 1;
+}
+.rating-value {
+  color: var(--cream-dim);
+  font-size: 13px;
+}
+.rating-empty {
+  color: var(--cream-dim);
+  padding: 12px 4px;
+}
+
+/* Админ-панель */
+.hidden { display: none !important; }
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+  margin-top: 14px;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--cream-dim);
+}
+.auth-form input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--cream);
+  padding: 10px 12px;
+  font-size: 15px;
+}
+.auth-form input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.form-error {
+  color: #ff8d7e;
+  font-size: 14px;
+  margin-top: 10px;
+}
+.chat-input {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+.chat-input input {
+  flex-grow: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--cream);
+  padding: 8px 12px;
+}
+.chat-input button {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  color: var(--cream);
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.chat-input button:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* Новости */
+.news-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+.news-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+.news-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--gold);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+.news-card h3 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 18px;
+}
+.news-card p {
+  margin: 0;
+  color: var(--cream-dim);
+  font-size: 14px;
+  flex-grow: 1;
+}
+.news-card .btn {
+  align-self: flex-start;
+}
+.news-card time {
+  color: var(--gold);
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+/* Контент из CMS: режим обслуживания и анонс */
+.site-maintenance {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  padding: 10px 18px;
+  text-align: center;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(90deg, #8a1f1f, #c0392b 50%, #8a1f1f);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+}
+.site-announcement {
+  padding: 10px 18px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--cream);
+  background: rgba(201, 168, 76, 0.14);
+  border-bottom: 1px solid rgba(201, 168, 76, 0.4);
+}
+
+/* -- ������ ���������� ������ (CMS) ----------------------- */
+.cms-hint {
+  color: var(--cream-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.cms-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--cream-dim);
+}
+.cms-input,
+.cms-field select {
+  background: rgba(7, 15, 27, 0.7);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--cream);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cms-input:focus,
+.cms-field select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.cms-block {
+  border-top: 1px solid var(--panel-border);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.cms-subtitle {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--gold);
+}
+.cms-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--cream-dim);
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.cms-check input { accent-color: var(--gold); }
+.cms-news-item {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+.cms-news-item .btn { justify-self: start; }
+.cms-status { font-size: 13px; color: var(--gold); }
+.cms-status.error { color: #ff8d7e; }
+.cms-select {
+  background: rgba(7, 15, 27, 0.7);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  color: var(--cream);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.cms-select:focus { outline: none; border-color: var(--gold); }
+textarea.cms-input { resize: vertical; line-height: 1.5; min-height: 84px; }
+
+/* -- Форум ---------------------------------------------- */
+.topnav { flex-wrap: wrap; row-gap: 4px; }
+.topnav-link.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+.fm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fm-search { flex: 1 1 240px; min-width: 180px; }
+.fm-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.fm-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  color: var(--cream-dim);
+  white-space: nowrap;
+}
+.fm-badge-pin { border-color: var(--gold); color: var(--gold); }
+.fm-badge-lock { border-color: #b46a4a; color: #e0a184; }
+.fm-badge-ok { border-color: #4caf7d; color: #7fe0ab; }
+
+.fm-topic-row { align-items: flex-start; flex-direction: column; gap: 4px; }
+.fm-topic-main { width: 100%; }
+.fm-topic-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fm-topic-link {
+  color: var(--cream);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 15px;
+}
+.fm-topic-link:hover { color: var(--gold-light); text-decoration: underline; }
+.fm-topic-sub { color: var(--cream-dim); font-size: 12.5px; line-height: 1.5; }
+
+#fm-newform {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#fm-newform .cms-subtitle { margin-bottom: 0; }
+.fm-form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+.fm-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; }
+.fm-page-info { color: var(--cream-dim); font-size: 13px; }
+
+.fm-back { margin-bottom: 14px; }
+.fm-topic-meta { color: var(--cream-dim); font-size: 13px; margin-top: 6px; }
+.fm-topic-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.fm-mini-btn { font-size: 12px; padding: 4px 10px; }
+.fm-danger { border-color: rgba(255, 120, 100, 0.5); color: #ff9d8e; }
+.fm-danger:hover { border-color: #ff7864; color: #ffb4a8; }
+
+.fm-posts { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.fm-post {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.fm-post-best { border-color: #4caf7d; box-shadow: 0 0 0 1px rgba(76, 175, 125, 0.35); }
+.fm-post-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.fm-post-author { color: var(--gold); font-weight: 600; }
+.fm-post-date { color: var(--cream-dim); margin-left: auto; }
+.fm-post-body { color: var(--cream); font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.fm-post-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+/* -- Обратная связь ------------------------------------- */
+.fb-form { max-width: 560px; }
+.fb-form textarea { resize: vertical; line-height: 1.5; }
+.fb-mine { display: flex; flex-direction: column; gap: 10px; }
+.fb-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+.fb-item-cat { color: var(--gold); font-weight: 600; }
+.fb-item-date { color: var(--cream-dim); margin-left: auto; font-size: 12px; }
+.fb-item-body { color: var(--cream); font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.fb-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+.fb-new { border-color: var(--gold); color: var(--gold); }
+.fb-read { border-color: #5b8fd0; color: #9dc2f0; }
+.fb-closed { border-color: #4caf7d; color: #7fe0ab; }
+.fb-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.fb-tab.active { border-color: var(--gold); color: var(--gold); }
+.fb-tab.active:hover { color: var(--gold-light); }
+
+/* Подсказка «что стоит указать» — меняется вместе с категорией */
+.fb-hint {
+  margin: 2px 0 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cream-dim);
+  border-left: 2px solid var(--gold);
+  padding-left: 10px;
+}
+.fb-counter { margin: 4px 0 0; font-size: 12px; color: var(--cream-dim); text-align: right; }
+.fb-counter-over { color: var(--gold); }
+
+/* Куда что писать: обратная связь против форума */
+.fb-routing {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.fb-routing .cms-subtitle { margin-bottom: 6px; }
+.fb-routing-item { font-size: 13.5px; line-height: 1.55; color: var(--cream-dim); margin: 6px 0; }
+.fb-routing-private { border-left: 2px solid var(--gold); padding-left: 10px; }
+.fb-link { color: var(--gold); text-decoration: none; border-bottom: 1px solid transparent; }
+.fb-link:hover { color: var(--gold-light); border-bottom-color: var(--gold-light); }
+
+/* Ответ команды — виден игроку в «Мои обращения» и модератору в админке */
+.fb-reply {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-left: 2px solid #4caf7d;
+  background: rgba(76, 175, 125, 0.08);
+  border-radius: 0 8px 8px 0;
+}
+.fb-reply-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7fe0ab;
+  margin-bottom: 4px;
+}
+.fb-reply-body {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--cream);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Форма ответа в очереди админки */
+.fb-reply-form { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.fb-reply-form textarea { resize: vertical; line-height: 1.5; font-size: 13.5px; }
+.fb-reply-actions { display: flex; flex-wrap: wrap; gap: 8px; }

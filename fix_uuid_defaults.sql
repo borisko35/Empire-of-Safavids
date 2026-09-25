@@ -1,0 +1,71 @@
+-- Create a simple UUID generator function that doesn't require external extensions
+CREATE OR REPLACE FUNCTION generate_uuid_v4() RETURNS uuid AS $$
+BEGIN
+  RETURN md5(random()::text || clock_timestamp()::text)::uuid;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Set the default for all tables that previously used uuid_generate_v4()
+ALTER TABLE users ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE characters ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guilds ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE auction_listings ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE crafting_jobs ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE mailbox ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE notifications ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE bounties ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE user_sessions ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE payments ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE admin_grants ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE dungeon_sessions ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE dungeon_history ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE parties ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE party_invites ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE trade_contracts ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE trade_history ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE trade_listings ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_quests ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_items ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_equipment ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_titles ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_reputation ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_achievements ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_daily_progress ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_mounts ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_mutes ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE character_pets ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE crafting_skills ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE friends ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guild_bank ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guild_logs ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guild_members ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guild_skills ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE guild_territories ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE leaderboard ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE login_history ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE party_members ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE party_progress ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE premium_subscriptions ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE promo_codes ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE promo_uses ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE pvp_arena ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE pvp_rankings ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE world_boss_kills ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE world_boss_schedule ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE anticheat_violations ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE battle_pass_progress ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE daily_tasks ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE dungeon_attempts ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE dungeon_boss_progress ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE dungeon_members ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE endless_tower ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE item_enchants ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE player_houses ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE house_decorations ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE trade_caravans ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE achievements ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE analytics_events ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE combat_logs ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+ALTER TABLE notifications ALTER COLUMN id SET DEFAULT generate_uuid_v4();
+
+SELECT 'UUID generator function created and defaults set' as status;

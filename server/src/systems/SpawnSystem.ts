@@ -29,16 +29,23 @@ function makePoint(p: Omit<SpawnPoint, 'counts' | 'lastDeath'>): SpawnPoint {
   return { ...p, counts: new Map(), lastDeath: {} };
 }
 
+// Исфахан (столица): мобы внутри стен не спавнятся.
+// Координаты продублированы из клиента (game3d/terrain.ts CITY) намеренно:
+// сервер не тянет клиентский модуль, а стены двигаются редко.
+const ISFAHAN = { x: 34, z: 26, radius: 116 };
+
 // Точки спавна (шаблон; экземпляры создаются на каждый активный шард)
 const SPAWN_POINTS: SpawnPoint[] = [
   // ─ Тебриз
-  makePoint({ id: 'sp_tabriz_01', monsterId: 'mob_bandit_scout',   region: Region.TABRIZ,      position: { x: 100, y: 0, z: 80  }, maxCount: 5, respawnTime: 60,   weatherBonus: {} }),
+  makePoint({ id: 'sp_tabriz_01', monsterId: 'mob_bandit_scout',   region: Region.TABRIZ,      position: { x: 143, y: 0, z: 115 }, maxCount: 5, respawnTime: 60,   weatherBonus: {} }),
   makePoint({ id: 'sp_tabriz_02', monsterId: 'mob_bandit_warrior', region: Region.TABRIZ,      position: { x: -80, y: 0, z: 120 }, maxCount: 3, respawnTime: 90,   weatherBonus: { fog: 1.5 } }),
+  makePoint({ id: 'sp_tabriz_scorp', monsterId: 'mob_desert_scorpion', region: Region.TABRIZ,   position: { x: 220, y: 0, z: 70  }, maxCount: 4, respawnTime: 45,   weatherBonus: { sandstorm: 2.0 } }),
+  makePoint({ id: 'sp_tabriz_wolf',  monsterId: 'mob_wolf',         region: Region.TABRIZ,      position: { x: -90, y: 0, z: 130 }, maxCount: 3, respawnTime: 60,   weatherBonus: { fog: 1.5 } }),
   // ─ Шираз
-  makePoint({ id: 'sp_shir_01',   monsterId: 'mob_bandit_scout',   region: Region.SHIRAZ,      position: { x: 90,  y: 0, z: -60 }, maxCount: 4, respawnTime: 75,   weatherBonus: {} }),
+  makePoint({ id: 'sp_shir_01',   monsterId: 'mob_bandit_scout',   region: Region.SHIRAZ,      position: { x: 110, y: 0, z: -91 }, maxCount: 4, respawnTime: 75,   weatherBonus: {} }),
   makePoint({ id: 'sp_shir_02',   monsterId: 'mob_fog_assassin',   region: Region.SHIRAZ,      position: { x: -110, y: 0, z: -90 }, maxCount: 2, respawnTime: 240,  weatherBonus: { fog: 2.0 } }),
   // ─ Кавказ
-  makePoint({ id: 'sp_cauc_01',   monsterId: 'mob_mongol_raider',  region: Region.CAUCASUS,    position: { x: 60,  y: 0, z: 140 }, maxCount: 4, respawnTime: 120,  weatherBonus: { snow: 1.4 } }),
+  makePoint({ id: 'sp_cauc_01',   monsterId: 'mob_mongol_raider',  region: Region.CAUCASUS,    position: { x: 66,  y: 0, z: 167 }, maxCount: 4, respawnTime: 120,  weatherBonus: { snow: 1.4 } }),
   makePoint({ id: 'sp_cauc_02',   monsterId: 'mob_bandit_warrior', region: Region.CAUCASUS,    position: { x: -140, y: 0, z: 160 }, maxCount: 3, respawnTime: 150,  weatherBonus: {} }),
   // ─ Месопотамия
   makePoint({ id: 'sp_meso_01',   monsterId: 'mob_ottoman_janissary', region: Region.MESOPOTAMIA, position: { x: 200, y: 0, z: 50  }, maxCount: 4, respawnTime: 300,  weatherBonus: { sandstorm: 1.3 } }),
@@ -135,6 +142,13 @@ export class SpawnSystem {
   private spawnMonster(sp: SpawnPoint, shardId: string): void {
     const def = MONSTERS_DATABASE[sp.monsterId];
     if (!def) return;
+
+    // Страховка от расширения города: не спавнить внутри стен Исфахана.
+    // (точки уже вынесены, это защита от будущих правок данных)
+    if (Math.hypot(sp.position.x - ISFAHAN.x, sp.position.z - ISFAHAN.z) < ISFAHAN.radius + 15) {
+      logger.debug(`[Spawn] skipped ${sp.id}: inside city walls`);
+      return;
+    }
 
     // Случайный разброс позиции
     const jitter = 5;

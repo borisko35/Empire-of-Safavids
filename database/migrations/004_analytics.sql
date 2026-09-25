@@ -1,4 +1,4 @@
--- Migration 004: Analytics
+﻿-- Migration 004: Analytics
 CREATE TABLE analytics_events (
   id           BIGSERIAL,
   event        VARCHAR(50) NOT NULL,

@@ -23,6 +23,9 @@ export interface Character {
   region: string;
   serverId: string;
   gold: number;
+  azens?: number;
+  isfahanSilver?: number;
+  syrianGold?: number;
 }
 
 export interface SkillDef {
@@ -53,6 +56,8 @@ export interface QuestObjectiveDef {
   target: string;
   required: number;
   optional: boolean;
+  /** Точки спавна монстров для навигации (используются когда монстры ещё не появились в мире) */
+  spawnPoints?: { x: number; z: number }[];
 }
 
 export interface QuestDef {
@@ -64,6 +69,8 @@ export interface QuestDef {
   minLevel: number;
   requiredRegion?: string;
   objectives: QuestObjectiveDef[];
+  /** id квестодателя (из server/src/data/quests.ts) — цель сдачи квеста */
+  npcGiver?: string;
   npcGiverRegion: string;
   rewards: { experience: number; gold: number; items?: { itemId: string; quantity: number }[] };
 }
@@ -73,6 +80,8 @@ export const session = {
   token: localStorage.getItem('eos_token') ?? '',
   userId: localStorage.getItem('eos_user_id') ?? '',
   username: localStorage.getItem('eos_username') ?? '',
+  isAdmin: false,
+  isAdminRole: 'gm',
   character: null as Character | null,
   skills: [] as SkillDef[],
   /** Локальные ресурсы (сервер их не стримит — поддерживаем сами, ресинк по событиям) */
@@ -98,6 +107,8 @@ export function clearAuth(): void {
   session.token = '';
   session.userId = '';
   session.username = '';
+  session.isAdmin = false;
+  session.isAdminRole = 'gm';
   session.character = null;
   session.skills = [];
   localStorage.removeItem('eos_token');

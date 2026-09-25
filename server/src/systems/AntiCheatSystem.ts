@@ -55,23 +55,30 @@ export class AntiCheatSystem {
     const last = this.lastPositions.get(characterId);
 
     if (last) {
-      const dt = (now - last.time) / 1000; // секунды
-      if (dt <= 0) return { valid: true };
+      const rawDt = (now - last.time) / 1000; // секунды
+      if (rawDt <= 0) return { valid: true };
 
       const dx = newPos.x - last.pos.x;
       const dy = newPos.y - last.pos.y;
       const dz = newPos.z - last.pos.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const speed = distance / dt;
+
+      // Клиент шлёт позицию каждые ~100мс. При сетевых задержках пакеты
+      // приходят пачками (два пакета за 10-30мс): измеренный dt тогда
+      // в разы меньше реального времени движения, и честная скорость
+      // бега 7.6 u/s превращается в ложные 20+ u/s. Ограничиваем dt
+      // снизу интервалом отправки клиента — скученность пакетов не
+      // должна раздувать скорость.
+      const dt = Math.max(rawDt, 0.08);
 
       // Проверка телепорта
       if (distance > MAX_TELEPORT_DISTANCE && dt < 0.5) {
-        return { valid: false, reason: `Teleport detected: ${distance.toFixed(1)}m in ${dt.toFixed(2)}s` };
+        return { valid: false, reason: `Teleport detected: ${distance.toFixed(1)}m in ${dt.toFixed(2)}s @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
       }
 
       // Проверка speed hack
-      if (speed > MAX_SPEED * 1.3) { // +30% толерантность
-        return { valid: false, reason: `Speed hack: ${speed.toFixed(1)} u/s (max ${MAX_SPEED})` };
+      if (distance / dt > MAX_SPEED * 1.3) { // +30% толерантность
+        return { valid: false, reason: `Speed hack: ${(distance / dt).toFixed(1)} u/s (max ${MAX_SPEED}) @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
       }
     }
 
@@ -83,7 +90,7 @@ export class AntiCheatSystem {
   // Проверка урона
   // ============================================================
   validateDamage(
-    characterId: string,
+    _characterId: string,
     damage: number,
     baseDamage: number
   ): { valid: boolean; reason?: string } {
@@ -172,5 +179,12 @@ export class AntiCheatSystem {
   cleanup(characterId: string): void {
     this.lastPositions.delete(characterId);
     this.packetCounters.delete(characterId);
+  }
+
+  // Сброс базовой позиции после серверного телепорта (респавн, смена
+  // региона, вход в игру): иначе следующий пакет движения сравнивается
+  // со старой точкой и даёт ложные speed_hack/teleport.
+  resetPosition(characterId: string, pos: Vector3): void {
+    this.lastPositions.set(characterId, { pos: { ...pos }, time: Date.now() });
   }
 }

@@ -72,6 +72,12 @@ export interface Character {
   serverId: string;
   guildId?: string;
   gold: number;
+  /** Премиум-валюта AZENS (АЗЭНы) — покупка за реальные деньги */
+  azens?: number;
+  /** Исфаханское серебро — бесплатно в квестах, торговле, ивентах */
+  isfahanSilver?: number;
+  /** Сирийское золото — бесплатно в квестах, торговле, ивентах */
+  syrianGold?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -107,6 +113,12 @@ export interface Guild {
   level: number;
   territory?: Region;
   gold: number;
+  /** Премиум-валюта AZENS (АЗЭНы) — покупка за реальные деньги */
+  azens?: number;
+  /** Исфаханское серебро — бесплатно в квестах, торговле, ивентах */
+  isfahanSilver?: number;
+  /** Сирийское золото — бесплатно в квестах, торговле, ивентах */
+  syrianGold?: number;
   createdAt: Date;
 }
 

@@ -4,7 +4,7 @@ import { Character, CharacterClass, CharacterStats, Region, ItemType } from '../
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ITEMS_DATABASE } from '../data/items';
-import { MAX_LEVEL, DEFAULT_SERVER_ID } from '../../../shared/constants';
+import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -53,7 +53,7 @@ export class CharacterService {
       maxMana,
       stamina: maxStamina,
       maxStamina,
-      position: { x: 0, y: 0, z: 0 }, // Стартовая позиция в Тебризе
+      position: { x: 0, y: 0, z: 0 }, // Площадь возрождения у ворот Исфахана (суша, см. REGION_SPAWNS)
       region: Region.TABRIZ,
       serverId,
       gold: 100,
@@ -76,6 +76,59 @@ export class CharacterService {
     );
 
     return character;
+  }
+
+  /**
+   * Удаление персонажа со всеми зависимостями, у которых нет каскада.
+   * Глава гильдии удалиться не может — сначала передать лидерство.
+   */
+  async deleteCharacter(characterId: string): Promise<void> {
+    await this.db.transaction(async (client) => {
+      const own = await client.query('SELECT id FROM characters WHERE id = $1', [characterId]);
+      if (own.rowCount === 0) throw new Error('Character not found');
+      const leaderOf = await client.query('SELECT id FROM guilds WHERE leader_id = $1', [characterId]);
+      if ((leaderOf.rowCount ?? 0) > 0) {
+        throw new Error('Guild leader cannot be deleted: transfer leadership first');
+      }
+      // Партии: выйти; если лидер — передать старейшему участнику
+      const ledParties = await client.query('SELECT id FROM parties WHERE leader_id = $1', [characterId]);
+      for (const row of ledParties.rows as { id: string }[]) {
+        const other = await client.query(
+          `SELECT character_id FROM party_members WHERE party_id = $1 AND character_id <> $2
+           ORDER BY joined_at LIMIT 1`,
+          [row.id, characterId]
+        );
+        if (other.rowCount === 0) {
+          await client.query('DELETE FROM parties WHERE id = $1', [row.id]);
+        } else {
+          const next = (other.rows[0] as { character_id: string }).character_id;
+          await client.query('UPDATE parties SET leader_id = $1 WHERE id = $2', [next, row.id]);
+          await client.query(
+            `UPDATE party_members SET role = 'leader' WHERE party_id = $1 AND character_id = $2`,
+            [row.id, next]
+          );
+        }
+      }
+      await client.query('DELETE FROM party_members WHERE character_id = $1', [characterId]);
+      await client.query('DELETE FROM party_invites WHERE inviter_id = $1 OR target_id = $1', [characterId]);
+      // Аукцион и торговые стенды: снять свои лоты
+      await client.query('DELETE FROM auction_listings WHERE seller_id = $1 OR buyer_id = $1', [characterId]);
+      await client.query('DELETE FROM trade_listings WHERE seller_id = $1', [characterId]);
+      await client.query('DELETE FROM trade_history WHERE seller_id = $1 OR buyer_id = $1', [characterId]);
+      await client.query('DELETE FROM trade_contracts WHERE seller_id = $1 OR buyer_id = $1', [characterId]);
+      // PvP-арена и награды за голову с участием
+      await client.query(
+        'DELETE FROM pvp_arena WHERE player1_id = $1 OR player2_id = $1 OR winner_id = $1',
+        [characterId]
+      );
+      await client.query(
+        'DELETE FROM bounties WHERE placer_id = $1 OR target_id = $1 OR claimer_id = $1',
+        [characterId]
+      );
+      // Вклады в банк гильдии — обезличить, историю сохранить
+      await client.query('UPDATE guild_bank SET deposited_by = NULL WHERE deposited_by = $1', [characterId]);
+      await client.query('DELETE FROM characters WHERE id = $1', [characterId]);
+    });
   }
 
   async getCharactersByUser(userId: string): Promise<Character[]> {
@@ -156,20 +209,26 @@ export class CharacterService {
   }
 
   /** Возрождение после смерти: пол-HP на стартовой точке региона. */
-  async respawn(characterId: string): Promise<{ hp: number; maxHp: number }> {
+  async respawn(characterId: string): Promise<{ hp: number; maxHp: number; position: { x: number; y: number; z: number } }> {
+    const current = await this.db.queryOne<{ region: string }>(
+      'SELECT region FROM characters WHERE id = $1',
+      [characterId]
+    );
+    const spawn = getRegionSpawn(current?.region ?? Region.TABRIZ);
+    const position = { x: spawn.x, y: 0, z: spawn.z };
     const row = await this.db.queryOne<{ hp: number; max_hp: number }>(
       `UPDATE characters SET
          hp = GREATEST(1, FLOOR(max_hp * 0.5)),
          mana = GREATEST(FLOOR(max_mana * 0.5), 0),
          stamina = max_stamina,
-         position = '{"x":0,"y":0,"z":0}'::jsonb,
+         position = $2::jsonb,
          updated_at = NOW()
        WHERE id = $1
        RETURNING hp, max_hp`,
-      [characterId]
+      [characterId, JSON.stringify(position)]
     );
     if (!row) throw new Error('Character not found');
-    return { hp: row.hp, maxHp: row.max_hp };
+    return { hp: row.hp, maxHp: row.max_hp, position };
   }
 
   /** Максимальный уровень (из общих констант) */
@@ -224,6 +283,114 @@ export class CharacterService {
     );
     if (!row) throw new Error('Insufficient gold');
     return Number(row.gold);
+  }
+
+  /** Начислить AZENS (премиум-валюта). Возвращает новый баланс. */
+  async addAzens(characterId: string, amount: number): Promise<number> {
+    const row = await this.db.queryOne<{ azens: number }>(
+      'UPDATE characters SET azens = azens + $1 WHERE id = $2 RETURNING azens',
+      [Math.max(0, amount), characterId]
+    );
+    if (!row) throw new Error('Character not found');
+    return Number(row.azens);
+  }
+
+  /** Атомарно списать AZENS. Бросает ошибку при нехватке. Возвращает остаток. */
+  async spendAzens(characterId: string, amount: number): Promise<number> {
+    const cost = Math.max(0, amount);
+    const row = await this.db.queryOne<{ azens: number }>(
+      'UPDATE characters SET azens = azens - $1 WHERE id = $2 AND azens >= $1 RETURNING azens',
+      [cost, characterId]
+    );
+    if (!row) throw new Error('Insufficient AZENS');
+    return Number(row.azens);
+  }
+
+  /** Начислить исфаханское серебро (бесплатная валюта квестов/ивентов). */
+  async addSilver(characterId: string, amount: number): Promise<number> {
+    const row = await this.db.queryOne<{ isfahan_silver: number }>(
+      'UPDATE characters SET isfahan_silver = isfahan_silver + $1 WHERE id = $2 RETURNING isfahan_silver',
+      [Math.max(0, Math.floor(amount)), characterId]
+    );
+    if (!row) throw new Error('Character not found');
+    return Number(row.isfahan_silver);
+  }
+
+  /** Начислить сирийское золото (бесплатная валюта квестов/ивентов). */
+  async addSyrianGold(characterId: string, amount: number): Promise<number> {
+    const row = await this.db.queryOne<{ syrian_gold: number }>(
+      'UPDATE characters SET syrian_gold = syrian_gold + $1 WHERE id = $2 RETURNING syrian_gold',
+      [Math.max(0, Math.floor(amount)), characterId]
+    );
+    if (!row) throw new Error('Character not found');
+    return Number(row.syrian_gold);
+  }
+
+  /** Атомарно списать исфаханское серебро. Бросает ошибку при нехватке. */
+  async spendSilver(characterId: string, amount: number): Promise<number> {
+    const cost = Math.max(0, Math.floor(amount));
+    const row = await this.db.queryOne<{ isfahan_silver: number }>(
+      'UPDATE characters SET isfahan_silver = isfahan_silver - $1 WHERE id = $2 AND isfahan_silver >= $1 RETURNING isfahan_silver',
+      [cost, characterId]
+    );
+    if (!row) throw new Error('Insufficient Isfahan silver');
+    return Number(row.isfahan_silver);
+  }
+
+  /** Атомарно списать сирийское золото. Бросает ошибку при нехватке. */
+  async spendSyrianGold(characterId: string, amount: number): Promise<number> {
+    const cost = Math.max(0, Math.floor(amount));
+    const row = await this.db.queryOne<{ syrian_gold: number }>(
+      'UPDATE characters SET syrian_gold = syrian_gold - $1 WHERE id = $2 AND syrian_gold >= $1 RETURNING syrian_gold',
+      [cost, characterId]
+    );
+    if (!row) throw new Error('Insufficient Syrian gold');
+    return Number(row.syrian_gold);
+  }
+
+  /** Атомный обмен свободных валют (золото/серебро/сирийское золото). */
+  async exchange(
+    characterId: string,
+    debit: 'gold' | 'isfahan_silver' | 'syrian_gold',
+    debitAmount: number,
+    credit: 'gold' | 'isfahan_silver' | 'syrian_gold',
+    creditAmount: number
+  ): Promise<{ gold: number; silver: number; syrian: number }> {
+    const cols = ['gold', 'isfahan_silver', 'syrian_gold'] as const;
+    if (!cols.includes(debit) || !cols.includes(credit) || debit === credit) {
+      throw new Error('Bad exchange pair');
+    }
+    const give = Math.max(1, Math.floor(debitAmount));
+    const get = Math.max(1, Math.floor(creditAmount));
+    const row = await this.db.queryOne<{ gold: number; isfahan_silver: number; syrian_gold: number }>(
+      `UPDATE characters SET ${debit} = ${debit} - $1, ${credit} = ${credit} + $2
+       WHERE id = $3 AND ${debit} >= $1
+       RETURNING gold, isfahan_silver, syrian_gold`,
+      [give, get, characterId]
+    );
+    if (!row) throw new Error('Insufficient funds for exchange');
+    return { gold: Number(row.gold), silver: Number(row.isfahan_silver), syrian: Number(row.syrian_gold) };
+  }
+
+  /** Точный поиск персонажа по имени (для подарков). */
+  async getCharacterByNameExact(name: string): Promise<Character | null> {
+    const row = await this.db.queryOne<Record<string, unknown>>(
+      'SELECT * FROM characters WHERE name = $1',
+      [name]
+    );
+    if (!row) return null;
+    return this.parseJsonFields(camelizeRow<Character>(row)!);
+  }
+
+  /** Долговая политика: при минусе по AZENS (чарджбэк/рефанд) любые траты
+   *  запрещены до погашения. Проверять перед каждой тратой AZENS. */
+  async assertSolvent(characterId: string): Promise<void> {
+    const row = await this.db.queryOne<{ azens: number }>(
+      'SELECT azens FROM characters WHERE id = $1',
+      [characterId]
+    );
+    if (!row) throw new Error('Character not found');
+    if (Number(row.azens) < 0) throw new Error('AZENS debt: top up to continue');
   }
 
   /** Сменить регион персонажа (путешествие). Возвращает обновлённого персонажа. */

@@ -154,9 +154,10 @@ export class AuthService {
     const user = await this.db.queryOne<{
       id: string; username: string; email: string;
       is_banned: boolean; ban_reason: string | null; ban_until: Date | null;
+      is_admin: boolean; admin_role: string | null;
       created_at: Date; last_login_at: Date;
     }>(
-      'SELECT id, username, email, is_banned, ban_reason, ban_until, created_at, last_login_at FROM users WHERE id = $1',
+      'SELECT id, username, email, is_banned, ban_reason, ban_until, is_admin, admin_role, created_at, last_login_at FROM users WHERE id = $1',
       [userId]
     );
     if (!user) return null;
@@ -180,6 +181,8 @@ export class AuthService {
       username: user.username,
       email: user.email,
       isPremium: !!premiumRow,
+      isAdmin: !!user.is_admin,
+      adminRole: user.admin_role ?? 'gm',
       isBanned: user.is_banned,
       banReason: user.ban_reason ?? undefined,
       banUntil: user.ban_until ? new Date(user.ban_until) : undefined,
@@ -264,6 +267,11 @@ export class AuthService {
     await this.redis.del(`auth:attempts:${ip}`);
   }
 
+  /** Сброс счётчика попыток (для разработчика) */
+  async resetRateLimit(ip: string): Promise<void> {
+    await this.redis.del(`auth:attempts:${ip}`);
+  }
+
   // ============================================================
   // ПРОВЕРКА УНИКАЛЬНОСТИ (для REST-роутов)
   // ============================================================
@@ -279,6 +287,22 @@ export class AuthService {
       'SELECT id FROM users WHERE email = $1', [email.toLowerCase()]
     );
     return !existing;
+  }
+
+  // ============================================================
+  // СБРОС ПАРОЛЯ (для разработчика)
+  // ============================================================
+  async resetPassword(email: string, newPassword: string): Promise<void> {
+    const user = await this.db.queryOne<{ id: string }>(
+      'SELECT id FROM users WHERE email = $1', [email.toLowerCase()]
+    );
+    if (!user) throw this.authError('user_not_found');
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await this.db.query(
+      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      [newHash, user.id]
+    );
+    logger.info(`[Auth] Password reset for: ${email}`);
   }
 
   private authError(code: AuthError, message?: string): Error {

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // HUD: рамки, навыки, чат, панели, тосты — Empire of Safavids
 // ============================================================
 
@@ -35,6 +35,8 @@ export function refreshBars(): void {
   $('hud-level').textContent = `${t('badges.level')} ${s.level}`;
   $('hud-gold').textContent = `◉ ${s.character?.gold ?? 0}`;
   $('hud-region').textContent = REGION_NAMES[s.character?.region ?? ''] ?? s.character?.region ?? '';
+  const azEl = document.getElementById('hud-azens');
+  if (azEl) azEl.textContent = `AZENS ${s.character?.azens ?? 0}`;
 }
 
 const REGION_NAMES: Record<string, string> = {
@@ -111,10 +113,17 @@ function skillCooldownSeconds(id: string): number {
 }
 
 // ── Чат ──────────────────────────────────────────────────────
-export function chatMessage(name: string | null, text: string, system = false): void {
+export function chatMessage(name: string | null, text: string, system = false, role: 'owner' | 'admin' | 'moderator' | null = null): void {
   const log = $('chat-log');
   const msg = document.createElement('div');
   msg.className = 'msg' + (system ? ' sys' : '');
+  if (role) {
+    const badge = document.createElement('span');
+    badge.className = `chat-role role-${role}`;
+    badge.textContent = role === 'owner' ? 'OWNER' : role === 'admin' ? 'ADMIN' : 'MOD';
+    msg.append(badge);
+    msg.append(' ');
+  }
   if (name) {
     const b = document.createElement('b');
     b.textContent = `${name}: `;
@@ -127,7 +136,9 @@ export function chatMessage(name: string | null, text: string, system = false): 
 }
 
 export function chatVisible(): boolean {
-  return !$('chat-form').classList.contains('hidden');
+  // Режим печати = фокус в поле ввода (форма чата всегда видима в HUD,
+  // поэтому проверять hidden-класс нельзя — движение блокировалось навсегда).
+  return document.activeElement === document.getElementById('chat-text');
 }
 
 export function openChat(): HTMLInputElement {
@@ -139,7 +150,7 @@ export function openChat(): HTMLInputElement {
 }
 
 export function closeChat(): void {
-  $('chat-form').classList.add('hidden');
+  // Форму не прячем (она часть HUD) — просто убираем фокус, чтобы WASD снова работали.
   ($('chat-text') as HTMLInputElement).blur();
 }
 
@@ -192,6 +203,12 @@ export async function loadRegions(): Promise<void> {
   }
 }
 
+/** Русские названия типов квестов (в данных — англ. идентификаторы) */
+const QUEST_TYPE_RU: Record<string, string> = {
+  main: 'Основной', side: 'Побочный', daily: 'Ежедневный',
+  class: 'Классовый', world: 'Мировой',
+};
+
 export async function loadQuests(): Promise<void> {
   try {
     const { quests } = await api.quests();
@@ -211,7 +228,7 @@ export async function loadQuests(): Promise<void> {
     }
 
     const available = quests.filter(
-      (q) => q.minLevel <= level + 2 && (!q.requiredRegion || q.requiredRegion === region),
+      (q) => q.minLevel <= level + 10 && (!q.requiredRegion || q.requiredRegion === region),
     );
     const list = available.slice(0, 8);
     if (!list.length) {
@@ -241,7 +258,7 @@ export async function loadQuests(): Promise<void> {
       else if (status === 'active') statusLine = `<div class="qstatus">${t('world.in_progress')}</div>`;
 
       card.innerHTML =
-        `<div class="qtype">${q.type} · ${t('badges.level')} ${q.minLevel}+</div>` +
+        `<div class="qtype">${QUEST_TYPE_RU[q.type] ?? q.type} · ${t('badges.level')} ${q.minLevel}+</div>` +
         `<b>${title}</b>` +
         `<div class="qdesc">${q.description}</div>` +
         objectives +
@@ -393,6 +410,16 @@ export async function loadInventory(): Promise<void> {
           await loadInventory();
         }));
       }
+      // Продать предмет в ближайший магазин (45% от цены)
+      actions.append(invBtn(t('world.sell'), async () => {
+        const shopId = nearestShopId();
+        if (!shopId) throw new Error('Нет доступного магазина рядом');
+        const res = await api.shopSell(shopId, cid, it.itemId, it.quantity);
+        if (session.character) session.character.gold = res.gold;
+        refreshBars();
+        toast(`${t('world.sold')} · +${res.goldGained} ${t('world.gold')}`, 'success');
+        await loadInventory();
+      }));
       row.append(actions);
       box.append(row);
     }
@@ -401,17 +428,150 @@ export async function loadInventory(): Promise<void> {
   }
 }
 
+// Ближайший магазин к текущей позиции персонажа.
+// Возвращает id магазина (shop_isfahan_bazaar, shop_tabriz_general и т.д.)
+const SHOP_LOCATIONS: { id: string; x: number; z: number }[] = [
+  { id: 'shop_isfahan_bazaar', x: 15, z: 2 },     // Джафар у аркады
+  { id: 'shop_tabriz_general', x: -350, z: -575 }, // у истоков реки А
+  { id: 'shop_khorasan_rare', x: 505, z: 55 },     // караван-сарай
+];
+export function nearestShopId(): string | null {
+  if (!session.character || !session.character.position) return null;
+  const cx = session.character.position.x ?? 0;
+  const cz = session.character.position.z ?? 0;
+  let best: { id: string; dist: number } | null = null;
+  for (const s of SHOP_LOCATIONS) {
+    const d = Math.hypot(s.x - cx, s.z - cz);
+    if (!best || d < best.dist) best = { id: s.id, dist: d };
+  }
+  return best && best.dist < 300 ? best.id : null;
+}
+
 // ── Мини-карта ───────────────────────────────────────────────
-const MINIMAP_RANGE = 120; // мировых единиц по горизонтали от игрока
+import {
+  CITY, CAMP, PORT, CARAVANSERAI, VILLAGE, FORT, LAKE, POND, WORLD_HALF,
+  biomeAt, isRoad, terrainHeight,
+} from './game3d/terrain';
+
+const MINIMAP_RANGE = 180;   // мировых единиц по горизонтали от игрока
+const TERRAIN_PAD = 24;      // запас слоя террейна (мировые единицы)
+const TERRAIN_SNAP = 16;     // шаг привязки слоя к сетке мира
+
+const MINIMAP_SETTLEMENTS: { x: number; z: number; nameRu: string; icon: string; r: number }[] = [
+  { x: CITY.x, z: CITY.z, nameRu: 'Исфахан', icon: '🏰', r: CITY.radius },
+  { x: CAMP.x, z: CAMP.z, nameRu: 'Лагерь', icon: '⛺', r: 30 },
+  { x: PORT.x, z: PORT.z, nameRu: 'Пристань', icon: '⚓', r: 30 },
+  { x: CARAVANSERAI.x, z: CARAVANSERAI.z, nameRu: 'Караван-сарай', icon: '🐫', r: 30 },
+  { x: VILLAGE.x, z: VILLAGE.z, nameRu: 'Деревня', icon: '🏡', r: 30 },
+  { x: FORT.x, z: FORT.z, nameRu: 'Форт', icon: '🏔', r: 30 },
+];
+
+let lastMinimapRegion = '';
+
+// ── Кэш слоя террейна: биомы рисуются один раз на «клетку» мира ──
+// Пересчитывать биомы (fbm-шум) на каждый кадр мини-карты дорого,
+// поэтому слой собирается только когда игрок сместился на TERRAIN_SNAP.
+let terrainLayer: HTMLCanvasElement | null = null;
+let terrainOrigin = { x: 0, z: 0 };
+let terrainExtent = 0;   // мировых единиц на сторону слоя
+let terrainSizePx = 0;
+
+const BIOME_COLORS: Record<string, [number, number, number]> = {
+  water: [26, 82, 128],
+  desert: [201, 168, 106],
+  forest: [58, 102, 56],
+  mountain: [122, 112, 100],
+  field: [108, 138, 72],
+};
+const ROAD_COLOR: [number, number, number] = [138, 122, 90];
+
+function buildTerrainLayer(cx: number, cz: number, sizePx: number): HTMLCanvasElement {
+  const snap = (v: number): number => Math.round(v / TERRAIN_SNAP) * TERRAIN_SNAP;
+  const extent = MINIMAP_RANGE * 2 + TERRAIN_PAD * 2;
+  const ox = snap(cx) - MINIMAP_RANGE - TERRAIN_PAD;
+  const oz = snap(cz) - MINIMAP_RANGE - TERRAIN_PAD;
+
+  const cvs = document.createElement('canvas');
+  cvs.width = sizePx; cvs.height = sizePx;
+  const c = cvs.getContext('2d');
+  if (!c) return cvs;
+
+  const img = c.createImageData(sizePx, sizePx);
+  const data = img.data;
+  // Шаг выборки 2 пикселя: 90² ≈ 8k вызовов шума на пересборку — приемлемо
+  const step = 2;
+  const cell = extent / sizePx;
+  for (let py = 0; py < sizePx; py += step) {
+    for (let px = 0; px < sizePx; px += step) {
+      const wx = ox + (px + 0.5) * cell;
+      const wz = oz + (py + 0.5) * cell;
+      let col: [number, number, number];
+      const biome = biomeAt(wx, wz);
+      if (isRoad(wx, wz) && biome !== 'water') {
+        col = ROAD_COLOR;
+      } else {
+        col = BIOME_COLORS[biome] ?? BIOME_COLORS.field;
+        // Лёгкая высотная подсветка: горы и возвышенности читаются объёмно
+        if (biome === 'mountain' || biome === 'field' || biome === 'desert') {
+          const h = terrainHeight(wx, wz);
+          const k = Math.max(0.82, Math.min(1.22, 1 + h / 160));
+          col = [col[0] * k, col[1] * k, col[2] * k];
+        }
+      }
+      for (let dy = 0; dy < step && py + dy < sizePx; dy++) {
+        for (let dx = 0; dx < step && px + dx < sizePx; dx++) {
+          const i = ((py + dy) * sizePx + (px + dx)) * 4;
+          data[i] = col[0]; data[i + 1] = col[1]; data[i + 2] = col[2]; data[i + 3] = 255;
+        }
+      }
+    }
+  }
+  c.putImageData(img, 0, 0);
+
+  // Вода: озёра и пруд поверх биомов (маска воды грубее реальной формы)
+  const toLayer = (wx: number, wz: number) => ({
+    x: ((wx - ox) / extent) * sizePx,
+    y: ((wz - oz) / extent) * sizePx,
+    r: (r: number) => (r / extent) * sizePx,
+  });
+  for (const body of [LAKE, POND]) {
+    const p = toLayer(body.x, body.z);
+    c.fillStyle = 'rgba(24, 74, 116, 0.85)';
+    c.beginPath();
+    c.arc(p.x, p.y, p.r(body.r), 0, Math.PI * 2);
+    c.fill();
+  }
+
+  // Поселения: контуры стен/заборов
+  c.strokeStyle = 'rgba(201, 168, 76, 0.75)';
+  c.lineWidth = Math.max(1.5, sizePx / 90);
+  for (const s of MINIMAP_SETTLEMENTS) {
+    const p = toLayer(s.x, s.z);
+    const r = p.r(s.nameRu === 'Исфахан' ? CITY.radius : 22);
+    c.beginPath();
+    c.arc(p.x, p.y, r, 0, Math.PI * 2);
+    c.stroke();
+    c.fillStyle = 'rgba(176, 148, 104, 0.28)';
+    c.fill();
+  }
+
+  terrainLayer = cvs;
+  terrainOrigin = { x: ox, z: oz };
+  terrainExtent = extent;
+  terrainSizePx = sizePx;
+  return cvs;
+}
 
 export function updateMinimap(
   me: { x: number; z: number },
   monsters: { x: number; z: number }[],
-): void {
+  npcs?: { x: number; z: number; nameRu: string }[],
+  route?: { x: number; z: number }[],
+): string {
   const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement | null;
-  if (!canvas) return;
+  if (!canvas) return lastMinimapRegion;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!ctx) return lastMinimapRegion;
 
   const size = canvas.width;
   const scale = size / (MINIMAP_RANGE * 2);
@@ -420,12 +580,27 @@ export function updateMinimap(
     y: size / 2 + (wz - me.z) * scale,
   });
 
+  // Фон — разноцветный слой биомов (кэш пересобирается при смещении)
   ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = 'rgba(7, 15, 27, 0.72)';
-  ctx.fillRect(0, 0, size, size);
+  const needLayer =
+    !terrainLayer || terrainSizePx !== size ||
+    Math.abs(me.x - (terrainOrigin.x + MINIMAP_RANGE + TERRAIN_PAD)) > TERRAIN_SNAP * 0.6 ||
+    Math.abs(me.z - (terrainOrigin.z + MINIMAP_RANGE + TERRAIN_PAD)) > TERRAIN_SNAP * 0.6;
+  if (needLayer) buildTerrainLayer(me.x, me.z, size);
+  if (terrainLayer) {
+    const ls = terrainSizePx / terrainExtent;   // px слоя на мировую единицу
+    const sw = size * (ls / scale);             // размер выборки в px слоя
+    // Игрок — точно в центр мини-карты: выборка центрируется на его позиции
+    const sx = (me.x - terrainOrigin.x) * ls - sw / 2;
+    const sy = (me.z - terrainOrigin.z) * ls - sw / 2;
+    ctx.drawImage(terrainLayer, sx, sy, sw, sw, 0, 0, size, size);
+  } else {
+    ctx.fillStyle = '#0a1628';
+    ctx.fillRect(0, 0, size, size);
+  }
 
   // Сетка
-  ctx.strokeStyle = 'rgba(201, 168, 76, 0.15)';
+  ctx.strokeStyle = 'rgba(20, 16, 8, 0.22)';
   ctx.lineWidth = 1;
   for (let i = 1; i < 4; i++) {
     const p = (size / 4) * i;
@@ -433,23 +608,259 @@ export function updateMinimap(
     ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(size, p); ctx.stroke();
   }
 
-  // Монстры
+  // Маршрут квеста (пунктир поверх биомов)
+  if (route && route.length > 1) {
+    ctx.strokeStyle = 'rgba(255, 217, 128, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    route.forEach((p, i) => {
+      const { x, y } = toPx(p.x, p.z);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Флажок конечной точки
+    const end = toPx(route[route.length - 1].x, route[route.length - 1].z);
+    if (end.x > 3 && end.y > 3 && end.x < size - 3 && end.y < size - 3) {
+      ctx.fillStyle = '#ffd980';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  // Поселения (значок + подпись)
+  let currentRegion = '';
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  for (const s of MINIMAP_SETTLEMENTS) {
+    const { x, y } = toPx(s.x, s.z);
+    if (x < -20 || y < -20 || x > size + 20 || y > size + 20) continue;
+    // Значок
+    ctx.font = '11px sans-serif';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(s.icon, x, y + 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(s.icon, x, y + 4);
+    // Подпись: белый текст с тёмной обводкой — читается на любом биоме
+    ctx.font = 'bold 9px sans-serif';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(s.nameRu, x, y - 7);
+    ctx.fillStyle = '#ffe9b8';
+    ctx.fillText(s.nameRu, x, y - 7);
+    // Определяем текущий регион
+    if (Math.hypot(me.x - s.x, me.z - s.z) < s.r) {
+      currentRegion = s.nameRu;
+    }
+  }
+  ctx.textAlign = 'left';
+
+  const dot = (x: number, y: number, fill: string, r: number): void => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+
+  // NPC (зелёные точки)
+  if (npcs) {
+    for (const npc of npcs) {
+      const { x, y } = toPx(npc.x, npc.z);
+      if (x < 2 || y < 2 || x > size - 2 || y > size - 2) continue;
+      dot(x, y, '#43e06a', 2.6);
+    }
+  }
+
+  // Монстры (красные точки)
   for (const m of monsters) {
     const { x, y } = toPx(m.x, m.z);
     if (x < 2 || y < 2 || x > size - 2 || y > size - 2) continue;
-    ctx.fillStyle = '#e85a4a';
+    dot(x, y, '#ff4f3d', 2.6);
+  }
+
+  // Игрок в центре (стрелка-треугольник)
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#1a1208';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(size / 2, size / 2 - 6);
+  ctx.lineTo(size / 2 - 4.5, size / 2 + 4);
+  ctx.lineTo(size / 2 + 4.5, size / 2 + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Рамка
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(0.75, 0.75, size - 1.5, size - 1.5);
+
+  if (currentRegion && currentRegion !== lastMinimapRegion) {
+    lastMinimapRegion = currentRegion;
+  }
+  return currentRegion;
+}
+
+// ── Карта мира (M): весь мир целиком ─────────────────────────
+let worldmapLayer: HTMLCanvasElement | null = null;
+let worldmapLayerW = 0;
+
+export function drawWorldMap(
+  me: { x: number; z: number },
+  monsters: { x: number; z: number }[],
+  npcs?: { x: number; z: number }[],
+  route?: { x: number; z: number }[],
+): void {
+  const canvas = document.getElementById('worldmap-canvas') as HTMLCanvasElement | null;
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const W = canvas.width, H = canvas.height;
+  const scale = Math.min(W, H) / (WORLD_HALF * 2);
+  const toPx = (wx: number, wz: number) => ({ x: W / 2 + wx * scale, y: H / 2 + wz * scale });
+
+  // Статичный слой террейна строится один раз (дорого — полный проход по биомам)
+  if (!worldmapLayer || worldmapLayerW !== W) {
+    const step = 3;
+    const layer = document.createElement('canvas');
+    layer.width = W; layer.height = H;
+    const c = layer.getContext('2d')!;
+    const img = c.createImageData(W, H);
+    for (let py = 0; py < H; py += step) {
+      for (let px = 0; px < W; px += step) {
+        const wx = (px - W / 2) / scale, wz = (py - H / 2) / scale;
+        let col: [number, number, number];
+        if (Math.abs(wx) > WORLD_HALF || Math.abs(wz) > WORLD_HALF) {
+          col = [10, 22, 40];
+        } else {
+          const biome = biomeAt(wx, wz);
+          const base = BIOME_COLORS[biome] ?? BIOME_COLORS.field;
+          col = [base[0], base[1], base[2]];
+        }
+        for (let dy = 0; dy < step && py + dy < H; dy++) {
+          for (let dx = 0; dx < step && px + dx < W; dx++) {
+            const i = ((py + dy) * W + (px + dx)) * 4;
+            img.data[i] = col[0]; img.data[i + 1] = col[1]; img.data[i + 2] = col[2]; img.data[i + 3] = 255;
+          }
+        }
+      }
+    }
+    c.putImageData(img, 0, 0);
+    // Вода и контуры поселений — тоже статика
+    for (const body of [LAKE, POND]) {
+      const p = toPx(body.x, body.z);
+      c.fillStyle = 'rgba(24, 74, 116, 0.9)';
+      c.beginPath();
+      c.arc(p.x, p.y, Math.max(2, body.r * scale), 0, Math.PI * 2);
+      c.fill();
+    }
+    c.strokeStyle = 'rgba(201, 168, 76, 0.8)';
+    c.lineWidth = 1.5;
+    for (const s of MINIMAP_SETTLEMENTS) {
+      const p = toPx(s.x, s.z);
+      const r = Math.max(3, (s.nameRu === 'Исфахан' ? CITY.radius : 22) * scale);
+      c.beginPath();
+      c.arc(p.x, p.y, r, 0, Math.PI * 2);
+      c.stroke();
+    }
+    worldmapLayer = layer;
+    worldmapLayerW = W;
+  }
+  ctx.drawImage(worldmapLayer, 0, 0);
+
+  // Сетка
+  ctx.strokeStyle = 'rgba(20, 16, 8, 0.3)';
+  ctx.lineWidth = 1;
+  for (let gx = -WORLD_HALF; gx <= WORLD_HALF; gx += 400) {
+    const p1 = toPx(gx, -WORLD_HALF), p2 = toPx(gx, WORLD_HALF);
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+    const q1 = toPx(-WORLD_HALF, gx), q2 = toPx(WORLD_HALF, gx);
+    ctx.beginPath(); ctx.moveTo(q1.x, q1.y); ctx.lineTo(q2.x, q2.y); ctx.stroke();
+  }
+
+  // Маршрут квеста
+  if (route && route.length > 1) {
+    ctx.strokeStyle = 'rgba(255, 217, 128, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 5]);
     ctx.beginPath();
-    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    route.forEach((p, i) => {
+      const { x, y } = toPx(p.x, p.z);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const end = toPx(route[route.length - 1].x, route[route.length - 1].z);
+    ctx.fillStyle = '#ffd980';
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Игрок в центре
-  ctx.fillStyle = '#f5f0e8';
+  // Поселения: значок + подпись
+  ctx.textAlign = 'center';
+  ctx.lineJoin = 'round';
+  for (const s of MINIMAP_SETTLEMENTS) {
+    const { x, y } = toPx(s.x, s.z);
+    ctx.font = '16px sans-serif';
+    ctx.fillText(s.icon, x, y + 6);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(s.nameRu, x, y - 12);
+    ctx.fillStyle = '#ffe9b8';
+    ctx.fillText(s.nameRu, x, y - 12);
+  }
+  ctx.textAlign = 'left';
+
+  const dot = (x: number, y: number, fill: string, r: number): void => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+  if (npcs) {
+    for (const n of npcs) {
+      const { x, y } = toPx(n.x, n.z);
+      dot(x, y, '#43e06a', 3);
+    }
+  }
+  for (const m of monsters) {
+    const { x, y } = toPx(m.x, m.z);
+    dot(x, y, '#ff4f3d', 3);
+  }
+
+  // Игрок — белый треугольник
+  const p = toPx(me.x, me.z);
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#1a1208';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, 4, 0, Math.PI * 2);
+  ctx.moveTo(p.x, p.y - 9);
+  ctx.lineTo(p.x - 7, p.y + 6);
+  ctx.lineTo(p.x + 7, p.y + 6);
+  ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = '#c9a84c';
   ctx.stroke();
+
+  // Рамка
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.55)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
 }
 
 // ── Мировое время ────────────────────────────────────────────
@@ -459,7 +870,7 @@ const TIME_OF_DAY_RU: Record<string, string> = {
 };
 const WEATHER_RU: Record<string, string> = {
   clear: 'ясно', cloudy: 'облачно', rain: 'дождь', storm: 'гроза',
-  fog: 'туман', sandstorm: 'песчаная буря', snow: 'снег',
+  fog: 'туман', sandstorm: 'песчаная буря', snow: 'снег', wind: 'ветер',
 };
 
 export function setWorldTime(payload: Record<string, unknown>): void {
@@ -469,4 +880,163 @@ export function setWorldTime(payload: Record<string, unknown>): void {
   const parts = [tod, weather].filter(Boolean);
   el.textContent = parts.join(' · ');
   el.classList.toggle('top-only', $('target-frame').classList.contains('hidden'));
+  applyWeatherEffects(weather);
+}
+
+// ── Система погоды ────────────────────────────────────────────
+
+let rainParticles: Array<{ x: number; z: number; vx: number; vz: number; alive: boolean }> = [];
+let thunderTimer: number | null = null;
+let sandstormAlpha: number = 0;
+let sandstormInterval: number | null = null;
+let windParticles: Array<{ x: number; z: number; vx: number; vz: number; age: number }> = [];
+let windTimer: number | null = null;
+let minimapSize = 180;
+
+function applyWeatherEffects(weather: string): void {
+
+  // Очищаем старые частицы
+  rainParticles = [];
+  if (thunderTimer) {
+    clearTimeout(thunderTimer);
+    thunderTimer = null;
+  }
+  sandstormAlpha = 0;
+  sandstormInterval = null;
+  if (windTimer) {
+    clearInterval(windTimer);
+    windTimer = null;
+  }
+  windParticles = [];
+  removeSandstormOverlay();
+  removeWindTrail();
+
+  switch (weather) {
+    case 'rain':
+      // Инициализировать дождевые капли (размечаем относительно центра мини-карты)
+      for (let i = 0; i < 50; i++) {
+        rainParticles.push({
+          x: (Math.random() - 0.5) * minimapSize,
+          z: (Math.random() - 0.5) * minimapSize,
+          vx: (Math.random() - 0.5) * 0.5,
+          vz: 2 + Math.random(),
+          alive: true,
+        });
+      }
+      // Громы через 2-5 секунд
+      thunderTimer = setTimeout(() => {
+        thunderFlash();
+        // Еще один молния через случайное время
+        thunderTimer = setTimeout(thunderFlash, 200 + Math.random() * 300);
+      }, 2000 + Math.random() * 3000);
+      break;
+
+    case 'sandstorm':
+      // Плавно нарастить альфа песчаной бури
+      sandstormInterval = setInterval(() => {
+        sandstormAlpha = Math.min(1, sandstormAlpha + 0.02);
+        updateSandstormOverlay(sandstormAlpha);
+      }, 50);
+      break;
+
+    case 'wind':
+      // Ветер оставляет след частиц
+      for (let i = 0; i < 30; i++) {
+        windParticles.push({
+          x: (Math.random() - 0.5) * minimapSize,
+          z: (Math.random() - 0.5) * minimapSize,
+          vx: -0.5 + Math.random() * 0.1,
+          vz: 0,
+          age: 0,
+        });
+      }
+      windTimer = setInterval(() => {
+        windParticles = windParticles.filter(p => p.age < 200);
+        windParticles.forEach(p => {
+          p.x += p.vx;
+          p.age++;
+        });
+        updateWindTrail();
+      }, 50);
+      break;
+
+    case 'clear':
+    case 'cloudy':
+      // Снять эффекты
+      if (sandstormInterval) {
+        clearInterval(sandstormInterval);
+        sandstormInterval = null;
+        sandstormAlpha = 0;
+        removeSandstormOverlay();
+      }
+      if (windTimer) {
+        clearInterval(windTimer);
+        windTimer = null;
+        removeWindTrail();
+      }
+      break;
+}
+}
+
+function thunderFlash(): void {
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 9999;
+    pointer-events: none;
+  `;
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 50);
+  // Последняя молния
+  thunderTimer = setTimeout(thunderFlash, 100 + Math.random() * 200);
+}
+
+function updateSandstormOverlay(alpha: number): void {
+  let overlay = $('sandstorm-overlay');
+  if (!overlay) {
+    const cvs = document.createElement('canvas');
+    cvs.id = 'sandstorm-overlay';
+    cvs.width = minimapSize;
+    cvs.height = minimapSize;
+    cvs.style.cssText = `
+      position: fixed;
+      bottom: 0; left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+      z-index: 8888;
+    `;
+    document.body.appendChild(cvs);
+  }
+  overlay = $('sandstorm-overlay');
+  overlay.style.background = `rgba(236, 217, 172, ${alpha * 0.7})`;
+}
+
+function removeSandstormOverlay(): void {
+  const overlay = $('sandstorm-overlay');
+  if (overlay) overlay.remove();
+}
+
+function removeWindTrail(): void {
+  const trail = $('wind-trail');
+  if (trail) trail.remove();
+}
+
+function updateWindTrail(): void {
+  const trail = document.getElementById('wind-trail') as HTMLCanvasElement | null;
+  if (!trail) return;
+  const c = trail.getContext('2d');
+  if (!c) return;
+  c.clearRect(0, 0, trail.width, trail.height);
+  if (windParticles.length === 0) return;
+  c.strokeStyle = 'rgba(150, 150, 180, 0.5)';
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(windParticles[0].x + trail.width / 2, windParticles[0].z + trail.height / 2);
+  for (let i = 1; i < windParticles.length; i++) {
+    const p = windParticles[i];
+    c.lineTo(p.x + trail.width / 2, p.z + trail.height / 2);
+  }
+  c.stroke();
 }

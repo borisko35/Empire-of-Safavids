@@ -2,7 +2,6 @@
 // Тесты — CharacterService — Empire of Safavids
 // ============================================================
 
-import { CharacterService } from '../services/CharacterService';
 import { CharacterClass } from '../types/game.types';
 import { LevelingSystem } from '../systems/LevelingSystem';
 

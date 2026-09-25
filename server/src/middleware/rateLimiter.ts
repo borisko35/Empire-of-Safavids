@@ -50,7 +50,7 @@ export function createRateLimiter(options: RateLimitOptions) {
 // Готовые пресеты
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000, // 15 минут
-  max: 10,
+  max: 100, // Увеличено для разработки
   keyPrefix: 'auth',
   message: 'Too many login attempts. Try again in 15 minutes.',
 });

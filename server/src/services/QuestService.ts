@@ -2,6 +2,7 @@ import { DatabaseService } from './DatabaseService';
 import { CharacterService } from './CharacterService';
 import { QUESTS_DATABASE, QuestDefinition, QuestObjectiveDef } from '../data/quests';
 import { ITEMS_DATABASE } from '../data/items';
+import { QUEST_NPC_ALIAS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
 // ============================================================
@@ -25,6 +26,9 @@ export interface CompletedQuestInfo {
   titleRu: string;
   experience: number;
   gold: number;
+  azens?: number;
+  isfahanSilver?: number;
+  syrianGold?: number;
   items: { itemId: string; nameRu: string; quantity: number }[];
   leveledUp?: boolean;
   newLevel?: number;
@@ -125,6 +129,59 @@ export class QuestService {
   }
 
   /**
+   * Засчитать разговор с NPC: talk-цели, указывающие на этого NPC
+   * (напрямую или через QUEST_NPC_ALIAS), закрываются сразу.
+   * После — общая проверка завершения (evaluateQuests).
+   * Вызывается из POST /api/npc/:npcId/dialog.
+   */
+  async recordTalk(characterId: string, npcId: string): Promise<CompletedQuestInfo[]> {
+    const active = (await this.getState(characterId)).filter(s => s.status === 'active');
+    for (const st of active) {
+      const def = QUESTS_DATABASE[st.questId];
+      if (!def) continue;
+      const talkObjectives = def.objectives.filter(o =>
+        !o.optional && o.type === 'talk' &&
+        (o.target === npcId || QUEST_NPC_ALIAS[o.target] === npcId)
+      );
+      if (!talkObjectives.length) continue;
+      const progress: Record<string, number> = { ...st.progress };
+      for (const o of talkObjectives) {
+        progress[o.id] = Math.max(progress[o.id] ?? 0, o.required);
+      }
+      await this.db.query(
+        'UPDATE character_quests SET progress = $2::jsonb WHERE character_id = $1 AND quest_id = $3',
+        [characterId, JSON.stringify(progress), st.questId],
+      );
+    }
+    return this.evaluateQuests(characterId);
+  }
+
+  /**
+   * Засчитать точку explore: клиент подошёл к цели (<=8м, проверено
+   * координатами навигатора). Прогресс ставится, дальше — общая проверка.
+   */
+  async recordExplore(characterId: string, questId: string, objectiveId?: string): Promise<CompletedQuestInfo[]> {
+    const state = (await this.getState(characterId)).filter(s => s.status === 'active');
+    const st = state.find(s => s.questId === questId);
+    if (!st) return [];
+    const def = QUESTS_DATABASE[questId];
+    if (!def) return [];
+    const targets = def.objectives.filter(o =>
+      !o.optional && o.type === 'explore' && (!objectiveId || o.id === objectiveId)
+    );
+    if (!targets.length) return [];
+    const progress: Record<string, number> = { ...st.progress };
+    for (const o of targets) {
+      progress[o.id] = Math.max(progress[o.id] ?? 0, o.required);
+    }
+    await this.db.query(
+      'UPDATE character_quests SET progress = $2::jsonb WHERE character_id = $1 AND quest_id = $3',
+      [characterId, JSON.stringify(progress), questId],
+    );
+    return this.evaluateQuests(characterId);
+  }
+
+  /**
    * Проверить активные квесты, чьи цели зависят от состояния мира:
    * collect — по инвентарю (списывается при завершении),
    * talk/explore — по нахождению персонажа в регионе квеста.
@@ -148,7 +205,11 @@ export class QuestService {
       const objectiveDone = (o: QuestObjectiveDef): boolean => {
         if (o.type === 'kill') return (st.progress[o.id] ?? 0) >= o.required;
         if (o.type === 'collect') return (inventory[o.target] ?? 0) >= o.required;
-        if (o.type === 'talk' || o.type === 'explore') return character.region === def.npcGiverRegion;
+        // talk/explore закрываются только явными событиями:
+        // talk — через recordTalk (диалог), explore — через recordExplore
+        // (клиент рядом с точкой). Проверка региона здесь НЕ нужна,
+        // иначе квест завершался бы без похода к цели.
+        if (o.type === 'talk' || o.type === 'explore') return (st.progress[o.id] ?? 0) >= o.required;
         return false;
       };
 
@@ -187,6 +248,12 @@ export class QuestService {
 
     const reward = await this.characters.addExperience(characterId, def.rewards.experience).catch(() => null);
     await this.characters.addGold(characterId, def.rewards.gold).catch(() => {});
+    const azens = def.rewards.azens ?? 0;
+    const isfahanSilver = def.rewards.isfahanSilver ?? 0;
+    const syrianGold = def.rewards.syrianGold ?? 0;
+    if (azens > 0) await this.characters.addAzens(characterId, azens).catch(() => {});
+    if (isfahanSilver > 0) await this.characters.addSilver(characterId, isfahanSilver).catch(() => {});
+    if (syrianGold > 0) await this.characters.addSyrianGold(characterId, syrianGold).catch(() => {});
     const items: CompletedQuestInfo['items'] = [];
     if (def.rewards.items?.length) {
       await this.characters.addItems(
@@ -210,6 +277,9 @@ export class QuestService {
       titleRu: def.titleRu,
       experience: def.rewards.experience,
       gold: def.rewards.gold,
+      azens: azens > 0 ? azens : undefined,
+      isfahanSilver: isfahanSilver > 0 ? isfahanSilver : undefined,
+      syrianGold: syrianGold > 0 ? syrianGold : undefined,
       items,
       leveledUp: reward?.leveledUp,
       newLevel: reward?.newLevel,

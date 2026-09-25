@@ -3,8 +3,6 @@
 // ============================================================
 
 import { DatabaseService } from '../services/DatabaseService';
-import { RedisService } from '../services/RedisService';
-import { NotificationService } from '../services/NotificationService';
 import { logger } from '../utils/logger';
 
 // ============================================================
@@ -71,8 +69,6 @@ export const BATTLE_PASS_TIERS: BattlePassTier[] = [
 
 export class PremiumSystem {
   private db           = DatabaseService.getInstance();
-  private redis        = RedisService.getInstance();
-  private notifications = new NotificationService();
 
   // ============================================================
   // Активация Premium
@@ -180,6 +176,9 @@ export class PremiumSystem {
           'INSERT INTO character_titles (character_id, title) VALUES ($1, $2) ON CONFLICT DO NOTHING',
           [characterId, reward.nameRu]
         );
+      } else if (reward.type === 'gems' && reward.amount) {
+        // Гемы сезона начисляются AZENS — единой премиум-валютой игры.
+        await client.query('UPDATE characters SET azens = azens + $1 WHERE id = $2', [reward.amount, characterId]);
       }
 
       const updatedTiers = [...progress.claimed_tiers, tier];

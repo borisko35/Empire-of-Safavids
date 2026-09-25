@@ -79,16 +79,25 @@ const SERVER_NAMES: Record<string, string> = {
   khoy: 'Хой', rasht: 'Решт', isfahan: 'Исфахан', derbent: 'Дербент',
 };
 
+let refreshListSeq = 0;
+
 async function refreshList(onEnter: (c: Character) => void): Promise<void> {
   const list = $('char-list');
   list.innerHTML = '';
+  const seq = ++refreshListSeq;
   try {
     const { characters } = await api.characters();
+    // Второй параллельный вызов (двойной клик по «Войти») — старый молча выходит,
+    // иначе два ответа interleaving дают задвоенные строки (1 персонаж = 2).
+    if (seq !== refreshListSeq) return;
     if (!characters.length) {
       list.innerHTML = `<div class="char-empty">${t('chars.empty')}</div>`;
       return;
     }
+    const seen = new Set<string>();
     for (const c of characters) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
       const row = document.createElement('div');
       row.className = 'char-row';
       const img = document.createElement('img');
@@ -104,7 +113,22 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
       const enter = document.createElement('span');
       enter.className = 'enter';
       enter.textContent = `▶ ${t('chars.enter_world')}`;
-      row.append(img, info, enter);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'char-delete';
+      del.textContent = '✕';
+      del.title = t('chars.delete') ?? 'Удалить';
+      del.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!window.confirm(`${t('chars.delete_confirm') ?? 'Удалить персонажа'} ${c.name}?`)) return;
+        try {
+          await api.deleteCharacter(c.id);
+          await refreshList(onEnter);
+        } catch (err) {
+          alert((err as Error).message);
+        }
+      });
+      row.append(img, info, enter, del);
       row.addEventListener('click', () => onEnter(c));
       list.append(row);
     }

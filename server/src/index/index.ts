@@ -8,51 +8,101 @@ import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import { logger } from '../utils/logger';
+
+// ── Safety net: prevent unhandled rejections from crashing the process ──
+process.on('unhandledRejection', (reason: unknown) => {
+  logger.error('[Process] Unhandled promise rejection (suppressed):', reason);
+});
+process.on('uncaughtException', (err: Error) => {
+  logger.error('[Process] Uncaught exception (suppressed):', err);
+});
 import { authRouter } from '../routes/auth';
 import { characterRouter } from '../routes/character';
 import { worldRouter } from '../routes/world';
 import { gameRouter } from '../routes/game';
+import { adminRouter } from '../routes/admin';
+import { friendsRouter } from '../routes/friends';
+import { leaderboardRouter } from '../routes/leaderboard';
+import { tutorialRouter } from '../routes/tutorial';
+import minigamesRouter from '../routes/minigames';
+import poetryRouter from '../routes/poetry';
+import chroniclesRouter from '../routes/chronicles';
+import guildsRouter from '../routes/guilds';
+import progressionRouter from '../routes/progression';
+import { npcRouter } from '../routes/npc';
+import { siteRouter } from '../routes/site';
+import { forumRouter } from '../routes/forum';
+import { feedbackRouter } from '../routes/feedback';
+import { skillsRouter } from '../routes/skills';
 import { GameSocketHandler } from '../socket/GameSocketHandler';
 import { DatabaseService } from '../services/DatabaseService';
 import { RedisService } from '../services/RedisService';
 import { GameLoop } from '../systems/GameLoop';
+import { migrate } from '../database/migrate';
 import { GAME_VERSION } from '../../../shared/constants';
+import { requestLogger } from '../middleware/requestLogger';
+import { errorHandler, notFoundHandler, badJsonHandler } from '../middleware/errorHandler';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
 const httpServer = createServer(app);
 
 // Корень репозитория: npm-скрипты выполняются из server/, но путь
-// проверяем, чтобы запуск из другого каталога не сломал статику
-const repoRoot = [path.resolve(process.cwd(), '..'), process.cwd()].find((dir) =>
+// проверяем, чтобы запуск из другого каталога не сломал статику.
+// В Docker-образе (WORKDIR /app/server) shared лежит в /app/shared,
+// поэтому корень shared ищем отдельно от web-статики.
+const candidateRoots = [
+  path.resolve(process.cwd(), '..'),
+  process.cwd(),
+  path.resolve(process.cwd(), '..', '..'),
+  '/app',
+];
+const repoRoot = candidateRoots.find((dir) =>
   fs.existsSync(path.join(dir, 'client', 'web', 'index.html')),
 );
+const sharedRoot = candidateRoots.find((dir) =>
+  fs.existsSync(path.join(dir, 'shared', 'locales', 'ru.json')),
+) ?? repoRoot ?? process.cwd();
 const WEB_DIR = path.resolve(repoRoot ?? process.cwd(), 'client', 'web');
-const LOCALES_DIR = path.resolve(repoRoot ?? process.cwd(), 'shared', 'locales');
+const LOCALES_DIR = path.resolve(sharedRoot, 'shared', 'locales');
 const INSTALLER_FILE = path.resolve(repoRoot ?? process.cwd(), 'site', 'install', 'install-game.cmd');
 
-// Socket.IO для real-time игровой логики
-const io = new SocketIOServer(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_ORIGIN || 'http://localhost:8080',
-    methods: ['GET', 'POST'],
-  },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-});
-
-// Middleware. CSP helmet по умолчанию включает upgrade-insecure-requests,
-// который ломает подгрузку ресурсов страницы по http://localhost — отключаем
-// только его, остальные защиты helmet остаются
-app.use(helmet({ contentSecurityPolicy: false }));
+// ── Middleware ────────────────────────────────────────────
+// Helmet: отключаем CSP только для dev; в продакшене оставляем
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { (req as unknown as { rawBody?: string }).rawBody = buf.toString('utf8'); } }));
+app.use(express.urlencoded({ extended: false }));
 
-// REST API маршруты
+// Обработка невалидного JSON в теле запроса
+app.use(badJsonHandler);
+
+// Логирование запросов
+app.use(requestLogger);
+
+// ── REST API маршруты ────────────────────────────────────
 app.use('/api/auth', authRouter);
 app.use('/api/characters', characterRouter);
+app.use('/api/skills', skillsRouter);
 app.use('/api/world', worldRouter);
 app.use('/api/game', gameRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/friends', friendsRouter);
+app.use('/api/leaderboard', leaderboardRouter);
+app.use('/api/tutorial', tutorialRouter);
+app.use('/api/chess', minigamesRouter);
+app.use('/api/poetry', poetryRouter);
+app.use('/api/chronicles', chroniclesRouter);
+app.use('/api/guilds', guildsRouter);
+app.use('/api/progression', progressionRouter);
+app.use('/api/npc', npcRouter);
+app.use('/api/site', siteRouter);
+// Форум (чтение открыто, запись — авторизованным) и обратная связь
+app.use('/api/forum', forumRouter);
+app.use('/api/feedback', feedbackRouter);
 
 // Веб-страница игры (лендинг с историей Сефевидов и загрузкой)
 app.use(express.static(WEB_DIR));
@@ -70,7 +120,22 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', game: 'Empire of Safavids', version: GAME_VERSION });
 });
 
+// 404 для неизвестных маршрутов
+app.use(notFoundHandler);
+
+// Централизованный обработчик ошибок (должен быть последним)
+app.use(errorHandler);
+
 // Инициализация Socket.IO обработчиков
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_ORIGIN || 'http://localhost:8080',
+    methods: ['GET', 'POST'],
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+});
+
 const gameSocketHandler = new GameSocketHandler(io);
 gameSocketHandler.initialize();
 
@@ -79,6 +144,15 @@ async function bootstrap() {
   try {
     await DatabaseService.getInstance().connect();
     logger.info('✅ Database connected');
+
+    // Автоматические миграции перед стартом игрового цикла
+    try {
+      await migrate();
+      logger.info('✅ Database migrations checked/applied');
+    } catch (migErr) {
+      logger.error('❌ Migration failed — aborting startup:', migErr);
+      throw migErr;
+    }
 
     await RedisService.getInstance().connect();
     logger.info('✅ Redis connected');
@@ -118,7 +192,7 @@ async function shutdown(signal: string) {
   }
 }
 
-process.on('SIGINT', () => void shutdown('SIGINT'));
-process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 bootstrap();

@@ -31,6 +31,8 @@ export interface AuthUser {
   username: string;
   email: string;
   isPremium: boolean;
+  isAdmin: boolean;
+  adminRole: string;
   isBanned: boolean;
   banReason?: string;
   banUntil?: Date;

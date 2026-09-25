@@ -7,6 +7,7 @@ import { RedisService } from './RedisService';
 import { NotificationService } from './NotificationService';
 import { logger } from '../utils/logger';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
+import { AUCTION_LISTING_FEE_SILVER } from '../utils/economy';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface AuctionListing {
@@ -24,7 +25,7 @@ export interface AuctionListing {
 export interface ShopItem {
   itemId: string;
   price: number;
-  currency: 'gold' | 'premium';
+  currency: 'gold' | 'premium' | 'silver' | 'syrian';
   stock?: number;       // undefined = бесконечно
   minLevel?: number;
   discount?: number;    // 0–1
@@ -67,6 +68,24 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
     items: [
       { itemId: 'con_exp_scroll', price: 10, currency: 'premium' },
       { itemId: 'mat_dragon_scale', price: 50, currency: 'premium', minLevel: 1 },
+    ],
+  },
+  'shop_silver_goods': {
+    nameRu: 'Серебряная лавка',
+    items: [
+      { itemId: 'con_health_potion_s', price: 5, currency: 'silver' },
+      { itemId: 'con_stamina_food', price: 7, currency: 'silver' },
+      { itemId: 'mat_iron_ore', price: 3, currency: 'silver' },
+      { itemId: 'con_mana_potion', price: 15, currency: 'silver' },
+      { itemId: 'con_health_potion_m', price: 20, currency: 'silver' },
+    ],
+  },
+  'shop_isfahan_stable': {
+    nameRu: 'Конюшня Исфахана',
+    items: [
+      { itemId: 'mount_arabian_horse', price: 5000, currency: 'gold', minLevel: 1 },
+      { itemId: 'mount_bactrian_camel', price: 8000, currency: 'gold', minLevel: 10 },
+      { itemId: 'mount_qizilbash_warhorse', price: 25000, currency: 'gold', minLevel: 30 },
     ],
   },
 };
@@ -115,6 +134,16 @@ export class AuctionService {
          WHERE character_id = $1 AND item_id = $2 AND enhancement = $3 AND quantity <= 0`,
         [sellerId, itemId, enhancement]
       );
+
+      // Плата за выставление лота — исфаханским серебром (сток валюты).
+      const fee = await client.query(
+        `UPDATE characters SET isfahan_silver = isfahan_silver - $1
+         WHERE id = $2 AND isfahan_silver >= $1`,
+        [AUCTION_LISTING_FEE_SILVER, sellerId]
+      );
+      if (fee.rowCount === 0) {
+        throw new Error(`Listing fee: need ${AUCTION_LISTING_FEE_SILVER} Isfahan silver`);
+      }
 
       await client.query(
         `INSERT INTO auction_listings

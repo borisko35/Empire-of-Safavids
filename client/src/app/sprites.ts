@@ -3,6 +3,23 @@
 // ============================================================
 // Пиксель-арт из tools/generate-sprites.js; image-rendering: pixelated.
 
+// ── Asset bundle system integration ──────────────────────────
+// SpriteSystem is the atlas/UV/animation catalog (see
+// client/src/assets/SpriteSystem.ts). Current file-based PNG
+// sprites remain the runtime source until atlas bundles are
+// published. Re-export helpers so callers can migrate gradually.
+// TODO: when atlas bundles ship, use spriteManager.getUV() /
+// getFrameAtTime() with atlasTexture loaded via textureManager.
+import { spriteManager, SPRITE_SHEETS } from '../assets/SpriteSystem';
+export { spriteManager, SPRITE_SHEETS };
+export type { SpriteFrame, SpriteSheet, SpriteAnimation } from '../assets/SpriteSystem';
+export function getSpriteUV(sheetId: string, frameId: string): { u0: number; v0: number; u1: number; v1: number } | undefined {
+  return spriteManager.getUV(sheetId, frameId);
+}
+export function getSpriteFrameAtTime(sheetId: string, animId: string, timeMs: number) {
+  return spriteManager.getFrameAtTime(sheetId, animId, timeMs);
+}
+
 import ground from './assets/sprites/ground.png';
 import decorRock from './assets/sprites/decor_rock.png';
 import decorBush from './assets/sprites/decor_bush.png';

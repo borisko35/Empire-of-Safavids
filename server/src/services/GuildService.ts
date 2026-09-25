@@ -1,150 +1,187 @@
 // ============================================================
-// Сервис гильдий — Empire of Safavids
+// Guild Service — Empire of Safavids
 // ============================================================
 
-import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from './DatabaseService';
-import { RedisService } from './RedisService';
 import { logger } from '../utils/logger';
-import { camelizeRow } from '../utils/camelize';
-import { Guild } from '../types/game.types';
-import { GuildRank, canPromote, getGuildRankPermissions } from '../data/guilds';
+
+export interface Guild {
+  id: string; name: string; tag: string; leader_id: string;
+  description: string; level: number; experience: number; gold: number;
+  max_members: number; banner_color: string; created_at: string;
+}
+
+export interface GuildMember {
+  character_id: string; character_name: string; rank: string;
+  contribution_points: number; joined_at: string; level: number; online: boolean;
+}
 
 export class GuildService {
   private db = DatabaseService.getInstance();
-  private redis = RedisService.getInstance();
 
-  async createGuild(leaderId: string, name: string, description: string): Promise<Guild> {
-    const existing = await this.db.queryOne('SELECT id FROM guilds WHERE name = $1', [name]);
-    if (existing) throw new Error('Guild name already taken');
-
-    const guild: Guild = {
-      id: uuidv4(),
-      name,
-      description,
-      leaderId,
-      members: [leaderId],
-      level: 1,
-      gold: 0,
-      createdAt: new Date(),
-    };
-
-    await this.db.transaction(async (client) => {
-      await client.query(
-        'INSERT INTO guilds (id, name, description, leader_id, level, gold, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$7)',
-        [guild.id, guild.name, guild.description, guild.leaderId, guild.level, guild.gold, guild.createdAt]
-      );
-      await client.query(
-        'INSERT INTO guild_members (guild_id, character_id, rank) VALUES ($1,$2,$3)',
-        [guild.id, leaderId, 'leader']
-      );
-      await client.query(
-        'UPDATE characters SET guild_id = $1 WHERE id = $2',
-        [guild.id, leaderId]
-      );
-    });
-
-    logger.info(`Guild created: ${name} by ${leaderId}`);
-    return guild;
-  }
-
-  async inviteMember(guildId: string, inviterId: string, targetId: string): Promise<void> {
-    const inviterRank = await this.getMemberRank(guildId, inviterId);
-    const perms = getGuildRankPermissions(inviterRank as GuildRank);
-    if (!perms?.invite) throw new Error('No permission to invite');
-
-    const memberCount = await this.db.queryOne<{ count: string }>(
-      'SELECT COUNT(*) as count FROM guild_members WHERE guild_id = $1', [guildId]
+  async createGuild(name: string, tag: string, leaderId: string, desc: string): Promise<Guild> {
+    // Проверяем, не состоит ли уже в гильдии
+    const existing = await this.db.queryOne(
+      'SELECT guild_id FROM guild_members WHERE character_id = $1', [leaderId]
     );
-    if (parseInt(memberCount?.count ?? '0') >= 100) throw new Error('Guild is full (max 100 members)');
+    if (existing) throw new Error('Already in a guild');
 
-    await this.db.transaction(async (client) => {
-      await client.query(
-        'INSERT INTO guild_members (guild_id, character_id, rank) VALUES ($1,$2,$3)',
-        [guildId, targetId, 'recruit']
-      );
-      await client.query('UPDATE characters SET guild_id = $1 WHERE id = $2', [guildId, targetId]);
-    });
+    // Проверяем уникальность
+    const nameTaken = await this.db.queryOne(
+      'SELECT id FROM guilds WHERE name = $1 OR tag = $2', [name, tag]
+    );
+    if (nameTaken) throw new Error('Guild name or tag taken');
 
-    await this.redis.publish('guild:member_joined', { guildId, characterId: targetId });
-    logger.info(`Character ${targetId} joined guild ${guildId}`);
-  }
-
-  async kickMember(guildId: string, kickerId: string, targetId: string): Promise<void> {
-    const kickerRank = await this.getMemberRank(guildId, kickerId);
-    const perms = getGuildRankPermissions(kickerRank as GuildRank);
-    if (!perms?.kick) throw new Error('No permission to kick');
-
-    const targetRank = await this.getMemberRank(guildId, targetId);
-    if (targetRank === 'leader') throw new Error('Cannot kick the guild leader');
-
-    await this.db.transaction(async (client) => {
-      await client.query('DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2', [guildId, targetId]);
-      await client.query('UPDATE characters SET guild_id = NULL WHERE id = $1', [targetId]);
-    });
-
-    logger.info(`Character ${targetId} kicked from guild ${guildId} by ${kickerId}`);
-  }
-
-  async promoteMember(guildId: string, promoterId: string, targetId: string, newRank: GuildRank): Promise<void> {
-    const promoterRank = await this.getMemberRank(guildId, promoterId);
-    const perms = getGuildRankPermissions(promoterRank as GuildRank);
-    if (!perms?.promote) throw new Error('No permission to promote');
-
-    const targetRank = await this.getMemberRank(guildId, targetId);
-    if (!canPromote(promoterRank as GuildRank, targetRank as GuildRank)) {
-      throw new Error('Cannot promote to this rank');
-    }
-
+    const result = await this.db.queryOne<Guild>(
+      `INSERT INTO guilds (name, tag, leader_id, description)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, tag, leaderId, desc]
+    );
+    // Добавляем создателя как лидера
     await this.db.query(
-      'UPDATE guild_members SET rank = $1 WHERE guild_id = $2 AND character_id = $3',
-      [newRank, guildId, targetId]
+      `INSERT INTO guild_members (guild_id, character_id, rank)
+       VALUES ($1, $2, 'leader')`, [result!.id, leaderId]
     );
+    logger.info(`[Guild] Created: ${name} [${tag}] by ${leaderId}`);
+    return result!;
   }
 
-  async depositGold(guildId: string, characterId: string, amount: number): Promise<void> {
-    await this.db.transaction(async (client) => {
-      const char = await client.query('SELECT gold FROM characters WHERE id = $1 FOR UPDATE', [characterId]);
-      if (!char.rows[0] || char.rows[0].gold < amount) throw new Error('Insufficient gold');
-
-      await client.query('UPDATE characters SET gold = gold - $1 WHERE id = $2', [amount, characterId]);
-      await client.query('UPDATE guilds SET gold = gold + $1, updated_at = NOW() WHERE id = $2', [amount, guildId]);
-    });
+  async getGuild(guildId: string): Promise<Guild | null> {
+    return this.db.queryOne<Guild>('SELECT * FROM guilds WHERE id = $1', [guildId]);
   }
 
-  /** Список всех гильдий: имя, лидер, число членов (для панели гильдий) */
-  async listGuilds(): Promise<{ id: string; name: string; description: string; leaderName: string; members: number }[]> {
-    const rows = await this.db.query<Record<string, unknown>>(
-          );
-    return rows.map((r) => ({
-      id: String(r.id),
-      name: String(r.name),
-      description: String(r.description),
-      leaderName: String(r.leader_name),
-      members: Number(r.members),
-    }));
-  }
-
-  async getGuildInfo(guildId: string): Promise<Guild | null> {
-    const row = await this.db.queryOne<Record<string, unknown>>(
-      'SELECT * FROM guilds WHERE id = $1', [guildId]
+  async getGuildByCharacter(charId: string): Promise<{ guild: Guild; rank: string } | null> {
+    const row = await this.db.queryOne<{ guild_id: string; rank: string }>(
+      'SELECT guild_id, rank FROM guild_members WHERE character_id = $1', [charId]
     );
-    return camelizeRow<Guild>(row);
+    if (!row) return null;
+    const guild = await this.getGuild(row.guild_id);
+    return guild ? { guild, rank: row.rank } : null;
   }
 
-  async getGuildMembers(guildId: string): Promise<{ characterId: string; rank: GuildRank; joinedAt: Date }[]> {
-    return this.db.query(
-      'SELECT character_id as "characterId", rank, joined_at as "joinedAt" FROM guild_members WHERE guild_id = $1 ORDER BY joined_at ASC',
+  async getMembers(guildId: string): Promise<GuildMember[]> {
+    return this.db.query<GuildMember>(
+      `SELECT gm.character_id, c.name as character_name, gm.rank,
+              gm.contribution_points, gm.joined_at, c.level, FALSE as online
+       FROM guild_members gm
+       JOIN characters c ON c.id = gm.character_id
+       WHERE gm.guild_id = $1
+       ORDER BY
+         CASE gm.rank WHEN 'leader' THEN 0 WHEN 'officer' THEN 1 WHEN 'veteran' THEN 2 ELSE 3 END,
+         c.level DESC`,
       [guildId]
     );
   }
 
-  private async getMemberRank(guildId: string, characterId: string): Promise<string> {
-    const row = await this.db.queryOne<{ rank: string }>(
-      'SELECT rank FROM guild_members WHERE guild_id = $1 AND character_id = $2',
-      [guildId, characterId]
+  async addMember(guildId: string, charId: string): Promise<void> {
+    const guild = await this.getGuild(guildId);
+    if (!guild) throw new Error('Guild not found');
+    const members = await this.getMembers(guildId);
+    if (members.length >= guild.max_members) throw new Error('Guild is full');
+    const existing = await this.db.queryOne(
+      'SELECT guild_id FROM guild_members WHERE character_id = $1', [charId]
     );
-    if (!row) throw new Error('Character is not a guild member');
-    return row.rank;
+    if (existing) throw new Error('Already in a guild');
+    await this.db.query(
+      'INSERT INTO guild_members (guild_id, character_id) VALUES ($1, $2)',
+      [guildId, charId]
+    );
+    await this.addLog(guildId, 'member_joined', charId);
+  }
+
+  async removeMember(guildId: string, charId: string): Promise<void> {
+    await this.db.query(
+      'DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2',
+      [guildId, charId]
+    );
+    await this.addLog(guildId, 'member_left', charId);
+  }
+
+  async setRank(guildId: string, charId: string, rank: string): Promise<void> {
+    await this.db.query(
+      'UPDATE guild_members SET rank = $1 WHERE guild_id = $2 AND character_id = $3',
+      [rank, guildId, charId]
+    );
+  }
+
+  async addContribution(guildId: string, charId: string, points: number): Promise<void> {
+    await this.db.query(
+      `UPDATE guild_members SET contribution_points = contribution_points + $1
+       WHERE guild_id = $2 AND character_id = $3`,
+      [points, guildId, charId]
+    );
+    await this.db.query(
+      'UPDATE guilds SET experience = experience + $1 WHERE id = $2',
+      [points, guildId]
+    );
+  }
+
+  async depositGold(guildId: string, _charId: string, amount: number): Promise<void> {
+    await this.db.query(
+      'UPDATE guilds SET gold = gold + $1 WHERE id = $2',
+      [amount, guildId]
+    );
+    await this.addContribution(guildId, _charId, Math.floor(amount / 10));
+  }
+
+  async depositItem(guildId: string, charId: string, itemId: string, qty: number): Promise<void> {
+    await this.db.query(
+      'INSERT INTO guild_bank (guild_id, item_id, quantity, deposited_by) VALUES ($1, $2, $3, $4)',
+      [guildId, itemId, qty, charId]
+    );
+    await this.addContribution(guildId, charId, qty * 5);
+  }
+
+  async getBankItems(guildId: string): Promise<{ id: number; item_id: string; quantity: number; deposited_by: string; deposited_at: string }[]> {
+    return this.db.query(
+      'SELECT * FROM guild_bank WHERE guild_id = $1 ORDER BY deposited_at DESC',
+      [guildId]
+    );
+  }
+
+  async searchGuilds(query: string, limit = 20): Promise<Guild[]> {
+    return this.db.query<Guild>(
+      `SELECT * FROM guilds
+       WHERE name ILIKE $1 OR tag ILIKE $1
+       ORDER BY level DESC LIMIT $2`,
+      [`%${query}%`, limit]
+    );
+  }
+
+  /** Alias for game.ts compatibility */
+  async listGuilds(): Promise<Guild[]> {
+    return this.db.query<Guild>('SELECT * FROM guilds ORDER BY level DESC LIMIT 50');
+  }
+
+  /** Alias — createGuild with positional args for game.ts */
+  async createGuildCompat(leaderId: string, name: string, description: string): Promise<Guild> {
+    return this.createGuild(name, name.slice(0, 6).toUpperCase(), leaderId, description);
+  }
+
+  /** Alias for game.ts */
+  async getGuildInfo(guildId: string): Promise<Guild | null> {
+    return this.getGuild(guildId);
+  }
+
+  /** Alias for game.ts */
+  async getGuildMembers(guildId: string): Promise<GuildMember[]> {
+    return this.getMembers(guildId);
+  }
+
+  /** Alias for game.ts */
+  async inviteMember(guildId: string, _inviterId: string, targetId: string): Promise<void> {
+    return this.addMember(guildId, targetId);
+  }
+
+  /** Alias for game.ts */
+  async kickMember(guildId: string, _kickerId: string, targetId: string): Promise<void> {
+    return this.removeMember(guildId, targetId);
+  }
+
+  private async addLog(guildId: string, action: string, actorId: string): Promise<void> {
+    await this.db.query(
+      'INSERT INTO guild_logs (guild_id, action, actor_name) VALUES ($1, $2, $3)',
+      [guildId, action, actorId]
+    );
   }
 }

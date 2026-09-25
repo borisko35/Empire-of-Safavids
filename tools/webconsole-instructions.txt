@@ -1,0 +1,26 @@
+#!/bin/bash
+# Пошаговая инструкция для Web Console (VNC)
+# Открывайте эту вкладку и выполняйте команды по очереди
+
+echo "=== Шаг 1 ==="
+echo "Введите: mkdir -p /root/.ssh"
+echo "Затем нажмите Enter"
+
+echo ""
+echo "=== Шаг 2 ==="
+echo "Введите: echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKtIuyofHzPY5II73QS0LVMp/34lgnJo2DfNu7c7XIOp user@MASA-19' > /root/.ssh/authorized_keys"
+echo "Затем нажмите Enter"
+
+echo ""
+echo "=== Шаг 3 ==="
+echo "Введите: chmod 700 /root/.ssh"
+echo "Затем нажмите Enter"
+
+echo ""
+echo "=== Шаг 4 ==="
+echo "Введите: chmod 600 /root/.ssh/authorized_keys"
+echo "Затем нажмите Enter"
+
+echo ""
+echo "=== ГОТОВО ==="
+echo "Напишите мне 'готово' и я проверю подключение"

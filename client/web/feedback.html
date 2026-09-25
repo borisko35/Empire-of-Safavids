@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Обратная связь — Empire of Safavids</title>
+  <meta name="description" content="Обратная связь игры Empire of Safavids: баги, идеи, вопросы команде.">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-icon" data-icon="star8" data-icon-size="26"></span>
+      <span class="brand-name">Empire of <b>Safavids</b></span>
+    </a>
+    <nav class="topnav">
+      <a href="/" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.news_title"></span></a>
+      <a href="/forum.html" class="topnav-link"><span data-icon="shield" data-icon-size="16"></span><span data-i18n="forum.title"></span></a>
+      <a href="/feedback.html" class="topnav-link active"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="feedback.title"></span></a>
+      <a href="/#rating" class="topnav-link"><span data-icon="crown" data-icon-size="16"></span><span data-i18n="menu.rating"></span></a>
+    </nav>
+    <div class="topbar-right">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="ru" type="button">Рус</button>
+        <button class="lang-btn" data-lang="en" type="button">Eng</button>
+        <button class="lang-btn" data-lang="az" type="button">Azə</button>
+      </div>
+      <a class="btn btn-ghost" id="fb-auth" href="/game/"><span data-i18n="auth.login"></span></a>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <div class="panel">
+        <h1 class="panel-title"><span class="panel-title-icon" data-icon="scroll" data-icon-size="20"></span> <span data-i18n="feedback.title"></span></h1>
+        <p class="cms-hint" data-i18n="feedback.subtitle"></p>
+
+        <form class="auth-form fb-form" id="fb-form" autocomplete="off">
+          <label data-i18n="feedback.field_category">
+            <select id="fb-category" class="cms-input">
+              <option value="bug" data-i18n="feedback.cat_bug"></option>
+              <option value="idea" data-i18n="feedback.cat_idea"></option>
+              <option value="balance" data-i18n="feedback.cat_balance"></option>
+              <option value="donation" data-i18n="feedback.cat_donation"></option>
+              <option value="account" data-i18n="feedback.cat_account"></option>
+              <option value="other" selected data-i18n="feedback.cat_other"></option>
+            </select>
+          </label>
+          <p class="fb-hint" id="fb-hint" aria-live="polite"></p>
+          <label data-i18n="feedback.field_message">
+            <textarea id="fb-message" class="cms-input" rows="7" maxlength="2000"
+                      data-i18n-placeholder="feedback.placeholder"></textarea>
+          </label>
+          <p class="fb-counter" id="fb-counter">0 / 2000</p>
+          <button class="btn btn-gold" type="submit" data-i18n="feedback.submit"></button>
+        </form>
+
+        <p class="form-error hidden" id="fb-error"></p>
+        <p class="cms-status hidden" id="fb-ok"></p>
+
+        <div class="fb-routing">
+          <h3 class="cms-subtitle" data-i18n="feedback.routing_title"></h3>
+          <p class="fb-routing-item fb-routing-private"><span data-i18n="feedback.routing_private"></span></p>
+          <p class="fb-routing-item"><span data-i18n="feedback.routing_forum"></span> <a href="/forum.html" class="fb-link" data-i18n="feedback.routing_forum_link"></a></p>
+        </div>
+
+        <div class="cms-block" id="fb-mine-block">
+          <h3 class="cms-subtitle" data-i18n="feedback.mine"></h3>
+          <div id="fb-mine" class="fb-mine"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span data-icon="star8" data-icon-size="14"></span>
+    <span data-i18n="site.footer_note"></span>
+    <span class="footer-sep">·</span>
+    <span>© 2024–2026 Sigma Arena Games Group</span>
+    <span class="footer-sep">·</span>
+    <a href="/" class="footer-link"><span data-i18n="site.news_title"></span></a>
+    <a href="/forum.html" class="footer-link"><span data-i18n="forum.title"></span></a>
+    <a href="/feedback.html" class="footer-link"><span data-i18n="feedback.title"></span></a>
+    <a href="/admin.html" class="footer-link hidden" id="admin-link">Управление сайтом</a>
+  </footer>
+
+  <script type="module" src="/js/feedback.js"></script>
+</body>
+</html>

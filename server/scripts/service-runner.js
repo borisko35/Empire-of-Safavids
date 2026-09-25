@@ -13,4 +13,4 @@ require('dotenv').config();
 
 // Гарантируем, что БД и Redis из .env доступны; сервер дальше сам
 // сообщает о проблемах подключения в лог службы.
-require('../dist/server/src/index/index.js');
+require('../dist/index.js');

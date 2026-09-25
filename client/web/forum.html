@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Форум — Empire of Safavids</title>
+  <meta name="description" content="Форум игры Empire of Safavids: обсуждения, советы и вопросы-ответы.">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-icon" data-icon="star8" data-icon-size="26"></span>
+      <span class="brand-name">Empire of <b>Safavids</b></span>
+    </a>
+    <nav class="topnav">
+      <a href="/" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.news_title"></span></a>
+      <a href="/forum.html" class="topnav-link active"><span data-icon="shield" data-icon-size="16"></span><span data-i18n="forum.title"></span></a>
+      <a href="/feedback.html" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="feedback.title"></span></a>
+      <a href="/#rating" class="topnav-link"><span data-icon="crown" data-icon-size="16"></span><span data-i18n="menu.rating"></span></a>
+    </nav>
+    <div class="topbar-right">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn" data-lang="ru" type="button">Рус</button>
+        <button class="lang-btn" data-lang="en" type="button">Eng</button>
+        <button class="lang-btn" data-lang="az" type="button">Azə</button>
+      </div>
+      <a class="btn btn-ghost" id="fm-auth" href="/game/"><span data-i18n="auth.login"></span></a>
+    </div>
+  </header>
+
+  <main>
+    <!-- ═══ Список тем ═══ -->
+    <section class="section" id="forum-list-sec">
+      <div class="panel">
+        <div class="fm-head">
+          <h1 class="panel-title"><span class="panel-title-icon" data-icon="shield" data-icon-size="20"></span> <span data-i18n="forum.title"></span></h1>
+          <button class="btn btn-gold" id="fm-new-toggle" type="button" hidden data-i18n="forum.new_topic"></button>
+        </div>
+        <p class="cms-hint" data-i18n="forum.subtitle"></p>
+
+        <div class="cms-toolbar">
+          <input type="search" id="fm-q" class="cms-input fm-search" maxlength="80"
+                 data-i18n-placeholder="forum.search_placeholder" autocomplete="off">
+          <button class="btn btn-ghost" id="fm-search" type="button" data-i18n="forum.search"></button>
+          <select id="fm-cat" class="cms-select"><option value="" data-i18n="forum.all_categories"></option></select>
+        </div>
+
+        <!-- Форма новой темы -->
+        <div class="cms-block hidden" id="fm-newform">
+          <h3 class="cms-subtitle" data-i18n="forum.new_topic"></h3>
+          <label class="cms-field" data-i18n="forum.field_category">
+            <select id="fm-ncat" class="cms-select"></select>
+          </label>
+          <input type="text" id="fm-ntitle" class="cms-input" maxlength="160"
+                 data-i18n-placeholder="forum.field_title" autocomplete="off">
+          <textarea id="fm-nbody" class="cms-input cms-textarea" rows="6" maxlength="5000"
+                    data-i18n-placeholder="forum.field_body"></textarea>
+          <div class="fm-form-actions">
+            <button class="btn btn-gold" id="fm-create" type="button" data-i18n="forum.publish"></button>
+            <button class="btn btn-ghost" id="fm-cancel" type="button" data-i18n="forum.cancel"></button>
+          </div>
+        </div>
+
+        <p class="form-error hidden" id="fm-error"></p>
+
+        <ol class="rating-list" id="fm-topics"></ol>
+        <div class="fm-pager" id="fm-pager"></div>
+      </div>
+    </section>
+
+    <!-- ═══ Просмотр темы ═══ -->
+    <section class="section hidden" id="forum-topic-sec">
+      <div class="panel">
+        <button class="btn btn-ghost fm-back" id="fm-back" type="button" data-i18n="forum.back"></button>
+
+        <div class="fm-head">
+          <h2 class="panel-title" id="fm-topic-title"></h2>
+          <div class="fm-badges" id="fm-topic-badges"></div>
+        </div>
+
+        <div class="fm-topic-meta" id="fm-topic-meta"></div>
+        <div class="fm-topic-actions" id="fm-topic-actions"></div>
+
+        <div class="fm-posts" id="fm-posts"></div>
+
+        <div class="cms-block" id="fm-reply-block">
+          <h3 class="cms-subtitle" data-i18n="forum.reply"></h3>
+          <textarea id="fm-rbody" class="cms-input cms-textarea" rows="4" maxlength="5000"
+                    data-i18n-placeholder="forum.reply_placeholder"></textarea>
+          <div class="fm-form-actions">
+            <button class="btn btn-gold" id="fm-reply" type="button" data-i18n="forum.reply_send"></button>
+            <span class="cms-status" id="fm-reply-status"></span>
+          </div>
+          <p class="form-error hidden" id="fm-rerror"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span data-icon="star8" data-icon-size="14"></span>
+    <span data-i18n="site.footer_note"></span>
+    <span class="footer-sep">·</span>
+    <span>© 2024–2026 Sigma Arena Games Group</span>
+    <span class="footer-sep">·</span>
+    <a href="/" class="footer-link"><span data-i18n="site.news_title"></span></a>
+    <a href="/forum.html" class="footer-link"><span data-i18n="forum.title"></span></a>
+    <a href="/feedback.html" class="footer-link"><span data-i18n="feedback.title"></span></a>
+    <a href="/admin.html" class="footer-link hidden" id="admin-link">Управление сайтом</a>
+  </footer>
+
+  <script type="module" src="/js/forum.js"></script>
+</body>
+</html>

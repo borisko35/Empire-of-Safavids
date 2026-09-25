@@ -2,7 +2,7 @@
 // Общие константы — Empire of Safavids
 // ============================================================
 
-export const GAME_VERSION = '0.1.0';
+export const GAME_VERSION = '0.2.0';
 export const MAX_LEVEL = 100;
 export const MAX_CHARACTERS_PER_ACCOUNT = 3;
 export const MAX_INVENTORY_SLOTS = 100;
@@ -55,6 +55,10 @@ export const SOCKET_EVENTS = {
   PLAYER_DIED: 'player:died',
   PLAYER_RESPAWNED: 'player:respawned',
   MOVE_REJECTED: 'move:rejected',
+
+  // Interiors (здания с входом/выходом)
+  INTERIOR_ENTER: 'interior:enter',
+  INTERIOR_EXIT: 'interior:exit',
 
   // Combat
   COMBAT_ACTION: 'combat:action',
@@ -116,6 +120,29 @@ export function isValidServerId(id: string): boolean {
   return GAME_SERVERS.some(s => s.id === id);
 }
 
+// ============================================================
+// Стартовые точки регионов (суша, рядом с поселениями).
+// Используются при создании персонажа, респавне и спасении
+// персонажа, чья сохранённая позиция оказалась в воде.
+// tabriz/isfahan — площадь возрождения у ворот Исфахана (0,0);
+// остальные — якоря регионов (см. REGION_ANCHORS в клиенте).
+// ============================================================
+export const SPAWN_PLAZA = { x: 0, z: 0 };
+
+export const REGION_SPAWNS: Record<string, { x: number; z: number }> = {
+  tabriz: { x: 0, z: 0 },
+  isfahan: { x: 0, z: 0 },
+  shiraz: { x: 90, z: -60 },
+  caucasus: { x: 60, z: 140 },
+  mesopotamia: { x: 200, z: 50 },
+  khorasan: { x: 150, z: 200 },
+  persian_gulf: { x: -60, z: -170 },
+};
+
+export function getRegionSpawn(region: string): { x: number; z: number } {
+  return REGION_SPAWNS[region] ?? { ...SPAWN_PLAZA };
+}
+
 export const REDIS_CHANNELS = {
   PLAYER_NOTIFICATION: 'player:notification',
   ANTI_CHEAT_KICK: 'anticheat:kick',
@@ -131,3 +158,28 @@ export const REDIS_CHANNELS = {
   REGION_MONSTER_KILLED: (shardId: string, region: string) => `region:${shardId}:${region}:monster_killed`,
   REGION_MONSTER_HIT: (shardId: string, region: string) => `region:${shardId}:${region}:monster_hit`, // монстр ударил игрока
 } as const;
+
+// ============================================================
+// Алиасы квестовых NPC: id из server/src/data/quests.ts, которых нет
+// в мире, → реально существующий NPC. Используется и сервером
+// (QuestService.recordTalk), и клиентом (стрелка-навигатор).
+// ============================================================
+export const QUEST_NPC_ALIAS: Record<string, string> = {
+  npc_shah_messenger: 'npc_quest_crier',
+  npc_grand_vizier: 'npc_quest_crier',
+  npc_guard_captain: 'npc_guard_east',
+  npc_tabriz_guard: 'npc_guard_east',
+  npc_tabriz_merchant: 'npc_forester',
+  npc_isfahan_trader: 'npc_bazaar_merchant',
+  npc_isfahan_merchant: 'npc_bazaar_merchant',
+  npc_village_elder: 'npc_forester',
+  npc_tabriz_farmer: 'npc_village_trader',
+  npc_tabriz_hunter: 'npc_woodcutter',
+  npc_shiraz_librarian: 'npc_poet',
+  npc_shiraz_priest: 'npc_healer',
+  npc_qizilbash_commander: 'npc_fort_commander',
+  npc_khorasan_governor: 'npc_desert_master',
+  'npc_gulf_harbor-master': 'npc_harbor_master',
+  npc_isfahan_mage: 'npc_mystic',
+  npc_isfahan_alchemist: 'npc_craftsman',
+};

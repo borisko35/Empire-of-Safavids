@@ -4,7 +4,6 @@
 
 import { AISystem } from '../systems/AISystem';
 import { MONSTERS_DATABASE } from '../data/monsters';
-import { Region } from '../types/game.types';
 
 describe('AISystem', () => {
   let ai: AISystem;

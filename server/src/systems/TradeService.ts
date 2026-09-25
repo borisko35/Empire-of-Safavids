@@ -21,6 +21,10 @@ export interface TradeContractDef {
   cargoQty: number;
   rewardGold: number;
   rewardExp: number;
+  /** Бонус исфаханским серебром (бесплатная валюта). */
+  rewardSilver?: number;
+  /** Бонус сирийским золотом (бесплатная валюта). */
+  rewardSyrian?: number;
   minLevel: number;
 }
 
@@ -38,7 +42,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
     nameRu: 'Шёлк для Исфахана',
     fromRegion: Region.TABRIZ, toRegion: Region.ISFAHAN,
     cargoItemId: 'mat_silk', cargoQty: 3,
-    rewardGold: 450, rewardExp: 400, minLevel: 5,
+    rewardGold: 450, rewardExp: 400, rewardSilver: 15, minLevel: 5,
   },
   {
     id: 'trade_isfahan_shiraz_saffron',
@@ -66,7 +70,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
     nameRu: 'Драконья чешуя в Хорасан',
     fromRegion: Region.ISFAHAN, toRegion: Region.KHORASAN,
     cargoItemId: 'mat_dragon_scale', cargoQty: 1,
-    rewardGold: 8000, rewardExp: 5200, minLevel: 70,
+    rewardGold: 8000, rewardExp: 5200, rewardSilver: 120, rewardSyrian: 40, minLevel: 70,
   },
 ];
 
@@ -107,7 +111,7 @@ export class TradeService {
 
   async deliver(
     characterId: string
-  ): Promise<{ ok: true; gold: number; exp: number; contract: TradeContractDef } | { ok: false; code: string }> {
+  ): Promise<{ ok: true; gold: number; exp: number; silver: number; syrian: number; contract: TradeContractDef } | { ok: false; code: string }> {
     const active = await this.getActive(characterId);
     if (!active) return { ok: false, code: 'contract_none_active' };
 
@@ -120,9 +124,13 @@ export class TradeService {
 
     await this.characters.addGold(characterId, def.rewardGold).catch(() => {});
     await this.characters.addExperience(characterId, def.rewardExp).catch(() => {});
+    const silver = def.rewardSilver ?? 0;
+    const syrian = def.rewardSyrian ?? 0;
+    if (silver > 0) await this.characters.addSilver(characterId, silver).catch(() => {});
+    if (syrian > 0) await this.characters.addSyrianGold(characterId, syrian).catch(() => {});
     await this.redis.del(CONTRACT_KEY(characterId));
     logger.info(`[Trade] Contract ${def.id} delivered by ${characterId}`);
-    return { ok: true, gold: def.rewardGold, exp: def.rewardExp, contract: def };
+    return { ok: true, gold: def.rewardGold, exp: def.rewardExp, silver, syrian, contract: def };
   }
 
   /** Отказаться от контракта: груз возвращается (караван развернулся) */

@@ -3,8 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Empire of Safavids — историческая Action MMORPG по мотивам Сефевидской империи (1501–1736)">
-  <title>Empire of Safavids — Action MMORPG</title>
+  <title>Empire of Safavids — Action MMORPG | Сефевидская Империя</title>
+  <meta name="description" content="Empire of Safavids — бесплатная историческая Action MMORPG по мотивам Сефевидской империи (1501–1736). PvP, подземелья, торговля, 7 регионов Персии.">
+  <meta name="keywords" content="MMORPG, action RPG, Safavid, Persia, online game, free, PvP, historical, Сефевиды, Персия, Онлайн игра">
+  <meta name="author" content="Sigma Arena Games Group">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://empire-of-safavids.com/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Empire of Safavids — Action MMORPG">
+  <meta property="og:description" content="Бесплатная историческая Action MMORPG. Путешествуйте по 7 регионам Сефевидской империи, сражайтесь в PvP, проходите подземелья.">
+  <meta property="og:image" content="/assets/og-screenshot.png">
+  <meta property="og:url" content="https://empire-of-safavids.com/">
+  <meta property="og:locale" content="ru_RU">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Empire of Safavids — Action MMORPG">
+  <meta name="twitter:description" content="Бесплатная историческая Action MMORPG по мотивам Сефевидской империи">
+  <meta name="twitter:image" content="/assets/og-screenshot.png">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Empire of Safavids",
+    "description": "Free historical Action MMORPG set in the Safavid Empire (1501–1736)",
+    "genre": ["MMORPG", "Action", "Historical"],
+    "gamePlatform": "Web Browser",
+    "operatingSystem": "Any",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Organization", "name": "Sigma Arena Games Group" }
+  }
+  </script>
+
   <link rel="icon" href="/favicon.ico">
   <link rel="apple-touch-icon" href="/assets/icon-256.png">
   <link rel="stylesheet" href="/css/main.css">
@@ -19,6 +53,13 @@
     </a>
     <nav class="topnav">
       <a href="#history" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="menu.history"></span></a>
+      <a href="#classes" class="topnav-link"><span data-icon="shield" data-icon-size="16"></span><span data-i18n="site.classes_title"></span></a>
+      <a href="#rating" class="topnav-link"><span data-icon="crown" data-icon-size="16"></span><span data-i18n="menu.rating"></span></a>
+      <a href="#screenshots" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.screenshots_title"></span></a>
+      <a href="#news" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.news_title"></span></a>
+      <a href="#faq" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.faq_title"></span></a>
+      <a href="/forum.html" class="topnav-link"><span data-icon="shield" data-icon-size="16"></span><span data-i18n="forum.title"></span></a>
+      <a href="/feedback.html" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="feedback.title"></span></a>
       <a href="#download" class="topnav-link"><span data-icon="download" data-icon-size="16"></span><span data-i18n="site.download_title"></span></a>
     </nav>
     <div class="topbar-right">
@@ -30,6 +71,10 @@
       <span class="version-badge" id="version-badge"><span data-i18n="menu.version"></span>&nbsp;<b id="version-num">…</b></span>
     </div>
   </header>
+
+  <!-- Контент из CMS (админка → «Управление сайтом») -->
+  <div id="site-maintenance" class="site-maintenance hidden" role="alert"></div>
+  <div id="site-announcement" class="site-announcement hidden"></div>
 
   <main>
     <!-- Герой: название игры на фоне ночного Исфахана -->
@@ -53,6 +98,18 @@
           <span data-icon="scroll" data-icon-size="20"></span>
           <span data-i18n="menu.history"></span>
         </a>
+        <a class="btn btn-ghost" href="#rating">
+          <span data-icon="crown" data-icon-size="20"></span>
+          <span data-i18n="menu.rating"></span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Статус серверов: живой онлайн -->
+    <section class="section" id="status">
+      <div class="panel panel-status">
+        <h2 class="panel-title"><span class="panel-title-icon" data-icon="bolt" data-icon-size="22"></span><span data-i18n="site.status_title"></span></h2>
+        <div class="status-grid" id="status-grid"></div>
       </div>
     </section>
 
@@ -88,6 +145,166 @@
       <h2 class="section-title"><span data-icon="shield" data-icon-size="22"></span>&nbsp;<span data-i18n="site.classes_title"></span></h2>
       <div class="class-grid" id="class-grid"></div>
     </section>
+
+    <!-- Рейтинг игроков: живой топ-10 -->
+    <section class="section" id="rating">
+      <div class="panel panel-rating">
+        <h2 class="panel-title"><span class="panel-title-icon" data-icon="crown" data-icon-size="22"></span><span data-i18n="site.rating_title"></span></h2>
+        <div class="rating-tabs" id="rating-tabs">
+          <button class="rating-tab active" data-type="level" type="button">Lv</button>
+          <button class="rating-tab" data-type="pvp" type="button">PvP</button>
+          <button class="rating-tab" data-type="kills" type="button">Kills</button>
+        </div>
+        <ol class="rating-list" id="rating-list"></ol>
+      </div>
+    </section>
+
+    <!-- Скриншоты и геймплей -->
+    <section class="section" id="screenshots">
+      <h2 class="section-title"><span data-icon="scroll" data-icon-size="22"></span>&nbsp;<span data-i18n="site.screenshots_title"></span></h2>
+      <div class="screenshots-grid">
+        <div class="screenshot-card">
+          <img src="/assets/screenshots/combat.png" alt="Бой в пустыне" loading="lazy">
+          <p class="screenshot-caption" data-i18n="site.ss_combat"></p>
+        </div>
+        <div class="screenshot-card">
+          <img src="/assets/screenshots/isfahan.png" alt="Площадь Исфахана" loading="lazy">
+          <p class="screenshot-caption" data-i18n="site.ss_isfahan"></p>
+        </div>
+        <div class="screenshot-card">
+          <img src="/assets/screenshots/dungeon.png" alt="Подземелье" loading="lazy">
+          <p class="screenshot-caption" data-i18n="site.ss_dungeon"></p>
+        </div>
+        <div class="screenshot-card">
+          <img src="/assets/screenshots/simurgh.png" alt="Босс Симург" loading="lazy">
+          <p class="screenshot-caption" data-i18n="site.ss_simurgh"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Новости империи -->
+    <section class="section" id="news">
+      <h2 class="section-title"><span data-icon="scroll" data-icon-size="22"></span>&nbsp;<span data-i18n="site.news_title"></span></h2>
+      <div class="news-grid">
+        <article class="news-card">
+          <h3 data-i18n="site.news_1_t"></h3>
+          <p data-i18n="site.news_1_d"></p>
+          <a class="btn btn-gold" href="/game/"><span data-i18n="menu.play"></span></a>
+        </article>
+        <article class="news-card">
+          <h3 data-i18n="site.news_2_t"></h3>
+          <p data-i18n="site.news_2_d"></p>
+        </article>
+        <article class="news-card">
+          <h3 data-i18n="site.news_3_t"></h3>
+          <p data-i18n="site.news_3_d"></p>
+        </article>
+        <article class="news-card">
+          <h3 data-i18n="site.news_4_t"></h3>
+          <p data-i18n="site.news_4_d"></p>
+        </article>
+        <article class="news-card">
+          <h3 data-i18n="site.news_5_t"></h3>
+          <p data-i18n="site.news_5_d"></p>
+        </article>
+        <article class="news-card">
+          <h3 data-i18n="site.news_6_t"></h3>
+          <p data-i18n="site.news_6_d"></p>
+        </article>
+      </div>
+    </section>
+
+    <!-- Особенности -->
+    <section class="section" id="features">
+      <h2 class="section-title"><span data-icon="star8" data-icon-size="22"></span>&nbsp;<span data-i18n="site.features_title"></span></h2>
+      <div class="features-grid" id="features-grid"></div>
+    </section>
+
+    <!-- Сообщество: Discord, соцсети -->
+    <section class="section" id="community">
+      <h2 class="section-title"><span data-icon="scroll" data-icon-size="22"></span>&nbsp;<span data-i18n="site.community_title"></span></h2>
+      <div class="community-links">
+        <a class="community-card community-discord" href="https://discord.gg/safavids" target="_blank" rel="noopener">
+          <span class="community-icon">💬</span>
+          <span class="community-name">Discord</span>
+          <span class="community-desc" data-i18n="site.discord_desc"></span>
+        </a>
+        <a class="community-card" href="https://www.facebook.com/profile.php?id=61594131067385" target="_blank" rel="noopener">
+          <span class="community-icon">📘</span>
+          <span class="community-name">Facebook</span>
+          <span class="community-desc" data-i18n="site.facebook_desc"></span>
+        </a>
+        <a class="community-card" href="https://twitter.com/EmpireOfSafavids" target="_blank" rel="noopener">
+          <span class="community-icon">🐦</span>
+          <span class="community-name">Twitter / X</span>
+          <span class="community-desc" data-i18n="site.twitter_desc"></span>
+        </a>
+        <a class="community-card" href="https://www.reddit.com/r/EmpireOfSafavids" target="_blank" rel="noopener">
+          <span class="community-icon">🔴</span>
+          <span class="community-name">Reddit</span>
+          <span class="community-desc" data-i18n="site.reddit_desc"></span>
+        </a>
+        <a class="community-card" href="https://indiedb.com/games/empire-of-safavids" target="_blank" rel="noopener">
+          <span class="community-icon">🎮</span>
+          <span class="community-name">IndieDB</span>
+          <span class="community-desc" data-i18n="site.indiedb_desc"></span>
+        </a>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <h2 class="section-title"><span data-icon="scroll" data-icon-size="22"></span>&nbsp;<span data-i18n="site.faq_title"></span></h2>
+      <div class="faq-list" id="faq-list">
+        <details class="faq-item">
+          <summary class="faq-q" data-i18n="site.faq_free_q"></summary>
+          <p class="faq-a" data-i18n="site.faq_free_a"></p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q" data-i18n="site.faq_pvp_q"></summary>
+          <p class="faq-a" data-i18n="site.faq_pvp_a"></p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q" data-i18n="site.faq_minigames_q"></summary>
+          <p class="faq-a" data-i18n="site.faq_minigames_a"></p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q" data-i18n="site.faq_req_q"></summary>
+          <p class="faq-a" data-i18n="site.faq_req_a"></p>
+        </details>
+        <details class="faq-item">
+          <summary class="faq-q" data-i18n="site.faq_languages_q"></summary>
+          <p class="faq-a" data-i18n="site.faq_languages_a"></p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Системные требования -->
+    <section class="section" id="requirements">
+      <h2 class="section-title"><span data-icon="gear" data-icon-size="22"></span>&nbsp;<span data-i18n="site.sysreq_title"></span></h2>
+      <div class="sysreq-grid">
+        <div class="sysreq-card sysreq-min">
+          <h3 data-i18n="site.sysreq_min"></h3>
+          <ul>
+            <li data-i18n="site.sysreq_os_min"></li>
+            <li data-i18n="site.sysreq_cpu_min"></li>
+            <li data-i18n="site.sysreq_ram_min"></li>
+            <li data-i18n="site.sysreq_gpu_min"></li>
+            <li data-i18n="site.sysreq_net"></li>
+          </ul>
+        </div>
+        <div class="sysreq-card sysreq-rec">
+          <h3 data-i18n="site.sysreq_rec"></h3>
+          <ul>
+            <li data-i18n="site.sysreq_os_rec"></li>
+            <li data-i18n="site.sysreq_cpu_rec"></li>
+            <li data-i18n="site.sysreq_ram_rec"></li>
+            <li data-i18n="site.sysreq_gpu_rec"></li>
+            <li data-i18n="site.sysreq_net"></li>
+          </ul>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
@@ -95,6 +312,17 @@
     <span data-i18n="site.footer_note"></span>
     <span class="footer-sep">·</span>
     <span>© 2024–2026 Sigma Arena Games Group</span>
+    <span class="footer-sep">·</span>
+    <a href="#rating" class="footer-link"><span data-i18n="menu.rating"></span></a>
+    <a href="#news" class="footer-link"><span data-i18n="site.news_title"></span></a>
+    <a href="#faq" class="footer-link"><span data-i18n="site.faq_title"></span></a>
+    <a href="/forum.html" class="footer-link"><span data-i18n="forum.title"></span></a>
+    <a href="/feedback.html" class="footer-link"><span data-i18n="feedback.title"></span></a>
+    <a href="https://discord.gg/safavids" target="_blank" rel="noopener" class="footer-link">Discord</a>
+    <a href="https://twitter.com/EmpireOfSafavids" target="_blank" rel="noopener" class="footer-link">Twitter</a>
+    <a href="https://www.reddit.com/r/EmpireOfSafavids" target="_blank" rel="noopener" class="footer-link">Reddit</a>
+    <!-- Видно только персоналу (см. main.js → revealAdminLink) -->
+    <a href="/admin.html" class="footer-link hidden" id="admin-link">Управление сайтом</a>
   </footer>
 
   <script type="module" src="/js/main.js"></script>

@@ -1,4 +1,4 @@
--- Migration 003: Monetization, Mounts, Pets, Premium, Battle Pass
+﻿-- Migration 003: Monetization, Mounts, Pets, Premium, Battle Pass
 
 -- Premium subscriptions
 CREATE TABLE premium_subscriptions (
@@ -42,7 +42,7 @@ CREATE TABLE character_pets (
 
 -- Notifications
 CREATE TABLE notifications (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   type         VARCHAR(50) NOT NULL,
   title_ru     VARCHAR(100) NOT NULL,
@@ -85,7 +85,7 @@ CREATE TABLE character_mutes (
 
 -- Bounties
 CREATE TABLE bounties (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id         UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   placer_id  UUID NOT NULL REFERENCES characters(id),
   target_id  UUID NOT NULL REFERENCES characters(id),
   amount     BIGINT NOT NULL,

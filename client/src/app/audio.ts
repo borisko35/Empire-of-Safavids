@@ -11,6 +11,8 @@
 
 const HICAZ = [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 554.37]; // D Eb F# G A Bb C
 const HICAZ_NIGHT = [261.63, 277.18, 329.63, 349.23, 392.0, 415.3, 493.88]; // C Db E F G Ab B
+// Светлый раст для стартовой страницы: D E F# G A B C# — спокойный, без барабанов.
+const RAST_AUTH = [293.66, 329.63, 369.99, 392.0, 440.0, 493.88, 554.37];
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -19,9 +21,13 @@ class AudioEngine {
   private sfxGain: GainNode | null = null;
   private ambienceGain: GainNode | null = null;
   private murmurGain: GainNode | null = null;
+  private murmurGain2: GainNode | null = null;
+  private rainGain: GainNode | null = null;
+  private stormGain: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private musicTimer: ReturnType<typeof setInterval> | null = null;
   private chirpTimer: ReturnType<typeof setTimeout> | null = null;
+  private cityTimer: ReturnType<typeof setTimeout> | null = null;
   private step = 0;
   private night = false;
   private inCity = false;
@@ -42,6 +48,7 @@ class AudioEngine {
   ensureAuth(): void {
     this.ensure();
     this.mode = 'auth';
+    this.step = 0;
     (window as unknown as Record<string, unknown>).__eosAudio = 'auth';
     this.setAmbienceEnabled(false);
   }
@@ -82,6 +89,7 @@ class AudioEngine {
   ensureGame(): void {
     this.ensure();
     this.mode = 'game';
+    this.step = 0;
     (window as unknown as Record<string, unknown>).__eosAudio = 'game';
     this.setAmbienceEnabled(true);
   }
@@ -90,6 +98,7 @@ class AudioEngine {
   dispose(): void {
     if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; }
     if (this.chirpTimer) { clearTimeout(this.chirpTimer); this.chirpTimer = null; }
+    if (this.cityTimer) { clearTimeout(this.cityTimer); this.cityTimer = null; }
   }
 
   setMuted(m: boolean): void {
@@ -130,7 +139,10 @@ class AudioEngine {
     if (this.inCity === inCity) return;
     this.inCity = inCity;
     if (this.murmurGain && this.ctx) {
-      this.murmurGain.gain.setTargetAtTime(inCity ? 0.045 : 0, this.ctx.currentTime, 0.8);
+      this.murmurGain.gain.setTargetAtTime(inCity ? 0.06 : 0, this.ctx.currentTime, 0.8);
+    }
+    if (this.murmurGain2 && this.ctx) {
+      this.murmurGain2.gain.setTargetAtTime(inCity ? 0.035 : 0, this.ctx.currentTime, 0.8);
     }
   }
 
@@ -172,6 +184,45 @@ class AudioEngine {
     murmur.connect(murmurFilter); murmurFilter.connect(this.murmurGain); this.murmurGain.connect(out);
     murmur.start();
 
+    // Второй слой гомона (выше и быстрее) — толпа звучит плотнее.
+    const murmur2 = ctx.createBufferSource();
+    murmur2.buffer = this.noiseBuf!;
+    murmur2.loop = true;
+    murmur2.playbackRate.value = 0.85;
+    const murmurFilter2 = ctx.createBiquadFilter();
+    murmurFilter2.type = 'bandpass';
+    murmurFilter2.frequency.value = 900;
+    murmurFilter2.Q.value = 0.7;
+    this.murmurGain2 = ctx.createGain();
+    this.murmurGain2.gain.value = 0;
+    murmur2.connect(murmurFilter2); murmurFilter2.connect(this.murmurGain2); this.murmurGain2.connect(out);
+    murmur2.start();
+
+    // Дождь: шипение (highpass-шум), громкость задаёт setRainLevel.
+    const rain = ctx.createBufferSource();
+    rain.buffer = this.noiseBuf!;
+    rain.loop = true;
+    const rainFilter = ctx.createBiquadFilter();
+    rainFilter.type = 'highpass';
+    rainFilter.frequency.value = 4200;
+    this.rainGain = ctx.createGain();
+    this.rainGain.gain.value = 0;
+    rain.connect(rainFilter); rainFilter.connect(this.rainGain); this.rainGain.connect(out);
+    rain.start();
+
+    // Вой ветра для бури: низкий гул поверх обычного ветра.
+    const storm = ctx.createBufferSource();
+    storm.buffer = this.noiseBuf!;
+    storm.loop = true;
+    storm.playbackRate.value = 0.45;
+    const stormFilter = ctx.createBiquadFilter();
+    stormFilter.type = 'lowpass';
+    stormFilter.frequency.value = 420;
+    this.stormGain = ctx.createGain();
+    this.stormGain.gain.value = 0;
+    storm.connect(stormFilter); stormFilter.connect(this.stormGain); this.stormGain.connect(out);
+    storm.start();
+
     // Расписание птиц/сверчков
     const scheduleChirps = () => {
       this.chirpTimer = setTimeout(() => {
@@ -183,6 +234,126 @@ class AudioEngine {
       }, this.night ? 1800 + Math.random() * 3200 : 2600 + Math.random() * 5200);
     };
     scheduleChirps();
+    this.scheduleCityLife();
+  }
+
+  /** Шумный город: молот кузнеца, всплески толпы, верблюжьи бубенцы. */
+  /** Уровень дождя 0..1 (шипение). */
+  setRainLevel(v: number): void {
+    if (this.rainGain && this.ctx) {
+      this.rainGain.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.11, this.ctx.currentTime, 0.8);
+    }
+  }
+
+  /** Уровень штормового ветра 0..1 (вой). Обычный ветер звучит всегда. */
+  setWindLevel(v: number): void {
+    if (this.stormGain && this.ctx) {
+      this.stormGain.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.14, this.ctx.currentTime, 1.0);
+    }
+  }
+
+  /** Раскат грома: низкий затухающий грохот. */
+  thunder(): void {
+    if (!this.ctx || !this.noiseBuf || !this.ambienceGain) return;
+    if (this._muted || !this.ambienceOn) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const dur = 1.6 + Math.random() * 1.2;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuf;
+    n.playbackRate.value = 0.3;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(160, t);
+    f.frequency.exponentialRampToValueAtTime(55, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    n.connect(f); f.connect(g); g.connect(this.ambienceGain);
+    n.start(t); n.stop(t + dur + 0.05);
+  }
+
+  private scheduleCityLife(): void {
+    this.cityTimer = setTimeout(() => {
+      if (this.ctx && !this._muted && this.ambienceOn && this.inCity) {
+        const roll = Math.random();
+        if (roll < 0.4) this.hammerClank();
+        else if (roll < 0.75) this.chatterBurst();
+        else this.camelBell();
+      }
+      this.scheduleCityLife();
+    }, 2000 + Math.random() * 5000);
+  }
+
+  private cityOut(): { ctx: AudioContext; out: GainNode } | null {
+    if (!this.ctx || !this.ambienceGain) return null;
+    return { ctx: this.ctx, out: this.ambienceGain };
+  }
+
+  /** Удар молота по наковальне: металлический звон с быстрым затуханием. */
+  private hammerClank(): void {
+    const io = this.cityOut();
+    if (!io) return;
+    const { ctx, out } = io;
+    const t = ctx.currentTime;
+    for (const hz of [1244, 1866, 2493]) {
+      const o = ctx.createOscillator();
+      o.type = 'square';
+      o.frequency.value = hz * (0.98 + Math.random() * 0.04);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.02, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      o.connect(g); g.connect(out);
+      o.start(t); o.stop(t + 0.4);
+    }
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuf!;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'highpass'; nf.frequency.value = 5000;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.03, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    n.connect(nf); nf.connect(ng); ng.connect(out);
+    n.start(t); n.stop(t + 0.08);
+  }
+
+  /** Всплеск толпы: полоса шума вспухает и гаснет. */
+  private chatterBurst(): void {
+    const io = this.cityOut();
+    if (!io) return;
+    const { ctx, out } = io;
+    const t = ctx.currentTime;
+    const dur = 0.5 + Math.random() * 0.7;
+    const n = ctx.createBufferSource();
+    n.buffer = this.noiseBuf!;
+    n.playbackRate.value = 0.5 + Math.random() * 0.4;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'bandpass';
+    nf.frequency.value = 400 + Math.random() * 500;
+    nf.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + dur * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    n.connect(nf); nf.connect(g); g.connect(out);
+    n.start(t); n.stop(t + dur + 0.05);
+  }
+
+  /** Верблюжий бубенец: высокий чистый динь. */
+  private camelBell(): void {
+    const io = this.cityOut();
+    if (!io) return;
+    const { ctx, out } = io;
+    const t = ctx.currentTime;
+    const hz = 2093 * (0.97 + Math.random() * 0.06);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = hz;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.025, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    o.connect(g); g.connect(out);
+    o.start(t); o.stop(t + 0.95);
   }
 
   /** Птица: 2–4 щелчка с падающей высотой */
@@ -240,6 +411,10 @@ class AudioEngine {
   private musicStep(): void {
     const ctx = this.ctx, out = this.musicGain;
     if (!ctx || !out || ctx.state !== 'running') return;
+    if (this.mode === 'auth') {
+      this.authMusicStep(ctx);
+      return;
+    }
     const scale = this.night ? HICAZ_NIGHT : HICAZ;
     const t = ctx.currentTime;
     const s = this.step++;
@@ -259,6 +434,24 @@ class AudioEngine {
     if (s % 2 === 1 || Math.random() < 0.3) {
       const idx = Math.floor(Math.random() * scale.length);
       this.ney(scale[idx] * (Math.random() < 0.25 ? 2 : 1), t + 0.15, 1.4);
+    }
+  }
+
+  /**
+   * Тема стартовой страницы: светлый раст, редкие аккорды, неторопливый
+   * ней поверх, барабанов нет. Слышно сразу, что это не игровая тема.
+   */
+  private authMusicStep(ctx: AudioContext): void {
+    const t = ctx.currentTime;
+    const s = this.step++;
+    if (s % 8 === 0) {
+      const rootHz = RAST_AUTH[0] / 2;
+      this.pad(rootHz, t, 14);
+      this.pad(rootHz * 1.498, t, 14);
+    }
+    if (s % 8 === 4) {
+      const idx = [3, 4, 5, 2][Math.floor(Math.random() * 4)];
+      this.ney(RAST_AUTH[idx], t + 0.2, 2.2);
     }
   }
 

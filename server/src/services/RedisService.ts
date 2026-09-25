@@ -95,6 +95,49 @@ export class RedisService {
     return this.client.sCard(`shard:members:${shardId}`);
   }
 
+  /** Онлайн ли конкретный персонаж (проверяет наличие свежего ключа позиции) */
+  async isPlayerOnline(characterId: string): Promise<boolean> {
+    try {
+      const exists = await this.client.exists(`player:position:${characterId}`);
+      if (exists) return true;
+      // fallback: проверить членство в shard:members (на случай если позиция ещё не записана)
+      // перебираем известные шарды — импорт избегаем, используем ключи напрямую
+      const keys = await this.client.keys('shard:members:*').catch(() => [] as string[]);
+      for (const key of keys) {
+        const member = await this.client.sIsMember(key, characterId).catch(() => false);
+        if (member) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Пакетная проверка онлайна */
+  async arePlayersOnline(characterIds: string[]): Promise<Map<string, boolean>> {
+    const result = new Map<string, boolean>();
+    if (characterIds.length === 0) return result;
+    await Promise.all(characterIds.map(async (id) => {
+      result.set(id, await this.isPlayerOnline(id));
+    }));
+    return result;
+  }
+
+  /** Онлайн ли пользователь (любой из его персонажей онлайн) */
+  async isUserOnline(userId: string): Promise<boolean> {
+    try {
+      const { DatabaseService } = await import('./DatabaseService');
+      const db = DatabaseService.getInstance();
+      const rows = await db.query<{ id: string }>('SELECT id FROM characters WHERE user_id = $1', [userId]);
+      for (const r of rows) {
+        if (await this.isPlayerOnline(r.id)) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   // Сессии
   async setSession(token: string, userId: string, ttl = 86400): Promise<void> {
     await this.client.setEx(`session:${token}`, ttl, userId);

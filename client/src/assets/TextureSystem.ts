@@ -283,6 +283,8 @@ export const TEXTURE_CATALOG: Record<string, TextureDefinition> = {
 // Менеджер текстур
 // ============================================================
 export class TextureManager {
+  // Cache for future runtime texture loading (currently unused — catalog is metadata-only)
+  // @ts-ignore - reserved for CDN texture instance cache
   private loadedTextures = new Map<string, TextureDefinition>();
   private qualitySettings: Record<TextureQuality, number> = {
     low: 3, medium: 2, high: 1, ultra: 0,

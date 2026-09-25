@@ -1,6 +1,6 @@
--- Migration 005: Auth sessions table
+﻿-- Migration 005: Auth sessions table
 CREATE TABLE user_sessions (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id         UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token      VARCHAR(36) UNIQUE NOT NULL,
   ip_address INET,

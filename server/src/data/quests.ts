@@ -15,11 +15,19 @@ export interface QuestObjectiveDef {
   target: string;       // monsterId | itemId | npcId | regionId
   required: number;
   optional: boolean;
+  /** Точки спавна монстров для навигации (используются когда монстры ещё не появились в мире) */
+  spawnPoints?: { x: number; z: number }[];
 }
 
 export interface QuestRewardDef {
   experience: number;
   gold: number;
+  /** Премиум-награда AZENS (обычно 0 — выдается в особых миссиях). */
+  azens?: number;
+  /** Исфаханское серебро — бесплатная валюта квестов/ивентов. */
+  isfahanSilver?: number;
+  /** Сирийское золото — бесплатная валюта квестов/ивентов. */
+  syrianGold?: number;
   items: { itemId: string; quantity: number }[];
   reputation?: { faction: string; amount: number }[];
   unlocks?: string[];   // разблокируемые квесты
@@ -74,7 +82,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 3,
     prerequisites: ['main_001_awakening'],
     objectives: [
-      { id: 'obj_kill_scouts', type: 'kill', description: 'Уничтожить разбойников-разведчиков', target: 'mob_bandit_scout', required: 10, optional: false },
+      { id: 'obj_kill_scouts', type: 'kill', description: 'Уничтожить разбойников-разведчиков', target: 'mob_bandit_scout', required: 10, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
       { id: 'obj_collect_loot', type: 'collect', description: 'Собрать украденное добро', target: 'mat_iron_ore', required: 5, optional: true },
     ],
     rewards: { experience: 1500, gold: 150, items: [{ itemId: 'wpn_iron_sword', quantity: 1 }, { itemId: 'con_health_potion_s', quantity: 10 }] },
@@ -92,7 +100,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     prerequisites: ['main_002_first_blood'],
     objectives: [
       { id: 'obj_spy_isfahan', type: 'explore', description: 'Проникните в османский лагерь', target: 'ottoman_camp_isfahan', required: 1, optional: false },
-      { id: 'obj_kill_spies', type: 'kill', description: 'Уничтожить османских шпионов', target: 'mob_ottoman_janissary', required: 20, optional: false },
+      { id: 'obj_kill_spies', type: 'kill', description: 'Уничтожить османских шпионов', target: 'mob_ottoman_janissary', required: 20, optional: false, spawnPoints: [{ x: 200, z: 50 }, { x: -60, z: -170 }] },
       { id: 'obj_recover_docs', type: 'collect', description: 'Забрать секретные документы', target: 'qst_royal_seal', required: 1, optional: false },
     ],
     rewards: {
@@ -116,10 +124,10 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 5,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_bandits', type: 'kill', description: 'Уничтожить разбойников', target: 'mob_bandit_warrior', required: 5, optional: false },
+      { id: 'obj_kill_bandits', type: 'kill', description: 'Уничтожить разбойников', target: 'mob_bandit_warrior', required: 5, optional: false, spawnPoints: [{ x: -80, z: 120 }, { x: 143, z: 115 }] },
       { id: 'obj_return_gold', type: 'collect', description: 'Вернуть золото торговцу', target: 'qst_merchant_gold_bag', required: 1, optional: false },
     ],
-    rewards: { experience: 2000, gold: 300, items: [{ itemId: 'mat_silk', quantity: 5 }] },
+    rewards: { experience: 2000, gold: 300, isfahanSilver: 50, syrianGold: 20, items: [{ itemId: 'mat_silk', quantity: 5 }] },
     npcGiver: 'npc_tabriz_merchant',
     npcGiverRegion: Region.TABRIZ,
     repeatable: false,
@@ -156,7 +164,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 1,
     prerequisites: [],
     objectives: [
-      { id: 'obj_daily_kill', type: 'kill', description: 'Уничтожить 20 разбойников', target: 'mob_bandit_scout', required: 20, optional: false },
+      { id: 'obj_daily_kill', type: 'kill', description: 'Уничтожить 20 разбойников', target: 'mob_bandit_scout', required: 20, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
     ],
     rewards: { experience: 3000, gold: 200, items: [{ itemId: 'con_health_potion_m', quantity: 2 }] },
     npcGiver: 'npc_guard_captain',
@@ -174,7 +182,6 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     prerequisites: [],
     objectives: [
       { id: 'obj_collect_silk', type: 'collect', description: 'Собрать 10 единиц шёлка', target: 'mat_silk', required: 10, optional: false },
-      { id: 'obj_deliver_silk', type: 'trade', description: 'Доставить шёлк торговцу', target: 'npc_tabriz_merchant', required: 1, optional: false },
     ],
     rewards: { experience: 2500, gold: 400, items: [{ itemId: 'mat_turquoise', quantity: 1 }] },
     npcGiver: 'npc_isfahan_trader',
@@ -194,8 +201,8 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     requiredClass: CharacterClass.QIZILBASH,
     prerequisites: ['main_010_silk_road'],
     objectives: [
-      { id: 'obj_solo_boss', type: 'kill', description: 'Победить босса в одиночку', target: 'boss_bandit_king', required: 1, optional: false },
-      { id: 'obj_no_potion', type: 'kill', description: 'Без использования зелий', target: 'mob_ottoman_janissary', required: 30, optional: true },
+      { id: 'obj_solo_boss', type: 'kill', description: 'Победить босса в одиночку', target: 'boss_bandit_king', required: 1, optional: false, spawnPoints: [{ x: 0, z: 0 }] },
+      { id: 'obj_no_potion', type: 'kill', description: 'Без использования зелий', target: 'mob_ottoman_janissary', required: 30, optional: true, spawnPoints: [{ x: 200, z: 50 }, { x: -60, z: -170 }] },
     ],
     rewards: {
       experience: 100000, gold: 5000,
@@ -218,7 +225,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 80,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_simurgh', type: 'kill', description: 'Победить Великого Симурга', target: 'world_boss_simurgh', required: 1, optional: false },
+      { id: 'obj_kill_simurgh', type: 'kill', description: 'Победить Великого Симурга', target: 'world_boss_simurgh', required: 1, optional: false, spawnPoints: [{ x: 0, z: 0 }] },
     ],
     rewards: {
       experience: 500000, gold: 10000,
@@ -243,7 +250,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 5,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_warriors', type: 'kill', description: 'Разогнать разбойников-воинов', target: 'mob_bandit_warrior', required: 5, optional: false },
+      { id: 'obj_kill_warriors', type: 'kill', description: 'Разогнать разбойников-воинов', target: 'mob_bandit_warrior', required: 5, optional: false, spawnPoints: [{ x: -80, z: 120 }, { x: 143, z: 115 }] },
     ],
     rewards: { experience: 900, gold: 120, items: [{ itemId: 'con_stamina_food', quantity: 5 }] },
     npcGiver: 'npc_guard_captain',
@@ -302,7 +309,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 50,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_raiders', type: 'kill', description: 'Разбить монгольских наездников', target: 'mob_mongol_raider', required: 10, optional: false },
+      { id: 'obj_kill_raiders', type: 'kill', description: 'Разбить монгольских наездников', target: 'mob_mongol_raider', required: 10, optional: false, spawnPoints: [{ x: 66, z: 167 }, { x: -150, z: 200 }] },
       { id: 'obj_collect_ore', type: 'collect', description: 'Собрать железо для ремонта ворот', target: 'mat_iron_ore', required: 10, optional: false },
     ],
     rewards: { experience: 12000, gold: 800, items: [{ itemId: 'con_health_potion_m', quantity: 10 }] },
@@ -321,7 +328,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 80,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_janissaries', type: 'kill', description: 'Потопить десанты янычар', target: 'mob_ottoman_janissary', required: 15, optional: false },
+      { id: 'obj_kill_janissaries', type: 'kill', description: 'Потопить десанты янычар', target: 'mob_ottoman_janissary', required: 15, optional: false, spawnPoints: [{ x: 200, z: 50 }, { x: -60, z: -170 }] },
       { id: 'obj_collect_turquoise', type: 'collect', description: 'Изъять контрабандную бирюзу', target: 'mat_turquoise', required: 3, optional: true },
     ],
     rewards: { experience: 80000, gold: 3000, items: [{ itemId: 'con_exp_scroll', quantity: 2 }] },
@@ -340,7 +347,7 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 85,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_rustam', type: 'kill', description: 'Одолеть Рустама Бессмертного', target: 'world_boss_rustam_reborn', required: 1, optional: false },
+      { id: 'obj_kill_rustam', type: 'kill', description: 'Одолеть Рустама Бессмертного', target: 'world_boss_rustam_reborn', required: 1, optional: false, spawnPoints: [{ x: 40, z: -230 }] },
     ],
     rewards: {
       experience: 400000, gold: 8000,
@@ -351,6 +358,371 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     npcGiverRegion: Region.PERSIAN_GULF,
     repeatable: true,
     repeatCooldown: 336,
+  },
+
+  // ── ПОБОЧНЫЕ КВЕСТЫ ТЕБРИЗА ──────────────────────────────────
+  'side_001_scorpion_nest': {
+    id: 'side_001_scorpion_nest',
+    title: 'Scorpion Nest',
+    titleRu: 'Гнездо Скорпионов',
+    description: 'Фермер жалуется на скорпионов у дороги. Уничтожьте гнездо.',
+    type: 'side',
+    minLevel: 2,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_scorpions', type: 'kill', description: 'Убить скорпионов', target: 'mob_desert_scorpion', required: 5, optional: false, spawnPoints: [{ x: 220, z: 70 }] },
+    ],
+    rewards: { experience: 200, gold: 50, items: [{ itemId: 'pot_health_small', quantity: 3 }] },
+    npcGiver: 'npc_tabriz_farmer',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'side_002_wolf_pelts': {
+    id: 'side_002_wolf_pelts',
+    title: 'Wolf Pelts',
+    titleRu: 'Волчьи Шкуры',
+    description: 'Охотник хочет купить волчьи шкуры для зимней куртки.',
+    type: 'side',
+    minLevel: 5,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_wolves', type: 'kill', description: 'Добыть шкуры волков', target: 'mob_wolf', required: 8, optional: false, spawnPoints: [{ x: -90, z: 130 }] },
+    ],
+    rewards: { experience: 350, gold: 120, items: [{ itemId: 'arm_leather_vest', quantity: 1 }] },
+    npcGiver: 'npc_tabriz_hunter',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
+  },
+
+  // ── ПОБОЧНЫЕ КВЕСТЫ ИСФАХАНА ────────────────────────────────
+  'side_003_silk_road': {
+    id: 'side_003_silk_road',
+    title: 'The Silk Road',
+    titleRu: 'Шёлковый Путь',
+    description: 'Торговец ищет защиту для каравана до Тебриза.',
+    type: 'side',
+    minLevel: 18,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_assassins', type: 'kill', description: 'Убить ассасинов', target: 'mob_assassin_acolyte', required: 5, optional: false, spawnPoints: [{ x: 34, z: 26 }] },
+    ],
+    rewards: { experience: 1200, gold: 500, items: [{ itemId: 'mat_silk_thread', quantity: 10 }, { itemId: 'acc_boots_silk', quantity: 1 }] },
+    npcGiver: 'npc_isfahan_merchant',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+  'side_004_sand_storm': {
+    id: 'side_004_sand_storm',
+    title: 'The Sand Storm',
+    titleRu: 'Песчаная Буря',
+    description: 'Маг-элементаль пустыни угрожает караванам. Следы ведут в пустыню.',
+    type: 'side',
+    minLevel: 28,
+    prerequisites: ['side_003_silk_road'],
+    objectives: [
+      { id: 'obj_kill_elementals', type: 'kill', description: 'Убить песчанных элементалей', target: 'mob_sand_elemental', required: 3, optional: false, spawnPoints: [{ x: 34, z: 26 }] },
+    ],
+    rewards: { experience: 2000, gold: 800, items: [{ itemId: 'acc_ring_jade', quantity: 1 }] },
+    npcGiver: 'npc_isfahan_mage',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: false,
+  },
+
+  // ── ПОБОЧНЫЕ КВЕСТЫ ШИРАЗА ──────────────────────────────────
+  'side_005_graveyard': {
+    id: 'side_005_graveyard',
+    title: 'The Haunted Graveyard',
+    titleRu: 'Проклятое Кладбище',
+    description: 'На кладбище Шираза поднялись мертвецы. Остановите их.',
+    type: 'side',
+    minLevel: 42,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_undead', type: 'kill', description: 'Убить неживых стражей', target: 'mob_undead_guardian', required: 4, optional: false, spawnPoints: [{ x: 110, z: -91 }] },
+    ],
+    rewards: { experience: 5000, gold: 2000, items: [{ itemId: 'arm_silk_robe', quantity: 1 }, { itemId: 'mat_dragon_scale', quantity: 2 }] },
+    npcGiver: 'npc_shiraz_priest',
+    npcGiverRegion: Region.SHIRAZ,
+    repeatable: true,
+    repeatCooldown: 72,
+  },
+
+  // ── ЕЖЕДНЕВНЫЕ КВЕСТЫ ────────────────────────────────────────
+  'daily_patrol': {
+    id: 'daily_patrol',
+    title: 'Patrol the Roads',
+    titleRu: 'Патрулирование Дорог',
+    description: 'Очистите дороги от разбойников.',
+    type: 'daily',
+    minLevel: 5,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_bandits', type: 'kill', description: 'Убить разбойников', target: 'mob_road_bandit', required: 10, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
+    ],
+    rewards: { experience: 500, gold: 200, items: [{ itemId: 'pot_health_small', quantity: 5 }] },
+    npcGiver: 'npc_tabriz_guard',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'daily_herbs': {
+    id: 'daily_herbs',
+    title: 'Gather Herbs',
+    titleRu: 'Сбор Трав',
+    description: 'Соберите лепестки роз для алхимика.',
+    type: 'daily',
+    minLevel: 1,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_collect_roses', type: 'collect', description: 'Собрать лепестки роз', target: 'mat_rose_petals', required: 15, optional: false },
+    ],
+    rewards: { experience: 150, gold: 60, items: [{ itemId: 'pot_mana_small', quantity: 3 }] },
+    npcGiver: 'npc_isfahan_alchemist',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+
+  // ── НОВЫЕ СЮЖЕТНЫЕ КВЕСТЫ ────────────────────────────────────
+  'main_020_shah_convocation': {
+    id: 'main_020_shah_convocation',
+    title: "The Shah's Convocation",
+    titleRu: 'Созыв Шаха',
+    description: 'Шах Исмаил созывает великий совет. Все воеводы должны явиться в Тебриз и доказать свою преданность.',
+    type: 'main',
+    minLevel: 15,
+    prerequisites: ['main_002_first_blood'],
+    objectives: [
+      { id: 'obj_travel_tabriz', type: 'explore', description: 'Явиться в Тебриз', target: 'tabriz_gate', required: 1, optional: false },
+      { id: 'obj_meet_warriors', type: 'talk', description: 'Доложить командующему', target: 'npc_tabriz_guard', required: 1, optional: false },
+    ],
+    rewards: { experience: 5000, gold: 500, items: [{ itemId: 'wpn_iron_sword', quantity: 1 }] },
+    npcGiver: 'npc_grand_vizier',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: false,
+  },
+  'main_030_caucasus_campaign': {
+    id: 'main_030_caucasus_campaign',
+    title: 'Campaign of the Caucasus',
+    titleRu: 'Кавказский Поход',
+    description: 'Монгольские налёты угрожают северным рубежам. Шах поручает вам возглавить карательную экспедицию.',
+    type: 'main',
+    minLevel: 25,
+    prerequisites: ['main_020_shah_convocation'],
+    objectives: [
+      { id: 'obj_kill_raiders', type: 'kill', description: 'Уничтожить монгольских наездников', target: 'mob_mongol_raider', required: 15, optional: false, spawnPoints: [{ x: 66, z: 167 }, { x: -140, z: 160 }] },
+      { id: 'obj_seize_pass', type: 'explore', description: 'Занять перевал', target: 'caucasus_pass', required: 1, optional: false },
+    ],
+    rewards: { experience: 12000, gold: 1500, items: [{ itemId: 'wpn_qizilbash_saber', quantity: 1 }] },
+    npcGiver: 'npc_qizilbash_commander',
+    npcGiverRegion: Region.CAUCASUS,
+    repeatable: false,
+  },
+  'main_040_desert_trial': {
+    id: 'main_040_desert_trial',
+    title: 'Trial of the Desert',
+    titleRu: 'Испытание Пустыни',
+    description: 'Чтобы стать истинным воином Сефевидов, нужно пережить испытание пустыней. Убейте огненного дива — стража дорог Хорасана.',
+    type: 'main',
+    minLevel: 35,
+    prerequisites: ['main_030_caucasus_campaign'],
+    objectives: [
+      { id: 'obj_kill_div', type: 'kill', description: 'Уничтожить Огненного Дива', target: 'mob_div_fire', required: 1, optional: false, spawnPoints: [{ x: 300, z: -100 }] },
+    ],
+    rewards: { experience: 25000, gold: 3000, items: [{ itemId: 'acc_silk_road_amulet', quantity: 1 }] },
+    npcGiver: 'npc_khorasan_governor',
+    npcGiverRegion: Region.KHORASAN,
+    repeatable: false,
+  },
+  'main_050_gulf_battle': {
+    id: 'main_050_gulf_battle',
+    title: 'Battle for the Gulf',
+    titleRu: 'Битва за Залив',
+    description: 'Османский флот появился в Персидском заливе. Нужно остановить их десант и защитить портовые города.',
+    type: 'main',
+    minLevel: 50,
+    prerequisites: ['main_040_desert_trial'],
+    objectives: [
+      { id: 'obj_kill_janissaries', type: 'kill', description: 'Уничтожить османский десант', target: 'mob_ottoman_janissary', required: 25, optional: false, spawnPoints: [{ x: -60, z: -170 }, { x: 200, z: 50 }] },
+    ],
+    rewards: { experience: 50000, gold: 5000, items: [{ itemId: 'arm_silk_robe', quantity: 1 }] },
+    npcGiver: 'npc_gulf_harbor-master',
+    npcGiverRegion: Region.PERSIAN_GULF,
+    repeatable: false,
+  },
+
+  // ── НОВЫЕ ПОБОЧНЫЕ КВЕСТЫ ────────────────────────────────────
+  'side_006_broken_caravan': {
+    id: 'side_006_broken_caravan',
+    title: 'The Broken Caravan',
+    titleRu: 'Разбитый Караван',
+    description: 'Караван торговцев атакован разбойниками у дорог Исфахана. Спасите выживших.',
+    type: 'side',
+    minLevel: 8,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_road_bandits', type: 'kill', description: 'Убить разбойников на дороге', target: 'mob_road_bandit', required: 6, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
+    ],
+    rewards: { experience: 600, gold: 200, items: [{ itemId: 'con_health_potion_m', quantity: 3 }] },
+    npcGiver: 'npc_isfahan_trader',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'side_007_forest_patrol': {
+    id: 'side_007_forest_patrol',
+    title: 'Forest Patrol',
+    titleRu: 'Лесной Патруль',
+    description: 'Волки стали агрессивнее у деревни. Отправляйтесь на патрулирование и Protected жителей.',
+    type: 'side',
+    minLevel: 6,
+    prerequisites: ['side_002_wolf_pelts'],
+    objectives: [
+      { id: 'obj_patrol_forest', type: 'kill', description: 'Очистить лес от волков', target: 'mob_wolf', required: 12, optional: false, spawnPoints: [{ x: -90, z: 130 }] },
+    ],
+    rewards: { experience: 800, gold: 250, items: [{ itemId: 'con_stamina_food', quantity: 5 }] },
+    npcGiver: 'npc_forester',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+  'side_008_shiraz_poet_riddle': {
+    id: 'side_008_shiraz_poet_riddle',
+    title: "The Poet's Riddle",
+    titleRu: 'Загадка Поэта',
+    description: 'Хафиз бросил вызов: кто решит его загадку — тот получит мудрость веков.',
+    type: 'side',
+    minLevel: 30,
+    prerequisites: ['side_shiraz_hafiz_manuscript'],
+    objectives: [
+      { id: 'obj_solve_riddle', type: 'talk', description: 'Решить загадку Хафиза', target: 'npc_poet', required: 1, optional: false },
+    ],
+    rewards: { experience: 3000, gold: 500, items: [{ itemId: 'acc_ring_jade', quantity: 1 }] },
+    npcGiver: 'npc_poet',
+    npcGiverRegion: Region.SHIRAZ,
+    repeatable: false,
+  },
+  'side_009_gulf_reef': {
+    id: 'side_009_gulf_reef',
+    title: 'Sharks of the Gulf',
+    titleRu: 'Акулы Залива',
+    description: 'Рыбаки не могут выйти в море — акулы заселили рифы. Очистите акваторию.',
+    type: 'side',
+    minLevel: 12,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_kill_sharks', type: 'kill', description: 'Убрать акул у рифов', target: 'mob_ottoman_janissary', required: 8, optional: false, spawnPoints: [{ x: -60, z: -170 }] },
+    ],
+    rewards: { experience: 1000, gold: 300, items: [{ itemId: 'con_health_potion_s', quantity: 5 }] },
+    npcGiver: 'npc_fisherman',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'side_010_sheikh_tomb': {
+    id: 'side_010_sheikh_tomb',
+    title: "The Sheikh's Tomb",
+    titleRu: 'Гробница Шеиха',
+    description: 'Древняя гробница в горах Кавказа стала убежищем для мертвецов. Исследуйте её.',
+    type: 'side',
+    minLevel: 20,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_clear_tomb', type: 'kill', description: 'Очистить гробницу от нежити', target: 'mob_undead_guardian', required: 6, optional: false, spawnPoints: [{ x: 60, z: 140 }] },
+    ],
+    rewards: { experience: 2000, gold: 600, items: [{ itemId: 'con_health_potion_m', quantity: 5 }] },
+    npcGiver: 'npc_healer',
+    npcGiverRegion: Region.SHIRAZ,
+    repeatable: false,
+  },
+  'side_011_stolen_horses': {
+    id: 'side_011_stolen_horses',
+    title: 'Stolen Horses',
+    titleRu: 'Украденные Кони',
+    description: 'У конюшни Исфахана украли лучших скакунов. Отслеедите и верните их.',
+    type: 'side',
+    minLevel: 15,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_track_thieves', type: 'kill', description: 'Напасть на след воров', target: 'mob_bandit_scout', required: 8, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
+    ],
+    rewards: { experience: 1500, gold: 400, items: [{ itemId: 'con_mana_potion', quantity: 5 }] },
+    npcGiver: 'npc_stable_master',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+  'side_012_metro_ruins': {
+    id: 'side_012_metro_ruins',
+    title: 'Ruins of Mesopotamia',
+    titleRu: 'Руины Месопотамии',
+    description: 'Древние руины к востоку заполнены разбойниками. Верните их под контроль Империи.',
+    type: 'side',
+    minLevel: 18,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_clear_ruins', type: 'kill', description: 'Очистить руины от врагов', target: 'mob_ottoman_janissary', required: 10, optional: false, spawnPoints: [{ x: 200, z: 50 }] },
+    ],
+    rewards: { experience: 1800, gold: 500, items: [{ itemId: 'mat_turquoise', quantity: 2 }] },
+    npcGiver: 'npc_desert_scout',
+    npcGiverRegion: Region.KHORASAN,
+    repeatable: true,
+    repeatCooldown: 48,
+  },
+
+  // ── НОВЫЕ ЕЖЕДНЕВНЫЕ КВЕСТЫ ──────────────────────────────────
+  'daily_wolf_hunt': {
+    id: 'daily_wolf_hunt',
+    title: 'Wolf Hunt',
+    titleRu: 'Охота на Волков',
+    description: 'Ежедневная охота на волков у деревенских границ.',
+    type: 'daily',
+    minLevel: 3,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_daily_wolves', type: 'kill', description: 'Убить 5 волков', target: 'mob_wolf', required: 5, optional: false, spawnPoints: [{ x: -90, z: 130 }] },
+    ],
+    rewards: { experience: 400, gold: 100, items: [{ itemId: 'pot_health_small', quantity: 3 }] },
+    npcGiver: 'npc_tabriz_hunter',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'daily_guard_duty': {
+    id: 'daily_guard_duty',
+    title: "Guard's Duty",
+    titleRu: 'Стража Гарнизона',
+    description: 'Ежедневный обход периметра. Убейте приближающихся врагов.',
+    type: 'daily',
+    minLevel: 5,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_daily_patrol', type: 'kill', description: 'Убить 10 разбойников', target: 'mob_bandit_warrior', required: 10, optional: false, spawnPoints: [{ x: -80, z: 120 }, { x: 143, z: 115 }] },
+    ],
+    rewards: { experience: 700, gold: 150, items: [{ itemId: 'con_health_potion_s', quantity: 5 }] },
+    npcGiver: 'npc_guard_east',
+    npcGiverRegion: Region.ISFAHAN,
+    repeatable: true,
+    repeatCooldown: 24,
+  },
+  'daily_scorpion_cleansing': {
+    id: 'daily_scorpion_cleansing',
+    title: 'Scorpion Cleansing',
+    titleRu: 'Очищение от Скорпионов',
+    description: 'Фермеры снова жалуются на скорпионов. Уберите угрозу.',
+    type: 'daily',
+    minLevel: 2,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_daily_scorpions', type: 'kill', description: 'Убить 10 скорпионов', target: 'mob_desert_scorpion', required: 10, optional: false, spawnPoints: [{ x: 220, z: 70 }] },
+    ],
+    rewards: { experience: 300, gold: 80, items: [{ itemId: 'pot_health_small', quantity: 3 }] },
+    npcGiver: 'npc_tabriz_farmer',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: true,
+    repeatCooldown: 24,
   },
 };
 

@@ -5,7 +5,7 @@ import { RedisService } from '../services/RedisService';
 import { CharacterService } from '../services/CharacterService';
 import { GameSocketHandler } from '../socket/GameSocketHandler';
 import { asyncHandler } from '../utils/asyncHandler';
-import { authMiddleware } from '../middleware/auth';
+import { secureMiddleware } from '../middleware/auth';
 import { REGION_LEVEL_REQUIREMENTS, GAME_SERVERS } from '../../../shared/constants';
 
 export const worldRouter = Router();
@@ -51,7 +51,7 @@ worldRouter.get('/regions/:id', asyncHandler(async (req: Request, res: Response)
 // POST /api/world/travel — путешествие персонажа в другой регион.
 // Мир бесшовный: позиция не меняется, меняется регион (спавн монстров,
 // комнаты сокетов, чат) и проверяется требование по уровню.
-worldRouter.post('/travel', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+worldRouter.post('/travel', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const { error, value } = travelSchema.validate(req.body);
   if (error) return res.status(400).json({ error: 'invalid_request' });
 

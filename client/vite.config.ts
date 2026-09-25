@@ -17,14 +17,17 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // three.js — тяжёлый вендор: отдельный чанк для кэширования
-        manualChunks: {
-          'vendor-three': ['three'],
+        manualChunks(id: string) {
+          if (id.includes('node_modules/three')) return 'vendor-three';
+          if (id.includes('node_modules')) return 'vendor';
         },
       },
     },
   },
   server: {
     port: 8080,
+    // Allow imports from client/src/assets and shared/ (outside root src/app)
+    fs: { allow: ['..', '../..', '../../shared'] },
     proxy: {
       '/api': 'http://localhost:3000',
       '/locales': 'http://localhost:3000',

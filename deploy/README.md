@@ -1,125 +1,170 @@
-# Развёртывание на VPS — Empire of Safavids
+# Empire of Safavids — Развёртывание на VPS (Docker + HTTPS)
 
-Пошаговая инструкция: от чистого Ubuntu-сервера до работающей игры
-на `https://ваш-домен`, доступной с любого компьютера через браузер.
+## 📋 Что нужно подготовить заранее
 
-## Что понадобится
+| Шаг | Что сделать | Где |
+|-----|-------------|-----|
+| 1 | Купить домен (например `sefevids.online`) | reg.ru / namecheap / cloudflare |
+| 2 | Создать A-запись домена → IP вашего VPS | панель домена |
+| 3 | Убедиться, что на VPS открыты порты **80** и **443** | панель провайдера (Vultr / Timeweb / Selectel) |
 
-- VPS: 2 vCPU / 4 GB RAM / 20 GB диска (Ubuntu 22.04+ или Debian 12)
-- Домен, у которого **A-запись указывает на IP сервера**
-- Открытые порты **80** и **443**
+> Без домена Let's Encrypt не выпустит сертификат — игра будет работать только по HTTP (не рекомендуется).
 
-## 1. Установить Docker
+---
+
+## 🖥 Шаг 1: Подключитесь к VPS
+
+```powershell
+# Из PowerShell (Windows)
+ssh root@45.32.220.58
+# пароль: REDACTED
+```
+
+Или через **WinSCP**: хост `45.32.220.58`, пользователь `root`, пароль `REDACTED`.
+
+---
+
+## 📥 Шаг 2: Загрузите файлы игры на сервер
+
+**Способ А — scp из PowerShell** (один раз, после каждого изменения):
+```powershell
+scp -r "D:\My Projects\Empire of Sefevids\deploy" root@45.32.220.58:~/
+```
+
+**Способ Б — WinSCP**: перетащите папку `deploy` из левого окна в правое.
+
+---
+
+## ⚙️ Шаг 3: Установите Docker и Docker Compose
 
 ```bash
+# Обновление и установка Docker
 curl -fsSL https://get.docker.com | sh
+usermod -aG docker root
+newgrp docker
+docker compose version
 ```
 
-## 2. Получить код игры
+---
+
+## 🔑 Шаг 4: Настройте переменные окружения
 
 ```bash
-apt install -y git
-git clone <адрес-репозитория> /opt/empire
-cd /opt/empire
+cd ~/deploy
+cp .env.example .env
+nano .env
 ```
 
-## 3. Создать конфигурацию
+Заполните:
+
+```env
+DOMAIN=ваш-домен.ru          # ← ваша A-запись уже должна смотреть сюда
+
+# Пароль PostgreSQL — сгенерируйте случайный:
+POSTGRES_PASSWORD=XXXXXXXXXXXXXXXX
+
+# Секрет JWT — сгенерируйте случайный:
+JWT_SECRET=YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+
+# Остальное можно не трогать — возьмёт значения по умолчанию
+```
+
+Сгенерировать пароли:
+```bash
+openssl rand -hex 16   # для POSTGRES_PASSWORD
+openssl rand -hex 32   # для JWT_SECRET
+```
+
+Сохраните: **Ctrl+O → Enter → Ctrl+X**
+
+---
+
+## 🚀 Шаг 5: Запустите игру
 
 ```bash
-cp deploy/.env.example deploy/.env
-nano deploy/.env
+cd ~/deploy
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-Заполните три значения:
+Первый запуск может занять **5–10 минут** (скачивание образов + сборка).  
+Следите за прогрессом:
+```bash
+docker compose -f docker-compose.prod.yml logs -f
+```
 
-| Переменная | Что указать |
-|---|---|
-| `DOMAIN` | ваш домен, например `game.example.com` |
-| `POSTGRES_PASSWORD` | `openssl rand -hex 16` |
-| `JWT_SECRET` | `openssl rand -hex 32` |
+Как только увидите `Empire of Safavids Server running on port 3000` — всё готово.
 
-## 4. Запустить
+---
+
+## ✅ Шаг 6: Проверка
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Статус контейнеров
+docker compose -f docker-compose.prod.yml ps
+
+# Health check
+curl -s http://localhost/game/health
+# → {"status":"ok","game":"Empire of Safavids","version":"0.2.0"}
 ```
 
-Первый запуск: сборка ~3–5 минут, выпуск сертификата Let's Encrypt —
-до минуты после старта (нужен доступный извне порт 80).
+Откройте в браузере: **https://ваш-домен.ru/game/**
 
-Проверка:
+---
+
+## 🎮 Как дать доступ друзьям
+
+Друг должен:
+1. Открыть **https://ваш-домен.ru/game/** в браузере
+2. Зарегистрироваться и играть
+
+Никаких установок — игра работает прямо в браузере.
+
+Если хотите десктопный клиент (launcher), обновите URL в `site/install/install-game.cmd`:
+```batch
+> "%INSTALL_DIR%\game.ini" echo URL=https://ваш-домен.ru
+```
+Затем пересоберите `install.zip` через `tools/build-installer.js` и залейте на сайт.
+
+---
+
+## 🔄 Обновление после изменений в коде
 
 ```bash
-curl https://ваш-домен/health      # {"status":"ok",...}
+# На сервере
+cd ~/deploy
+git pull   # если репозиторий клонирован, либо снова scp deploy/
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 ```
 
-Затем откройте `https://ваш-домен` в браузере — лендинг, кнопка
-«Играть», регистрация, и игра.
+Миграции БД применятся автоматически перед стартом сервера.
 
-## Что поднимается
+---
 
-| Сервис | Роль |
-|---|---|
-| `caddy` | единственная точка входа: HTTPS (сертификаты сами продлеваются), прокси на клиент |
-| `client` | лендинг `/`, игра `/game/`, прокси `api/locales/socket.io/download` на сервер |
-| `migrate` | разовый прогон SQL-миграций перед стартом сервера |
-| `server` | игровой сервер (Socket.IO + REST) |
-| `postgres` | база, данные в томе `pg_data` |
-| `redis` | сессии, позиции, pub/sub, данные в томе `redis_data` |
-
-Наружу открыты только порты 80/443; база, Redis и сервер — во
-внутренней сети compose.
-
-## Обновление игры
+## 🛠 Полезные команды
 
 ```bash
-cd /opt/empire
-git pull
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Перезапуск
+docker compose -f docker-compose.prod.yml restart
+
+# Логи
+docker compose -f docker-compose.prod.yml logs -f server
+
+# Остановить всё
+docker compose -f docker-compose.prod.yml down
+
+# Удалить volumes (сброс БД!)
+docker compose -f docker-compose.prod.yml down -v
 ```
 
-Новые SQL-миграции применятся сервисом `migrate` автоматически
-(до старта обновлённого сервера). Игроки, находящиеся в мире,
-переподключатся после рестарта.
+---
 
-## Резервная копия базы
+## 🔧 Если что-то не работает
 
-```bash
-# снять
-docker compose -f deploy/docker-compose.prod.yml exec postgres \
-  pg_dump -U safavid_user empire_of_safavids > backup_$(date +%F).sql
-
-# восстановить
-cat backup_2026-09-13.sql | docker compose -f deploy/docker-compose.prod.yml exec -T postgres \
-  psql -U safavid_user -d empire_of_safavids
-```
-
-Рекомендуется ночной cron с выгрузкой в внешний storage.
-
-## Диагностика
-
-```bash
-docker compose -f deploy/docker-compose.prod.yml ps          # статус
-docker compose -f deploy/docker-compose.prod.yml logs -f server   # логи сервера
-docker compose -f deploy/docker-compose.prod.yml logs -f caddy    # сертификаты/прокси
-```
-
-Частые проблемы:
-
-- **Сертификат не выпускается** — проверьте A-запись домена
-  (`dig +short ваш-домен`) и что порты 80/443 не закрыты файрволом.
-- **502 от Caddy** — клиент ещё собирается; подождите минуту,
-  `logs -f client`.
-- **Сервер перезапускается** — `logs -f server`: чаще всего неверный
-  `POSTGRES_PASSWORD`/`JWT_SECRET` в `deploy/.env` после смены — при
-  смене пароля БД нужно пересоздать том `pg_data` или поменять пароль
-  через psql.
-
-## Безопасность
-
-- Секреты живут только в `deploy/.env` — файл не коммитится
-  (добавьте в `.gitignore`).
-- SSH на сервере — по ключу, парольный вход отключить.
-- База и Redis не торчат наружу; для админ-доступа к БД — SSH-туннель:
-  `ssh -L 5433:postgres:5432 user@vps`, затем подключение на
-  `localhost:5433`.
+| Проблема | Решение |
+|----------|---------|
+| `docker: command not found` | `curl -fsSL https://get.docker.com \| sh` |
+| Сервер не запускается | `docker compose -f docker-compose.prod.yml logs server` |
+| Ошибка `POSTGRES_PASSWORD` | Проверьте `.env` — пароль должен быть задан |
+| CORS-ошибка в браузере | Убедитесь, что `DOMAIN` в `.env` совпадает с адресом в браузере |
+| 502 Bad Gateway | `docker compose -f docker-compose.prod.yml ps` — проверьте, что все контейнеры `healthy` |
+| Let's Encrypt не выпускает сертификат | Убедитесь, что порт 80 открыт снаружи и DNS указывает на этот VPS |

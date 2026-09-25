@@ -41,7 +41,7 @@ services:
     build:
       context: ..
       dockerfile: server/Dockerfile
-    command: node dist/server/src/database/migrate.js
+    command: npx tsx src/database/migrate.ts
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -76,9 +76,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - server_logs:/app/logs
+      - server_logs:/app/server/logs
       # Установщик Windows для кнопки «Скачать» на лендинге
-      - ../site/install:/app/site/install:ro
+      - ../site/install:/app/server/site/install:ro
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────

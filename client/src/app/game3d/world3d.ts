@@ -10,12 +10,15 @@ import * as THREE from 'three';
 import { World, PlayerEntity } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
-  groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements,
-  WORLD_HALF, CITY, CAMP, COLLIDERS,
+  groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
+  waterMask, bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
+import { createCivilians, CiviliansHandle } from './civilians';
+import { createWeather, WeatherHandle } from './weather';
+import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { audio } from '../audio';
 import { chatVisible } from '../hud';
@@ -25,7 +28,9 @@ export interface World3DCallbacks {
   onTarget: (name: string, hp: number, maxHp: number) => void;
   onTargetCleared: () => void;
   /** Клик по NPC: открыть связанную панель */
-  onNpc?: (panel: string, nameRu: string) => void;
+  onNpc?: (panel: string, nameRu: string, npcId: string) => void;
+  /** Клик по двери здания: войти/выйти (мир уже телепортирован, нужен только тост). */
+  onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string) => void;
 }
 
 const GRAVITY = 20;
@@ -33,7 +38,7 @@ const JUMP_V = 7.6;
 const WALK_SPEED = 4.2;
 const RUN_SPEED = 7.6;
 const CROUCH_SPEED = 2.2;
-const PLAYER_R = 0.7;   // радиус персонажа для столкновений
+const PLAYER_R = 1.0;   // радиус персонажа для столкновений
 const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
 
 interface BoundRig {
@@ -52,6 +57,10 @@ export class World3D {
   private sky!: SkyHandle;
   private fauna!: FaunaHandle;
   private npcs!: NpcsHandle;
+  private civilians!: CiviliansHandle;
+  private weather!: WeatherHandle;
+  private interiors!: InteriorsHandle;
+  private doorTargets: THREE.Object3D[] = [];
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
@@ -74,6 +83,9 @@ export class World3D {
   private grounded = true;
   private crouch = false;
   private block = false;
+  private swimming = false;
+  /** Высота ног локального игрока с предыдущего кадра (физика, а не ландшафт) */
+  private feetY = Number.NaN;
   private keys = new Set<string>();
   private stepTimer = 0;
   private attackCd = 0;
@@ -86,11 +98,43 @@ export class World3D {
   private wasNight = false;
   private lastDir: { x: number; y: number; z: number } = { x: 0, y: 0, z: 1 };
   private callbacks: World3DCallbacks | null = null;
+  private debugColliders!: THREE.Group;
+  private wasInWater = false;
+  private splashMesh!: THREE.Mesh;
+  private bubbleTimer = 0;
 
   get isLocked() { return this.locked; }
 
   /** Последнее направление движения в мировых координатах (для пакетов player:move) */
   get moveDir() { return this.lastDir; }
+
+  /** Экипировать/снять оружие у персонажа */
+  equipPlayerWeapon(show: boolean): void {
+    if (!this.me) return;
+    const b = this.rigs.get(this.me.id);
+    if (b && b.kind === 'player') b.rig.equipWeapon(show);
+  }
+
+  /** Экипировать/снять щит у персонажа */
+  equipPlayerShield(show: boolean): void {
+    if (!this.me) return;
+    const b = this.rigs.get(this.me.id);
+    if (b && b.kind === 'player') b.rig.equipShield(show);
+  }
+
+  /** Проверить, экипировано ли оружие */
+  isPlayerWeaponEquipped(): boolean {
+    if (!this.me) return false;
+    const b = this.rigs.get(this.me.id);
+    return b && b.kind === 'player' ? b.rig.isWeaponEquipped() : false;
+  }
+
+  /** Проверить, экипирован ли щит */
+  isPlayerShieldEquipped(): boolean {
+    if (!this.me) return false;
+    const b = this.rigs.get(this.me.id);
+    return b && b.kind === 'player' ? b.rig.isShieldEquipped() : false;
+  }
 
   // ── Инициализация ────────────────────────────────────────────
   init(container: HTMLElement, callbacks: World3DCallbacks): void {
@@ -127,6 +171,7 @@ export class World3D {
     // Мир
     buildTerrain(this.scene);
     buildScatter(this.scene);
+    buildRoads(this.scene);
     const city = buildCity(this.scene);
     for (const l of city.userData.lights as { x: number; z: number }[]) {
       const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
@@ -134,6 +179,7 @@ export class World3D {
       this.scene.add(light);
       this.torches.push({ light, base: 1.6 });
     }
+    for (const d of buildTownBuildings(this.scene)) this.doorTargets.push(d);
     buildCamp(this.scene);
     buildWater(this.scene);
     buildSettlements(this.scene);
@@ -150,7 +196,24 @@ export class World3D {
     this.sky = createSky(this.scene);
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
+    this.civilians = createCivilians(this.scene);
+    this.weather = createWeather(this.scene, audio);
+    this.interiors = createInteriors(this.scene);
+    for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
+    buildPocketGround(this.scene);
     this.navigator = createNavigator(this.scene);
+
+    // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
+    console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
+    this.debugColliders = new THREE.Group();
+    this.debugColliders.visible = false;
+    const debugMat = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.35 });
+    for (const c of COLLIDERS) {
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(c.r, c.r, 4, 12), debugMat);
+      cyl.position.set(c.x, groundHeight(c.x, c.z) + 2, c.z);
+      this.debugColliders.add(cyl);
+    }
+    this.scene.add(this.debugColliders);
 
     // Кольцо цели
     this.targetRing = new THREE.Mesh(
@@ -160,6 +223,15 @@ export class World3D {
     this.targetRing.rotation.x = -Math.PI / 2;
     this.targetRing.visible = false;
     this.scene.add(this.targetRing);
+
+    // Кольцо всплеска при входе в воду
+    this.splashMesh = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 1.8, 20),
+      new THREE.MeshBasicMaterial({ color: 0xaaddee, transparent: true, opacity: 0, side: THREE.DoubleSide }),
+    );
+    this.splashMesh.rotation.x = -Math.PI / 2;
+    this.splashMesh.visible = false;
+    this.scene.add(this.splashMesh);
 
     // FX-слой и прицел
     this.fxLayer = document.createElement('div');
@@ -203,6 +275,11 @@ export class World3D {
   /** Цель стрелки-навигатора над игроком */
   setNavTarget(target: NavTarget | null): void {
     this.navigator?.setTarget(target);
+  }
+
+  /** Построенный маршрут навигатора (для мини-карты) */
+  getNavRoute(): { x: number; z: number }[] {
+    return this.navigator?.getRoute() ?? [];
   }
 
   /** Игровой час (0–23) от world:time — ведёт солнце/луну/звёзды */
@@ -272,6 +349,11 @@ export class World3D {
       this.grounded = false;
       audio.jump();
     }
+    // DEBUG: переключение визуализации коллайдеров
+    if (e.code === 'KeyZ') {
+      this.debugColliders.visible = !this.debugColliders.visible;
+      console.log(`[Collision] Debug colliders: ${this.debugColliders.visible ? 'ON' : 'OFF'} (${COLLIDERS.length} total)`);
+    }
   };
 
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
@@ -321,7 +403,10 @@ export class World3D {
     this.attackCd = 0.45;
 
     // Клик по NPC открывает связанную панель (приоритет над боем)
+    // Сначала клик по NPC открывает панель, затем — дверь здания.
     if (this.pickNpc()) return;
+
+    if (this.pickDoor()) return;
 
     // Мягкое прицеливание: конус от камеры, затем близость
     const id = this.acquireTarget();
@@ -344,9 +429,97 @@ export class World3D {
     if (!hits.length || hits[0].distance > 22) return false;
     const panel = hits[0].object.userData.npcPanel as string | undefined;
     const name = hits[0].object.userData.npcName as string | undefined;
+    const npcId = hits[0].object.userData.npcId as string | undefined;
     if (!panel) return false;
-    this.callbacks?.onNpc?.(panel, name ?? '');
+    this.callbacks?.onNpc?.(panel, name ?? '', npcId ?? '');
     return true;
+  }
+
+  /** Клик по двери здания: только детект. Телепорт — лишь после ACK
+   *  сервера (иначе первый пакет из кармана опередит сброс трекинга
+   *  и античит кикнет за спидхак). */
+  private pickDoor(): boolean {
+    if (!this.me || !this.doorTargets.length) return false;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hits = ray.intersectObjects(this.doorTargets, false);
+    if (!hits.length || hits[0].distance > 22) return false;
+    const ud = hits[0].object.userData as { doorBuilding?: string; doorAction?: string; doorName?: string };
+    if (!ud.doorBuilding || (ud.doorAction !== 'enter' && ud.doorAction !== 'exit')) return false;
+    this.callbacks?.onDoor?.(ud.doorAction, ud.doorBuilding, ud.doorName ?? ud.doorBuilding);
+    return true;
+  }
+
+  /** Телепорт внутрь в точку от сервера (вызывать только по ack). */
+  enterBuildingAt(id: string, target: { x: number; y: number; z: number }): boolean {
+    if (!this.me) return false;
+    const def = this.interiors.def(id);
+    if (!def) return false;
+    this.interiors.enter(id);
+    this.weather?.setInside(true);
+    this.me.pos.x = target.x;
+    this.me.pos.y = target.y;
+    this.me.pos.z = target.z;
+    this.me.target = { ...this.me.pos };
+    this.vy = 0;
+    this.grounded = true;
+    this.swimming = false;
+    return true;
+  }
+
+  /** Телепорт наружу в точку от сервера (вызывать только по ack). */
+  exitBuildingAt(target: { x: number; y: number; z: number }): boolean {
+    if (!this.me || !this.interiors.isInside()) return false;
+    const def = this.interiors.insideDef();
+    if (!def) return false;
+    this.interiors.exit();
+    this.weather?.setInside(false);
+    this.me.pos.x = target.x;
+    this.me.pos.y = target.y;
+    this.me.pos.z = target.z;
+    this.me.target = { ...this.me.pos };
+    this.vy = 0;
+    this.grounded = true;
+    this.swimming = false;
+    return true;
+  }
+
+  /** Локальный выход без сервера: резиновая лента при отклонении движения. */  exitBuildingLocal(): boolean {
+    if (!this.me || !this.interiors.isInside()) return false;
+    const def = this.interiors.insideDef();
+    if (!def) return false;
+    this.interiors.exit();
+    // Восстановить погоду при выходе локально (без сервера)
+    if (!this.interiors.isInside()) this.weather?.setInside(false);
+    this.me.pos.x = def.exitX;
+    this.me.pos.z = def.exitZ;
+    this.me.pos.y = groundHeight(def.exitX, def.exitZ);
+    this.me.target = { ...this.me.pos };
+    this.vy = 0;
+    this.grounded = true;
+    this.swimming = false;
+    return true;
+  }
+
+  /** Погода от сервера (world:time): дождь, гроза, песчаная буря. */
+  setWeather(w: string): void {
+    this.weather?.setWeather(w);
+  }
+
+  isInsideBuilding(): boolean {
+    return this.interiors.isInside();
+  }
+
+  /** Восстановить состояние «внутри» по позиции спавна (вход в мир в кармане).
+   *  Без телепорта и без сокета: сервер уже сбросил трекинг при AUTH.
+   *  Без этого первый шаг в комнате упирался в кламп границ и давал кик. */
+  enterBuildingLocalAt(x: number, z: number): string | null {
+    if (!this.me) return null;
+    const def = BUILDINGS.find((b) =>
+      Math.abs(x - b.roomCx) <= 16 && Math.abs(z - b.roomCz) <= 16) ?? null;
+    if (!def) return null;
+    this.interiors.enter(def.id);
+    return def.nameRu;
   }
 
   // ── Синхронизация ригов ──────────────────────────────────────
@@ -362,9 +535,25 @@ export class World3D {
         b.rig.group.userData.playerId = id;
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
+        // Экипировка по умолчанию: оружие класса видно, щит только для Кызылбаша
+        const isLocal = id === this.me?.id;
+        if (isLocal) {
+          const hasWeapon = p.charClass !== 'sufi_mystic';
+          const hasShield = p.charClass === 'qizilbash';
+          b.rig.equipWeapon(hasWeapon);
+          b.rig.equipShield(hasShield);
+        }
       }
-      const y = groundHeight(p.pos.x, p.pos.z);
-      b.rig.group.position.set(p.pos.x, y, p.pos.z);
+      // Высота тела — из логической позиции (мосты, плавание, интерьеры),
+      // а не из ландшафта: иначе тело «улетает» на горы в кармане
+      // и «тонет» на дне в воде.
+      // Для локального игрока берём this.feetY — результат физики текущего
+      // кадра (плавание держит на поверхности, внутри здания — пол комнаты).
+      // Для остальных — позицию, пришедшую по сокету.
+      const py = id === this.me?.id
+        ? (Number.isFinite(this.feetY) ? this.feetY : groundHeight(p.pos.x, p.pos.z))
+        : (Number.isFinite(p.pos.y) ? p.pos.y : groundHeight(p.pos.x, p.pos.z));
+      b.rig.group.position.set(p.pos.x, py, p.pos.z);
     }
 
     for (const [id, m] of this.entities.monsters) {
@@ -457,12 +646,49 @@ export class World3D {
     }
   }
 
+  /** Пузырёк при плавании: маленькая полупрозрачная сфера, всплывает и исчезает */
+  private spawnBubble(x: number, y: number, z: number): void {
+    const geo = new THREE.SphereGeometry(0.06 + Math.random() * 0.06, 6, 5);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xccddff, transparent: true, opacity: 0.5 });
+    const b = new THREE.Mesh(geo, mat);
+    b.position.set(x + (Math.random() - 0.5) * 0.8, y - 0.2, z + (Math.random() - 0.5) * 0.8);
+    this.scene.add(b);
+    const start = performance.now();
+    const vy = 1.5 + Math.random();
+    const vx = (Math.random() - 0.5) * 0.4;
+    const vz = (Math.random() - 0.5) * 0.4;
+    const tick = () => {
+      const t = (performance.now() - start) / 900;
+      if (t >= 1) { this.scene.remove(b); b.geometry.dispose(); return; }
+      b.position.x += vx * 0.016;
+      b.position.y += vy * 0.016;
+      b.position.z += vz * 0.016;
+      b.scale.setScalar(1 + t * 0.5);
+      mat.opacity = 0.5 * (1 - t);
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
   /** Выталкивает точку из цилиндрических коллайдеров построек (проходы — для углов) */
   private resolveCollisions(p: { x: number; z: number }, radius: number): void {
-    if (!COLLIDERS.length) return;
+    this.resolveCircleList(p, radius, COLLIDERS);
+    this.resolveCircleList(p, radius, FAUNA_COLLIDERS);
+    // Коллайдеры интерьера живут в кармане мира — снаружи список пуст.
+    this.resolveCircleList(p, radius, INTERIOR_COLLIDERS);
+    // Забор кармана держит игрока на плато, даже если он как-то вышел из комнаты.
+    this.resolveCircleList(p, radius, POCKET_COLLIDERS);
+    // Горожане: сквозь них не пройти.
+    this.resolveCircleList(p, radius, CIV_COLLIDERS);
+  }
+
+  private resolveCircleList(
+    p: { x: number; z: number }, radius: number, list: { x: number; z: number; r: number }[],
+  ): void {
+    if (!list.length) return;
     for (let pass = 0; pass < 3; pass++) {
       let pushed = false;
-      for (const c of COLLIDERS) {
+      for (const c of list) {
         const dx = p.x - c.x, dz = p.z - c.z;
         const d = Math.hypot(dx, dz);
         const min = c.r + radius;
@@ -500,7 +726,17 @@ export class World3D {
     this.crouch = this.keys.has('KeyC') || this.keys.has('ControlLeft');
 
     const len = Math.hypot(ix, iz);
-    const speed = this.crouch ? CROUCH_SPEED : this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED;
+    const waterDepth = waterMask(me.pos.x, me.pos.z);
+    const onBridge = bridgeAt(me.pos.x, me.pos.z);
+    const surfaceY = waterSurfaceY(me.pos.x, me.pos.z);
+    // Плавание: вода глубокая И нет моста под ногами
+    this.swimming = waterDepth > 0.3 && onBridge === null;
+    // На мелководье — брод: медленнее и только у поверхности, глубже — плавание.
+    const wading = surfaceY !== null && onBridge === null && waterDepth <= 0.3;
+    const speed = (this.swimming
+      ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 3.2 : 2.0)
+      : this.crouch ? CROUCH_SPEED : this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED)
+      * (wading ? 0.75 : 1);
     // Направление камеры в мире (нужно и для поворота рига ниже)
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     if (len > 0) {
@@ -511,27 +747,53 @@ export class World3D {
       me.pos.z += wz * speed * dt;
       this.lastDir = { x: wx, y: 0, z: wz };
       // Границы мира
-      me.pos.x = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.x));
-      me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
+      // Границы мира — только снаружи: карман интерьеров вне этих пределов,
+      // внутри комнаты игрока держат стены-коллайдеры.
+      if (!this.interiors.isInside()) {
+        me.pos.x = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.x));
+        me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
+      }
       me.flipped = false;
     }
 
     // Столкновения с постройками — каждый кадр (в т.ч. если затолкало в стену)
     this.resolveCollisions(me.pos, PLAYER_R);
 
-    // ── Вертикаль: прыжок и земля ──
-    const groundY = groundHeight(me.pos.x, me.pos.z);
-    if (!this.grounded) {
+    // ── Вертикаль: прыжок / плавание / мост / земля ──
+    // Внутри здания пол — пол комнаты; в кармане вне комнат — плато.
+    const pocketY = pocketGroundY(me.pos.x, me.pos.z);
+    const groundY = this.interiors.isInside()
+      ? this.interiors.floorY()
+      : pocketY ?? groundHeight(me.pos.x, me.pos.z);
+    const bridgeY = bridgeAt(me.pos.x, me.pos.z);
+    // Дно под водой — не пол: ступни не опускаются ниже поверхности минус полметра.
+    const wadeFloor = surfaceY !== null && bridgeY === null ? surfaceY - 0.5 : -Infinity;
+    const effectiveGroundY = bridgeY !== null ? bridgeY : Math.max(groundY, wadeFloor);
+    if (this.swimming) {
+      // ... поверхность локального водоёма, а не всегда озера
+      const swimLevel = surfaceY ?? LAKE.level;
+      const surfaceTop = swimLevel + 0.3;
+      // В воде: плавно держим игрока на поверхности
+      me.pos.y += (surfaceTop - me.pos.y) * Math.min(1, dt * 4);
+      this.vy *= 0.85; // гашение вертикальной скорости
+      // Прыжок в воде = всплытие вверх
+      if (this.keys.has('Space') && me.pos.y > swimLevel - 1) {
+        this.vy = 3.5;
+      }
+      me.pos.y += this.vy * dt;
+      me.pos.y = Math.max(swimLevel - 1.5, Math.min(swimLevel + 2, me.pos.y));
+      this.grounded = false;
+    } else if (!this.grounded) {
       this.vy -= GRAVITY * dt;
       me.pos.y += this.vy * dt;
-      if (me.pos.y <= groundY) {
-        me.pos.y = groundY;
+      if (me.pos.y <= effectiveGroundY) {
+        me.pos.y = effectiveGroundY;
         this.vy = 0;
         this.grounded = true;
         audio.footstep(true);
       }
     } else {
-      me.pos.y = groundY;
+      me.pos.y = effectiveGroundY;
       // Шаги
       if (len > 0) {
         this.stepTimer -= dt;
@@ -542,6 +804,35 @@ export class World3D {
       }
     }
     me.moving = len > 0;
+    // Высота тела для рига: физика (мост/вода/пол комнаты), не ландшафт
+    this.feetY = me.pos.y;
+
+    // ── Водные эффекты: всплеск + пузырьки ──
+    if (this.swimming && !this.wasInWater) {
+      // Вошли в воду — всплеск
+      this.splashMesh.visible = true;
+      this.splashMesh.position.set(me.pos.x, LAKE.level + 0.1, me.pos.z);
+      (this.splashMesh.material as THREE.MeshBasicMaterial).opacity = 0.7;
+      this.splashMesh.scale.set(1, 1, 1);
+    } else if (this.swimming) {
+      // Пузырьки: каждые 0.4с при движении
+      if (me.moving) {
+        this.bubbleTimer -= dt;
+        if (this.bubbleTimer <= 0) {
+          this.bubbleTimer = 0.4;
+          this.spawnBubble(me.pos.x, me.pos.y, me.pos.z);
+        }
+      }
+    }
+    // Анимация всплеска
+    if (this.splashMesh.visible) {
+      const mat = this.splashMesh.material as THREE.MeshBasicMaterial;
+      mat.opacity -= dt * 1.2;
+      this.splashMesh.scale.x += dt * 3;
+      this.splashMesh.scale.z += dt * 3;
+      if (mat.opacity <= 0) { this.splashMesh.visible = false; }
+    }
+    this.wasInWater = this.swimming;
 
     // ── Риги ──
     this.syncRigs();
@@ -570,7 +861,7 @@ export class World3D {
       } else if (!isMe) {
         // поворот монстров задан выше
       }
-      b.rig.update(dt, { moving, speed: spd, grounded: b.kind === 'monster' ? true : this.grounded, crouch: isMe && this.crouch, block: isMe && this.block, dead });
+      b.rig.update(dt, { moving, speed: spd, grounded: b.kind === 'monster' ? true : this.grounded, crouch: isMe && this.crouch, block: isMe && this.block, dead, swimming: isMe && this.swimming });
       if (b.kind === 'player' && isMe && this.attackAnim) b.rig.triggerAttack();
     }
     this.attackAnim = false;
@@ -587,14 +878,23 @@ export class World3D {
     }
 
     // ── Камера ──
-    const targetY = groundHeight(me.pos.x, me.pos.z) + 1.55 + (this.crouch ? -0.4 : 0);
-    const camY = me.pos.y + 1.55 + Math.sin(this.pitch) * this.dist;
+    const swimCamOffset = this.swimming ? 0.6 : 0;
+    const swimLevel = waterSurfaceY(me.pos.x, me.pos.z) ?? LAKE.level;
+    const targetY = this.swimming
+      ? swimLevel + 0.5
+      : me.pos.y + 1.55 + (this.crouch ? -0.4 : 0);
+    const camY = me.pos.y + 1.55 + swimCamOffset + Math.sin(this.pitch) * this.dist;
     const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist;
     const camZ = me.pos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.dist;
     // Камера тоже не должна проникать в здания
     const cam = { x: camX, z: camZ };
     this.resolveCollisions(cam, CAMERA_R);
-    const minY = groundHeight(cam.x, cam.z) + 0.5;
+    const camGround = this.interiors.isInside()
+      ? this.interiors.floorY()
+      : pocketGroundY(cam.x, cam.z) ?? groundHeight(cam.x, cam.z);
+    const minY = this.swimming
+      ? swimLevel + 0.5
+      : camGround + 0.5;
     this.camera.position.set(cam.x, Math.max(camY, minY), cam.z);
     this.camera.lookAt(me.pos.x, targetY, me.pos.z);
 
@@ -603,6 +903,7 @@ export class World3D {
     this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
     this.fauna.update(dt, now);
     this.npcs.update(dt, now);
+    this.civilians.update(dt, now);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
     // Солнце/луна по дуге: источник света следует за светилом
@@ -634,6 +935,9 @@ export class World3D {
       if (mat.map) mat.map.offset.y = (mat.map.offset.y - dt * 0.55) % 1;
     }
     // Факелы и костёр
+    // Погода обновляется после записи цвета тумана из неба,
+    // чтобы песчаная буря могла приглушить дальность поверх.
+    this.weather.update(dt, me.pos.x, me.pos.z, me.pos.y, this.lastInCity);
     const torchOn = 0.35 + night * 0.65;
     for (const t of this.torches) {
       t.light.intensity = t.base * torchOn * (0.86 + Math.sin(now / 90 + t.base * 7) * 0.14);
@@ -663,6 +967,9 @@ export class World3D {
     this.sky?.dispose();
     this.fauna?.dispose();
     this.npcs?.dispose();
+    this.civilians?.dispose();
+    this.weather?.dispose();
+    this.interiors?.dispose();
     this.navigator?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();

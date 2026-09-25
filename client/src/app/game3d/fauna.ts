@@ -7,7 +7,7 @@
 // на поверхности. Блуждающая логика: цель в радиусе дома, паузы.
 
 import * as THREE from 'three';
-import { CITY, CAMP, LAKE, POND, RIVER_A, RIVER_B, groundHeight, biomeAt } from './terrain';
+import { CITY, CAMP, LAKE, POND, RIVER_A, RIVER_B, groundHeight, biomeAt, waterMask, waterSurfaceY, FAUNA_COLLIDERS, COLLIDERS } from './terrain';
 
 const mat = (color: number, rough = 0.9) => new THREE.MeshStandardMaterial({ color, roughness: rough });
 
@@ -19,6 +19,8 @@ interface Walker {
   speed: number;
   idleUntil: number;
   phase: number;
+  /** Радиус тела для коллайдера с игроком. */
+  radius: number;
 }
 
 interface Flock {
@@ -138,11 +140,11 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
   const schools: FishSchool[] = [];
   const splashes: Splash[] = [];
 
-  const addWalker = (g: THREE.Group, legs: THREE.Mesh[], x: number, z: number, speed: number, homeR: number, home = { x, z }) => {
+  const addWalker = (g: THREE.Group, legs: THREE.Mesh[], x: number, z: number, speed: number, homeR: number, radius: number, home = { x, z }) => {
     g.position.set(x, groundHeight(x, z), z);
     g.rotation.y = Math.random() * Math.PI * 2;
     all.add(g);
-    walkers.push({ group: g, legs, home: { x: home.x, z: home.z, r: homeR }, target: { x, z }, speed, idleUntil: 0, phase: Math.random() * 10 });
+    walkers.push({ group: g, legs, home: { x: home.x, z: home.z, r: homeR }, target: { x, z }, speed, idleUntil: 0, phase: Math.random() * 10, radius });
   };
 
   // ── Биомные животные: пробные точки по карте ──
@@ -154,40 +156,42 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
     const z = (rng() * 2 - 1) * (WORLD_HALF_SAFE());
     const biome = biomeAt(x, z);
     if ((got[biome] ?? 0) >= (want[biome] ?? 0)) continue;
+    // Не спавнить внутри стен Исфахана (город вырос — старые точки накрыло)
+    if (Math.hypot(x - CITY.x, z - CITY.z) < CITY.radius + 12) continue;
     if (biome === 'desert') {
       got.desert = (got.desert ?? 0) + 1;
       if (got.desert <= 2) {
         // верблюды: у караван-сарая
         const { group, legs } = makeQuadruped(0xc8a15a, 0xd9b878, 1.15, { hump: true, tall: true });
         const hx = 505 + (rng() - 0.5) * 30, hz = 55 + (rng() - 0.5) * 30;
-        addWalker(group, legs, hx, hz, 0.7, 24, { x: 505, z: 55 });
+        addWalker(group, legs, hx, hz, 0.7, 24, 0.9, { x: 505, z: 55 });
       } else {
         // ящерицы: быстрые мелкие
         const { group, legs } = makeQuadruped(0xb09a62, 0xc2ac74, 0.35);
-        addWalker(group, legs, x, z, 2.2, 12);
+        addWalker(group, legs, x, z, 2.2, 12, 0.35);
       }
     } else if (biome === 'forest') {
       got.forest = (got.forest ?? 0) + 1;
       if (got.forest <= 3) {
         const { group, legs } = makeQuadruped(0x8a5a34, 0x9c6c46, 1.0, { tall: true, antlers: true });
-        addWalker(group, legs, x, z, 1.1, 26);
+        addWalker(group, legs, x, z, 1.1, 26, 0.7);
       } else {
         const { group, legs } = makeQuadruped(0xc06a30, 0xd07a40, 0.5);
-        addWalker(group, legs, x, z, 1.8, 16);
+        addWalker(group, legs, x, z, 1.8, 16, 0.4);
       }
     } else if (biome === 'field') {
       got.field = (got.field ?? 0) + 1;
       if (got.field <= 3) {
         const { group, legs } = makeQuadruped(0xe8e2d4, 0xd8d0c0, 0.8, { fluffy: true });
-        addWalker(group, legs, x, z, 0.8, 20, { x: CITY.x + 120, z: CITY.z + 60 });
+        addWalker(group, legs, x, z, 0.8, 20, 0.6, { x: CITY.x + 150, z: CITY.z + 75 });
       } else {
         const { group, legs } = makeQuadruped(0x9a948a, 0xa8a298, 0.4);
-        addWalker(group, legs, x, z, 2.0, 12);
+        addWalker(group, legs, x, z, 2.0, 12, 0.35);
       }
     } else if (biome === 'mountain') {
       got.mountain = (got.mountain ?? 0) + 1;
       const { group, legs } = makeQuadruped(0xd8dce4, 0xe8ecf2, 0.75, { tall: true, antlers: true });
-      addWalker(group, legs, x, z, 1.0, 18);
+      addWalker(group, legs, x, z, 1.0, 18, 0.6);
     }
   }
   function WORLD_HALF_SAFE(): number { return 1100; }
@@ -243,11 +247,13 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
     all.add(duck.group);
     walkers.push({
       group: duck.group, legs: [], home: { x: LAKE.x, z: LAKE.z, r: LAKE.r * 0.55 },
-      target: { x, z }, speed: 0.5, idleUntil: 0, phase: Math.random() * 10,
+      target: { x, z }, speed: 0.5, idleUntil: 0, phase: Math.random() * 10, radius: 0.4,
     });
   }
 
   function update(dt: number, now: number): void {
+    // Динамические коллайдеры фауны: список собирается заново каждый кадр.
+    FAUNA_COLLIDERS.length = 0;
     // Птицы
     for (const f of flocks) {
       f.angle += dt * f.speed;
@@ -271,6 +277,11 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
         const r = s.radius * (0.55 + 0.35 * Math.sin(a * 2 + i));
         f.position.set(Math.cos(a) * r, Math.sin(now / 700 + i) * 0.15, Math.sin(a) * r);
         f.rotation.y = -a + Math.PI / 2;
+        FAUNA_COLLIDERS.push({
+          x: s.pivot.position.x + f.position.x,
+          z: s.pivot.position.z + f.position.z,
+          r: 0.3,
+        });
       }
       // круги на воде
       if (Math.random() < dt * 0.5) {
@@ -305,6 +316,8 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
     // Бродячие животные (утки плавают: y — уровень воды)
     for (const w of walkers) {
       const isDuck = w.legs.length === 0;
+      // Коллайдер — всегда, не только на ходу: сквозь стоящего зверя не пройти.
+      FAUNA_COLLIDERS.push({ x: w.group.position.x, z: w.group.position.z, r: w.radius });
       if (now < w.idleUntil) {
         for (const leg of w.legs) leg.rotation.x = 0;
         continue;
@@ -313,18 +326,61 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
       const dz = w.target.z - w.group.position.z;
       const d = Math.hypot(dx, dz);
       if (d < 0.4) {
-        const a = Math.random() * Math.PI * 2;
-        const r = Math.random() * w.home.r;
-        w.target = { x: w.home.x + Math.cos(a) * r, z: w.home.z + Math.sin(a) * r };
+        // Новую цель сухопутные звери выбирают на суше (до 4 попыток),
+        // чтобы не брести через реки и озёра. Утки плавают — им можно.
+        let tx = w.home.x, tz = w.home.z;
+        for (let tries = 0; tries < 4; tries++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * w.home.r;
+          const cx = w.home.x + Math.cos(a) * r, cz = w.home.z + Math.sin(a) * r;
+          tx = cx; tz = cz;
+          if (isDuck || waterMask(cx, cz) <= 0.3) break;
+        }
+        w.target = { x: tx, z: tz };
         w.idleUntil = now + 1500 + Math.random() * 4000;
         continue;
       }
       const want = Math.atan2(dx, dz);
       w.group.rotation.y += Math.atan2(Math.sin(want - w.group.rotation.y), Math.cos(want - w.group.rotation.y)) * Math.min(1, dt * 4);
       const step = w.speed * dt;
-      w.group.position.x += Math.sin(w.group.rotation.y) * step;
-      w.group.position.z += Math.cos(w.group.rotation.y) * step;
-      w.group.position.y = isDuck ? LAKE.level + 0.1 : groundHeight(w.group.position.x, w.group.position.z);
+      let nx = w.group.position.x + Math.sin(w.group.rotation.y) * step;
+      let nz = w.group.position.z + Math.cos(w.group.rotation.y) * step;
+      // Скольжение вдоль стен и домов: иначе звери идут сквозь город
+      for (let pass = 0; pass < 2; pass++) {
+        let pushed = false;
+        for (const c of COLLIDERS) {
+          const dx = nx - c.x, dz = nz - c.z;
+          const d = Math.hypot(dx, dz);
+          const min = c.r + 0.5;
+          if (d < min) {
+            if (d > 1e-4) {
+              nx = c.x + (dx / d) * min;
+              nz = c.z + (dz / d) * min;
+            } else {
+              nx = c.x + min;
+            }
+            pushed = true;
+          }
+        }
+        if (!pushed) break;
+      }
+      // Уткнулись — выбрать новую цель
+      if (Math.hypot(nx - w.group.position.x, nz - w.group.position.z) < step * 0.25) {
+        const a = Math.random() * Math.PI * 2;
+        w.target = { x: w.home.x + Math.cos(a) * w.home.r, z: w.home.z + Math.sin(a) * w.home.r };
+        w.idleUntil = now + 1000 + Math.random() * 2000;
+      } else {
+        w.group.position.x = nx;
+        w.group.position.z = nz;
+      }
+      if (isDuck) {
+        w.group.position.y = LAKE.level + 0.1;
+      } else {
+        // Зверь не уходит под воду: на мелководье идёт вброд у поверхности.
+        const gy = groundHeight(w.group.position.x, w.group.position.z);
+        const surf = waterSurfaceY(w.group.position.x, w.group.position.z);
+        w.group.position.y = surf !== null ? Math.max(gy, surf - 0.35) : gy;
+      }
       const swing = Math.sin(now / 1000 * 9 + w.phase) * 0.5;
       if (!isDuck) {
         w.legs[0].rotation.x = swing; w.legs[3].rotation.x = swing;

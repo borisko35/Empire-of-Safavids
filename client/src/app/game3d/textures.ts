@@ -7,14 +7,37 @@
 
 import * as THREE from 'three';
 
-function makeCanvas(size = 256): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+// ── Asset bundle system integration ──────────────────────────
+// TextureSystem is the authoritative CDN/mip catalog for future
+// texture assets (see client/src/assets/TextureSystem.ts). The
+// procedural canvas textures below are the current fallback and
+// remain in use until CDN bundles are published. Delegation
+// helpers expose TextureSystem via this module so callers can
+// prefer CDN URLs with graceful fallback to procedural.
+// TODO: when CDN is live, replace callers of sandTexture() etc.
+// with textureManager.getCdnUrl() + TextureLoader.
+import { textureManager, TEXTURE_CATALOG } from '../../assets/TextureSystem';
+export { textureManager, TEXTURE_CATALOG };
+export type { TextureQuality, TextureDefinition } from '../../assets/TextureSystem';
+
+/** CDN URL for a catalog texture at given quality, if catalogued. */
+export function getTextureCdnUrl(id: string, quality: 'low' | 'medium' | 'high' | 'ultra' = 'high'): string | undefined {
+  return textureManager.getCdnUrl(id, quality);
+}
+
+/** Whether a texture id is in the bundle catalog (future CDN). */
+export function hasCatalogTexture(id: string): boolean {
+  return !!TEXTURE_CATALOG[id];
+}
+
+export function makeCanvas(size = 256): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   return { canvas, ctx: canvas.getContext('2d')! };
 }
 
-function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
+export function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -25,7 +48,7 @@ function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTextu
 }
 
 /** Пестрота: случайное затемнение пикселя */
-function speckle(ctx: CanvasRenderingContext2D, size: number, count: number, alpha = 0.08): void {
+export function speckle(ctx: CanvasRenderingContext2D, size: number, count: number, alpha = 0.08): void {
   for (let i = 0; i < count; i++) {
     const x = Math.random() * size, y = Math.random() * size;
     const r = 0.5 + Math.random() * 1.6;

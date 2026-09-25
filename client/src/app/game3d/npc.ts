@@ -9,6 +9,12 @@
 import * as THREE from 'three';
 import { buildHumanoid, HumanoidCfg } from './rig';
 import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight } from './terrain';
+import { GATE } from './terrain';
+
+// Стража ворот стоит относительно ворот (а не на захардкоженных точках),
+// поэтому переживает смену радиуса города. GATE — мировые координаты.
+const GATE_LX = GATE.x - CITY.x;
+const GATE_LZ = GATE.z - CITY.z;
 
 export interface NpcDef {
   id: string;
@@ -45,11 +51,12 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_poet', nameRu: 'Поэт Хафиз', panel: 'panel-quests', quest: false, dx: 6, dz: -20, look: { robe: 0xe8e0d0, robeDark: 0xbdb4a2, hat: 'turban', hatColor: 0x2e8b8b, weapon: 'none', scale: 0.96 } },
       { id: 'npc_guard_gate', nameRu: 'Привратник', panel: 'panel-party', quest: false, dx: 26, dz: 6, look: GUARD(0x50565e) },
   // ── Стражники городских ворот (проход на юго-западе) ──
-  { id: 'npc_gate_guard_l', nameRu: 'Стражник Фарид', panel: 'panel-dungeons', quest: false, dx: -41.2, dz: -35.9, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
-  { id: 'npc_gate_guard_r', nameRu: 'Стражник Кавус', panel: 'panel-dungeons', quest: false, dx: -45.4, dz: -30.3, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
-  { id: 'npc_gate_archer_l', nameRu: 'Лучник Марван', panel: 'panel-party', quest: false, dx: -46.5, dz: -41.2, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
-  { id: 'npc_gate_archer_r', nameRu: 'Лучник Данияр', panel: 'panel-party', quest: false, dx: -52.0, dz: -34.1, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
+  { id: 'npc_gate_guard_l', nameRu: 'Стражник Фарид', panel: 'panel-dungeons', quest: false, dx: GATE_LX + 5.1, dz: GATE_LZ - 1.0, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
+  { id: 'npc_gate_guard_r', nameRu: 'Стражник Кавус', panel: 'panel-dungeons', quest: false, dx: GATE_LX + 0.9, dz: GATE_LZ + 4.6, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
+  { id: 'npc_gate_archer_l', nameRu: 'Лучник Марван', panel: 'panel-party', quest: false, dx: GATE_LX - 0.2, dz: GATE_LZ - 6.3, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
+  { id: 'npc_gate_archer_r', nameRu: 'Лучник Данияр', panel: 'panel-party', quest: false, dx: GATE_LX - 5.7, dz: GATE_LZ + 0.8, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
       { id: 'npc_mystic', nameRu: 'Суфий Мевлана', panel: 'panel-quests', quest: true, dx: 2, dz: -26, look: { robe: 0xd9c27a, robeDark: 0xa8954f, hat: 'hood', hatColor: 0x7a5f3c, weapon: 'staff', scale: 0.98 } },
+      { id: 'npc_stable_master', nameRu: 'Конюх Фархад', panel: 'panel-mount-stable', quest: false, dx: -18.6, dz: -69.5, look: { robe: 0x5a4430, robeDark: 0x3d3020, hat: 'cap', hatColor: 0x8a6a42, weapon: 'none', scale: 1.02 } },
     ],
   },
   // ── Приозёрный порт ──
@@ -147,6 +154,25 @@ for (const { origin, npcs } of NPC_GROUPS) {
   }
 }
 
+/**
+ * Квестовые NPC из server/src/data/quests.ts не все стоят в мире —
+ * карта переводит id квестодателя/цели в реально существующего NPC.
+ * Без неё стрелка-навигатор уходила к якорю региона (центр города,
+ * мечеть) вместо нужного торговца/стражника.
+ * Единый источник: shared/constants.ts (сервер использует тот же).
+ */
+import { QUEST_NPC_ALIAS } from '../../../../shared/constants';
+
+export { QUEST_NPC_ALIAS };
+
+/** Мировая позиция квестового NPC (прямой id или алиас), либо null */
+export function questNpcPosition(id: string): { x: number; z: number; nameRu: string } | null {
+  const direct = NPC_WORLD_POSITIONS[id];
+  if (direct) return direct;
+  const alias = QUEST_NPC_ALIAS[id];
+  return alias ? (NPC_WORLD_POSITIONS[alias] ?? null) : null;
+}
+
 export interface NpcsHandle {
   update(dt: number, now: number): void;
   /** Меши для луча клика (по userData.npcPanel и userData.npcName) */
@@ -158,7 +184,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   const group = new THREE.Group();
   const clickTargets: THREE.Object3D[] = [];
   const markers: { sprite: THREE.Sprite; phase: number; baseY: number }[] = [];
-  const rigs: { update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean }) => void }[] = [];
+  const rigs: { update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void }[] = [];
 
   for (const { origin, npcs } of NPC_GROUPS) {
     for (const def of npcs) {
@@ -173,6 +199,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       rig.group.traverse(o => {
         o.userData.npcPanel = def.panel;
         o.userData.npcName = def.nameRu;
+        o.userData.npcId = def.id;
       });
       group.add(rig.group);
       rigs.push({ update: (dt, p) => rig.update(dt, p) });
@@ -198,7 +225,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
 
   function update(dt: number, now: number): void {
     for (const r of rigs) {
-      r.update(dt, { moving: false, speed: 0, grounded: true, crouch: false, block: false, dead: false });
+      r.update(dt, { moving: false, speed: 0, grounded: true, crouch: false, block: false, dead: false, swimming: false });
     }
     for (const m of markers) {
       m.sprite.position.y = m.baseY + Math.sin(now / 380 + m.phase) * 0.14;

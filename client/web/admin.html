@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель — Empire of Safavids</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-name">Empire of <b>Safavids</b> · Admin</span>
+    </a>
+    <div class="topbar-right">
+      <span class="version-badge" id="admin-who">…</span>
+      <button class="btn btn-ghost" id="admin-logout" type="button" hidden>Выйти</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" id="admin-login-sec">
+      <div class="panel">
+        <h2 class="panel-title">Вход для администрации</h2>
+        <form id="admin-login-form" class="auth-form" autocomplete="on">
+          <label>Email<input type="email" id="admin-email" required></label>
+          <label>Пароль<input type="password" id="admin-password" required></label>
+          <button class="btn btn-gold" type="submit">Войти</button>
+        </form>
+        <p class="form-error hidden" id="admin-error"></p>
+      </div>
+    </section>
+
+    <section class="section hidden" id="admin-dash">
+      <div class="panel">
+        <h2 class="panel-title">Статистика сервера</h2>
+        <div class="status-grid" id="admin-stats"></div>
+      </div>
+      <div class="panel">
+        <h2 class="panel-title">Игроки онлайн (<span id="online-count">0</span>)</h2>
+        <form id="admin-search-form" class="chat-input">
+          <input type="text" id="admin-search-q" placeholder="Поиск по имени…" autocomplete="off">
+          <button type="submit">Найти</button>
+        </form>
+        <div id="admin-search-results"></div>
+        <ol class="rating-list" id="admin-online"></ol>
+      </div>
+    </section>
+
+    <!-- ═══ Управление сайтом (CMS) ═══ -->
+    <section class="section hidden" id="admin-cms">
+      <div class="panel">
+        <h2 class="panel-title">Управление сайтом</h2>
+        <p class="cms-hint">Контент главной страницы: анонс, режим обслуживания и новости. Сохраняется в БД, лендинг подхватывает сразу (обновите страницу).</p>
+
+        <div class="cms-toolbar">
+          <label class="cms-field">Язык
+            <select id="cms-lang">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+              <option value="az">Azərbaycan</option>
+            </select>
+          </label>
+          <button class="btn btn-ghost" id="cms-reload" type="button">Перезагрузить</button>
+          <button class="btn btn-gold" id="cms-save" type="button">Сохранить изменения</button>
+          <span class="cms-status" id="cms-status"></span>
+        </div>
+
+        <div class="cms-block">
+          <h3 class="cms-subtitle">Анонс (баннер над главной страницей)</h3>
+          <label class="cms-check"><input type="checkbox" id="ann-enabled"> Показывать</label>
+          <input type="text" id="ann-text" class="cms-input" maxlength="300" placeholder="Например: Новый сезон уже 1 октября!">
+        </div>
+
+        <div class="cms-block">
+          <h3 class="cms-subtitle">Режим обслуживания (красный баннер сверху)</h3>
+          <label class="cms-check"><input type="checkbox" id="mnt-enabled"> Включить</label>
+          <input type="text" id="mnt-text" class="cms-input" maxlength="300" placeholder="Например: Сервер временно недоступен, идёт техработа">
+        </div>
+
+        <div class="cms-block">
+          <h3 class="cms-subtitle">Новости главной страницы</h3>
+          <div id="cms-news"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ Обратная связь ═══ -->
+    <section class="section hidden" id="admin-feedback">
+      <div class="panel">
+        <h2 class="panel-title">Обратная связь</h2>
+        <p class="cms-hint">Обращения игроков с /feedback.html. Ответ увидит игрок в «Мои обращения»; статус меняется кнопками ниже.</p>
+
+        <div class="cms-toolbar">
+          <button class="btn btn-ghost fb-tab active" type="button" data-status="">Все <span id="fb-c-all">0</span></button>
+          <button class="btn btn-ghost fb-tab" type="button" data-status="new">Новые <span id="fb-c-new">0</span></button>
+          <button class="btn btn-ghost fb-tab" type="button" data-status="read">Прочитанные <span id="fb-c-read">0</span></button>
+          <button class="btn btn-ghost fb-tab" type="button" data-status="closed">Закрытые <span id="fb-c-closed">0</span></button>
+          <button class="btn btn-ghost" id="fb-reload" type="button">Обновить</button>
+        </div>
+
+        <p class="form-error hidden" id="fb-queue-error"></p>
+        <div id="fb-queue"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

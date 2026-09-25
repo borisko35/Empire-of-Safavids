@@ -33,12 +33,17 @@ export interface RigPose {
   crouch: boolean;
   block: boolean;
   dead: boolean;
+  swimming: boolean;  // плавание в воде
 }
 
 export interface Rig {
   group: THREE.Group;
   update: (dt: number, p: RigPose) => void;
   triggerAttack: () => void;
+  equipWeapon: (visible: boolean) => void;
+  equipShield: (visible: boolean) => void;
+  isWeaponEquipped: () => boolean;
+  isShieldEquipped: () => boolean;
   dispose: () => void;
 }
 
@@ -219,20 +224,27 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   torso.add(armL, armR);
 
   // Оружие в правой руке
+  let weaponRef: THREE.Group | null = null;
   if (cfg.weapon !== 'none') {
-    const weapon = buildWeapon(cfg.weapon);
-    weapon.position.y = -0.6;
-    armR.add(weapon);
+    weaponRef = buildWeapon(cfg.weapon);
+    weaponRef.position.y = -0.6;
+    armR.add(weaponRef);
   }
   // Щит на левой
+  let shieldRef: THREE.Mesh | null = null;
+  let bossRef: THREE.Mesh | null = null;
   if (cfg.shield) {
-    const shield = cyl(0.3, 0.3, 0.05, MAT.wood, 14);
-    shield.rotation.x = Math.PI / 2;
-    shield.position.set(-0.05, -0.55, 0.08);
-    const boss = sphere(0.06, MAT.steel, 8);
-    boss.position.set(-0.05, -0.55, 0.12);
-    armL.add(shield, boss);
+    shieldRef = cyl(0.3, 0.3, 0.05, MAT.wood, 14);
+    shieldRef.rotation.x = Math.PI / 2;
+    shieldRef.position.set(-0.05, -0.55, 0.08);
+    bossRef = sphere(0.06, MAT.steel, 8);
+    bossRef.position.set(-0.05, -0.55, 0.12);
+    armL.add(shieldRef);
+    armL.add(bossRef);
   }
+
+  let weaponOn = !!weaponRef;
+  let shieldOn = !!shieldRef;
 
   body.add(torso);
   group.scale.setScalar(s);
@@ -244,6 +256,7 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   let crouchT = 0;
   let airT = 0;                 // 0..1 в воздухе
   let deadT = 0;
+  let swimT = 0;                // 0..1 плавание
 
   const rig: Rig = {
     group,
@@ -258,30 +271,58 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
       crouchT += ((p.crouch ? 1 : 0) - crouchT) * Math.min(1, dt * 8);
       airT += ((p.grounded ? 0 : 1) - airT) * Math.min(1, dt * 10);
       deadT = p.dead ? Math.min(1, deadT + dt * 2.2) : 0;
+      swimT += ((p.swimming ? 1 : 0) - swimT) * Math.min(1, dt * 6);
+
+      const inWater = swimT > 0.01;
+
+      // ── Плавание: тело горизонтально, руки гребут, ноги бьют ──
+      if (inWater) {
+        // Тело: горизонтальное положение
+        const swimLean = 0.55 * swimT;
+        torso.rotation.x += (swimLean - torso.rotation.x) * Math.min(1, dt * 6);
+        torso.position.y = (0.98 - 0.3) * (1 - swimT) + 0.55 * swimT;
+
+        // Руки: гребок вперёд-назад (альтернативно)
+        const swimPhase = phase * 0.8;
+        const armSwingL = Math.sin(swimPhase) * 0.7 * swimT;
+        const armSwingR = Math.sin(swimPhase + Math.PI) * 0.7 * swimT;
+        armL.rotation.x += (armSwingL - 0.3 * swimT - armL.rotation.x) * Math.min(1, dt * 8);
+        armL.rotation.z += (-0.4 * swimT - armL.rotation.z) * Math.min(1, dt * 8);
+        armR.rotation.x += (armSwingR - 0.3 * swimT - armR.rotation.x) * Math.min(1, dt * 8);
+        armR.rotation.z += (0.4 * swimT - armR.rotation.z) * Math.min(1, dt * 8);
+
+        // Ноги: биение в воде
+        const legKick = Math.sin(swimPhase * 1.3) * 0.3 * swimT;
+        legL.rotation.x += (legKick - 0.2 * swimT - legL.rotation.x) * Math.min(1, dt * 10);
+        legR.rotation.x += (-legKick - 0.2 * swimT - legR.rotation.x) * Math.min(1, dt * 10);
+      }
 
       const w = Math.sin(phase);            // взмах ног
       const swingAmp = p.moving ? 0.28 + 0.5 * speedRatio : 0.035;
 
-      // Ноги: бег/шаг + поджатие в прыжке + присед
-      const legLX = w * swingAmp - airT * 0.55 - crouchT * 0.7;
-      const legRX = -w * swingAmp - airT * 0.3 - crouchT * 0.5;
-      legL.rotation.x += (legLX - legL.rotation.x) * Math.min(1, dt * 14);
-      legR.rotation.x += (legRX - legR.rotation.x) * Math.min(1, dt * 14);
+      // ── Если НЕ в воде — обычная анимация ходьбы/бега ──
+      if (!inWater) {
+        // Ноги: бег/шаг + поджатие в прыжке + присед
+        const legLX = w * swingAmp - airT * 0.55 - crouchT * 0.7;
+        const legRX = -w * swingAmp - airT * 0.3 - crouchT * 0.5;
+        legL.rotation.x += (legLX - legL.rotation.x) * Math.min(1, dt * 14);
+        legR.rotation.x += (legRX - legR.rotation.x) * Math.min(1, dt * 14);
 
-      // Корпус: покачивание, наклон при беге, присед, смерть
-      const bob = p.moving && p.grounded ? Math.abs(Math.cos(phase)) * 0.05 * (0.4 + speedRatio) : Math.sin(phase * 0.6) * 0.012;
-      torso.position.y = 0.98 + bob - crouchT * 0.34;
-      const leanX = (p.moving ? 0.1 * speedRatio : 0.02 * Math.sin(phase * 0.5)) + crouchT * 0.32 + airT * 0.12;
-      torso.rotation.x += (leanX - torso.rotation.x) * Math.min(1, dt * 8);
-      torso.rotation.y *= (1 - Math.min(1, dt * 6));
+        // Корпус: покачивание, наклон при беге, присед
+        const bob = p.moving && p.grounded ? Math.abs(Math.cos(phase)) * 0.05 * (0.4 + speedRatio) : Math.sin(phase * 0.6) * 0.012;
+        torso.position.y = 0.98 + bob - crouchT * 0.34;
+        const leanX = (p.moving ? 0.1 * speedRatio : 0.02 * Math.sin(phase * 0.5)) + crouchT * 0.32 + airT * 0.12;
+        torso.rotation.x += (leanX - torso.rotation.x) * Math.min(1, dt * 8);
+        torso.rotation.y *= (1 - Math.min(1, dt * 6));
 
-      // Руки: противофаза к ногам; блок левой; атака правой
-      const armLX = -w * swingAmp * 0.75 - blockT * 2.1 - airT * 0.35 + crouchT * 0.3;
-      const armRX = w * swingAmp * 0.75 + airT * 0.3;
-      armL.rotation.x += (armLX - armL.rotation.x) * Math.min(1, dt * 12);
-      armL.rotation.z += (blockT * -0.5 - armL.rotation.z) * Math.min(1, dt * 12);
-      armR.rotation.x += (armRX - armR.rotation.x) * Math.min(1, dt * 12);
-      armR.rotation.z += (attackT >= 0 && attackT < 0.35 ? -0.9 : 0) * 1 - armR.rotation.z * 0.2;
+        // Руки: противофаза к ногам; блок левой; атака правой
+        const armLX = -w * swingAmp * 0.75 - blockT * 2.1 - airT * 0.35 + crouchT * 0.3;
+        const armRX = w * swingAmp * 0.75 + airT * 0.3;
+        armL.rotation.x += (armLX - armL.rotation.x) * Math.min(1, dt * 12);
+        armL.rotation.z += (blockT * -0.5 - armL.rotation.z) * Math.min(1, dt * 12);
+        armR.rotation.x += (armRX - armR.rotation.x) * Math.min(1, dt * 12);
+        armR.rotation.z += (attackT >= 0 && attackT < 0.35 ? -0.9 : 0) * 1 - armR.rotation.z * 0.2;
+      }
 
       // Атака: замах -> рубящий удар -> возврат
       if (attackT >= 0) {
@@ -310,6 +351,14 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
         body.position.y = -crouchT * 0.36;
       }
     },
+    equipWeapon(visible: boolean) {
+      if (weaponRef) { weaponRef.visible = visible; weaponOn = visible; }
+    },
+    equipShield(visible: boolean) {
+      if (shieldRef) { shieldRef.visible = visible; bossRef && (bossRef.visible = visible); shieldOn = visible; }
+    },
+    isWeaponEquipped() { return weaponOn; },
+    isShieldEquipped() { return shieldOn; },
     dispose() {
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -419,6 +468,10 @@ function buildDemon(): Rig {
         body.position.y = -deadT * 0.4;
       } else group.rotation.x *= 1 - Math.min(1, dt * 8);
     },
+    equipWeapon() {},
+    equipShield() {},
+    isWeaponEquipped() { return false; },
+    isShieldEquipped() { return false; },
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }
@@ -493,6 +546,98 @@ function buildSimurgh(): Rig {
         body.position.y = -deadT * 0.6;
       } else group.rotation.x *= 1 - Math.min(1, dt * 8);
     },
+    equipWeapon() {},
+    equipShield() {},
+    isWeaponEquipped() { return false; },
+    isShieldEquipped() { return false; },
+    dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
+  };
+}
+
+// ── Скорпион (пустынный, низкий, сегментированное тело, хвост-жалo, клешни)
+function buildScorpion(): Rig {
+  const group = new THREE.Group();
+  const sand = mat(0xc4a04a, 0.9);
+  const sandDark = mat(0x8a6e2a, 0.9);
+  const dark = mat(0x3a2a10, 0.85);
+  const body = new THREE.Group();
+  group.add(body);
+
+  // Тело: плоское овальное
+  const torso = sphere(0.28, sand, 10);
+  torso.scale.set(1.3, 0.35, 1.0);
+  torso.position.set(0, 0.12, 0);
+  body.add(torso);
+
+  // Голова (передняя часть)
+  const head = sphere(0.18, sandDark, 8);
+  head.scale.set(1.1, 0.5, 0.9);
+  head.position.set(0, 0.2, 0.28);
+  body.add(head);
+
+  // Клешни
+  for (const side of [-1, 1]) {
+    const clawArm = cyl(0.03, 0.03, 0.22, dark);
+    clawArm.rotation.z = side * 0.4;
+    clawArm.position.set(side * 0.24, 0.2, 0.44);
+    // Клешня-кулак
+    const claw = sphere(0.07, dark, 6);
+    claw.scale.set(1, 0.6, 0.8);
+    claw.position.set(side * 0.34, 0.32, 0.54);
+    body.add(clawArm, claw);
+  }
+
+  // Хвост: 4 сегмента + жало
+  const tailSegs = [
+    { x: 0, y: 0.08, z: -0.22, r: 0.08 },
+    { x: 0, y: 0.2, z: -0.38, r: 0.07 },
+    { x: 0, y: 0.36, z: -0.50, r: 0.06 },
+    { x: 0, y: 0.50, z: -0.58, r: 0.05 },
+  ];
+  for (const s of tailSegs) {
+    const seg = sphere(s.r, sandDark, 8);
+    seg.position.set(s.x, s.y, s.z);
+    body.add(seg);
+  }
+  // Жало (шило)
+  const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.18, 6), dark);
+  stinger.position.set(0, 0.58, -0.63);
+  stinger.rotation.x = -0.3;
+  body.add(stinger);
+
+  // Ноги (6 пар — по 3 с каждой стороны)
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const legX = side * (0.26 + i * 0.03);
+      const legZ = 0.08 - i * 0.12;
+      const leg = cyl(0.02, 0.02, 0.18, dark);
+      leg.position.set(legX, 0.04, legZ);
+      leg.rotation.z = side * 0.6;
+      body.add(leg);
+    }
+  }
+
+  let phase = Math.random() * 6;
+  let deadT = 0;
+  return {
+    group,
+    triggerAttack() {},
+    update(dt, p) {
+      phase += dt * (p.moving ? 4 : 1.5);
+      deadT = p.dead ? Math.min(1, deadT + dt * 2.2) : 0;
+      // Покачивание при ходьбе
+      body.position.y = Math.abs(Math.cos(phase * 0.7)) * 0.015 * (p.moving ? 1 : 0.2);
+      // Хвост слегка поднимается при атаке
+      if (deadT > 0) {
+        group.rotation.x = -Math.PI / 2 * Math.min(1, deadT * 1.4);
+        body.position.y = -deadT * 0.15;
+      } else {
+        group.rotation.x *= 1 - Math.min(1, dt * 8);
+      }
+    },
+    equipWeapon() {}, equipShield() {},
+    isWeaponEquipped() { return false; },
+    isShieldEquipped() { return false; },
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }
@@ -508,6 +653,8 @@ export function buildMonsterRig(monsterId: string): Rig {
       return buildHumanoid({ robe: 0x42644c, robeDark: 0x2c4434, hat: 'cap', hatColor: 0xe8e0d0, weapon: 'sword', scale: 1.05 });
     case 'mob_mongol_raider':
       return buildHumanoid({ robe: 0x58462f, robeDark: 0x3c3020, hat: 'helmet', hatColor: 0x4c3a22, weapon: 'bow', scale: 1.02 });
+    case 'mob_desert_scorpion':
+      return buildScorpion();
     case 'mob_div_fire':
       return buildDemon();
     case 'world_boss_simurgh':
@@ -528,3 +675,5 @@ export function buildPlayerRig(charClass: string): Rig {
   };
   return buildHumanoid(cfgs[charClass] ?? cfgs.qizilbash);
 }
+
+

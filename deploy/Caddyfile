@@ -2,7 +2,7 @@
 # Домен и сертификаты Let's Encrypt настраиваются автоматически;
 # переменная DOMAIN приходит из deploy/.env (окружение контейнера).
 
-{$DOMAIN} {
+{$DOMAIN}, www.{$DOMAIN} {
 	encode gzip zstd
 
 	header {

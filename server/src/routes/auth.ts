@@ -5,7 +5,7 @@
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
 import { authRateLimiter } from '../middleware/rateLimiter';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, secureMiddleware } from '../middleware/auth';
 import { logger } from '../utils/logger';
 
 export const authRouter = Router();
@@ -85,7 +85,7 @@ authRouter.post('/logout-all', authMiddleware, async (req: Request, res: Respons
 // ============================================================
 // GET /api/auth/me
 // ============================================================
-authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
+authRouter.get('/me', secureMiddleware, async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '') ?? '';
     const user  = await authService.validateSession(token);
@@ -99,7 +99,7 @@ authRouter.get('/me', authMiddleware, async (req: Request, res: Response) => {
 // ============================================================
 // POST /api/auth/change-password
 // ============================================================
-authRouter.post('/change-password', authMiddleware, async (req: Request, res: Response) => {
+authRouter.post('/change-password', secureMiddleware, async (req: Request, res: Response) => {
   try {
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) {
@@ -107,6 +107,23 @@ authRouter.post('/change-password', authMiddleware, async (req: Request, res: Re
     }
     await authService.changePassword(req.userId!, oldPassword, newPassword);
     return res.json({ success: true, message: 'Пароль успешно изменён' });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(400).json({ success: false, code: e.code, message: e.message });
+  }
+});
+
+// ============================================================
+// POST /api/auth/reset-password — сброс пароля (dev)
+// ============================================================
+authRouter.post('/reset-password', async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Укажите email и новый пароль' });
+  }
+  try {
+    await authService.resetPassword(email, password);
+    return res.json({ success: true, message: 'Пароль успешно сброшен' });
   } catch (err: unknown) {
     const e = err as Error & { code?: string };
     return res.status(400).json({ success: false, code: e.code, message: e.message });
@@ -132,4 +149,18 @@ authRouter.get('/check-email/:email', async (req: Request, res: Response) => {
   const { email } = req.params;
   const available = await authService.isEmailAvailable(email);
   return res.json({ available });
+});
+
+// ============================================================
+// POST /api/auth/reset-rate-limit — сброс rate limiter (dev)
+// ============================================================
+authRouter.post('/reset-rate-limit', async (_req: Request, res: Response) => {
+  try {
+    await authService.resetRateLimit('127.0.0.1');
+    await authService.resetRateLimit('localhost');
+    await authService.resetRateLimit('::1');
+    return res.json({ success: true, message: 'Rate limit сброшен' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });

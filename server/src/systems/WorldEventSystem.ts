@@ -58,7 +58,7 @@ export class WorldEventSystem {
 
   start(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => void this.tick(), 30 * 1000);
+    this.timer = setInterval(() => { this.tick().catch(() => {}); }, 30 * 1000);
     logger.info('[WorldEvent] Scheduler started (world boss every 3h per shard, first in 10m)');
   }
 

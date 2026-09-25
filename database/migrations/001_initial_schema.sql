@@ -1,17 +1,22 @@
--- ============================================================
+﻿-- ============================================================
 -- Empire of Safavids — Initial Database Schema
 -- Migration: 001
 -- ============================================================
 
--- Расширения
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Расширения (uuid-ossp отключён из-за mismatch версий: сервер PG16, библиотеки PG18)
+-- Используем встроенную генерацию UUID через функцию generate_uuid_v4()
 CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- Для поиска по имени
+
+-- Функция генерации UUID (замена uuid_generate_v4 из uuid-ossp)
+CREATE OR REPLACE FUNCTION generate_uuid_v4() RETURNS uuid AS $$
+  SELECT md5(random()::text || clock_timestamp()::text)::uuid;
+$$ LANGUAGE sql IMMUTABLE;
 
 -- ============================================================
 -- Пользователи
 -- ============================================================
 CREATE TABLE users (
-  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id            UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   username      VARCHAR(20) UNIQUE NOT NULL,
   email         VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
@@ -29,7 +34,7 @@ CREATE INDEX idx_users_username ON users(username);
 -- Персонажи
 -- ============================================================
 CREATE TABLE characters (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name         VARCHAR(24) UNIQUE NOT NULL,
   class        VARCHAR(30) NOT NULL,
@@ -60,7 +65,7 @@ CREATE INDEX idx_characters_name_trgm ON characters USING gin(name gin_trgm_ops)
 -- Инвентарь
 -- ============================================================
 CREATE TABLE inventory (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   slot_index   SMALLINT NOT NULL,
   item_id      VARCHAR(50) NOT NULL,
@@ -77,7 +82,7 @@ CREATE INDEX idx_inventory_character ON inventory(character_id);
 -- Гильдии
 -- ============================================================
 CREATE TABLE guilds (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id          UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   name        VARCHAR(30) UNIQUE NOT NULL,
   description TEXT,
   leader_id   UUID NOT NULL REFERENCES characters(id),
@@ -101,7 +106,7 @@ CREATE TABLE guild_members (
 -- Квесты персонажей
 -- ============================================================
 CREATE TABLE character_quests (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   quest_id     VARCHAR(50) NOT NULL,
   status       VARCHAR(20) NOT NULL DEFAULT 'active', -- active, completed, failed
@@ -117,7 +122,7 @@ CREATE INDEX idx_quests_character ON character_quests(character_id);
 -- Торговля (Аукционный дом)
 -- ============================================================
 CREATE TABLE auction_listings (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   seller_id    UUID NOT NULL REFERENCES characters(id),
   item_id      VARCHAR(50) NOT NULL,
   quantity     INTEGER NOT NULL DEFAULT 1,

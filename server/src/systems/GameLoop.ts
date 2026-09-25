@@ -72,6 +72,8 @@ export class GameLoop {
     WorldEventSystem.getInstance().start();
 
     this.timer = setInterval(() => this.tick(), TICK_INTERVAL_MS);
+    // Сразу шлём время/погоду, иначе клиент ждёт первый тик до 60 секунд
+    this.worldTime.broadcastWorldTime().catch((e) => logger.error('[GameLoop] initial worldTime rejected:', e));
     logger.info('[GameLoop] Started (tick = 1s)');
   }
 
@@ -93,17 +95,17 @@ export class GameLoop {
 
       // Тик ИИ для всех активных монстров
       if (this.tickCount % AI_TICK_EVERY === 0) {
-        void this.tickAI();
+        this.tickAI().catch((e) => logger.error('[GameLoop] tickAI rejected:', e));
       }
 
       // Вещание игрового времени (день/ночь/погода)
       if (this.tickCount % WORLD_TIME_EVERY === 0) {
-        void this.worldTime.broadcastWorldTime();
+        this.worldTime.broadcastWorldTime().catch((e) => logger.error('[GameLoop] worldTime rejected:', e));
       }
 
       // Постепенное восстановление отрицательной кармы у онлайн-игроков
       if (this.tickCount % KARMA_DECAY_EVERY === 0) {
-        void this.decayKarmaOnline();
+        this.decayKarmaOnline().catch((e) => logger.error('[GameLoop] decayKarma rejected:', e));
       }
     } catch (error) {
       logger.error('[GameLoop] Tick error:', error);
@@ -111,17 +113,18 @@ export class GameLoop {
   }
 
   private async tickAI(): Promise<void> {
+    try {
     // Собираем онлайн-игроков по шардам и регионам из Redis
     const nearbyPlayers = new Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>();
     const allIds: string[] = [];
     const shards = this.spawnSystem.getActiveShards();
     for (const shardId of shards) {
       for (const region of Object.values(Region)) {
-        const ids = await this.redis.getPlayersInRegion(shardId, region);
+        const ids = await this.redis.getPlayersInRegion(shardId, region).catch(() => [] as string[]);
         allIds.push(...ids);
         const players: { id: string; position: { x: number; y: number; z: number }; hp: number }[] = [];
         for (const id of ids) {
-          const pos = await this.redis.getPlayerPosition(id) as { x: number; y: number; z: number } | null;
+          const pos = await this.redis.getPlayerPosition(id).catch(() => null) as { x: number; y: number; z: number } | null;
           if (pos) players.push({ id, position: pos, hp: 1 });
         }
         nearbyPlayers.set(`${shardId}:${region}`, players);
@@ -180,6 +183,9 @@ export class GameLoop {
         died: applied.died,
       }).catch(() => {});
     }
+    } catch (error) {
+      logger.error('[GameLoop] tickAI error:', error);
+    }
   }
 
   /** Урон монстра игроку: навык из базы монстров либо удар с руки, минус защита цели */
@@ -197,13 +203,17 @@ export class GameLoop {
   }
 
   private async decayKarmaOnline(): Promise<void> {
+    try {
     for (const shardId of this.spawnSystem.getActiveShards()) {
       for (const region of Object.values(Region)) {
-        const ids = await this.redis.getPlayersInRegion(shardId, region);
+        const ids = await this.redis.getPlayersInRegion(shardId, region).catch(() => [] as string[]);
         for (const id of ids) {
-          await this.karmaSystem.decayKarma(id);
+          await this.karmaSystem.decayKarma(id).catch(() => {});
         }
       }
+    }
+    } catch (error) {
+      logger.error('[GameLoop] decayKarmaOnline error:', error);
     }
   }
 }

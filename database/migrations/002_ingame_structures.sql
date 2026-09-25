@@ -1,11 +1,11 @@
--- Дополнительные таблицы для внутриигровых структур
+﻿-- Дополнительные таблицы для внутриигровых структур
 -- Migration: 002
 
 -- ============================================================
 -- Крафтинг
 -- ============================================================
 CREATE TABLE crafting_jobs (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   character_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   recipe_id    VARCHAR(50) NOT NULL,
   started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -116,7 +116,7 @@ CREATE TABLE character_titles (
 -- Почтовый ящик (для получения наград аукциона)
 -- ============================================================
 CREATE TABLE mailbox (
-  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID PRIMARY KEY DEFAULT generate_uuid_v4(),
   recipient_id UUID NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
   sender_id    UUID REFERENCES characters(id) ON DELETE SET NULL,
   subject      VARCHAR(100) NOT NULL,

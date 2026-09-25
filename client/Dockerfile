@@ -11,6 +11,7 @@ COPY client/vite.config.ts ./client/
 COPY client/tsconfig.json ./client/
 COPY client/src ./client/src
 COPY client/web ./client/web
+COPY shared ./shared
 
 WORKDIR /app/client
 RUN npm run build

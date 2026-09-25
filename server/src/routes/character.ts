@@ -6,9 +6,11 @@ import { QuestService } from '../services/QuestService';
 import { EnhancementSystem } from '../systems/EnhancementSystem';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { CharacterClass } from '../types/game.types';
-import { authMiddleware } from '../middleware/auth';
+import { secureMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { MAX_CHARACTERS_PER_ACCOUNT, DEFAULT_SERVER_ID, isValidServerId } from '../../../shared/constants';
+import { DatabaseService } from '../services/DatabaseService';
+import { logger } from '../utils/logger';
 
 export const characterRouter = Router();
 const characterService = new CharacterService();
@@ -24,13 +26,13 @@ const createCharacterSchema = Joi.object({
 });
 
 // GET /api/characters — список персонажей пользователя
-characterRouter.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.get('/', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const characters = await characterService.getCharactersByUser(req.userId!);
   return res.json({ characters });
 }));
 
 // POST /api/characters — создать персонажа
-characterRouter.post('/', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const { error, value } = createCharacterSchema.validate(req.body);
   if (error) return res.status(400).json({ error: error.details[0].message });
 
@@ -47,8 +49,53 @@ characterRouter.post('/', authMiddleware, asyncHandler(async (req: Request, res:
   return res.status(201).json({ character });
 }));
 
+// POST /api/characters/:id/rename — смена ника за АЗЭНЫ
+characterRouter.post('/:id/rename', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const { name } = req.body;
+  if (!name || name.length < 2 || name.length > 24) {
+    return res.status(400).json({ error: 'Имя должно быть от 2 до 24 символов' });
+  }
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Персонаж не найден' });
+  }
+  if (character.name === name) {
+    return res.status(400).json({ error: 'Новое имя совпадает со старым' });
+  }
+  // Проверка уникальности
+  const exists = await characterService.getCharacterByNameExact(name);
+  if (exists) {
+    return res.status(400).json({ error: 'Такое имя уже занято' });
+  }
+  // Стоимость: 500 АЗЭНОВ
+  const cost = 500;
+  if ((character.azens ?? 0) < cost) {
+    return res.status(400).json({ error: `Недостаточно АЗЭНОВ. Нужно ${cost}`, needed: cost, have: character.azens });
+  }
+  // Выполняем изменение имени и списание АЗЭН
+  await DatabaseService.getInstance().query(
+    'UPDATE characters SET name = $1, azens = azens - $2, last_name_change_at = NOW() WHERE id = $3',
+    [name, cost, req.params.id]
+  );
+  logger.info(`[Character] ${req.userId} renamed ${character.name} -> ${name}`);
+  const updated = await characterService.getCharacterById(req.params.id);
+  return res.json({ success: true, character: updated });
+}));
+characterRouter.delete('/:id', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  try {
+    await characterService.deleteCharacter(req.params.id);
+  } catch (err) {
+    return res.status(400).json({ error: (err as Error).message });
+  }
+  return res.json({ success: true });
+}));
+
 // GET /api/characters/:id/skills — навыки персонажа
-characterRouter.get('/:id/skills', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.get('/:id/skills', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -58,7 +105,7 @@ characterRouter.get('/:id/skills', authMiddleware, asyncHandler(async (req: Requ
 }));
 
 // GET /api/characters/:id/inventory — инвентарь персонажа
-characterRouter.get('/:id/inventory', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.get('/:id/inventory', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -68,7 +115,7 @@ characterRouter.get('/:id/inventory', authMiddleware, asyncHandler(async (req: R
 }));
 
 // GET /api/characters/:id/equipment — экипировка и бонусы характеристик
-characterRouter.get('/:id/equipment', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.get('/:id/equipment', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -78,7 +125,7 @@ characterRouter.get('/:id/equipment', authMiddleware, asyncHandler(async (req: R
 }));
 
 // POST /api/characters/:id/equipment/equip — надеть предмет { itemId }
-characterRouter.post('/:id/equipment/equip', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/:id/equipment/equip', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -95,7 +142,7 @@ characterRouter.post('/:id/equipment/equip', authMiddleware, asyncHandler(async 
 }));
 
 // POST /api/characters/:id/equipment/unequip — снять предмет { slot }
-characterRouter.post('/:id/equipment/unequip', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/:id/equipment/unequip', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -114,7 +161,7 @@ characterRouter.post('/:id/equipment/unequip', authMiddleware, asyncHandler(asyn
 }));
 
 // POST /api/characters/:id/inventory/use — использовать расходник { itemId }
-characterRouter.post('/:id/inventory/use', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/:id/inventory/use', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -130,7 +177,7 @@ characterRouter.post('/:id/inventory/use', authMiddleware, asyncHandler(async (r
 }));
 
 // POST /api/characters/:id/enhance — заточить предмет { itemId }
-characterRouter.post('/:id/enhance', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/:id/enhance', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -146,7 +193,7 @@ characterRouter.post('/:id/enhance', authMiddleware, asyncHandler(async (req: Re
 }));
 
 // GET /api/characters/:id/quests — прогресс квестов персонажа
-characterRouter.get('/:id/quests', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.get('/:id/quests', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -156,7 +203,7 @@ characterRouter.get('/:id/quests', authMiddleware, asyncHandler(async (req: Requ
 }));
 
 // POST /api/characters/:id/quests/:questId/accept — взять квест
-characterRouter.post('/:id/quests/:questId/accept', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+characterRouter.post('/:id/quests/:questId/accept', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const character = await characterService.getCharacterById(req.params.id);
   if (!character || character.userId !== req.userId) {
     return res.status(404).json({ error: 'Character not found' });
@@ -164,4 +211,15 @@ characterRouter.post('/:id/quests/:questId/accept', authMiddleware, asyncHandler
   const result = await questService.accept(req.params.id, req.params.questId);
   if (!result.ok) return res.status(400).json({ error: result.code });
   return res.json({ success: true });
+}));
+
+// POST /api/characters/:id/quests/:questId/explore — игрок дошёл до точки (тело: objectiveId)
+characterRouter.post('/:id/quests/:questId/explore', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const { objectiveId } = req.body as { objectiveId?: string };
+  const completed = await questService.recordExplore(req.params.id, req.params.questId, objectiveId);
+  return res.json({ success: true, completed });
 }));

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
@@ -26,6 +26,16 @@
         <label><span data-i18n="auth.email"></span><input type="email" id="login-email" required></label>
         <label><span data-i18n="auth.password"></span><input type="password" id="login-password" required minlength="8"></label>
         <button class="btn btn-gold" type="submit" data-i18n="auth.submit_login"></button>
+        <button type="button" class="btn btn-ghost link-btn" id="btn-forgot-password" data-i18n="auth.forgot_password"></button>
+      </form>
+
+      <!-- Форма сброса пароля -->
+      <form id="form-reset-password" class="auth-form hidden" autocomplete="off">
+        <label><span data-i18n="auth.email"></span><input type="email" id="reset-email" required></label>
+        <label><span data-i18n="auth.new_password"></span><input type="password" id="reset-new-password" required minlength="8"></label>
+        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reset-confirm-password" required minlength="8"></label>
+        <button class="btn btn-gold" type="submit" data-i18n="auth.reset_password"></button>
+        <button type="button" class="btn btn-ghost link-btn" id="btn-back-to-login">← <span data-i18n="auth.login"></span></button>
       </form>
 
       <form id="form-register" class="auth-form hidden" autocomplete="off">
@@ -84,7 +94,7 @@
       <div class="bar mana"><i id="bar-mana"></i><span id="txt-mana"></span></div>
       <div class="bar stamina"><i id="bar-stamina"></i><span id="txt-stamina"></span></div>
       <div class="bar exp"><i id="bar-exp"></i><span id="txt-exp"></span></div>
-      <div class="char-line gold-line"><span id="hud-gold"></span><span id="hud-region"></span></div>
+      <div class="char-line gold-line"><span id="hud-gold"></span><span id="hud-azens"></span><span id="hud-region"></span></div>
     </div>
 
     <!-- Рамка цели -->
@@ -98,13 +108,18 @@
 
     <!-- Чат -->
     <div class="hud chat" id="chat">
+      <div class="chat-tabs">
+        <button class="chat-tab active" data-channel="system" data-i18n="chat.system">Система</button>
+        <button class="chat-tab" data-channel="world" data-i18n="chat.world">Мир</button>
+        <button class="chat-tab" data-channel="region" data-i18n="chat.region">Регион</button>
+        <button class="chat-tab" data-channel="guild" data-i18n="chat.guild">Гильдия</button>
+        <button class="chat-tab" data-channel="trade" data-i18n="chat.trade">Торговля</button>
+        <button class="chat-tab" data-channel="war" data-i18n="chat.war">Война</button>
+      </div>
       <div class="chat-log" id="chat-log"></div>
-      <form class="chat-input hidden" id="chat-form">
-        <select id="chat-channel">
-          <option value="region" data-i18n="chat.region"></option>
-          <option value="world" data-i18n="chat.world"></option>
-        </select>
+      <form class="chat-input" id="chat-form">
         <input type="text" id="chat-text" maxlength="500" data-i18n-placeholder="chat.placeholder" autocomplete="off">
+        <button type="submit" data-i18n="chat.send">→</button>
       </form>
     </div>
 
@@ -146,6 +161,96 @@
       <h3><span data-icon="silk"></span><span data-i18n="panels.trade"></span></h3>
       <div id="trade-list"></div>
     </div>
+    <div class="hud side-panel hidden" id="panel-mount-stable">
+      <h3><span data-icon="mount"></span>Конюшня</h3>
+      <div id="mount-stable-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-house">
+      <h3><span data-icon="home"></span>Недвижимость</h3>
+      <div id="house-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-leaderboard">
+      <h3><span data-icon="crown"></span>Рейтинги</h3>
+      <div id="lb-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-friends">
+      <h3><span data-icon="user"></span>Друзья</h3>
+      <div id="friends-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-achievements">
+      <h3><span data-icon="crown"></span>Достижения</h3>
+      <div id="ach-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-tasks">
+      <h3><span data-icon="scroll"></span>Ежедневные задачи</h3>
+      <div id="tasks-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-pets">
+      <h3><span data-icon="heart"></span>Питомцы</h3>
+      <div id="pets-list"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-pvp">
+      <h3><span data-icon="swords"></span>PvP Арена</h3>
+      <div id="pvp-content"></div>
+    </div>
+    <!-- Панель скиллов и профессий -->
+    <div class="hud side-panel hidden" id="panel-skills">
+      <h3><span data-icon="bolt"></span>Навыки и Профессии</h3>
+      <div id="skills-profession"></div>
+      <div id="skills-list"></div>
+      <div id="skills-available"></div>
+    </div>
+    <!-- Панель настроек -->
+    <div class="hud side-panel hidden" id="panel-settings">
+      <h3><span data-icon="gear"></span>Настройки</h3>
+      <div class="settings-section">
+        <h4>Смена пароля</h4>
+        <input type="password" id="set-old-pass" placeholder="Старый пароль">
+        <input type="password" id="set-new-pass" placeholder="Новый пароль">
+        <input type="password" id="set-new-pass2" placeholder="Повторите пароль">
+        <button id="btn-change-pass">Изменить пароль</button>
+      </div>
+      <div class="settings-section">
+        <h4>Смена ника (500 АЗЭН)</h4>
+        <input type="text" id="set-new-name" placeholder="Новое имя" maxlength="24">
+        <button id="btn-rename">Сменить имя</button>
+        <span id="rename-status"></span>
+      </div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-tower">
+      <h3><span data-icon="star8"></span>Башня</h3>
+      <div id="tower-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-reputation">
+      <h3><span data-icon="flag"></span>Репутация</h3>
+      <div id="rep-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-chess">
+      <h3><span data-icon="crown"></span>Шахматы</h3>
+      <div id="chess-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-poetry">
+      <h3><span data-icon="scroll"></span>Поэзия</h3>
+      <div id="poetry-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-chronicles">
+      <h3><span data-icon="book"></span>Хроники</h3>
+      <div id="chronicles-content"></div>
+    </div>
+    <div class="hud side-panel hidden" id="panel-admin">
+      <h3><span data-icon="shield"></span><span>Admin</span></h3>
+      <div id="admin-list"></div>
+    </div>
+
+    <!-- Диалог с NPC -->
+    <div class="hud side-panel hidden" id="panel-dialog">
+      <div class="dialog-header">
+        <span class="dialog-npc-name" id="dialog-npc-name"></span>
+        <button class="dialog-close" id="dialog-close" type="button">✕</button>
+      </div>
+      <div class="dialog-text" id="dialog-text"></div>
+      <div class="dialog-choices" id="dialog-choices"></div>
+    </div>
 
     <!-- Кнопки-переключатели панелей -->
     <div class="hud panel-toggles">
@@ -158,6 +263,22 @@
       <button data-panel="panel-auction" data-icon="coin" title="Аукцион" type="button"></button>
       <button data-panel="panel-party" data-icon="user" title="Группа" type="button"></button>
       <button data-panel="panel-trade" data-icon="silk" title="Караваны" type="button"></button>
+      <button data-panel="panel-mount-stable" data-icon="mount" title="Конюшня" type="button"></button>
+      <button data-panel="panel-house" data-icon="home" title="Дом" type="button"></button>
+      <button data-panel="panel-leaderboard" data-icon="crown" title="Рейтинги" type="button"></button>
+      <button data-panel="panel-friends" data-icon="user" title="Друзья" type="button"></button>
+      <button data-panel="panel-achievements" data-icon="crown" title="Достижения" type="button"></button>
+      <button data-panel="panel-tasks" data-icon="scroll" title="Задачи" type="button"></button>
+      <button data-panel="panel-pets" data-icon="heart" title="Питомцы" type="button"></button>
+      <button data-panel="panel-pvp" data-icon="swords" title="PvP" type="button"></button>
+      <button data-panel="panel-tower" data-icon="star8" title="Башня" type="button"></button>
+      <button data-panel="panel-reputation" data-icon="flag" title="Репутация" type="button"></button>
+      <button data-panel="panel-chess" data-icon="crown" title="Шахматы" type="button"></button>
+      <button data-panel="panel-poetry" data-icon="scroll" title="Поэзия" type="button"></button>
+      <button data-panel="panel-chronicles" data-icon="star8" title="Хроники" type="button"></button>
+      <button data-panel="panel-admin" data-icon="shield" type="button" id="btn-panel-admin" class="hidden"></button>
+      <button data-panel="panel-skills" data-icon="bolt" title="Навыки" type="button"></button>
+      <button data-panel="panel-settings" data-icon="gear" title="Настройки" type="button"></button>
     </div>
 
     <!-- Цель активного квеста (стрелка-навигатор) -->
@@ -165,11 +286,116 @@
 
     <!-- Мини-карта -->
     <div class="hud minimap" id="minimap">
-      <canvas id="minimap-canvas" width="150" height="150"></canvas>
+      <span class="minimap-region" id="minimap-region"></span>
+      <canvas id="minimap-canvas" width="180" height="180"></canvas>
     </div>
 
     <!-- Мир. время -->
     <div class="hud world-time" id="world-time"></div>
+
+    <!-- ═══ Полноэкранная карта (M) ═══ -->
+    <div class="overlay hidden" id="overlay-map">
+      <div class="worldmap">
+        <button class="worldmap-close" id="worldmap-close" type="button">✕</button>
+        <h2 class="worldmap-title">🗺 Карта мира</h2>
+        <canvas id="worldmap-canvas" width="900" height="600"></canvas>
+        <div class="worldmap-legend">
+          <span>🏰 Город</span><span>⛺ Лагерь</span><span>⚓ Порт</span>
+          <span>🐫 Караван-сарай</span><span>🏡 Деревня</span><span>🏔 Форт</span>
+          <span>🟢 NPC</span><span>🔴 Враг</span><span>▲ Вы</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Панель персонажа (F) ═══ -->
+    <div class="hud side-panel hidden" id="panel-character">
+      <h3><span data-icon="user"></span> <span data-i18n="panels.character"></span></h3>
+      <div class="char-panel-body" id="char-panel-body">
+        <div class="char-equip-grid">
+          <div class="equip-slot" data-slot="head" id="eq-head"><span class="equip-icon">🪖</span><span class="equip-label">Голова</span></div>
+          <div class="equip-slot" data-slot="weapon" id="eq-weapon"><span class="equip-icon">⚔️</span><span class="equip-label">Оружие</span></div>
+          <div class="equip-slot" data-slot="chest" id="eq-chest"><span class="equip-icon">🛡</span><span class="equip-label">Грудь</span></div>
+          <div class="equip-slot" data-slot="legs" id="eq-legs"><span class="equip-icon">👖</span><span class="equip-label">Ноги</span></div>
+          <div class="equip-slot" data-slot="feet" id="eq-feet"><span class="equip-icon">👢</span><span class="equip-label">Ступни</span></div>
+          <div class="equip-slot" data-slot="ring" id="eq-ring"><span class="equip-icon">💍</span><span class="equip-label">Кольцо</span></div>
+          <div class="equip-slot" data-slot="amulet" id="eq-amulet"><span class="equip-icon">📿</span><span class="equip-label">Амулет</span></div>
+          <div class="equip-slot" data-slot="shield" id="eq-shield"><span class="equip-icon">🛡</span><span class="equip-label">Щит</span></div>
+        </div>
+        <div class="char-stats" id="char-stats"></div>
+      </div>
+    </div>
+
+    <!-- ═══ Панель квестов (J) ═══ -->
+    <div class="hud side-panel hidden" id="panel-quests-j">
+      <h3><span data-icon="scroll"></span> <span data-i18n="world.quests"></span></h3>
+      <div id="quests-j-list"></div>
+    </div>
+
+    <!-- ═══ Панель гильдии (G) ═══ -->
+    <div class="hud side-panel hidden" id="panel-guild">
+      <h3><span data-icon="user"></span> Гильдия</h3>
+      <div id="guild-content"></div>
+    </div>
+
+    <!-- ═══ Оверлей настроек ═══ -->
+    <div class="overlay hidden" id="overlay-settings">
+      <div class="settings-card">
+        <h2 class="settings-title">⚙ Настройки</h2>
+        <div class="settings-group">
+          <label class="settings-row">
+            <span>🔊 Громкость музыки</span>
+            <input type="range" id="set-music" min="0" max="100" value="50">
+          </label>
+          <label class="settings-row">
+            <span>🔊 Громкость эффектов</span>
+            <input type="range" id="set-sfx" min="0" max="100" value="70">
+          </label>
+          <label class="settings-row">
+            <span>🖥 Качество графики</span>
+            <select id="set-quality">
+              <option value="low">Низкое</option>
+              <option value="medium" selected>Среднее</option>
+              <option value="high">Высокое</option>
+            </select>
+          </label>
+          <label class="settings-row">
+            <span>🌍 Язык</span>
+            <select id="set-lang">
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+              <option value="az">Azərbaycan</option>
+            </select>
+          </label>
+          <label class="settings-row">
+            <span>💡 Показывать подсказки</span>
+            <input type="checkbox" id="set-hints" checked>
+          </label>
+          <label class="settings-row">
+            <span>🗺 Показывать мини-карту</span>
+            <input type="checkbox" id="set-minimap" checked>
+          </label>
+          <label class="settings-row">
+            <span>☁ Туман войны</span>
+            <input type="checkbox" id="set-fog" checked>
+          </label>
+        </div>
+        <button class="btn btn-gold" id="settings-close" type="button">Применить</button>
+        <div class="settings-keys">
+          <h4>Управление</h4>
+          <div class="key-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Движение</div>
+          <div class="key-row"><kbd>Shift</kbd> Бег</div>
+          <div class="key-row"><kbd>Пробел</kbd> Прыжок</div>
+          <div class="key-row"><kbd>Enter</kbd> Чат</div>
+          <div class="key-row"><kbd>1</kbd>–<kbd>4</kbd> Навыки</div>
+          <div class="key-row"><kbd>M</kbd> Карта мира</div>
+          <div class="key-row"><kbd>F</kbd> Персонаж</div>
+          <div class="key-row"><kbd>G</kbd> Гильдия</div>
+          <div class="key-row"><kbd>J</kbd> Квесты</div>
+          <div class="key-row"><kbd>Z</kbd> Отладка коллайдеров</div>
+          <div class="key-row"><kbd>Esc</kbd> Меню / Закрыть</div>
+        </div>
+      </div>
+    </div>
 
     <!-- Оверлеи -->
     <div class="overlay hidden" id="overlay-death">
@@ -180,9 +406,33 @@
       </div>
     </div>
     <div class="overlay hidden" id="overlay-menu">
-      <div class="menu-card">
+      <div class="menu-card main-menu">
+        <div class="menu-logo">
+          <div class="menu-logo-icon">🏛</div>
+          <h1 class="menu-title">Empire of Safavids</h1>
+          <p class="menu-subtitle" data-i18n="menu.subtitle"></p>
+        </div>
+        <div class="menu-char-info" id="menu-char-info"></div>
+        
+        <!-- Основная кнопка -->
         <button class="btn btn-gold" id="btn-continue" type="button" data-i18n="menu.play"></button>
-        <button class="btn btn-ghost" id="btn-exit" type="button" data-i18n="world.exit_game"></button>
+        
+        <!-- Быстрые действия -->
+        <div class="menu-quick-actions">
+          <button class="btn btn-ghost" id="btn-quick-mounts" type="button">🐴 Конюшня</button>
+          <button class="btn btn-ghost" id="btn-quick-tower" type="button">🏰 Башня</button>
+          <button class="btn btn-ghost" id="btn-quick-pets" type="button">🐾 Питомцы</button>
+        </div>
+        
+        <div class="menu-secondary">
+          <button class="btn btn-ghost" id="btn-settings" type="button" data-i18n="menu.settings">⚙ Настройки</button>
+          <button class="btn btn-ghost btn-danger" id="btn-exit" type="button" data-i18n="world.exit_game"></button>
+        </div>
+        
+        <!-- Статистика персонажа -->
+        <div class="menu-stats" id="menu-stats"></div>
+        
+        <p class="menu-version">v0.2.0</p>
       </div>
     </div>
     <div class="overlay hidden" id="overlay-lost">

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // 3D-мир: рельеф, биомы, вода, города — Empire of Safavids
 // ============================================================
 // Бесшовный ландшафт 2400x2400: поля вокруг Исфахана, пустыня с
@@ -15,8 +15,8 @@ import {
 } from './textures';
 
 export const WORLD_HALF = 1200;         // половина стороны мира
-export const CITY = { x: 34, z: 26, radius: 58 };
-export const CAMP = { x: 104, z: 82, radius: 16 };
+export const CITY = { x: 34, z: 26, radius: 116 }; // Столица: радиус x2 = площадь x4
+export const CAMP = { x: 167, z: 132, radius: 16 }; // Полевой лагерь ВНЕ стен (город r=116)
 
 // ── Вода и достопримечательности ─────────────────────────────
 export const LAKE = { x: -420, z: -160, r: 170, level: -2.0 };
@@ -29,6 +29,37 @@ export const RIVER_A: { x: number; z: number }[] = [
 export const RIVER_B: { x: number; z: number }[] = [
   { x: -300, z: 20 }, { x: -140, z: 120 }, { x: 120, z: 200 }, { x: 380, z: 270 }, { x: 540, z: 292 },
 ];
+
+// ── Мосты через воду ──────────────────────────────────────────
+export interface Bridge {
+  x: number; z: number;       // центр
+  dx: number; dz: number;     // направление (нормализовано)
+  length: number;             // длина
+  width: number;              // ширина
+  height: number;             // высота поверхности моста
+}
+/** Мосты: from -> to, ширина 4, высота чуть выше уровня воды */
+export const BRIDGES: Bridge[] = [
+  // Мост через RIVER_B на дороге Исфahan ↔ Лагерь (пересекает реку у ~(-140,120))
+  { x: -100, z: 130, dx: 0.85, dz: 0.53, length: 18, width: 4.5, height: LAKE.level + 1.2 },
+  // Мост через RIVER_A у входа в озеро (северное русло)
+  { x: -405, z: -230, dx: 0.2, dz: -0.98, length: 16, width: 4, height: LAKE.level + 1.0 },
+  // Мост через RIVER_B на пути к Караван-сараю (восточный)
+  { x: 320, z: 255, dx: 0.96, dz: 0.29, length: 14, width: 4, height: LAKE.level + 0.8 },
+];
+
+/** Проверяет, находится ли точка на мосту. Возвращает высоту поверхности или null */
+export function bridgeAt(x: number, z: number): number | null {
+  for (const b of BRIDGES) {
+    // Преобразуем точку в локальные координаты моста
+    const lx = (x - b.x) * b.dx + (z - b.z) * b.dz;   // вдоль моста
+    const lz = -(x - b.x) * b.dz + (z - b.z) * b.dx;  // поперёк моста
+    if (Math.abs(lx) < b.length / 2 && Math.abs(lz) < b.width / 2) {
+      return b.height;
+    }
+  }
+  return null;
+}
 
 // ── Поселения (координаты мировые) ───────────────────────────
 export const PORT = { x: -225, z: -150, radius: 26, level: -0.6 };     // приозёрный порт
@@ -47,9 +78,18 @@ export type Biome = 'desert' | 'forest' | 'field' | 'mountain' | 'water';
 /** Цилиндрические коллайдеры построек: персонаж и камера их уважают */
 export const COLLIDERS: { x: number; z: number; r: number }[] = [];
 
+/** Динамические коллайдеры фауны: звери движутся, поэтому фауна
+ *  перезаписывает этот список каждый кадр (позиции + радиусы). */
+export interface FaunaCollider { x: number; z: number; r: number }
+export const FAUNA_COLLIDERS: FaunaCollider[] = [];
+
+/** Динамические коллайдеры горожан (перезаписываются каждый кадр). */
+export const CIV_COLLIDERS: FaunaCollider[] = [];
+
 function addCollider(x: number, z: number, r: number): void {
   COLLIDERS.push({ x, z, r });
 }
+export { addCollider };
 
 function fract(v: number): number { return v - Math.floor(v); }
 
@@ -120,6 +160,13 @@ export function waterMask(x: number, z: number): number {
   return m;
 }
 
+/** Уровень поверхности воды в точке или null, если суша.
+ *  Озеро и реки — на уровне LAKE, пруд — на своём. */
+export function waterSurfaceY(x: number, z: number): number | null {
+  if (waterMask(x, z) <= 0.05) return null;
+  return Math.hypot(x - POND.x, z - POND.z) < POND.r ? POND.level : LAKE.level;
+}
+
 function flatten(h: number, x: number, z: number, cx: number, cz: number, r: number, level: number): number {
   const d = Math.hypot(x - cx, z - cz);
   const t = smoothstep(clamp01((d - r * 0.55) / (r * 0.45)));
@@ -139,7 +186,7 @@ export function terrainHeight(x: number, z: number): number {
   const dm = desertMask(x, z);
   h = h * (1 - dm * 0.55) + dm * 0.55 * (1.5 + Math.sin(x * 0.021 + fbm(x / 60, z / 60) * 4) * 2.6 + (fbm(x / 25, z / 25) - 0.5) * 3);
   // Плоские площадки: город, возрождение, лагерь, поселения
-  h = flatten(h, x, z, CITY.x, CITY.z, 100, 0.4); // плато накрывает кольцо стены (r=58)
+  h = flatten(h, x, z, CITY.x, CITY.z, 150, 0.4); // плато накрывает кольцо стены (r=116)
   h = flatten(h, x, z, 0, 0, 26, 0.4); // уровень = базе города: иначе у ворот земля ниже и город «висит»
   h = flatten(h, x, z, CAMP.x, CAMP.z, 22, h * 0.35 + 0.3);
   h = flatten(h, x, z, PORT.x, PORT.z, PORT.radius, PORT.level);
@@ -405,6 +452,11 @@ export function buildScatter(scene: THREE.Scene): void {
   });
   trunks.count = trees.length; crowns.count = trees.length; crowns2.count = trees.length;
 
+  // Коллайдеры деревьев (стволы)
+  for (const s of trees) {
+    addCollider(s.x, s.z, 0.5);
+  }
+
   // Камни
   const rockGeo = new THREE.IcosahedronGeometry(1, 0);
   const rocksMesh = new THREE.InstancedMesh(rockGeo, MAT.stone, rocks.length);
@@ -415,6 +467,11 @@ export function buildScatter(scene: THREE.Scene): void {
     rocksMesh.setMatrixAt(idx, m);
   });
   rocksMesh.count = rocks.length;
+  // Коллайдеры камней: по размеру (мелочь не мешает, валуны держат)
+  for (const s of rocks) {
+    const big = s.biome === 'mountain';
+    addCollider(s.x, s.z, big ? 1.4 : 0.9);
+  }
 
   // Трава
   const tuftGeo = new THREE.ConeGeometry(0.5, 1.1, 5);
@@ -463,6 +520,10 @@ export function buildScatter(scene: THREE.Scene): void {
     put(pinesMesh, idx, s.x, s.h + 3.1 * k, s.z, k);
   });
   pinesMesh.count = pines.length; pineTrunks.count = pines.length;
+  // Коллайдеры горной хвои (стволы)
+  for (const s of pines) {
+    addCollider(s.x, s.z, 0.5);
+  }
 
   // Пальмы-оазисы: берега озера/пруда
   const oasis = spots.filter(s => {
@@ -477,8 +538,186 @@ export function buildScatter(scene: THREE.Scene): void {
   for (const s of oasis) addPalm(scene, s.x, s.z, 0.8 + rng() * 0.6);
 }
 
+// ── Дороги: грунтовые и каменные + караванные пути ─────────
+export function buildRoads(scene: THREE.Scene): void {
+  const roads: { from: { x: number; z: number }; to: { x: number; z: number }; w: number; stone: boolean }[] = [
+    { from: { x: CITY.x, z: CITY.z }, to: { x: 0,   z: 0  }, w: 4.0, stone: true  },
+    { from: { x: 0,    z: 0   }, to: { x: CAMP.x, z: CAMP.z }, w: 3.5, stone: false },
+    { from: { x: CITY.x, z: CITY.z }, to: { x: PORT.x, z: PORT.z }, w: 3.0, stone: false },
+    { from: { x: CITY.x, z: CITY.z }, to: { x: CARAVANSERAI.x, z: CARAVANSERAI.z }, w: 3.0, stone: false },
+  ];
+
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0xd4b47a, roughness: 0.9, metalness: 0.0 });
+  const stoneRoadMat = new THREE.MeshStandardMaterial({ color: 0x9a9080, roughness: 0.8, metalness: 0.0 });
+  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 1.0, metalness: 0.0 });
+
+  // Вспомогательная функция: строит одну дорогу как единый BufferGeometry
+  function buildSingleRoad(
+    scene: THREE.Scene,
+    from: { x: number; z: number },
+    to: { x: number; z: number },
+    width: number,
+    mat: THREE.Material,
+  ): void {
+    const dx = to.x - from.x, dz = to.z - from.z;
+    const totalLen = Math.hypot(dx, dz);
+    const segCount = Math.max(8, Math.ceil(totalLen / 2));
+
+    // Нормаль и перпендикуляр
+    const angle = Math.atan2(dx, dz);
+    const sinA = Math.sin(angle), cosA = Math.cos(angle);
+    const px = sinA, pz = cosA;
+
+    // Положим все данные в отдельные массивы
+    const posArr: number[] = [];
+    const uvArr: number[] = [];
+    const idxArr: number[] = [];
+
+    for (let si = 0; si <= segCount; si++) {
+      const tt = si / segCount;
+      const cx = from.x + dx * tt;
+      const cz = from.z + dz * tt;
+      const cy = groundHeight(cx, cz);
+      // левая и правая крайние точки
+      const lx = cx - px * width / 2, lz = cz - pz * width / 2;
+      const rx = cx + px * width / 2, rz = cz + pz * width / 2;
+      posArr.push(lx, cy + 0.05, lz, rx, cy + 0.05, rz);
+      uvArr.push(0, tt, 1, tt);
+    }
+    for (let si = 0; si < segCount; si++) {
+      const a = si * 2, b = si * 2 + 1, c = (si + 1) * 2, d = (si + 1) * 2 + 1;
+      idxArr.push(a, c, b, b, c, d);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvArr, 2));
+    geo.setIndex(idxArr);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    scene.add(mesh);
+
+    // Бордюры
+    for (const side of [-1, 1]) {
+      const off = width / 2 + 0.12;
+      const cp: number[] = [], cu: number[] = [], ci: number[] = [];
+      for (let si = 0; si <= segCount; si++) {
+        const tt = si / segCount;
+        const cx = from.x + dx * tt;
+        const cz = from.z + dz * tt;
+        const ch = groundHeight(cx, cz);
+        cp.push(cx + px * off * side, ch + 0.4, cz + pz * off * side);
+        cp.push(cx - px * 0.09 * side, ch + 0.4, cz - pz * 0.09 * side);
+        cu.push(0, tt, 1, tt);
+      }
+      for (let si = 0; si < segCount; si++) {
+        const a = si * 2, b = si * 2 + 1, c = (si + 1) * 2, d = (si + 1) * 2 + 1;
+        ci.push(a, c, b, b, c, d);
+      }
+      const cg = new THREE.BufferGeometry();
+      cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3));
+      cg.setAttribute('uv', new THREE.Float32BufferAttribute(cu, 2));
+      cg.setIndex(ci);
+      cg.computeVertexNormals();
+      const cm = new THREE.Mesh(cg, edgeMat);
+      cm.castShadow = true;
+      cm.receiveShadow = true;
+      scene.add(cm);
+    }
+  }
+
+  for (const r of roads) {
+    buildSingleRoad(scene, r.from, r.to, r.w, r.stone ? stoneRoadMat : roadMat);
+  }
+
+  // Караваны на пути к караван-сараю
+  const caravanPath = roads[3]; // Исфahan → Караван-сарай
+  for (let i = 0; i < 3; i++) {
+    const t = 0.2 + i * 0.25; // через каждые 25% пути
+    const cx = caravanPath.from.x + (caravanPath.to.x - caravanPath.from.x) * t;
+    const cz = caravanPath.from.z + (caravanPath.to.z - caravanPath.from.z) * t;
+    const ch = groundHeight(cx, cz);
+    const angle = Math.atan2(caravanPath.to.x - caravanPath.from.x, caravanPath.to.z - caravanPath.from.z);
+
+    const caravan = new THREE.Group();
+    // Верблюд
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 2.0), MAT.wood);
+    body.position.y = 1.2;
+    const hump = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 5), MAT.wood);
+    hump.position.set(0, 2.0, 0);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.8), MAT.wood);
+    head.position.set(0, 1.8, 1.2);
+    const leg1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0, 5), MAT.trunk);
+    leg1.position.set(-0.4, 0.5, -0.6);
+    const leg2 = leg1.clone(); leg2.position.z = 0.6;
+    const leg3 = leg1.clone(); leg3.position.x = 0.4;
+    const leg4 = leg3.clone(); leg4.position.z = 0.6;
+    caravan.add(body, hump, head, leg1, leg2, leg3, leg4);
+
+    // Тюк на спине
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), MAT.clothTeal);
+    pack.position.set(0, 2.3, 0);
+    caravan.add(pack);
+
+    caravan.position.set(cx, ch, cz);
+    caravan.rotation.y = angle;
+    scene.add(caravan);
+  }
+
+  // ── Мосты ──
+  const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x8a7040, roughness: 0.9 });
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x6a5030, roughness: 0.85 });
+  for (const b of BRIDGES) {
+    const angle = Math.atan2(b.dx, b.dz);
+    const bridgeGroup = new THREE.Group();
+
+    // Дорожное полотно
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(b.width, 0.3, b.length), bridgeMat);
+    deck.position.y = 0;
+    deck.receiveShadow = true;
+    deck.castShadow = true;
+    bridgeGroup.add(deck);
+
+    // Балки под полотном
+    for (let i = -1; i <= 1; i += 2) {
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, b.length - 0.5), railMat);
+      beam.position.set(i * (b.width / 2 - 0.2), -0.4, 0);
+      bridgeGroup.add(beam);
+    }
+
+    // Перила по бокам
+    for (let side = -1; side <= 1; side += 2) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, b.length), railMat);
+      rail.position.set(side * (b.width / 2 - 0.05), 0.55, 0);
+      bridgeGroup.add(rail);
+      // Столбики перил
+      for (let p = -b.length / 2 + 1; p <= b.length / 2 - 1; p += 2.5) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 5), railMat);
+        post.position.set(side * (b.width / 2 - 0.05), 0.5, p);
+        bridgeGroup.add(post);
+      }
+    }
+
+    bridgeGroup.position.set(b.x, b.height, b.z);
+    bridgeGroup.rotation.y = angle;
+    scene.add(bridgeGroup);
+
+    // Коллайдеры по краям моста (чтобы не свалиться в воду сбоку)
+    const perpX = -b.dz, perpZ = b.dx;
+    for (let along = -b.length / 2 + 2; along <= b.length / 2 - 2; along += 4) {
+      for (let side = -1; side <= 1; side += 2) {
+        const cx = b.x + b.dx * along + perpX * side * (b.width / 2 - 0.5);
+        const cz = b.z + b.dz * along + perpZ * side * (b.width / 2 - 0.5);
+        COLLIDERS.push({ x: cx, z: cz, r: 0.4 });
+      }
+    }
+  }
+}
+
 /** Пальма: изогнутый ствол + веер листьев */
-function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1): void {
+function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1, cityLocal = false): void {
   const palm = new THREE.Group();
   const lean = (Math.random() - 0.5) * 0.28;
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * k, 0.26 * k, 5.4 * k, 6), MAT.palmTrunk);
@@ -502,15 +741,165 @@ function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1): void {
   }
   palm.position.set(x, groundHeight(x, z), z);
   parent.add(palm);
+  if (cityLocal) addCollider(CITY.x + x, CITY.z + z, 0.55);
+  else addCollider(x, z, 0.55);
 }
 
 // ── Город Исфахан ────────────────────────────────────────────
+// Табличка квартала
+function quarterSign(text: string): THREE.Mesh {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#2a2018';
+  g.fillRect(0, 0, 256, 64);
+  g.strokeStyle = '#c9a84c';
+  g.lineWidth = 4;
+  g.strokeRect(3, 3, 250, 58);
+  g.fillStyle = '#f5f0e8';
+  g.font = 'bold 26px sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 128, 34);
+  return new THREE.Mesh(
+    new THREE.PlaneGeometry(4.2, 1.05),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c) }),
+  );
+}
+
+// Кварталы расширенного города: базар, ремесла, жилые дома, сады.
+// Позиции зарезервированы в placed[] выше — процедурные дома их обходят.
+function buildQuarters(
+  city: THREE.Group,
+  canopies: THREE.MeshStandardMaterial[],
+  lights: { x: number; z: number; y?: number }[],
+): void {
+  const streetMat = new THREE.MeshStandardMaterial({ color: 0x9a8a68, roughness: 1 });
+  const QUARTERS = [
+    { x: 84, z: 0, name: 'Базар' },
+    { x: 11.7, z: -83.2, name: 'Ремесла' },
+    { x: 59.4, z: 59.4, name: 'Жилой' },
+    { x: -31.5, z: 77.9, name: 'Сады' },
+  ];
+
+  // Улицы-проспекты от центра к кварталам
+  for (const q of QUARTERS) {
+    const len = Math.hypot(q.x, q.z);
+    // Проспект только по внешнему кольцу (r=30..len-14): центр занят
+    // площадью, мечетью и рынком — дорога их не пересекает.
+    const r0 = 30, r1 = len - 14;
+    const ave = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, r1 - r0), streetMat);
+    ave.position.set(q.x / len * ((r0 + r1) / 2), 0.42, q.z / len * ((r0 + r1) / 2));
+    ave.rotation.y = Math.atan2(q.x, q.z);
+    ave.receiveShadow = true;
+    city.add(ave);
+    const nx = -q.x / len, nz = -q.z / len;
+    const sign = quarterSign(q.name);
+    sign.position.set(q.x + nx * 13, 3.2, q.z + nz * 13);
+    sign.rotation.y = Math.atan2(nx, nz);
+    city.add(sign);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.2, 0.25), MAT.wood);
+    post.position.set(q.x + nx * 13, 1.6, q.z + nz * 13);
+    city.add(post);
+    addCollider(CITY.x + q.x + nx * 13, CITY.z + q.z + nz * 13, 0.5);
+  }
+
+  // Базар: два ряда лавок
+  const stallKinds = [0, 1, 2, 0, 1, 2] as const;
+  const stallSpots: [number, number][] = [[78, -5], [78, 5], [84, -5], [84, 5], [90, -4], [90, 5]];
+  stallSpots.forEach(([sx, sz], i) => {
+    const stall = buildStall(stallKinds[i], canopies);
+    stall.position.set(sx, 0.3, sz);
+    stall.rotation.y = (i % 2 ? -0.12 : 0.12);
+    city.add(stall);
+    addCollider(CITY.x + sx, CITY.z + sz, 2.4);
+  });
+
+  // Ремесла: три кузни с горнами
+  for (const [hx, hz] of [[8, -80], [16, -86], [6, -88]] as const) {
+    const hut = new THREE.Group();
+    const hb = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3, 4), MAT.sandstoneDark);
+    hb.position.y = 1.5; hb.castShadow = true;
+    const chim = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.4, 0.8), MAT.dark);
+    chim.position.set(1.2, 4.0, -0.8);
+    const anvil = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 0.6), MAT.dark);
+    anvil.position.set(-3.2, 0.65, 1.2);
+    const fire = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.7, 0.9),
+      new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.6 }),
+    );
+    fire.position.set(-3.2, 1.2, 1.2);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 1.5, 9), MAT.wood);
+    barrel.position.set(3.0, 0.75, 1.4);
+    barrel.castShadow = true;
+    hut.add(hb, chim, anvil, fire, barrel);
+    hut.position.set(hx, 0.3, hz);
+    hut.rotation.y = hx * 0.05;
+    city.add(hut);
+    addCollider(CITY.x + hx, CITY.z + hz, 3.4);
+  }
+
+  // Жилой квартал: семь домов кольцом
+  // Радиус коллайдера берётся по диагонали дома (w×0.9), зазор между домами ≥ 2.2 м.
+  // Координаты пересчитаны: минимальное расстояние между центрами должно быть
+  // > houseR_i + houseR_j + 2.2, иначе дома визуально слипаются.
+  const homeOffsets: [number, number, number][] = [
+    [-14, -7, 5],   // дом 1 — дальше от дома 4
+    [0, -13, 6],    // дом 2
+    [14, -7, 4.5],  // дом 3 — дальше от дома 1
+    [-14, 3, 5.5],  // дом 4 — дальше от дома 1
+    [14, 3, 4.5],   // дом 5
+    [-6, 12, 5],    // дом 6
+    [6, 12, 6],     // дом 7
+  ];
+  homeOffsets.forEach(([ox, oz, w], i) => {
+    const hx = 59.4 + ox, hz = 59.4 + oz;
+    const r = Math.max(2.4, Math.hypot(w, w * 0.9) / 2);
+    brickHouse(city, hx, hz, w, 3.6, { balcony: i % 2 === 0, badgirH: i % 3 === 0 ? 1.8 : undefined });
+    addCollider(CITY.x + hx, CITY.z + hz, r);
+  });
+
+  // Сады: кипарисы, пруд, скамейки
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    cypress(city, -31.5 + Math.cos(a) * 11, 77.9 + Math.sin(a) * 11, 0.3, 0.9 + (i % 3) * 0.2);
+  }
+  const pond = new THREE.Mesh(new THREE.CircleGeometry(5.5, 24), MAT.water);
+  pond.rotation.x = -Math.PI / 2;
+  pond.position.set(-31.5, 0.5, 77.9);
+  city.add(pond);
+  addCollider(CITY.x - 31.5, CITY.z + 77.9, 6);
+  for (const [bx, bz, ry] of [[-38, 77.9, 0.3], [-25, 77.9, -0.3], [-31.5, 71, 0], [-31.5, 84.8, Math.PI]] as const) {
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 0.6), MAT.wood);
+    bench.position.set(bx, 0.65, bz);
+    bench.rotation.y = ry;
+    bench.castShadow = true;
+    city.add(bench);
+    addCollider(CITY.x + bx, CITY.z + bz, 1.3);
+  }
+  // По фонарю на квартал (ночная подсветка через общий механизм lights)
+  for (const [lx, lz] of [[84, 8], [11.7, -75.2], [59.4, 51.4], [-31.5, 69.9]] as const) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 4.4, 6), MAT.dark);
+    pole.position.set(lx, 2.4, lz);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.5, 8), MAT.gold);
+    bowl.position.set(lx, 4.8, lz);
+    city.add(pole, bowl);
+    lights.push({ x: CITY.x + lx, z: CITY.z + lz });
+    addCollider(CITY.x + lx, CITY.z + lz, 0.5);
+  }
+}
+
 export function buildCity(scene: THREE.Scene): THREE.Group {
   const city = new THREE.Group();
   // База города — сам меш: бугор плиты учитывается отдельно в groundHeight,
   // иначе весь город (стены/ворота) висит над землёй
   const baseY = meshHeight(CITY.x, CITY.z);
   city.position.set(CITY.x, baseY, CITY.z);
+  const landscapeCount = COLLIDERS.length;
+  // Копируем коллайдеры ландшафта (деревья/камни), сохранённые до обнуления
+  const landscapeCopy: typeof COLLIDERS = [];
+  for (let i = 0; i < landscapeCount; i++) landscapeCopy.push(COLLIDERS[i]);
+  (city as any).__landscapeColliders = landscapeCopy;
   COLLIDERS.length = 0; // город строится один раз за сессию мира
 
   const gateAngle = Math.atan2(-CITY.z, -CITY.x); // направление к точке возрождения (0,0)
@@ -551,7 +940,9 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const dirX = Math.cos(gateAngle + Math.PI / 2), dirZ = Math.sin(gateAngle + Math.PI / 2);
     const inward = (k: number) => ({ x: gx - Math.cos(gateAngle) * k, z: gz - Math.sin(gateAngle) * k });
     for (const side of [-1, 1]) {
-      const tx = gx + dirX * side * 5.6, tz = gz + dirZ * side * 5.6;
+      // Привратные башни — СНАРУЖИ стены, по бокам прохода: иначе сливаются с торцами
+      const tx = gx + dirX * side * 9 + Math.cos(gateAngle) * 3;
+      const tz = gz + dirZ * side * 9 + Math.sin(gateAngle) * 3;
       // Корпус обзорной башни
       const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 10), MAT.sandstoneDark);
       tower.position.set(tx, 7.5, tz);
@@ -563,6 +954,14 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       const railing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.14, 6, 12), MAT.wood);
       railing.position.set(tx, 16.1, tz);
       railing.rotation.x = Math.PI / 2;
+      city.add(deck, railing);
+      // Стойки перил: без них кольцо висело в воздухе
+      for (let p = 0; p < 6; p++) {
+        const pa = (p / 6) * Math.PI * 2;
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.7, 6), MAT.wood);
+        post.position.set(tx + Math.cos(pa) * 3.2, 15.9, tz + Math.sin(pa) * 3.2);
+        city.add(post);
+      }
       for (let m = 0; m < 8; m++) {
         const ma = (m / 8) * Math.PI * 2;
         const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 0.5), MAT.sandstoneDark);
@@ -571,55 +970,72 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
         merlon.castShadow = true;
         city.add(merlon);
       }
-      // Шатёр и чаша огня (свет добавляет world3d по lights)
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(3.1, 2.6, 10), MAT.tealDome);
-      cap.position.set(tx, 17.2, tz);
-      cap.castShadow = true;
+      // Чаша огня на площадке (открытая обзорная площадка — шатра нет,
+      // иначе крыша парила бы над настилом, а чаша пряталась внутри конуса)
       const brazier = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.3, 0.5, 8), MAT.gold);
-      brazier.position.set(tx, 15.9, tz);
+      brazier.position.set(tx, 15.8, tz);
       const fire = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 6), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.8 }));
       fire.position.set(tx, 16.5, tz);
-      city.add(tower, deck, railing, cap, brazier, fire);
+      city.add(tower, brazier, fire);
       addCollider(CITY.x + tx, CITY.z + tz, 3.4);
       lights.push({ x: CITY.x + tx, z: CITY.z + tz, y: baseY + 16.2 });
     }
-    // Арка с зубцами
+    // Арка с зубцами. Балка идёт ВДОЛЬ стены (по касательной):
+    // rotation.y = -gateAngle кладёт ось X радиально — был разворот на 90°.
+    const tangentRot = -gateAngle - Math.PI / 2;
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(11.6, 1.8, 2.6), MAT.sandstone);
     lintel.position.set(gx, 10.5, gz);
-    lintel.rotation.y = -gateAngle;
+    lintel.rotation.y = tangentRot;
     lintel.castShadow = true;
-    const keystone = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.5, 10), MAT.tealDome);
-    keystone.position.set(gx, 11.8, gz);
-    keystone.rotation.x = Math.PI / 2;
-    keystone.rotation.z = -gateAngle;
+    // Шахский герб — плакетка на внешней грани балки (по центру, вместо зубца)
+    const keystone = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, 0.4), MAT.tealDome);
+    keystone.position.set(gx + Math.cos(gateAngle) * 1.5, 10.9, gz + Math.sin(gateAngle) * 1.5);
+    keystone.rotation.y = tangentRot;
+    keystone.castShadow = true;
     city.add(lintel, keystone);
     for (let m = -2; m <= 2; m++) {
       if (m === 0) continue; // место под шахский герб
       const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.5), MAT.sandstoneDark);
       merlon.position.set(gx + dirX * m * 2.4, 11.8, gz + dirZ * m * 2.4);
-      merlon.rotation.y = -gateAngle;
+      merlon.rotation.y = tangentRot;
       merlon.castShadow = true;
       city.add(merlon);
     }
-    // Створки ворот: тёмное дерево, приоткрыты для прохода по центру
+    // Створки ворот: тёмное дерево, приоткрыты для прохода по центру.
+    // Широкая грань — тоже вдоль стены; высота дотянута до балки (9.6), иначе щель.
     for (const side of [-1, 1]) {
       const inner = inward(0.4);
-      const door = new THREE.Mesh(new THREE.BoxGeometry(3.4, 8.5, 0.4), MAT.wood);
-      door.position.set(inner.x + dirX * side * 2.6, 4.2, inner.z + dirZ * side * 2.6);
-      door.rotation.y = -gateAngle + side * 0.22;
+      const door = new THREE.Mesh(new THREE.BoxGeometry(3.4, 9.6, 0.4), MAT.wood);
+      door.position.set(inner.x + dirX * side * 2.6, 4.8, inner.z + dirZ * side * 2.6);
+      door.rotation.y = tangentRot + side * 0.22;
       door.castShadow = true;
       // оковка створок
       for (let b = 0; b < 3; b++) {
         const band = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.18, 0.5), MAT.dark);
-        band.position.set(0, -2.6 + b * 2.4, 0.05);
+        band.position.set(0, -3.2 + b * 3.0, 0.05);
         door.add(band);
       }
       city.add(door);
     }
-    // фонарь над проходом
+    // Крылья стен от дверей к башням: закрывают боковые щели.
+    // Отрезок A->B вдоль касательной: поворот кладёт локальный +X на (B-A).
+    for (const sgn of [-1, 1]) {
+      const ax = gx + dirX * sgn * 4.3, az = gz + dirZ * sgn * 4.3;
+      const bx = gx + dirX * sgn * 9.2, bz = gz + dirZ * sgn * 9.2;
+      const segLen = Math.hypot(bx - ax, bz - az);
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(segLen, 5, 1.2), MAT.sandstoneDark);
+      wing.position.set((ax + bx) / 2, 2.5, (az + bz) / 2);
+      wing.rotation.y = Math.atan2(-(bz - az), bx - ax);
+      wing.castShadow = true; wing.receiveShadow = true;
+      city.add(wing);
+      addCollider(CITY.x + (ax + bx) / 2, CITY.z + (az + bz) / 2, segLen / 2 + 0.6);
+    }
+    // фонарь над проходом — висит на стержне под балкой (низ балки 9.6)
+    const gateRod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 6), MAT.dark);
+    gateRod.position.set(gx, 9.75, gz);
     const gateLamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshStandardMaterial({ color: 0xffd980, emissive: 0xffa530, emissiveIntensity: 1.3 }));
-    gateLamp.position.set(gx, 9.4, gz);
-    city.add(gateLamp);
+    gateLamp.position.set(gx, 9.1, gz);
+    city.add(gateRod, gateLamp);
     lights.push({ x: CITY.x + gx, z: CITY.z + gz, y: baseY + 9.4 });
   }
 
@@ -652,21 +1068,21 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
 
   // Стены: непрерывная дуга по кругу с проёмом ровно под ворота
   // (дискретные сегменты оставляли дыры по бокам ворот)
-  const OPEN = 0.16; // половина угла проёма ворот (рад)
+  const OPEN = 9.5 / CITY.radius; // половина угла проёма ворот (рад)
   const wallMat = new THREE.MeshStandardMaterial({
     color: 0xb09468, roughness: 0.9, map: stoneTexture(6), side: THREE.DoubleSide,
   });
   const thetaStart = Math.PI / 2 - gateAngle + OPEN; // стандартный угол φ = π/2 − θ (mod 2π)
   const thetaLength = Math.PI * 2 - OPEN * 2;
   const wall = new THREE.Mesh(
-    new THREE.CylinderGeometry(CITY.radius, CITY.radius, 6, 96, 1, true, thetaStart, thetaLength),
+    new THREE.CylinderGeometry(CITY.radius, CITY.radius, 6, 192, 1, true, thetaStart, thetaLength),
     wallMat,
   );
   wall.position.y = 3;
   wall.castShadow = true; wall.receiveShadow = true;
   city.add(wall);
   // Зубцы по гребню стены
-  const merlonCount = 84;
+  const merlonCount = Math.round(84 * CITY.radius / 58);
   const merlonGeo = new THREE.BoxGeometry(1.6, 0.8, 0.6);
   const merlons = new THREE.InstancedMesh(merlonGeo, MAT.sandstoneDark, merlonCount);
   merlons.castShadow = true;
@@ -731,15 +1147,37 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   }
   mosque.position.set(0, 0.3, -8);
   city.add(mosque);
+  // Минареты — отдельные коллайдеры (база мечети уже накрыта сеткой выше)
+  for (const side of [-1, 1]) {
+    addCollider(CITY.x + side * 15, CITY.z - 8 + 6, 1.6);
+  }
 
   // Жилые дома: купольные одно- и двухэтажные, с балконами
   const rng = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const canopies = [MAT.clothRed, MAT.clothTeal, MAT.clothPurple];
   // Занятые места площади: мечеть, фонтан, прилавки, аркада, NPC —
   // дома ставятся только с учётом дистанции до них (см. проверку ниже)
+  // научный центр): их позиции — в client/.../game3d/interiors.ts (SPOTS),
+  // дублируются здесь числом, чтобы не создавать циклический импорт
+  // terrain<->interiors (он роняет загрузку мира: CITY ещё в TDZ).
+  // При переносе домов править ОБА места!
   const placed: { x: number; z: number; r: number }[] = [
     { x: 0, z: -8, r: 13.5 }, // мечеть
     { x: 6, z: 6, r: 5.5 },   // фонтан
+    { x: -18.6, z: -69.5, r: 8 }, // конюшня
+    { x: 36.0, z: -62.4, r: 8 },  // казарма
+    { x: 67.7, z: -24.6, r: 8 },  // мастерская
+    { x: 67.7, z: 24.6, r: 8 },   // таверна
+    { x: 24.6, z: 67.7, r: 8 },   // обсерватория
+    { x: -65.2, z: 30.4, r: 8 },  // научный центр
+    { x: 84, z: 0, r: 13 },       // базарный квартал
+    { x: 11.7, z: -83.2, r: 13 }, // ремесленный квартал
+    { x: 59.4, z: 59.4, r: 15 },  // жилой квартал
+    // Семь кольцевых домов квартала (см. homeOffsets выше): выступают за r=15,
+    // каждый резервируем отдельно, иначе процедурные дома встают впритык (1+1=2)
+    ...[[-14, -7, 5], [0, -13, 6], [14, -7, 4.5], [-14, 3, 5.5], [14, 3, 4.5], [-6, 12, 5], [6, 12, 6]]
+      .map(([ox, oz, w]) => ({ x: 59.4 + ox, z: 59.4 + oz, r: Math.hypot(w, w * 0.9) / 2 })),
+    { x: -31.5, z: 77.9, r: 15 }, // сады
     ...[0, 1, 2, 3, 4, 5, 6].map((i) => {
       const a = Math.PI * 0.6 + (i / 7) * Math.PI * 0.8;
       return { x: Math.cos(a) * 20, z: -8 + Math.sin(a) * 20, r: 2.6 };
@@ -751,15 +1189,24 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     ...[[-8, 10], [20, 16], [-24, -6], [12, -2], [16, -10], [-14, -14], [-4, 22], [6, -20], [26, 6], [2, -26]]
       .map(([x, z]) => ({ x, z, r: 2 })), // NPC Исфахана (npc.ts)
   ];
-  for (let i = 0; i < 20; i++) {
+  // Corridor reservations for quarter avenues (r=30..70): procedural houses must avoid roads.
+  for (const q of [{ x: 84, z: 0 }, { x: 11.7, z: -83.2 }, { x: 59.4, z: 59.4 }, { x: -31.5, z: 77.9 }]) {
+    const len = Math.hypot(q.x, q.z);
+    const steps = Math.ceil((len - 30) / 8);
+    for (let i = 0; i <= steps; i++) {
+      const t = 30 + (i / Math.max(1, steps)) * (len - 30);
+      placed.push({ x: (q.x / len) * t, z: (q.z / len) * t, r: 4 });
+    }
+  }
+  for (let i = 0; i < 44; i++) {
     const a = rng() * Math.PI * 2;
-    const r = 16 + rng() * 30;
+    const r = 18 + rng() * 78;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     const w = 4 + rng() * 4, h = 3 + rng() * 2.5;
     // Занятые места: мечеть, фонтан, прилавки, аркада, NPC (npc.ts).
     // Дома не должны прилипать друг к другу и к постройкам.
-    const houseR = Math.max(2.4, w * 0.62);
-    if (placed.some(p => Math.hypot(p.x - x, p.z - z) < p.r + houseR + 1.4)) continue;
+    const houseR = Math.max(2.4, Math.hypot(w, w * 0.9) / 2); // коллайдер по диагонали (дома вращаются случайно)
+    if (placed.some(p => Math.hypot(p.x - x, p.z - z) < p.r + houseR + 3.0)) continue;
     placed.push({ x, z, r: houseR });
     const house = new THREE.Group();
     const twoStory = rng() < 0.35;
@@ -784,10 +1231,80 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const window1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.1), MAT.dark);
     window1.position.set(0, h * 0.55, w * 0.45 + 0.02);
     house.add(window1);
+    // Восточный колорит столицы: бадгиры и балконы на части домов
+    if (rng() < 0.45) badgir(house, w * 0.26, -w * 0.2, h, 1.8 + rng() * 1.2);
+    if (rng() < 0.4) {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.12, 0.9), MAT.wood);
+      slab.position.set(0, h * 0.6, w * 0.45 + 0.35);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.42, 0.07), MAT.wood);
+      rail.position.set(0, h * 0.6 + 0.27, w * 0.45 + 0.75);
+      house.add(slab, rail);
+    }
     house.position.set(x, 0.25, z);
     house.rotation.y = rng() * Math.PI;
     city.add(house);
-    addCollider(CITY.x + x, CITY.z + z, Math.max(2.4, w * 0.62));
+    addCollider(CITY.x + x, CITY.z + z, Math.max(2.4, Math.hypot(w, w * 0.9) / 2));
+  }
+
+  // ── Конюшня: длинное стойло с крышей и лошадью ──
+  {
+    const sx = -18.6, sz = -69.5;
+    const stable = new THREE.Group();
+    // Пол и основание
+    const sfloor = new THREE.Mesh(new THREE.BoxGeometry(9, 0.2, 6), MAT.sandstoneDark);
+    sfloor.position.set(0, 0.1, 0);
+    stable.add(sfloor);
+    // Задняя и боковые стены (перед открыт для прохода)
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(9, 3.6, 0.5), MAT.sandstone);
+    backWall.position.set(0, 1.8, -2.75);
+    backWall.castShadow = true;
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.6, 6), MAT.sandstone);
+    leftWall.position.set(-4.25, 1.8, 0);
+    leftWall.castShadow = true;
+    const rightWall = leftWall.clone(); rightWall.position.x = 4.25;
+    stable.add(backWall, leftWall, rightWall);
+    // Двускатная крыша (соломенная текстура — тёмно-жёлтая)
+    const roofShape = new THREE.Shape();
+    roofShape.moveTo(-4.8, 0);
+    roofShape.lineTo(0, 2.6);
+    roofShape.lineTo(4.8, 0);
+    roofShape.lineTo(-4.8, 0);
+    const roofGeo = new THREE.ExtrudeGeometry(roofShape, { depth: 6.8, bevelEnabled: false });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x9a7a30, roughness: 1 });
+    const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.position.set(0, 3.6, -3.4);
+    roof.castShadow = true; roof.receiveShadow = true;
+    stable.add(roof);
+    // Столбики-разделители стойл
+    for (const px of [-2, 0, 2]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.8, 0.3), MAT.trunk);
+      pillar.position.set(px, 1.4, 1.5);
+      stable.add(pillar);
+    }
+    // Лошадь — простая модель из примитивов
+    const horseMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 1 });
+    const horse = new THREE.Group();
+    const hBody = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.2, 2.2), horseMat);
+    hBody.position.y = 1.5;
+    const hNeck = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.0, 0.5), horseMat);
+    hNeck.position.set(0, 2.2, 1.0); hNeck.rotation.x = -0.4;
+    const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.9), horseMat);
+    hHead.position.set(0, 2.7, 1.3);
+    const hTail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.9, 4), horseMat);
+    hTail.position.set(0, 1.9, -1.3); hTail.rotation.x = 0.4;
+    // Ноги
+    for (const [lx, lz] of [[-0.35, 0.7], [0.35, 0.7], [-0.35, -0.7], [0.35, -0.7]] as const) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.0, 5), horseMat);
+      leg.position.set(lx, 0.5, lz);
+      horse.add(leg);
+    }
+    horse.add(hBody, hNeck, hHead, hTail);
+    horse.position.set(0, 0.2, 0);
+    horse.rotation.y = -Math.PI / 2;
+    stable.add(horse);
+    stable.position.set(sx, 0.2, sz);
+    city.add(stable);
+    addCollider(CITY.x + sx, CITY.z + sz, 5.0);
   }
 
   // Базарные прилавки с товаром у мечети
@@ -798,15 +1315,18 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     stall.position.set(x, 0.3, z);
     stall.rotation.y = -a + Math.PI / 2;
     city.add(stall);
-    addCollider(CITY.x + x, CITY.z + z, 1.8);
+    addCollider(CITY.x + x, CITY.z + z, 2.6);
   }
 
   // Пальмы у базара и вдоль улицы к воротам
-  addPalm(city, 24, -14, 1);
-  addPalm(city, -22, 12, 0.9);
-  addPalm(city, -2, 30, 1.05);
-  addPalm(city, 12, 26, 0.85);
-  addPalm(city, -12, 24, 0.95);
+  // Кварталы расширенного города: базар, ремесла, жилые дома, сады + улицы
+  buildQuarters(city, canopies, lights);
+
+  addPalm(city, 24, -14, 1, true);
+  addPalm(city, -22, 12, 0.9, true);
+  addPalm(city, -2, 30, 1.05, true);
+  addPalm(city, 12, 26, 0.85, true);
+  addPalm(city, -12, 24, 0.95, true);
 
   // Городские фонари-чаши
   for (let i = 0; i < 5; i++) {
@@ -818,6 +1338,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     bowl.position.set(x, 4.8, z);
     city.add(pole, bowl);
     lights.push({ x: CITY.x + x, z: CITY.z + z });
+    addCollider(CITY.x + x, CITY.z + z, 0.5);
   }
 
   // Коллайдер мечети — строго по корпусу здания (24×18 в локальных -8):
@@ -828,12 +1349,17 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       addCollider(CITY.x + mx, CITY.z - 8 + mz, 4.4);
     }
   }
-  // Портал-арка — коллайдер по её положению (локальный z 9.4), а не
-  // между аркой и зданием (перекрывал проход)
-  addCollider(CITY.x, CITY.z + 9.4, 2.2);
+  // Портал-арка: коллайдеры по бокам арки (по 1.2), чтобы персонаж
+  // мог свободно пройти под аркой в мечеть
+  addCollider(CITY.x - 2.2, CITY.z + 9.4, 1.2);
+  addCollider(CITY.x + 2.2, CITY.z + 9.4, 1.2);
 
   city.userData.lights = lights;
   scene.add(city);
+  // Возвращаем сохранённые коллайдеры ландшафта (деревья, камни) ПОСЛЕ города,
+  // чтобы игрок не проходил сквозь них
+  const saved = (city as any).__landscapeColliders;
+  if (saved) for (const c of saved) COLLIDERS.push(c);
   return city;
 }
 
@@ -873,6 +1399,94 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
 }
 
 // ── Лагерь разбойников ───────────────────────────────────────
+// ── Восточный набор: бадгир, айван, кирпичный дом, кипарис ──
+// Единый стиль для всех поселений, у каждого — своя палитра/композиция.
+
+/** Бадгир (ветроуловитель): башня с прорезями и шляпкой. */
+function badgir(parent: THREE.Group, x: number, z: number, baseY: number, h: number): void {
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(1.3, h, 1.3), MAT.sandstone);
+  shaft.position.set(x, baseY + h / 2, z);
+  shaft.castShadow = true;
+  parent.add(shaft);
+  for (const [ox, oz, w, d] of [[0, 0.66, 0.7, 0.06], [0, -0.66, 0.7, 0.06], [0.66, 0, 0.06, 0.7], [-0.66, 0, 0.06, 0.7]] as const) {
+    const slot = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.55, d), MAT.dark);
+    slot.position.set(x + ox, baseY + h * 0.62, z + oz);
+    parent.add(slot);
+  }
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.35, 1.7), MAT.sandstoneDark);
+  cap.position.set(x, baseY + h + 0.17, z);
+  cap.castShadow = true;
+  parent.add(cap);
+}
+
+/** Айван: портал с пилонами, аркой и бирюзовой полосой. */
+function tiledIwan(parent: THREE.Group, x: number, z: number, w: number, h: number, ry: number): void {
+  const g = new THREE.Group();
+  const pw = w * 0.22;
+  for (const s of [-1, 1]) {
+    const pylon = new THREE.Mesh(new THREE.BoxGeometry(pw, h, 1.6), MAT.sandstone);
+    pylon.position.set(s * (w / 2 - pw / 2), h / 2, 0);
+    pylon.castShadow = true; pylon.receiveShadow = true;
+    g.add(pylon);
+    const band = new THREE.Mesh(new THREE.BoxGeometry(pw + 0.1, h * 0.3, 1.7), MAT.tealDome);
+    band.position.set(s * (w / 2 - pw / 2), h * 0.72, 0);
+    g.add(band);
+  }
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.2, 1.6), MAT.sandstoneDark);
+  beam.position.set(0, h * 0.9, 0);
+  beam.castShadow = true;
+  const arch = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, h * 0.72, 0.5), MAT.dark);
+  arch.position.set(0, h * 0.36, 0.4);
+  g.add(beam, arch);
+  g.position.set(x, 0, z);
+  g.rotation.y = ry;
+  parent.add(g);
+}
+
+/** Кирпичный дом с куполом, балконом и окнами. Возвращает высоту для коллайдера. */
+function brickHouse(
+  parent: THREE.Group, x: number, z: number, w: number, h: number,
+  opts: { dome?: boolean; balcony?: boolean; badgirH?: number; plaster?: THREE.Material } = {},
+): number {
+  const wallMat = opts.plaster ?? MAT.sandstone;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.9), wallMat);
+  body.position.set(x, h / 2, z);
+  body.castShadow = true; body.receiveShadow = true;
+  parent.add(body);
+  if (opts.dome !== false) {
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(w * 0.32, 10, 8), MAT.tealDome);
+    dome.scale.y = 0.72;
+    dome.position.set(x, h + 0.1, z);
+    dome.castShadow = true;
+    parent.add(dome);
+  }
+  if (opts.balcony) {
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.14, 1.1), MAT.wood);
+    slab.position.set(x, h * 0.62, z + w * 0.45 + 0.4);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.5, 0.08), MAT.wood);
+    rail.position.set(x, h * 0.62 + 0.32, z + w * 0.45 + 0.9);
+    parent.add(slab, rail);
+  }
+  const win = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.12), MAT.dark);
+  win.position.set(x - w * 0.22, h * 0.55, z + w * 0.45 + 0.02);
+  const win2 = win.clone();
+  win2.position.x = x + w * 0.22;
+  parent.add(win, win2);
+  if (opts.badgirH) badgir(parent, x + w * 0.28, z - w * 0.2, h, opts.badgirH);
+  return Math.max(Math.hypot(w, w * 0.9) / 2, 2.4);
+}
+
+/** Кипарис для садов и дворов. */
+function cypress(parent: THREE.Group, x: number, z: number, baseY: number, s: number): void {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.7, 6), MAT.trunk);
+  trunk.position.set(x, baseY + 0.35, z);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.85 * s, 3.6 * s, 7), MAT.foliageDark);
+  crown.position.set(x, baseY + 0.7 + 1.8 * s, z);
+  crown.castShadow = true;
+  parent.add(trunk, crown);
+  addCollider(CITY.x + x, CITY.z + z, 0.55);
+}
+
 export function buildCamp(scene: THREE.Scene): void {
   const camp = new THREE.Group();
   const baseY = groundHeight(CAMP.x, CAMP.z);
@@ -888,6 +1502,28 @@ export function buildCamp(scene: THREE.Scene): void {
     camp.add(tent, flag);
     addCollider(CAMP.x + x, CAMP.z + z, 2.5);
   }
+  // Частокол кольцом (с юга — проход) и большой шатёр вождя
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2;
+    if (Math.abs(a - Math.PI / 2) < 0.28) continue;
+    const px = Math.cos(a) * 15, pz = Math.sin(a) * 15;
+    const stake = new THREE.Mesh(new THREE.BoxGeometry(0.35, 2.6, 0.35), MAT.trunk);
+    stake.position.set(px, 1.3, pz);
+    stake.rotation.z = i % 2 ? 0.04 : -0.04;
+    stake.castShadow = true;
+    camp.add(stake);
+  }
+  addCollider(CAMP.x + 15, CAMP.z, 1.6);
+  addCollider(CAMP.x - 15, CAMP.z, 1.6);
+  addCollider(CAMP.x, CAMP.z - 15, 1.6);
+  addCollider(CAMP.x, CAMP.z + 15, 1.6);
+  const bigTent = new THREE.Mesh(new THREE.ConeGeometry(3.6, 4.6, 8), MAT.clothPurple);
+  bigTent.position.set(0, 2.3, -6.5);
+  bigTent.castShadow = true;
+  const bigFlag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.6, 1.1), MAT.gold);
+  bigFlag.position.set(0, 5.6, -6.5);
+  camp.add(bigTent, bigFlag);
+  addCollider(CAMP.x, CAMP.z - 6.5, 3.4);
   const fire = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 0.4, 9), MAT.dark);
   fire.position.set(0, 0.2, 0);
   addCollider(CAMP.x, CAMP.z, 1.4);
@@ -910,11 +1546,18 @@ export function buildSettlements(scene: THREE.Scene): void {
     for (let i = 0; i < 3; i++) {
       const house = new THREE.Group();
       const w = 4 + rng() * 2, h = 3 + rng();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.9), MAT.wood);
+      // Белёные стены + синий купол — приморский стиль
+      const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.9), MAT.white);
       body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true;
       const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.8, 1.6, 4), MAT.clothTeal);
       roof.position.y = h + 0.8; roof.rotation.y = Math.PI / 4;
       house.add(body, roof);
+      if (i === 0) {
+        const dome = new THREE.Mesh(new THREE.SphereGeometry(1.1, 10, 8), MAT.tealDome);
+        dome.scale.y = 0.75;
+        dome.position.set(w * 0.2, h + 0.4, 0);
+        house.add(dome);
+      }
       const a = -0.8 + i * 0.9;
       house.position.set(Math.cos(a) * 9, 0.2, Math.sin(a) * 9);
       house.rotation.y = -a + Math.PI;
@@ -948,13 +1591,55 @@ export function buildSettlements(scene: THREE.Scene): void {
     pier.position.set(Math.sin(toLake) * 12, 0, Math.cos(toLake) * 12);
     pier.rotation.y = toLake;
     g.add(pier);
-    // бочки
+
+    // Торговые столы у причала (рядом с домиками)
+    const tablePositions = [
+      { x: -2, z: -3 },   // стол у рыбака
+      { x: 3, z: -5 },    // стол у торговца
+      { x: -5, z: -6 },   // стол у кок-Салима
+    ];
+    for (const tp of tablePositions) {
+      const table = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 1.0), MAT.wood);
+      table.position.set(tp.x, 0.45, tp.z);
+      table.castShadow = true;
+      g.add(table);
+      // Ножки стола
+      for (const [lx, lz] of [[-0.7, -0.35], [0.7, -0.35], [-0.7, 0.35], [0.7, 0.35]] as const) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.9, 5), MAT.wood);
+        leg.position.set(tp.x + lx, 0, tp.z + lz);
+        g.add(leg);
+      }
+      addCollider(PORT.x + tp.x, PORT.z + tp.z, 1.1);
+    }
+
+    // Доска объявлений у входа в порт
+    {
+      const boardX = 8, boardZ = 8;
+      const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.2, 5), MAT.wood);
+      post1.position.set(boardX - 0.6, 1.1, boardZ);
+      const post2 = post1.clone(); post2.position.x = boardX + 0.6;
+      const board = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 0.08), MAT.wood);
+      board.position.set(boardX, 1.7, boardZ);
+      board.castShadow = true;
+      g.add(post1, post2, board);
+      addCollider(PORT.x + boardX, PORT.z + boardZ, 0.7);
+    }
+
+    // бочки — каждая бочка с коллайдером
+    const barrelPositions: { x: number; z: number }[] = [];
     for (let i = 0; i < 4; i++) {
+      const bx = -8 + rng() * 4;
+      const bz = 4 + rng() * 6;
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.7, 8), MAT.wood);
-      barrel.position.set(-8 + rng() * 4, 0.55, 4 + rng() * 6);
+      barrel.position.set(bx, 0.55, bz);
       barrel.castShadow = true;
       g.add(barrel);
+      barrelPositions.push({ x: bx, z: bz });
     }
+    for (const bp of barrelPositions) {
+      addCollider(PORT.x + bp.x, PORT.z + bp.z, 0.8);
+    }
+
     // маячок-фонарь
     const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.24, 5.2, 6), MAT.dark);
     lampPost.position.set(-10, 2.8, -4);
@@ -962,6 +1647,33 @@ export function buildSettlements(scene: THREE.Scene): void {
     lamp.position.set(-10, 5.6, -4);
     g.add(lampPost, lamp);
     addCollider(PORT.x - 10, PORT.z - 4, 0.6);
+
+    // Маяк на конце пирса + склады у берега
+    const lightTower = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 9, 10), MAT.white);
+    lightTower.position.set(-2.2, 4.5, -12.5);
+    lightTower.castShadow = true;
+    const lampRoom = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.2, 8), MAT.dark);
+    lampRoom.position.set(-2.2, 9.6, -12.5);
+    const lampGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0xffd980, emissive: 0xffa530, emissiveIntensity: 1.6 }),
+    );
+    lampGlow.position.set(-2.2, 9.6, -12.5);
+    const lightCap = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.9, 8), MAT.clothRed);
+    lightCap.position.set(-2.2, 10.6, -12.5);
+    g.add(lightTower, lampRoom, lampGlow, lightCap);
+    addCollider(PORT.x - 2.2, PORT.z - 12.5, 1.6);
+    for (const [wx, wz, ww] of [[-14, 6, 7], [-15, -2, 5.5]] as const) {
+      const store = new THREE.Mesh(new THREE.BoxGeometry(ww, 3.2, 5), MAT.sandstoneDark);
+      store.position.set(wx, 1.6, wz);
+      store.castShadow = true; store.receiveShadow = true;
+      const awn = new THREE.Mesh(new THREE.BoxGeometry(ww + 0.6, 0.15, 2.2), MAT.clothRed);
+      awn.position.set(wx, 3.0, wz + 3.2);
+      awn.rotation.x = 0.18;
+      g.add(store, awn);
+      addCollider(PORT.x + wx, PORT.z + wz, ww * 0.62);
+    }
+
     scene.add(g);
   }
 
@@ -977,14 +1689,43 @@ export function buildSettlements(scene: THREE.Scene): void {
       w.castShadow = true; w.receiveShadow = true;
       g.add(w);
     }
+    // Коллайдеры стен двора (частые точки вдоль каждой стены)
+    for (let wx = -14; wx <= 14; wx += 4) {
+      addCollider(CARAVANSERAI.x + wx, CARAVANSERAI.z - 14, 2.0);
+      if (Math.abs(wx) > 10) addCollider(CARAVANSERAI.x + wx, CARAVANSERAI.z + 14, 2.0);
+    }
+    for (let wz = -14; wz <= 14; wz += 4) {
+      addCollider(CARAVANSERAI.x - 14, CARAVANSERAI.z + wz, 2.0);
+    }
     const gateL = new THREE.Mesh(new THREE.BoxGeometry(1.6, 4.6, 1.6), MAT.sandstoneDark);
     gateL.position.set(-11, 2.3, 14);
     const gateR = gateL.clone(); gateR.position.x = 11;
-    const archTop = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 1.8), MAT.sandstone);
-    archTop.position.set(0, 4.9, 14);
-    g.add(gateL, gateR, archTop);
+    g.add(gateL, gateR);
     addCollider(CARAVANSERAI.x - 11, CARAVANSERAI.z + 14, 1.4);
     addCollider(CARAVANSERAI.x + 11, CARAVANSERAI.z + 14, 1.4);
+    // Угловые башни крепости
+    for (const [tx, tz] of [[-14, -14], [14, -14], [-14, 14], [14, 14]] as const) {
+      const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.2, 6.5, 9), MAT.sandstone);
+      tower.position.set(tx, 3.25, tz);
+      tower.castShadow = true;
+      const tooth = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.7, 9), MAT.sandstoneDark);
+      tooth.position.set(tx, 6.8, tz);
+      g.add(tower, tooth);
+      addCollider(CARAVANSERAI.x + tx, CARAVANSERAI.z + tz, 2.5);
+    }
+    // Бирюзовый айван над воротами
+    tiledIwan(g, 0, 14, 9, 6.5, 0);
+    addCollider(CARAVANSERAI.x, CARAVANSERAI.z + 14, 2.2);
+    // Внутренняя аркада вдоль северной стены
+    for (let ax = -10; ax <= 10; ax += 5) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.4, 0.7), MAT.sandstone);
+      pillar.position.set(ax, 1.7, -11.5);
+      pillar.castShadow = true;
+      g.add(pillar);
+    }
+    const arcadeBeam = new THREE.Mesh(new THREE.BoxGeometry(21, 0.5, 0.9), MAT.wood);
+    arcadeBeam.position.set(0, 3.6, -11.5);
+    g.add(arcadeBeam);
     for (let i = 0; i < 5; i++) {
       const tent = new THREE.Mesh(new THREE.ConeGeometry(2.4, 3, 7), i % 2 ? MAT.clothPurple : MAT.clothRed);
       tent.position.set(-9 + (i % 3) * 9, 1.5, -8 + Math.floor(i / 3) * 7);
@@ -1008,6 +1749,30 @@ export function buildSettlements(scene: THREE.Scene): void {
       bale.rotation.y = rng() * Math.PI;
       bale.castShadow = true;
       g.add(bale);
+      addCollider(CARAVANSERAI.x + bale.position.x, CARAVANSERAI.z + bale.position.z, 0.8);
+    }
+    // Верблюды во дворе: 2 отдыхающих (статичные, на коленях) + место
+    // для ходячих из фауны (их дом — центр двора, стены держат коллайдеры)
+    for (const [restX, restZ, restRy] of [[-6, 2, 0.6], [9, -2, -0.9]] as const) {
+      const rest = new THREE.Group();
+      const camelMat = new THREE.MeshStandardMaterial({ color: 0xc8a15a, roughness: 1 });
+      const camelDark = new THREE.MeshStandardMaterial({ color: 0xa8823f, roughness: 1 });
+      const rbody = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 1.9), camelMat);
+      rbody.position.y = 0.55;
+      const hump = new THREE.Mesh(new THREE.SphereGeometry(0.42, 7, 6), camelDark);
+      hump.position.set(0, 1.05, -0.2);
+      const hump2 = hump.clone(); hump2.position.z = 0.45;
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.32), camelMat);
+      neck.position.set(0, 0.9, 1.05);
+      neck.rotation.x = 0.5;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.7), camelMat);
+      head.position.set(0, 1.3, 1.4);
+      rest.add(rbody, hump, hump2, neck, head);
+      rest.position.set(restX, 0.2, restZ);
+      rest.rotation.y = restRy;
+      rest.traverse(o => { if (o instanceof THREE.Mesh) o.castShadow = true; });
+      g.add(rest);
+      addCollider(CARAVANSERAI.x + restX, CARAVANSERAI.z + restZ, 1.4);
     }
     scene.add(g);
   }
@@ -1024,6 +1789,8 @@ export function buildSettlements(scene: THREE.Scene): void {
       const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.85, 2, 4), MAT.trunk);
       roof.position.y = h + 1; roof.rotation.y = Math.PI / 4;
       house.add(body, roof);
+      // Бадгиры над двумя домами — сельский силуэт
+      if (i % 2 === 0) badgir(house, w * 0.28, -w * 0.2, h, 1.6);
       const a = (i / 4) * Math.PI * 2 + 0.4;
       house.position.set(Math.cos(a) * 10, 0.2, Math.sin(a) * 10);
       house.rotation.y = -a + Math.PI;
@@ -1037,12 +1804,30 @@ export function buildSettlements(scene: THREE.Scene): void {
       log.position.set(-6 + (i % 4) * 0.42, 0.2 + Math.floor(i / 4) * 0.36, 8);
       g.add(log);
     }
+    addCollider(VILLAGE.x - 6, VILLAGE.z + 8, 1.4);
     // стог сена
     const hay = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.6, 8), new THREE.MeshStandardMaterial({ color: 0xc8a84c, roughness: 1 }));
     hay.position.set(8, 1.3, 7);
     hay.castShadow = true;
     g.add(hay);
     addCollider(VILLAGE.x + 8, VILLAGE.z + 7, 1.7);
+    // Поля: вспаханные делянки с изгородью
+    const fieldCols = [
+      new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: 0x6e563a, roughness: 1 }),
+    ];
+    [[-14, 10, 0], [-14, 17, 1], [-6, 14, 0]].forEach(([fx, fz, fi], idx) => {
+      const field = new THREE.Mesh(new THREE.BoxGeometry(7, 0.15, 5), fieldCols[(idx + fi) % 2]);
+      field.position.set(fx, 0.08, fz);
+      field.receiveShadow = true;
+      g.add(field);
+      for (let px = -3; px <= 3; px += 2) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), MAT.trunk);
+        post.position.set(fx + px, 0.45, fz - 2.6);
+        g.add(post);
+      }
+    });
+    addCollider(VILLAGE.x - 14, VILLAGE.z + 13.5, 4.5);
     scene.add(g);
   }
 
@@ -1073,6 +1858,17 @@ export function buildSettlements(scene: THREE.Scene): void {
       flag.position.set(side * 5, 14.6, 0.9);
       g.add(pole, flag);
     }
+    // Куртины между башнями (кроме южного проёма под ворота)
+    for (const [wx, wz, ww, wd] of [[0, -9, 15.5, 1.8], [-9, 0, 1.8, 15.5], [9, 0, 1.8, 15.5]] as const) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(ww, 5.5, wd), MAT.stone);
+      wall.position.set(wx, 2.75, wz);
+      wall.castShadow = true; wall.receiveShadow = true;
+      g.add(wall);
+      addCollider(FORT.x + wx, FORT.z + wz, Math.max(ww, wd) / 2);
+    }
+    // Айван ворот с юга
+    tiledIwan(g, 0, 9, 7, 6, 0);
+    addCollider(FORT.x, FORT.z + 9, 2.4);
     scene.add(g);
   }
 }

@@ -35,7 +35,32 @@ export async function applyLocale(code) {
 
   for (const el of document.querySelectorAll('[data-i18n]')) {
     const value = resolve(dict, el.dataset.i18n);
-    if (typeof value === 'string') el.textContent = value;
+    if (typeof value !== 'string') continue;
+    // Элемент может содержать вложенные узлы (метка с <select>/<textarea>):
+    // заменяем только текстовые узлы, детей не трогаем.
+    const kids = [...el.childNodes];
+    const withText = kids.filter((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim());
+    if (!withText.length) {
+      if (kids.length) el.insertBefore(document.createTextNode(value), el.firstChild);
+      else el.textContent = value;
+      continue;
+    }
+    withText[0].textContent = value;
+    for (const extra of withText.slice(1)) extra.textContent = '';
+  }
+
+  // Подсказки в полях ввода и всплывающие подсказки
+  for (const el of document.querySelectorAll('[data-i18n-placeholder]')) {
+    const value = resolve(dict, el.dataset.i18nPlaceholder);
+    if (typeof value === 'string') el.setAttribute('placeholder', value);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-title]')) {
+    const value = resolve(dict, el.dataset.i18nTitle);
+    if (typeof value === 'string') el.setAttribute('title', value);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-aria]')) {
+    const value = resolve(dict, el.dataset.i18nAria);
+    if (typeof value === 'string') el.setAttribute('aria-label', value);
   }
 
   document.querySelectorAll('.lang-btn').forEach((btn) => {

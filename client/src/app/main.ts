@@ -9,9 +9,19 @@ import { enterWorld, showScreen } from './world';
 import { initAuthScreen } from './screens/auth';
 import { initCharsScreen } from './screens/chars';
 import { audio } from './audio';
+import { initConnectionIndicator } from './connectionIndicator';
+// Wire asset bundle system so Vite includes it (otherwise client/src/assets/* is dead code).
+// See client/src/assets/index.ts — TextureSystem / SpriteSystem / AssetStorage catalogs.
+// TODO: preload critical bundles (bundle_core) here when CDN is live; currently procedural
+// textures and file-based PNG sprites are used as fallback.
+import { textureManager, spriteManager, assetStorage } from '../assets/index';
+void textureManager; void spriteManager; void assetStorage;
 
 async function boot(): Promise<void> {
   await loadLocale(detectLocale());
+
+  // Индикатор состояния соединения
+  initConnectionIndicator();
 
   // Музыка на экранах входа/регистрации/персонажей — после первого жеста
   audio.installAuthMusicTrigger();

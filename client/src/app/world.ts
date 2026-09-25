@@ -9,13 +9,15 @@ import { t } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
 import { loadPanelContent } from './panels';
-import { NPC_WORLD_POSITIONS } from './game3d/npc';
+import { openNpcDialogue } from './dialogue';
+import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
 import { GATE } from './game3d/terrain';
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
 import {
   chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap,
+  drawWorldMap,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
   tickCooldowns, toast,
 } from './hud';
@@ -32,6 +34,10 @@ let raf = 0;
 let lastFrame = 0;
 let lastMoveSent = 0;
 let lastMinimapDraw = 0;
+let lastWorldmapDraw = 0;
+let lastExploreCheck = 0;
+// Уже отправленные explore-цели (чтобы не спамить endpoint каждый тик)
+const exploreSent = new Set<string>();
 let night = 0;
 let deathTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -53,6 +59,7 @@ function resolveQuestTarget(obj: QuestObjectiveDef, def: QuestDef): { x: number;
   if (!me) return null;
   const withDist = (x: number, z: number) =>
     ({ x, z, label: `${obj.description} · ${Math.round(Math.hypot(x - me!.pos.x, z - me!.pos.z))} ${t('nav.m')}` });
+  const anchor = REGION_ANCHORS[def.npcGiverRegion];
 
   if (obj.type === 'kill') {
     let best: { x: number; z: number } | null = null;
@@ -65,12 +72,38 @@ function resolveQuestTarget(obj: QuestObjectiveDef, def: QuestDef): { x: number;
       }
     }
     if (best) return withDist(best.x, best.z);
-    return null; // монстров этого вида пока нет в мире — стрелку прячем
+    // Монстров этого вида нет в мире — ведём к ближайшей точке спавна
+    // из квеста, а не к центру региона (иначе линия упирается в ворота/плазу)
+    if (obj.spawnPoints?.length) {
+      let bestSpawn: { x: number; z: number } | null = null;
+      let bestSpawnD = Infinity;
+      for (const sp of obj.spawnPoints) {
+        const d = Math.hypot(sp.x - me.pos.x, sp.z - me.pos.z);
+        if (d < bestSpawnD) { bestSpawnD = d; bestSpawn = sp; }
+      }
+      if (bestSpawn) return withDist(bestSpawn.x, bestSpawn.z);
+    }
+    if (anchor) return withDist(anchor.x, anchor.z);
+    return null;
   }
   if (obj.type === 'talk') {
-    const npc = NPC_WORLD_POSITIONS[obj.target];
+    const npc = questNpcPosition(obj.target);
     if (npc) return withDist(npc.x, npc.z);
-    // Цели-спутника нет в мире: ведём к ближайшему квестному NPC региона
+    // Цели-спутника нет в мире: сначала сдающий квест NPC, потом точки квеста,
+    // и только потом ближайший квестный NPC региона (не любой рядом стоящий)
+    const turnIn = def.npcGiver ? questNpcPosition(def.npcGiver) : null;
+    if (turnIn) return withDist(turnIn.x, turnIn.z);
+    if ((obj as any).spawnPoints?.length) {
+      let bestSpawn: { x: number; z: number } | null = null;
+      let bestSpawnD = Infinity;
+      for (const sp of (obj as any).spawnPoints as { x: number; z: number }[]) {
+        const d = Math.hypot(sp.x - me!.pos.x, sp.z - me!.pos.z);
+        if (d < bestSpawnD) { bestSpawnD = d; bestSpawn = sp; }
+      }
+      if (bestSpawn) return withDist(bestSpawn.x, bestSpawn.z);
+    }
+    const anchor = REGION_ANCHORS[def.npcGiverRegion];
+    if (anchor) return withDist(anchor.x, anchor.z);
     let best: { x: number; z: number } | null = null;
     let bestD = Infinity;
     for (const npc of Object.values(NPC_WORLD_POSITIONS)) {
@@ -84,8 +117,59 @@ function resolveQuestTarget(obj: QuestObjectiveDef, def: QuestDef): { x: number;
     const a = EXPLORE_ANCHORS[obj.target];
     if (a) return withDist(a.x, a.z);
   }
-  const anchor = REGION_ANCHORS[def.npcGiverRegion];
+  // фолбэк по spawnPoints из квеста (если NPC неизвестен)
+  if ((obj as any).spawnPoints?.length) {
+    let bestSpawn: { x: number; z: number } | null = null;
+    let bestSpawnD = Infinity;
+    for (const sp of (obj as any).spawnPoints as { x: number; z: number }[]) {
+      const d = Math.hypot(sp.x - me!.pos.x, sp.z - me!.pos.z);
+      if (d < bestSpawnD) { bestSpawnD = d; bestSpawn = sp; }
+    }
+    if (bestSpawn) return withDist(bestSpawn.x, bestSpawn.z);
+  }
   return anchor ? withDist(anchor.x, anchor.z) : null;
+}
+
+// ── Журнал квестов (J): активные с прогрессом и маркерами ────
+let questDefsCache: QuestDef[] | null = null;
+async function getQuestDefs(): Promise<QuestDef[]> {
+  if (!questDefsCache) questDefsCache = (await api.quests()).quests;
+  return questDefsCache;
+}
+
+async function refreshQuestPanelJ(): Promise<void> {
+  const listEl = document.getElementById('quests-j-list');
+  if (!listEl) return;
+  const cid = session.character?.id;
+  if (!cid) {
+    listEl.innerHTML = '<div class="quest-j-empty">Нет персонажа</div>';
+    return;
+  }
+  try {
+    const [defs, { quests }] = await Promise.all([getQuestDefs(), api.questState(cid)]);
+    const active = (quests || []).filter((q) => q.status === 'active');
+    if (!active.length) {
+      listEl.innerHTML = '<div class="quest-j-empty">Нет активных заданий<br><small>Поговорите с NPC чтобы получить задания</small></div>';
+      return;
+    }
+    listEl.innerHTML = active.map((q) => {
+      const def = defs.find((d) => d.id === q.questId);
+      const progress = q.progress || {};
+      const objHtml = (def?.objectives ?? []).map((o) => {
+        const have = progress[o.id] ?? 0;
+        const done = have >= o.required;
+        const counter = o.type === 'kill' || o.type === 'collect' ? ` ${Math.min(have, o.required)}/${o.required}` : '';
+        return `<div class="quest-j-desc ${done ? 'done' : ''}">${done ? '✓' : '•'} ${o.description}${counter}</div>`;
+      }).join('');
+      const title = def ? ((session as unknown as { lang?: string }).lang === 'en' ? def.title : def.titleRu) : q.questId;
+      return `<div class="quest-j-item" data-quest="${q.questId}">` +
+        `<div class="quest-j-title">◆ ${title}</div>` +
+        objHtml +
+        `</div>`;
+    }).join('');
+  } catch {
+    listEl.innerHTML = '<div class="quest-j-empty">Ошибка загрузки квестов</div>';
+  }
 }
 
 async function refreshNavTarget(): Promise<void> {
@@ -142,7 +226,7 @@ export async function enterWorld(character: Character): Promise<void> {
     onAttack: () => basicAttack(),
     onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
     onTargetCleared: () => hideTarget(),
-    onNpc: (panel, name) => {
+    onNpc: (panel, name, npcId) => {
       // Клик по NPC: открыть связанную панель (кнопкой-переключателем,
       // чтобы не ломать состояние .hidden/.active)
       const btn = document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`);
@@ -150,6 +234,8 @@ export async function enterWorld(character: Character): Promise<void> {
       if (btn && el?.classList.contains('hidden')) btn.click();
       else loadPanelContent(panel);
       if (name) toast(`${name} — ${t('panels.npc_greeting')}`, 'info');
+      // Диалог: ветвящаяся беседа, тон/дружба, засчитывает talk-цели квестов
+      if (npcId) void openNpcDialogue(npcId).catch(() => {});
     },
   });
 
@@ -457,14 +543,21 @@ function wireSocket(): void {
     refreshBars();
   });
 
-  // ── Чат ──
-  const chatEvents = ['chat:world', 'chat:region'] as const;
+  // ── Чат ── сервер поддерживает world/region/guild/party (см. GameSocketHandler.handleChatMessage)
+  const chatEvents = ['chat:world', 'chat:region', 'chat:guild', 'chat:party'] as const;
+  const channelPrefix: Record<string, string> = { 'chat:guild': '[Гильдия] ', 'chat:party': '[Группа] ' };
   for (const ev of chatEvents) {
-    socket.on(ev, ({ characterId, message }: { characterId: string; message: string }) => {
+    socket.on(ev, ({ characterId, name, role, message }: { characterId: string; name?: string | null; role?: 'owner' | 'admin' | 'moderator' | null; message: string }) => {
       const p = world?.players.get(characterId);
-      chatMessage(p?.name ?? '???', message);
+      const displayName = name ?? p?.name ?? '???';
+      const prefix = channelPrefix[ev] ?? '';
+      chatMessage(displayName, prefix + message, false, role ?? null);
     });
   }
+  // гильдия/пати ошибки
+  socket.on('chat:error', ({ message }: { message: string }) => {
+    chatMessage(null, message, true);
+  });
 
   socket.on('notification', (msg: { message?: string; text?: string; title?: string }) => {
     toast(msg.message ?? msg.text ?? msg.title ?? '', 'info');
@@ -476,6 +569,8 @@ function wireSocket(): void {
     night = tod === 'night' || tod === 'midnight' ? 1 : tod === 'evening' || tod === 'dawn' ? 0.5 : 0;
     const hour = Number(payload.gameHour ?? payload.hour);
     if (Number.isFinite(hour)) world3d?.setClock(hour);
+    const weather = String(payload.weather ?? '');
+    if (weather) world3d?.setWeather(weather);
   });
 
   socket.on('move:rejected', ({ reason }: { reason?: string }) => {
@@ -509,18 +604,50 @@ function showLostScreen(reason: string): void {
   }, 2200);
 }
 
-// ── Ввод ─────────────────────────────────────────────────────
+// ── Ввод: поддержка переназначения клавиш ──────────────────────
+const DEFAULT_BINDS: Record<string, string> = { map: 'KeyM', character: 'KeyF', guild: 'KeyG', quests: 'KeyJ', inventory: 'KeyI' };
+function getBind(action: string): string {
+  try {
+    const saved = JSON.parse(localStorage.getItem('eos_keybinds') ?? '{}');
+    return saved[action] ?? DEFAULT_BINDS[action] ?? action;
+  } catch { return DEFAULT_BINDS[action] ?? action; }
+}
+export function setBind(action: string, code: string): void {
+  const saved = JSON.parse(localStorage.getItem('eos_keybinds') ?? '{}');
+  saved[action] = code;
+  localStorage.setItem('eos_keybinds', JSON.stringify(saved));
+}
 
 function wireInput(): void {
   window.onkeydown = (e) => {
     if (chatVisible()) return;
     if (e.code === 'Enter') {
       e.preventDefault();
-      // Чат требует курсора: выходим из pointer lock, если захвачен 3D-движком
       if (document.pointerLockElement) document.exitPointerLock();
       openChat();
     } else if (e.code === 'Escape') {
       document.getElementById('overlay-menu')?.classList.toggle('hidden');
+    } else if (e.code === getBind('map')) {
+      const overlay = document.getElementById('overlay-map');
+      overlay?.classList.toggle('hidden');
+      if (overlay && !overlay.classList.contains('hidden')) redrawWorldMap();
+    } else if (e.code === getBind('character')) {
+      const panel = document.getElementById('panel-character');
+      panel?.classList.toggle('hidden');
+      if (panel && !panel.classList.contains('hidden')) loadPanelContent('panel-character');
+    } else if (e.code === getBind('guild')) {
+      const panel = document.getElementById('panel-guild');
+      panel?.classList.toggle('hidden');
+      if (panel && !panel.classList.contains('hidden')) loadPanelContent('panel-guild');
+    } else if (e.code === getBind('quests')) {
+      const panel = document.getElementById('panel-quests-j');
+      panel?.classList.toggle('hidden');
+      if (panel && !panel.classList.contains('hidden')) void refreshQuestPanelJ();
+    } else if (e.code === getBind('inventory')) {
+      const panel = document.getElementById('panel-inventory');
+      panel?.classList.toggle('hidden');
+      // Клавиша I открывает панель так же, как клик по кнопке — иначе сумка пустая
+      if (panel && !panel.classList.contains('hidden')) void loadInventory();
     } else if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
       const skill = session.skills[idx];
@@ -529,7 +656,7 @@ function wireInput(): void {
   };
 
   window.addEventListener('game:skill', (e) => useSkill((e as CustomEvent<string>).detail));
-  window.addEventListener('quest:accepted', () => void refreshNavTarget());
+  window.addEventListener('quest:accepted', () => { void refreshNavTarget(); void refreshQuestPanelJ(); });
 
   $('btn-continue')?.addEventListener('click', () => document.getElementById('overlay-menu')?.classList.add('hidden'));
   $('btn-exit')?.addEventListener('click', () => {
@@ -539,15 +666,28 @@ function wireInput(): void {
     void import('./main').then((m) => m.logoutLocal());
   });
 
-  // Чат: отправка
+  // Чат: переключение вкладок
+  for (const tab of document.querySelectorAll<HTMLButtonElement>('.chat-tab')) {
+    tab.addEventListener('click', () => {
+      for (const t of document.querySelectorAll<HTMLButtonElement>('.chat-tab')) t.classList.remove('active');
+      tab.classList.add('active');
+    });
+  }
+
+  // Чат: отправка — канал берётся из активной вкладки (fallback: старое #chat-channel или region)
   ($('chat-form') as HTMLFormElement).onsubmit = (e) => {
     e.preventDefault();
     const input = $('chat-text') as HTMLInputElement;
     const text = input.value.trim();
     if (text && socket.connected) {
+      const activeTab = document.querySelector<HTMLButtonElement>('.chat-tab.active');
+      let channel = activeTab?.dataset.channel ?? (document.getElementById('chat-channel') as HTMLSelectElement | null)?.value ?? 'region';
+      // UI имеет system/trade/war — мапим на поддерживаемые сервером каналы
+      const allowed = new Set(['world', 'region', 'guild', 'party']);
+      if (!allowed.has(channel)) channel = 'region';
       socket.emit('chat:message', {
         message: text,
-        channel: ($('chat-channel') as HTMLSelectElement).value,
+        channel,
       });
       input.value = '';
     }
@@ -608,6 +748,51 @@ function useSkill(skillId: string): void {
 
 // ── Игровой цикл ─────────────────────────────────────────────
 
+function redrawWorldMap(): void {
+  if (!me || !world) return;
+  drawWorldMap(
+    { x: me.pos.x, z: me.pos.z },
+    [...world.monsters.values()].map((m) => ({ x: m.pos.x, z: m.pos.z })),
+    Object.values(NPC_WORLD_POSITIONS).map((n) => ({ x: n.x, z: n.z })),
+    world3d?.getNavRoute() ?? [],
+  );
+}
+
+// ── Explore-цели: подошёл к точке квеста — засчитать на сервере.
+// Без этого explore закрывался только регионом (сразу при взятии),
+// а не походом к воротам/лагерю.
+async function checkExploreObjectives(): Promise<void> {
+  if (!session.character || !me || !world) return;
+  try {
+    if (!navDefs) navDefs = (await api.quests()).quests;
+    const { quests: state } = await api.questState(session.character.id);
+    for (const st of state) {
+      if (st.status !== 'active') continue;
+      const def = navDefs.find((q) => q.id === st.questId);
+      if (!def) continue;
+      for (const o of def.objectives) {
+        if (o.type !== 'explore' || o.optional) continue;
+        if ((st.progress[o.id] ?? 0) >= o.required) continue;
+        const key = `${st.questId}:${o.id}`;
+        if (exploreSent.has(key)) continue;
+        const target = resolveQuestTarget(o, def);
+        if (!target) continue;
+        if (Math.hypot(target.x - me.pos.x, target.z - me.pos.z) > 8) continue;
+        exploreSent.add(key);
+        try {
+          const res = await api.questExplore(session.character.id, st.questId, o.id);
+          if (res.completed?.length) {
+            for (const q of res.completed) {
+              toast(`Квест завершён: ${q.titleRu} (+${q.experience} ${t('world.exp')})`, 'success');
+            }
+            window.dispatchEvent(new CustomEvent('quest:accepted'));
+          }
+        } catch { exploreSent.delete(key); }
+      }
+    }
+  } catch { /* навигация не критична */ }
+}
+
 function loop(now: number): void {
   raf = requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
@@ -644,5 +829,19 @@ function loop(now: number): void {
       { x: me.pos.x, z: me.pos.z },
       [...world.monsters.values()].map((m) => ({ x: m.pos.x, z: m.pos.z })),
     );
+  }
+
+  // Большая карта (M): перерисовка раз в ~1.5с, пока открыта
+  if (now - lastWorldmapDraw > 1500) {
+    lastWorldmapDraw = now;
+    if (!document.getElementById('overlay-map')?.classList.contains('hidden')) {
+      redrawWorldMap();
+    }
+  }
+
+  // Explore-цели: дошёл до точки — засчитать на сервере (раз в ~3с)
+  if (now - lastExploreCheck > 3000) {
+    lastExploreCheck = now;
+    void checkExploreObjectives();
   }
 }

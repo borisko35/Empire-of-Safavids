@@ -1,6 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
+import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache } from '../services/EquipmentCache';
@@ -16,12 +17,18 @@ import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
-import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS } from '../../../shared/constants';
+import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
+import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn } from '../../../shared/constants';
+import { isDeepWater } from '../utils/spawn';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   characterId?: string;
   region?: Region;
+  /** Имя персонажа для чата (кэшируется при AUTH). */
+  senderName?: string;
+  /** Роль для бейджа в чате: owner/admin/moderator (кэшируется при AUTH). */
+  senderRole?: 'owner' | 'admin' | 'moderator' | null;
   /** Игровой сервер (шард) персонажа */
   shardId?: string;
 }
@@ -52,6 +59,7 @@ export class GameSocketHandler {
   private skillCooldowns = new Map<string, Map<string, number>>();
   // Троттлинг записи позиции в PostgreSQL: characterId -> последняя запись
   private lastPositionPersist = new Map<string, number>();
+  private lastQuestEval = new Map<string, number>();
   // Серия лёгких атак (комбо): characterId -> { count, lastAt }
   private comboChains = new Map<string, { count: number; lastAt: number }>();
 
@@ -95,6 +103,9 @@ export class GameSocketHandler {
     }
     await this.redis.removePlayerFromRegion(shardId, oldRegion, characterId).catch(() => {});
     await this.redis.addPlayerToRegion(shardId, newRegion, characterId).catch(() => {});
+    // После travel-телепорта сбросить базовую точку античита
+    const movedChar = await this.characterService.getCharacterById(characterId).catch(() => null);
+    if (movedChar) this.antiCheat.resetPosition(characterId, movedChar.position);
   }
 
   initialize(): void {
@@ -124,6 +135,22 @@ export class GameSocketHandler {
         this.handleChatMessage(socket, data);
       });
 
+      // Интерьеры: вход/выход из зданий (с серверной проверкой координат).
+      // Клиент телепортируется ТОЛЬКО по ack — иначе первый же пакет
+      // движения из кармана прилетает раньше сброса трекинга и даёт кик.
+      socket.on(SOCKET_EVENTS.INTERIOR_ENTER, async (
+        data: { buildingId: string },
+        ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => void,
+      ) => {
+        await this.handleInterior(socket, data?.buildingId, 'enter', ack);
+      });
+      socket.on(SOCKET_EVENTS.INTERIOR_EXIT, async (
+        data: { buildingId: string },
+        ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => void,
+      ) => {
+        await this.handleInterior(socket, data?.buildingId, 'exit', ack);
+      });
+
       // Отключение
       socket.on('disconnect', async () => {
         await this.handleDisconnect(socket);
@@ -131,10 +158,8 @@ export class GameSocketHandler {
     });
 
     // Регенерация ресурсов онлайн-игроков раз в 5 секунд (+ синк клиенту)
-    this.regenTimer = setInterval(() => void this.regenTick(), 5000);
+    void setInterval(() => { this.regenTick().catch(() => {}); }, 5000);
   }
-
-  private regenTimer: NodeJS.Timeout | null = null;
 
   /** Медленная регенерация hp/маны/стамины онлайн-игроков + синк состояния */
   private async regenTick(): Promise<void> {
@@ -194,7 +219,7 @@ export class GameSocketHandler {
             targetId: String(msg.characterId),
             actionType: 'attack',
           });
-          if (msg.died) void this.handleDeathById(String(msg.characterId));
+          if (msg.died) this.handleDeathById(String(msg.characterId)).catch(() => {});
         });
       }
     }
@@ -250,9 +275,35 @@ export class GameSocketHandler {
         return;
       }
 
+      // Спасение из воды: если сохранённая позиция оказалась в озере/реке
+      // (отключился во время плавания), вернуть на стартовую точку региона,
+      // иначе игрок каждый вход появляется в воде без возможности выйти
+      if (character.position && isDeepWater(character.position.x, character.position.z)) {
+        const spawn = getRegionSpawn(character.region);
+        character.position = { x: spawn.x, y: 0, z: spawn.z };
+        await this.characterService.updatePosition(character.id, character.position).catch(() => {});
+        logger.info(`Player rescued from water to region spawn: ${character.id} (${character.region})`);
+      }
+
       socket.userId = userId;
       socket.characterId = character.id;
       socket.region = character.region;
+      socket.senderName = character.name;
+      // Роль для бейджа в чате: один запрос при входе, дальше из кэша сокета.
+      try {
+        const adminRow = await DatabaseService.getInstance().queryOne<{
+          is_admin: boolean; admin_role: string | null;
+        }>('SELECT is_admin, admin_role FROM users WHERE id = $1', [userId]);
+        socket.senderRole = !adminRow?.is_admin
+          ? null
+          : adminRow.admin_role === 'owner'
+            ? 'owner'
+            : adminRow.admin_role === 'gm'
+              ? 'moderator'
+              : 'admin';
+      } catch {
+        socket.senderRole = null;
+      }
       // Шард из привязки персонажа (по умолчанию — Исфахан для старых персонажей)
       (socket as AuthenticatedSocket & { shardId?: string }).shardId =
         character.serverId && GAME_SERVERS.some(s => s.id === character.serverId)
@@ -268,11 +319,14 @@ export class GameSocketHandler {
       }
       // Активировать шард: заселить монстрами, если он ещё пуст
       GameLoop.getInstance().getSpawnSystem().activateShard(shardId);
-      await this.redis.addPlayerToRegion(shardId, character.region, character.id);
+      await this.redis.addPlayerToRegion(shardId, character.region, character.id).catch(() => {});
       // Позиция в Redis сразу: иначе стоящий игрок невидим для ИИ,
       // пока клиент не пошлёт первый player:move
       await this.redis.setPlayerPosition(character.id, character.position).catch(() => {});
       this.activePlayers.set(character.id, socket);
+      // Базовая точка античита = точка спавна: первый пакет движения
+      // после входа не должен считаться телепортом от старой позиции
+      this.antiCheat.resetPosition(character.id, character.position);
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
 
@@ -327,19 +381,36 @@ export class GameSocketHandler {
     // Скорость / телепорт
     const moveCheck = this.antiCheat.validateMovement(characterId, data.position);
     if (!moveCheck.valid) {
-      await this.punish(socket, 'speed_hack', moveCheck.reason ?? 'invalid movement', 2);
-      socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: moveCheck.reason });
-      return;
+      // Амнистия переходов у дверей и внутри комнат: легальный вход/выход
+      // (включая старые клиенты без ack и граничные случаи) никогда не кикает.
+      // Позиция принимается, трекинг сбрасывается — как travel/respawn.
+      const px = data.position.x, pz = data.position.z;
+      const legal = Object.values(INTERIORS).some(
+        (d) => isInsideRoom(d, px, pz) || Math.hypot(px - d.doorX, pz - d.doorZ) <= 30
+      );
+      if (legal) {
+        this.antiCheat.resetPosition(characterId, data.position);
+      } else {
+        await this.punish(socket, 'speed_hack', moveCheck.reason ?? 'invalid movement', 2);
+        socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: moveCheck.reason });
+        return;
+      }
     }
 
     // Кэшировать позицию в Redis (быстро)
-    await this.redis.setPlayerPosition(characterId, data.position);
+    await this.redis.setPlayerPosition(characterId, data.position).catch(() => {});
 
     // В PostgreSQL пишем не чаще раза в 5 секунд (движение генерирует десятки пакетов/сек)
     const now = Date.now();
     if (now - (this.lastPositionPersist.get(characterId) ?? 0) > 5000) {
       this.lastPositionPersist.set(characterId, now);
       await this.characterService.updatePosition(characterId, data.position).catch(() => {});
+      // Заодно проверяем квесты (collect/kill-смешанные): движение = активность
+      const done = await this.questService.evaluateQuests(characterId).catch(() => []);
+      if (done.length) {
+        socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: done });
+      }
+      this.lastQuestEval.set(characterId, now);
     }
 
     // Транслировать другим игрокам в регионе
@@ -527,9 +598,13 @@ export class GameSocketHandler {
       attacker.id, result.damage, this.combatService.getBaseDamageFor(attacker)
     );
     if (!damageCheck.valid) {
-      await this.antiCheat.recordViolation(attacker.id, 'damage_hack', damageCheck.reason ?? 'damage hack', 3);
-      this.forceDisconnect(attacker.id, 'Анти-чит: damage hack');
-      return;
+      if (this.isStaff(socket)) {
+        logger.info(`[AntiCheat] skip damage check for staff (${socket.senderRole})`);
+      } else {
+        await this.antiCheat.recordViolation(attacker.id, 'damage_hack', damageCheck.reason ?? 'damage hack', 3);
+        this.forceDisconnect(attacker.id, 'Анти-чит: damage hack');
+        return;
+      }
     }
 
     // Применяем урон к цели (персистентно)
@@ -610,9 +685,13 @@ export class GameSocketHandler {
       attacker.id, result.damage, this.combatService.getBaseDamageFor(attacker)
     );
     if (!damageCheck.valid) {
-      await this.antiCheat.recordViolation(attacker.id, 'damage_hack', damageCheck.reason ?? 'damage hack', 3);
-      this.forceDisconnect(attacker.id, 'Анти-чит: damage hack');
-      return;
+      if (this.isStaff(socket)) {
+        logger.info(`[AntiCheat] skip damage check for staff (${socket.senderRole})`);
+      } else {
+        await this.antiCheat.recordViolation(attacker.id, 'damage_hack', damageCheck.reason ?? 'damage hack', 3);
+        this.forceDisconnect(attacker.id, 'Анти-чит: damage hack');
+        return;
+      }
     }
 
     const ai = GameLoop.getInstance().getSpawnSystem().getAI();
@@ -698,10 +777,10 @@ export class GameSocketHandler {
   /** Опыт членам партии в том же регионе: 50% от награды за убийство */
   private async sharePartyExperience(attacker: Character, expReward: number): Promise<void> {
     if (expReward <= 0) return;
-    const partyId = await this.redis.get(`player:party:${attacker.id}`);
+    const partyId = await this.redis.get(`player:party:${attacker.id}`).catch(() => null);
     if (!partyId) return;
 
-    const party = await this.partySystem.getPartyInfo(partyId);
+    const party = await this.partySystem.getPartyInfo(partyId).catch(() => null);
     if (!party) return;
 
     for (const member of party.members) {
@@ -727,11 +806,14 @@ export class GameSocketHandler {
     const respawned = await this.characterService.respawn(dead.id);
     // Синк позиции в Redis: клиент телепортируется на стартовую точку,
     // и ИИ должен видеть игрока там же, а не на месте смерти
-    await this.redis.setPlayerPosition(dead.id, { x: 0, y: 0, z: 0 }).catch(() => {});
+    await this.redis.setPlayerPosition(dead.id, respawned.position).catch(() => {});
+    // Сбросить базовую точку античита на точку респавна — иначе первое
+    // движение после возрождения выглядит как телепорт/speed_hack
+    this.antiCheat.resetPosition(dead.id, respawned.position);
     deadSocket?.emit(SOCKET_EVENTS.PLAYER_RESPAWNED, {
       hp: respawned.hp,
       maxHp: respawned.maxHp,
-      position: { x: 0, y: 0, z: 0 },
+      position: respawned.position,
       region: dead.region,
     });
 
@@ -780,6 +862,8 @@ export class GameSocketHandler {
 
     const payload = {
       characterId: socket.characterId,
+      name: socket.senderName ?? null,
+      role: socket.senderRole ?? null,
       message: sanitized,
       timestamp: Date.now(),
     };
@@ -801,18 +885,84 @@ export class GameSocketHandler {
         break;
       }
       case 'party':
-        void this.broadcastPartyChat(socket, payload);
+        this.broadcastPartyChat(socket, payload).catch(() => {});
         break;
       default:
         socket.emit(SOCKET_EVENTS.CHAT_REGION, payload);
     }
   }
 
-  private async broadcastPartyChat(
+  /**
+   * Вход/выход из зданий. Сервер сам вычисляет обе точки телепорта:
+   * свежая позиция берётся из Redis (пакеты движения идут каждые ~100мс),
+   * запасной вариант — персистнутая позиция из БД.
+   * Легитимный телепорт сбрасывает античит-трекинг (как travel/respawn),
+   * итог возвращается через ack — клиент двигается только после него.
+   */
+  private async handleInterior(
     socket: AuthenticatedSocket,
+    buildingId: string,
+    kind: 'enter' | 'exit',
+    ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => void,
+  ): Promise<void> {
+    const fail = (reason: string): void => {
+      socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason });
+      ack?.({ ok: false, reason });
+    };
+    if (!socket.characterId) {
+      fail('Not authenticated');
+      return;
+    }
+    const def = getInterior(String(buildingId ?? ''));
+    if (!def) {
+      fail('Unknown building');
+      return;
+    }
+
+    let px: number | null = null;
+    let pz: number | null = null;
+    const live = await this.redis.getPlayerPosition(socket.characterId).catch(() => null) as {
+      x?: unknown; z?: unknown;
+    } | null;
+    if (typeof live?.x === 'number' && Number.isFinite(live.x) && typeof live?.z === 'number' && Number.isFinite(live.z)) {
+      px = live.x;
+      pz = live.z;
+    } else {
+      const character = await this.characterService.getCharacterById(socket.characterId).catch(() => null);
+      if (!character?.position) {
+        fail('Character not found');
+        return;
+      }
+      px = character.position.x;
+      pz = character.position.z;
+    }
+
+    let target: { x: number; y: number; z: number };
+    if (kind === 'enter') {
+      if (!canEnter(def, px, pz)) {
+        fail('Too far from the door');
+        return;
+      }
+      target = { x: def.spawnX, y: 0.4, z: def.spawnZ };
+    } else {
+      if (!isInsideRoom(def, px, pz)) {
+        fail('Not inside');
+        return;
+      }
+      target = { x: def.exitX, y: 0.4, z: def.exitZ };
+    }
+
+    await this.characterService.updatePosition(socket.characterId, target).catch(() => {});
+    await this.redis.setPlayerPosition(socket.characterId, target).catch(() => {});
+    this.antiCheat.resetPosition(socket.characterId, target);
+    logger.info(`[Interior] ${kind} ${def.id} by ${socket.characterId}`);
+    ack?.({ ok: true, target });
+  }
+
+  private async broadcastPartyChat(    socket: AuthenticatedSocket,
     payload: { characterId: string; message: string; timestamp: number }
   ): Promise<void> {
-    const partyId = await this.redis.get(`player:party:${socket.characterId}`);
+    const partyId = await this.redis.get(`player:party:${socket.characterId}`).catch(() => null);
     if (!partyId) {
       socket.emit('chat:error', { message: 'You are not in a party' });
       return;
@@ -823,6 +973,13 @@ export class GameSocketHandler {
   // ============================================================
   // Санкции и отключение
   // ============================================================
+  /** Разработчик и администрация вне античита: только лог, без санкций */
+  private isStaff(socket: AuthenticatedSocket): boolean {
+    return socket.senderRole === 'owner'
+      || socket.senderRole === 'admin'
+      || socket.senderRole === 'moderator';
+  }
+
   private async punish(
     socket: AuthenticatedSocket,
     type: 'speed_hack' | 'packet_flood' | 'teleport',
@@ -830,6 +987,10 @@ export class GameSocketHandler {
     severity: 1 | 2 | 3
   ): Promise<void> {
     if (!socket.characterId) return;
+    if (this.isStaff(socket)) {
+      logger.info(`[AntiCheat] skip for staff (${socket.senderRole}): ${type} | ${details}`);
+      return;
+    }
     try {
       const result = await this.antiCheat.recordViolation(socket.characterId, type, details, severity);
       if (result.action === 'kick' || result.action === 'ban') {
@@ -854,13 +1015,15 @@ export class GameSocketHandler {
     this.activePlayers.delete(socket.characterId);
     this.skillCooldowns.delete(socket.characterId);
     this.lastPositionPersist.delete(socket.characterId);
+    this.lastQuestEval.delete(socket.characterId);
     this.comboChains.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
     const shardId = socket.shardId ?? 'isfahan';
-    await this.redis.removePlayerFromRegion(shardId, socket.region, socket.characterId);
+    await this.redis.removePlayerFromRegion(shardId, socket.region, socket.characterId).catch(() => {});
     // Шард опустел — выгрузить его монстров
-    if (await this.redis.getShardOnline(shardId) === 0) {
+    const online = await this.redis.getShardOnline(shardId).catch(() => 1);
+    if (online === 0) {
       GameLoop.getInstance().getSpawnSystem().deactivateShard(shardId);
     }
 

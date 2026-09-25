@@ -167,7 +167,7 @@ export class AISystem {
   // ============================================================
   private executeState(
     ctx: AIContext,
-    players: { id: string; position: Vector3; hp: number }[],
+    _players: { id: string; position: Vector3; hp: number }[],
     now: number
   ): AIAction {
     switch (ctx.state) {

@@ -45,6 +45,8 @@ export const ICONS = {
   download: '<path d="M11 3h2v9l3.5-3.5 1.4 1.4L12 16 6.1 9.9l1.4-1.4L11 12zM4 19h16v2H4z"/>',
   back: '<path d="M11 4l8 8-8 8-1.5-1.5L15.9 12 9.5 5.5z"/>',
   play: '<path d="M6 3l14 9-14 9z"/>',
+  home: '<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  book: '<path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1h16M5 8h3m-3 3h3m-3 3h2"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

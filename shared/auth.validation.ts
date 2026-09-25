@@ -2,7 +2,7 @@
 // Auth Validation — Empire of Safavids
 // ============================================================
 
-import { RegisterRequest, LoginRequest, AuthError } from './auth.types';
+import { RegisterRequest, LoginRequest } from './auth.types';
 
 export interface ValidationResult {
   valid: boolean;

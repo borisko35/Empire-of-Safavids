@@ -60,3 +60,7 @@ site/install/index.html
 site/install/log.html
 site/install/styles.css
 server/scripts/daemon/
+
+# —крипты с реквизитами подключени€ Ч Ќ» ќ√ƒј не коммитить
+tools/setup-ssh-key.winscp.txt
+tools/*.winscp.txt

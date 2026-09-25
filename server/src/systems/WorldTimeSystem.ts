@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 
 export type TimeOfDay = 'dawn' | 'morning' | 'noon' | 'afternoon' | 'dusk' | 'night' | 'midnight';
 export type Season    = 'spring' | 'summer' | 'autumn' | 'winter';
-export type Weather   = 'clear' | 'cloudy' | 'rain' | 'storm' | 'sandstorm' | 'fog' | 'snow';
+export type Weather   = 'clear' | 'cloudy' | 'rain' | 'storm' | 'sandstorm' | 'fog' | 'snow' | 'wind';
 
 export interface WorldTime {
   gameHour:   number;   // 0–23
@@ -38,6 +38,7 @@ export const WEATHER_EFFECTS: Record<Weather, {
   sandstorm: { nameRu: 'Песчаная Буря', visibilityMod: 0.3,  speedMod: 0.6,  expMod: 1.4,  spawnMod: 1.6,  specialMobs: ['mob_sand_div'] },
   fog:       { nameRu: 'Туман',       visibilityMod: 0.5,  speedMod: 0.95, expMod: 1.2,  spawnMod: 1.3,  specialMobs: ['mob_fog_assassin'] },
   snow:      { nameRu: 'Снег',        visibilityMod: 0.6,  speedMod: 0.8,  expMod: 1.15, spawnMod: 0.8,  specialMobs: [] },
+  wind:      { nameRu: 'Ветер',       visibilityMod: 0.85, speedMod: 1.0,  expMod: 1.05, spawnMod: 1.1,  specialMobs: [] },
 };
 
 export const SEASONAL_EVENTS: Record<Season, {
@@ -114,9 +115,15 @@ export class WorldTimeSystem {
   }
 
   private getCurrentWeather(): Weather {
-    // В реальной реализации погода хранится в Redis и меняется по расписанию
-    const weathers: Weather[] = ['clear', 'clear', 'clear', 'cloudy', 'cloudy', 'rain', 'fog', 'storm', 'sandstorm'];
-    const idx = Math.floor(Date.now() / (30 * 60 * 1000)) % weathers.length;
+    // Слоты по 4 минуты: погода заметно меняется прямо во время игры.
+    // Раньше было 30 минут — дождь/бурю можно было не дождаться за сессию.
+    // Распределение: ясно чаще, дождь/буря/песчанка регулярно, снег редко.
+    const weathers: Weather[] = [
+      'clear', 'clear', 'clear', 'cloudy', 'cloudy', 'wind',
+      'rain', 'rain', 'cloudy', 'fog', 'storm', 'clear',
+      'sandstorm', 'wind', 'clear', 'rain', 'storm', 'sandstorm',
+    ];
+    const idx = Math.floor(Date.now() / (4 * 60 * 1000)) % weathers.length;
     return weathers[idx];
   }
 

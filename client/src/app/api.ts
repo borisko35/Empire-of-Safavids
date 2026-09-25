@@ -55,6 +55,101 @@ export const api = {
 
   logout: () => req<unknown>('/api/auth/logout', { method: 'POST' }),
 
+  authMe: () =>
+    req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string } }>('/api/auth/me'),
+
+  changePassword: (oldPass: string, newPass: string) =>
+    req<{ success: boolean; message: string }>('/api/auth/change-password', {
+      method: 'POST', body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
+    }),
+
+  resetPassword: (email: string, newPassword: string) =>
+    req<{ success: boolean; message: string }>('/api/auth/reset-password', {
+      method: 'POST', body: JSON.stringify({ email, password: newPassword }),
+    }),
+
+  renameCharacter: (characterId: string, newName: string) =>
+    req<{ success: boolean; character: any }>(`/api/characters/${characterId}/rename`, {
+      method: 'POST', body: JSON.stringify({ name: newName }),
+    }),
+
+  getSkills: (characterId: string) =>
+    req<{ skills: any[] }>(`/api/skills?characterId=${characterId}`),
+
+  getAvailableSkills: (characterId: string, profession?: string) =>
+    req<{ skills: any[] }>(`/api/skills/available?characterId=${characterId}${profession ? '&profession=' + profession : ''}`),
+
+  learnSkill: (characterId: string, skillId: string) =>
+    req<{ success: boolean; skill: any }>('/api/skills/learn', {
+      method: 'POST', body: JSON.stringify({ characterId, skillId }),
+    }),
+
+  getProfession: (characterId: string) =>
+    req<{ profession: any }>(`/api/skills/professions?characterId=${characterId}`),
+
+  unlockProfession: (characterId: string, professionId: string) =>
+    req<{ success: boolean; profession: any }>('/api/skills/professions/unlock', {
+      method: 'POST', body: JSON.stringify({ characterId, professionId }),
+    }),
+
+  getProfessionSkills: (professionId: string) =>
+    req<{ skills: any[] }>(`/api/skills/professions/${professionId}/skills`),
+
+  adminSearch: (q: string) =>
+    req<{ results: { id: string; name: string; class: string; level: number; region: string; user_id: string; email: string; is_banned: boolean }[] }>(`/api/admin/search?q=${encodeURIComponent(q)}`),
+
+  adminMute: (characterId: string, durationMinutes: number, reason: string) =>
+    req<{ success: boolean }>('/api/admin/mute', {
+      method: 'POST', body: JSON.stringify({ characterId, durationMinutes, reason }),
+    }),
+
+  adminBan: (userId: string, reason: string, durationDays?: number) =>
+    req<{ success: boolean }>('/api/admin/ban', {
+      method: 'POST', body: JSON.stringify({ userId, reason, durationDays }),
+    }),
+
+  adminUnban: (userId: string) =>
+    req<{ success: boolean }>('/api/admin/unban', {
+      method: 'POST', body: JSON.stringify({ userId }),
+    }),
+
+  adminTeleport: (characterId: string, position: { x: number; y: number; z: number }, region: string) =>
+    req<{ success: boolean }>('/api/admin/teleport', {
+      method: 'POST', body: JSON.stringify({ characterId, position, region }),
+    }),
+
+  adminGiveGold: (characterId: string, amount: number) =>
+    req<{ success: boolean }>('/api/admin/give-gold', {
+      method: 'POST', body: JSON.stringify({ characterId, amount }),
+    }),
+
+  adminGrantCurrency: (characterId: string, currency: string, amount: number, reason: string) =>
+    req<{ success: boolean; balance: number }>('/api/admin/grant-currency', {
+      method: 'POST', body: JSON.stringify({ characterId, currency, amount, reason }),
+    }),
+
+  adminRefund: (paymentId: string, reason: string) =>
+    req<{ success: boolean; deduped: boolean; azens?: number }>('/api/admin/refund', {
+      method: 'POST', body: JSON.stringify({ paymentId, reason }),
+    }),
+
+  adminGrants: (limit = 50) =>
+    req<{ grants: { id: string; admin_id: string; character_id: string; currency: string; amount: string; reason: string; created_at: string; character_name: string; admin_email: string }[] }>(`/api/admin/grants?limit=${limit}`),
+
+  adminPayments: (limit = 50) =>
+    req<{ payments: { id: string; user_id: string; character_id: string; real_currency: string; real_amount: string; azens_credited: string; status: string; created_at: string; character_name: string }[] }>(`/api/admin/payments?limit=${limit}`),
+
+  adminFinance: () =>
+    req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { azens: string; silver: string; syrian: string; redemptions: number }; grants: { currency: string; count: number; total: string }[]; velocity: { user_id: string; completed_24h: number }[] }>('/api/admin/finance'),
+
+  adminPromoCreate: (body: { code: string; azens?: number; silver?: number; syrian?: number; maxUses?: number; expiresAt?: string }) =>
+    req<{ success: boolean; promo: { code: string } }>('/api/admin/promocodes', {
+      method: 'POST', body: JSON.stringify(body),
+    }),
+
+  adminPromos: () =>
+    req<{ promos: { code: string; azens: string; silver: number; syrian: number; maxUses: number; usedCount: number; expiresAt: string | null }[] }>('/api/admin/promocodes'),
+
   characters: () => req<{ characters: Character[] }>('/api/characters'),
 
   createCharacter: (name: string, characterClass: string, serverId: string) =>
@@ -62,6 +157,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, class: characterClass, serverId }),
     }),
+
+  deleteCharacter: (characterId: string) =>
+    req<{ success: boolean }>(`/api/characters/${characterId}`, { method: 'DELETE' }),
 
   gameServers: () =>
     req<{ servers: { id: string; nameRu: string; online: number; recommended?: boolean }[] }>('/api/game/servers'),
@@ -98,12 +196,12 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ itemId }) },
     ),
 
-  shops: () => req<{ shops: { id: string; nameRu: string; items: { itemId: string; price: number; currency: string; minLevel?: number }[] }[] }>('/api/game/shops'),
+  shops: () => req<{ shops: { id: string; nameRu: string; items: { itemId: string; nameRu: string; price: number; currency: string; minLevel?: number }[] }[] }>('/api/game/shops'),
 
-  shopBuy: (shopId: string, characterId: string, itemId: string, quantity = 1) =>
-    req<{ success: boolean; itemId: string; quantity: number; goldSpent: number; gold: number }>(
+  shopBuy: (shopId: string, characterId: string, itemId: string, currency: 'gold' | 'azens' | 'silver' | 'syrian' = 'gold', quantity = 1) =>
+    req<{ success: boolean; itemId: string; quantity: number; goldSpent: number; azensSpent: number; silverSpent: number; syrianSpent: number; gold?: number; azens?: number; silver?: number; syrian?: number }>(
       `/api/game/shops/${shopId}/buy`,
-      { method: 'POST', body: JSON.stringify({ characterId, itemId, quantity }) },
+      { method: 'POST', body: JSON.stringify({ characterId, itemId, currency, quantity }) },
     ),
 
   shopSell: (shopId: string, characterId: string, itemId: string, quantity = 1) =>
@@ -133,7 +231,7 @@ export const api = {
     ),
 
   tradeContracts: () =>
-    req<{ contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; minLevel: number }[] }>(
+    req<{ contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number }[] }>(
       '/api/game/trade/contracts',
     ),
 
@@ -144,9 +242,87 @@ export const api = {
     }),
 
   tradeDeliver: (characterId: string) =>
-    req<{ success: boolean; gold: number; exp: number }>('/api/game/trade/deliver', {
+    req<{ success: boolean; gold: number; exp: number; silver?: number; syrian?: number }>('/api/game/trade/deliver', {
       method: 'POST',
       body: JSON.stringify({ characterId }),
+    }),
+
+  paymentRates: () =>
+    req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; firstBonus: { multiplier: number; maxBonus: number }; premiumDurations: { days: number; priceAzens: number }[]; simulator: boolean }>('/api/game/payments/rates'),
+
+  paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }) =>
+    req<{ success: boolean; paymentId: string; status: string; packId: string | null; azensExpected: number; realCurrency: string; realAmount: number }>('/api/game/payments/topup', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, ...input }),
+    }),
+
+  paymentStatus: (paymentId: string) =>
+    req<{ paymentId: string; status: string; azensExpected: number; bonus: number; realCurrency: string; realAmount: number }>(`/api/game/payments/${paymentId}`),
+
+  paymentHistory: (characterId: string) =>
+    req<{ payments: { paymentId: string; status: string; packId: string | null; azensExpected: number; bonus: number; realCurrency: string; realAmount: number; createdAt: string }[] }>(`/api/game/payments/mine?characterId=${characterId}`),
+
+  paymentSimulate: (characterId: string, paymentId: string) =>
+    req<{ success: boolean; deduped: boolean; azens?: number; bonus?: number }>('/api/game/payments/simulate', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, paymentId }),
+    }),
+
+  wallet: (characterId: string) =>
+    req<{ gold: number; azens: number; isfahanSilver: number; syrianGold: number; hasToppedUp: boolean }>('/api/game/wallet', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
+  premiumStatus: (characterId: string) =>
+    req<{ active: boolean; benefits: { expMultiplier: number; goldMultiplier: number } | null; durations: { days: number; priceAzens: number }[] }>('/api/game/premium/status', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
+  premiumPurchase: (characterId: string, days: number) =>
+    req<{ success: boolean; days: number; price: number; azens: number }>('/api/game/premium/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, days }),
+    }),
+
+  promoRedeem: (characterId: string, code: string) =>
+    req<{ success: boolean; reward: { azens: number; silver: number; syrian: number }; wallet: { azens: number; isfahanSilver: number; syrianGold: number } }>('/api/game/promo/redeem', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, code }),
+    }),
+
+  exchangePairs: () =>
+    req<{ pairs: { id: string; from: string; to: string; give: number; receive: number }[] }>('/api/game/exchange/pairs'),
+
+  exchange: (characterId: string, pairId: string, times = 1) =>
+    req<{ success: boolean; pair: string; times: number; wallet: { gold: number; silver: number; syrian: number } }>('/api/game/exchange', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, pairId, times }),
+    }),
+
+  giftSend: (characterId: string, targetName: string, itemId: string, quantity = 1) =>
+    req<{ success: boolean; target: string; itemId: string; quantity: number }>('/api/game/gifts/send', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, targetName, itemId, quantity }),
+    }),
+
+  battlepassStatus: (characterId: string) =>
+    req<{ season: { id: string; nameRu: string; premiumPrice: number }; tiers: { tier: number; requiredPoints: number; freeReward: { type: string; amount?: number; nameRu: string }; premiumReward: { type: string; amount?: number; nameRu: string } }[]; progress: { points: number; is_premium: boolean; claimed_tiers: number[] | string } | null }>('/api/game/battlepass/status', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
+  battlepassPurchase: (characterId: string) =>
+    req<{ success: boolean; price: number; azens: number; season: string }>('/api/game/battlepass/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
+  battlepassClaim: (characterId: string, tier: number, premium: boolean) =>
+    req<{ success: boolean; reward: { type: string; amount?: number; nameRu: string } }>('/api/game/battlepass/claim', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, tier, premium }),
     }),
 
   tradeCancel: (characterId: string) =>
@@ -228,4 +404,206 @@ export const api = {
 
   acceptQuest: (characterId: string, questId: string) =>
     req<{ success: boolean }>(`/api/characters/${characterId}/quests/${questId}/accept`, { method: 'POST' }),
+
+  questExplore: (characterId: string, questId: string, objectiveId: string) =>
+    req<{ success: boolean; completed: { questId: string; titleRu: string; experience: number; gold: number }[] }>(
+      `/api/characters/${characterId}/quests/${questId}/explore`,
+      { method: 'POST', body: JSON.stringify({ objectiveId }) },
+    ),
+
+  // ── Друзья ────────────────────────────────────────────────
+  friends: () =>
+    req<{ friends: { userId: string; friendId: string; friendName: string; status: string; online: boolean; level: number; region: string }[]; pending: { userId: string; friendName: string; level: number }[] }>('/api/friends'),
+
+  friendRequest: (friendId: string) =>
+    req<{ success: boolean }>('/api/friends/request', { method: 'POST', body: JSON.stringify({ friendId }) }),
+
+  friendAccept: (friendId: string) =>
+    req<{ success: boolean }>('/api/friends/accept', { method: 'POST', body: JSON.stringify({ friendId }) }),
+
+  friendRemove: (friendId: string) =>
+    req<{ success: boolean }>(`/api/friends/${friendId}`, { method: 'DELETE' }),
+
+  friendBlock: (friendId: string) =>
+    req<{ success: boolean }>('/api/friends/block', { method: 'POST', body: JSON.stringify({ friendId }) }),
+
+  // ── Рейтинги ──────────────────────────────────────────────
+  leaderboard: (type: string, limit = 20, offset = 0) =>
+    req<{ entries: { rank: number; characterId: string; characterName: string; className: string; level: number; value: number; guild?: string }[]; total: number }>(
+      `/api/leaderboard/${type}?limit=${limit}&offset=${offset}`,
+    ),
+
+  leaderboardMe: (type: string, characterId: string) =>
+    req<{ rank: { rank: number; value: number } | null }>(`/api/leaderboard/${type}/me?characterId=${characterId}`),
+
+  // ── Туториал ──────────────────────────────────────────────
+  tutorialSteps: () =>
+    req<{ steps: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string }[] }>('/api/tutorial/steps'),
+
+  tutorialProgress: (characterId: string) =>
+    req<{ progress: { step: number; completed: boolean }; currentStep: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string } | null }>(`/api/tutorial/${characterId}`),
+
+  tutorialAdvance: (characterId: string) =>
+    req<{ step: number; completed: boolean; tutorialStep: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string } }>(`/api/tutorial/${characterId}/advance`, { method: 'POST' }),
+
+  tutorialSkip: (characterId: string) =>
+    req<{ success: boolean }>(`/api/tutorial/${characterId}/skip`, { method: 'POST' }),
+
+  // ── Шахматы Шаха ──────────────────────────────────────────
+  chessStart: (betGold: number) =>
+    req<{ gameId: string; board: (string | null)[][]; turn: string; status: string; betGold: number }>(
+      '/api/chess/start', { method: 'POST', body: JSON.stringify({ betGold }) },
+    ),
+
+  chessMove: (gameId: string, from: { row: number; col: number }, to: { row: number; col: number }) =>
+    req<{ board: (string | null)[][]; turn: string; status: string; result?: { winner: string; goldWon: number; messageRu: string } }>(
+      '/api/chess/move', { method: 'POST', body: JSON.stringify({ gameId, from, to }) },
+    ),
+
+  chessState: (gameId: string) =>
+    req<{ board: (string | null)[][]; turn: string; status: string; moveCount: number; betGold: number }>(
+      `/api/chess/state/${gameId}`,
+    ),
+
+  chessResign: (gameId: string) =>
+    req<{ success: boolean }>('/api/chess/resign', { method: 'POST', body: JSON.stringify({ gameId }) }),
+
+  // ── Стихи Хафиза ──────────────────────────────────────────
+  poetryChallenges: () =>
+    req<{ challenges: { id: string; title: string; titleRu: string; difficulty: string; lineCount: number; reward: { gold: number; experience: number } }[] }>(
+      '/api/poetry/challenges',
+    ),
+
+  poetryStart: (difficulty?: string) =>
+    req<{ gameId: string; challenge: { id: string; title: string; titleRu: string; difficulty: string; lineCount: number }; options: { text: string; textRu: string }[] }>(
+      '/api/poetry/start', { method: 'POST', body: JSON.stringify({ difficulty }) },
+    ),
+
+  poetrySelect: (gameId: string, lineIndex: number) =>
+    req<{ selectedCount: number; isComplete: boolean; isCorrect: boolean }>(
+      '/api/poetry/select', { method: 'POST', body: JSON.stringify({ gameId, lineIndex }) },
+    ),
+
+  poetryUndo: (gameId: string) =>
+    req<{ selectedCount: number }>('/api/poetry/undo', { method: 'POST', body: JSON.stringify({ gameId }) }),
+
+  poetryQuit: (gameId: string) =>
+    req<{ success: boolean }>('/api/poetry/quit', { method: 'POST', body: JSON.stringify({ gameId }) }),
+
+  // ── Хроники Сефевидов ─────────────────────────────────────
+  chronicles: () =>
+    req<{ entries: { id: string; category: string; title: string; titleRu: string; content: string; contentRu: string }[] }>(
+      '/api/chronicles',
+    ),
+
+  chroniclesByCategory: (cat: string) =>
+    req<{ entries: { id: string; category: string; title: string; titleRu: string; content: string; contentRu: string }[] }>(
+      `/api/chronicles/category/${cat}`,
+    ),
+
+  // ── Фичи (для лендинга) ───────────────────────────────────
+  features: () =>
+    req<{ features: { icon: string; title: string; titleRu: string; desc: string; descRu: string }[] }>(
+      '/api/features',
+    ),
+
+  // ── Гильдии ──────────────────────────────────────────────
+  guildMy: () => req<{ guild: any; rank: string } | null>('/api/guilds'),
+  guildSearch: (q: string) => req<{ guilds: any[] }>(`/api/guilds/search?q=${encodeURIComponent(q)}`),
+  guildCreate: (name: string, tag: string, description: string) =>
+    req<{ success: boolean; guild: any }>('/api/guilds/create', { method: 'POST', body: JSON.stringify({ name, tag, description }) }),
+  guildJoin: (guildId: string) =>
+    req<{ success: boolean }>('/api/guilds/join', { method: 'POST', body: JSON.stringify({ guildId }) }),
+  guildLeave: () => req<{ success: boolean }>('/api/guilds/leave', { method: 'POST' }),
+  guildMembers: () => req<{ members: any[] }>('/api/guilds/members'),
+  guildRank: (characterId: string, rank: string) =>
+    req<{ success: boolean }>('/api/guilds/rank', { method: 'POST', body: JSON.stringify({ characterId, rank }) }),
+  guildDepositGold: (amount: number) =>
+    req<{ success: boolean }>('/api/guilds/deposit-gold', { method: 'POST', body: JSON.stringify({ amount }) }),
+  guildBank: () => req<{ items: any[] }>('/api/guilds/bank'),
+  guildKick: (characterId: string) =>
+    req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId }) }),
+
+  // ── Достижения / Задачи / Репутация ─────────────────────
+  achievements: () => req<{ achievements: any[]; total: number; unlockedCount: number }>('/api/progression/achievements'),
+  tasks: () => req<{ tasks: any[]; completedCount: number }>('/api/progression/tasks'),
+  tasksProgress: () => req<{ completedCount: number }>('/api/progression/tasks/progress'),
+  reputation: () => req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>('/api/progression/reputation'),
+  factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
+
+  // ── Питомцы ─────────────────────────────────────────────
+  pets: () => req<{ pets: any[]; allDefs: any[] }>('/api/game/pets'),
+  petsActive: () => req<{ pet: any }>('/api/game/pets/active'),
+  petAcquire: (characterId: string, petId: string) =>
+    req<{ success: boolean; pet: any }>('/api/game/pets/acquire', { method: 'POST', body: JSON.stringify({ characterId, petId }) }),
+  petActivate: (characterId: string, petDbId: number) =>
+    req<{ success: boolean }>('/api/game/pets/activate', { method: 'POST', body: JSON.stringify({ characterId, petDbId }) }),
+  petRename: (characterId: string, petDbId: number, nickname: string) =>
+    req<{ success: boolean }>('/api/game/pets/rename', { method: 'POST', body: JSON.stringify({ characterId, petDbId, nickname }) }),
+  petRelease: (characterId: string, petDbId: number) =>
+    req<{ success: boolean }>('/api/game/pets/release', { method: 'POST', body: JSON.stringify({ characterId, petDbId }) }),
+
+  // ── Конюшня: скакуны ────────────────────────────────────
+  mountsBuy: (shopId: string, characterId: string, mountId: string) =>
+    req<{ success: boolean; gold?: number; azens?: number; silver?: number; syrian?: number; mount?: any; error?: string }>('/api/game/shops/' + shopId + '/buy', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, itemId: mountId, currency: 'gold' }),
+    }),
+  mountsMy: (characterId: string) =>
+    req<{ mounts: any[] }>('/api/game/mounts/my', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+  mountActivate: (characterId: string, mountId: string) =>
+    req<{ success: boolean }>('/api/game/mounts/activate', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, mountId }),
+    }),
+
+
+  // ── Дом ─────────────────────────────────────────────────
+  house: () => req<{ house: any; playerDecorations: any[]; houseTypes: any[]; allDecorations: any[] }>('/api/game/house'),
+  houseBuy: (characterId: string, region: string, houseType: string) =>
+    req<{ success: boolean; house: any }>('/api/game/house/buy', { method: 'POST', body: JSON.stringify({ characterId, region, houseType }) }),
+  houseUpgrade: (characterId: string) =>
+    req<{ success: boolean; house: any }>('/api/game/house/upgrade', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  houseDecorate: (characterId: string, decorationId: string) =>
+    req<{ success: boolean }>('/api/game/house/decorate', { method: 'POST', body: JSON.stringify({ characterId, decorationId }) }),
+
+  // ── PvP Арена ───────────────────────────────────────────
+  pvpFindMatch: (characterId: string) => req<{ match: any }>('/api/game/pvp/find-match', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  pvpComplete: (characterId: string, matchId: number, winnerId: string) =>
+    req<{ winnerChange: number; loserChange: number; winnerNewRating: number; loserNewRating: number }>(
+      '/api/game/pvp/complete', { method: 'POST', body: JSON.stringify({ characterId, matchId, winnerId }) }),
+  pvpRankings: (limit = 50) => req<{ rankings: any[] }>(`/api/game/pvp/rankings?limit=${limit}`),
+  pvpMe: () => req<{ ranking: any }>('/api/game/pvp/me'),
+  pvpHistory: () => req<{ history: any[] }>('/api/game/pvp/history'),
+
+  // ── Бесконечная Башня ───────────────────────────────────
+  towerProgress: () => req<{ progress: any }>('/api/game/tower/progress'),
+  towerStart: () => req<{ progress: any; floor: any }>('/api/game/tower/start', { method: 'POST' }),
+  towerCompleteFloor: (characterId: string, floor: number, timeSeconds: number) =>
+    req<{ reward: any; newMax: boolean; nextFloor: any }>(
+      '/api/game/tower/complete-floor', { method: 'POST', body: JSON.stringify({ characterId, floor, timeSeconds }) }),
+  towerFloor: (num: number) => req<{ floor: any }>(`/api/game/tower/floor/${num}`),
+  towerLeaderboard: () => req<{ leaderboard: any[] }>('/api/game/tower/leaderboard'),
+
+  // ── NPC Диалоги ────────────────────────────────────────────
+  npcInfo: () => req<{ npcs: { npcId: string; nameRu: string; role: string; region: string; helloLineId: string }[] }>('/api/npc/info'),
+
+  npcDialog: (npcId: string, lineId?: string, characterId?: string) => {
+    const q = new URLSearchParams();
+    if (lineId) q.set('line', lineId);
+    if (characterId) q.set('characterId', characterId);
+    const qs = q.toString();
+    return req<{ npcId: string; nameRu: string; role: string; region: string; line: { id: string; textRu: string; choices?: { labelRu: string; nextId: string; action?: string; questId?: string; itemId?: string }[] }; questsCompleted?: { questId: string; titleRu: string; experience: number; gold: number }[] }>(
+      `/api/npc/${encodeURIComponent(npcId)}/dialog${qs ? `?${qs}` : ''}`,
+    );
+  },
+
+  npcReply: (npcId: string, lineId: string, choiceIndex: number, characterId?: string) =>
+    req<{ npcId: string; nameRu: string; choice: { labelRu: string; nextId: string; action?: string; questId?: string }; nextLine: { id: string; textRu: string; choices?: { labelRu: string; nextId: string; action?: string; questId?: string }[] }; questsCompleted?: { questId: string; titleRu: string; experience: number; gold: number }[] }>(
+      `/api/npc/${encodeURIComponent(npcId)}/dialog`,
+      { method: 'POST', body: JSON.stringify({ lineId, choiceIndex, characterId }) },
+    ),
 };

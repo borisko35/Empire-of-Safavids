@@ -25,7 +25,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./server/logs:/app/logs
+      - ./server/logs:/app/server/logs
     restart: unless-stopped
 
   # Игровой клиент: статика Three.js + прокси API/WS на сервер
