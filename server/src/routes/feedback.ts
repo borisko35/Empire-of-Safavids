@@ -163,11 +163,14 @@ feedbackRouter.patch('/:id', secureMiddleware, asyncHandler(async (req: Request,
       return res.status(400).json({ error: 'Статус: new | read | closed' });
     }
     params.push(status);
-    const statusIdx = params.length;
-    sets.push(`status = $${statusIdx}`);
+    sets.push(`status = $${params.length}`);
     params.push(req.userId);
     sets.push(`handled_by = $${params.length}`);
-    sets.push(`handled_at = CASE WHEN $${statusIdx} = 'new' THEN NULL ELSE NOW() END`);
+    // Ключ статуса подставляем ТОЛЬКО в status = $n. Повторять его в
+    // "CASE WHEN $n = 'new'" нельзя: PostgreSQL выведет для одного параметра
+    // два типа — varchar из колонки и text из литерала — и запрос упадёт с
+    // "inconsistent types deduced for parameter $1". Флаг считаем в JS.
+    sets.push(status === 'new' ? 'handled_at = NULL' : 'handled_at = NOW()');
   }
 
   if (hasReply) {
