@@ -66,6 +66,13 @@ export async function applyLocale(code) {
     const value = resolve(dict, el.dataset.i18nAlt);
     if (typeof value === 'string') el.setAttribute('alt', value);
   }
+  // SEO-описание страницы. Важно: боты соцсетей (Discord, Telegram,
+  // Facebook) JS не выполняют и видят исходный текст из HTML —
+  // так что русская версия в разметке остаётся опорной.
+  for (const el of document.querySelectorAll('[data-i18n-content]')) {
+    const value = resolve(dict, el.dataset.i18nContent);
+    if (typeof value === 'string') el.setAttribute('content', value);
+  }
 
   document.querySelectorAll('.lang-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.lang === code);
