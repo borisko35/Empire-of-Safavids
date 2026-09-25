@@ -82,19 +82,29 @@ for (const btn of document.querySelectorAll('.lang-btn')) {
 }
 
 // ── Статус серверов: живой онлайн ──────────────────────────
+// ВАЖНО: словарь подгружаем ОДИН раз ДО цикла, карточки собираем
+// в DocumentFragment и подменяем сетку одной операцией replaceChildren.
+// Раньше await стоял между grid.innerHTML='' и grid.append(): параллельные
+// вызовы (загрузка страницы + eos:locale + таймер) очищали ещё пустую
+// сетку и дописывали карточки дважды — отсюда дубликаты.
 async function renderStatus() {
   const grid = document.getElementById('status-grid');
   if (!grid) return;
   try {
-    const res = await fetch('/api/game/servers-status');
+    const [res, dict] = await Promise.all([
+      fetch('/api/game/servers-status'),
+      loadLocale(document.documentElement.lang || 'ru').catch(() => null),
+    ]);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const { servers } = await res.json();
-    grid.innerHTML = '';
+    const label = dict?.site?.status_online ?? '';
+    const frag = document.createDocumentFragment();
     let total = 0;
     for (const s of servers ?? []) {
-      total += s.online ?? 0;
+      const online = s.online ?? 0;
+      total += online;
       const card = document.createElement('div');
-      card.className = 'status-card' + ((s.online ?? 0) > 0 ? ' online' : '');
+      card.className = 'status-card' + (online > 0 ? ' online' : '');
       const dot = document.createElement('span');
       dot.className = 'status-dot';
       const name = document.createElement('span');
@@ -102,18 +112,17 @@ async function renderStatus() {
       name.textContent = s.nameRu ?? s.id;
       const count = document.createElement('span');
       count.className = 'status-count';
-      const dict = await loadLocale(document.documentElement.lang || 'ru').catch(() => null);
-      count.textContent = `${s.online ?? 0} ${dict?.site?.status_online ?? ''}`;
+      count.textContent = `${online} ${label}`;
       card.append(dot, name, count);
-      grid.append(card);
+      frag.append(card);
     }
+    grid.replaceChildren(frag);
     grid.dataset.total = String(total);
   } catch {
-    grid.innerHTML = '';
     const off = document.createElement('div');
     off.className = 'status-offline';
     off.textContent = '…';
-    grid.append(off);
+    grid.replaceChildren(off);
   }
 }
 
@@ -126,15 +135,17 @@ async function renderRating() {
     const res = await fetch(`/api/leaderboard/top/${ratingType}?limit=10`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const { entries } = await res.json();
-    list.innerHTML = '';
+    // словарь подгружаем ДО очистки — иначе параллельный вызов
+    // очистит уже заполненный список и добавит сообщение повторно
+    const dict = await loadLocale(document.documentElement.lang || 'ru').catch(() => null);
     if (!entries?.length) {
       const li = document.createElement('li');
       li.className = 'rating-empty';
-      const dict = await loadLocale(document.documentElement.lang || 'ru').catch(() => null);
       li.textContent = dict?.site?.rating_empty ?? '';
-      list.append(li);
+      list.replaceChildren(li);
       return;
     }
+    const frag = document.createDocumentFragment();
     for (const e of entries) {
       const li = document.createElement('li');
       li.className = 'rating-row' + (e.rank <= 3 ? ` top${e.rank}` : '');
@@ -148,10 +159,11 @@ async function renderRating() {
       value.className = 'rating-value';
       value.textContent = `${e.className ?? ''} · Lv.${e.level ?? '?'} · ${e.value ?? 0}`;
       li.append(rank, name, value);
-      list.append(li);
+      frag.append(li);
     }
+    list.replaceChildren(frag);
   } catch {
-    list.innerHTML = '';
+    list.replaceChildren();
   }
 }
 
