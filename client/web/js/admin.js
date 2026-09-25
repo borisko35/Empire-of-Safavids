@@ -4,6 +4,32 @@
 // Токен общий с игрой (localStorage eos_token, тот же origin).
 // Все запросы требуют прав администратора (adminCheck на сервере).
 
+import { applyLocale, detectLocale } from './i18n.js';
+
+// ── Локализация ─────────────────────────────────────────────
+// Готовые надписи в разметке ([data-i18n]) переводит сам applyLocale.
+// Здесь — то, что рисуется кодом: кнопки действий, карточки
+// обращений, редактор новостей. Словарь приходит событием eos:locale.
+let DICT = {};
+let booted = false;
+
+const tx = (path, fallback = '') => {
+  const value = path.split('.').reduce((n, k) => (n == null ? undefined : n[k]), DICT);
+  return typeof value === 'string' ? value : fallback;
+};
+
+for (const btn of document.querySelectorAll('.lang-btn')) {
+  btn.addEventListener('click', () => applyLocale(btn.dataset.lang).catch(console.error));
+}
+
+document.addEventListener('eos:locale', (e) => {
+  DICT = e.detail ?? {};
+  retagCmsNews();                       // плейсхолдеры и кнопки редактора новостей
+  if (!booted) return;                  // до входа данные ещё не грузили
+  refreshOnline();                      // кнопки «Мут» / «Бан» / «ТП»
+  loadFeedback();                       // карточки обращений
+});
+
 const headers = () => {
   const h = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('eos_token');
@@ -34,7 +60,7 @@ async function boot() {
     const { data } = await api('/api/auth/me');
     const staffRoles = ['owner', 'administrator', 'admin', 'moderator', 'developer', 'dev', 'gm'];
     if (!data?.isAdmin && !staffRoles.includes(data?.adminRole)) {
-      throw new Error('Нужны права администратора или модератора');
+      throw new Error(tx('admin.rights_needed', 'Нужны права администратора или модератора'));
     }
     loginSec.classList.add('hidden');
     logoutBtn.hidden = false;
@@ -51,6 +77,7 @@ async function boot() {
     await loadSiteContent();
     document.getElementById('admin-feedback')?.classList.remove('hidden');
     await loadFeedback();
+    booted = true;
   } catch (e) {
     loginSec.classList.remove('hidden');
     dash.classList.add('hidden');
@@ -120,18 +147,18 @@ function playerRow(p) {
     b.addEventListener('click', () => fn(p).then(refreshOnline).catch((e) => alert(e.message)));
     return b;
   };
-  const muteBtn = mk('Мут', async (pl) => {
-    const minutes = Number(prompt('Минут мута:', '10') ?? 0);
-    const reason = prompt('Причина:', 'нарушение') ?? '';
+  const muteBtn = mk(tx('admin.act_mute', 'Мут'), async (pl) => {
+    const minutes = Number(prompt(tx('admin.mute_minutes', 'Минут мута:'), '10') ?? 0);
+    const reason = prompt(tx('admin.reason', 'Причина:'), tx('admin.reason_default', 'нарушение')) ?? '';
     await api('/api/admin/mute', { method: 'POST', body: JSON.stringify({ characterId: pl.characterId, durationMinutes: minutes, reason }) });
   });
-  const banBtn = mk('Бан', async (pl) => {
-    if (!confirm(`Забанить ${pl.name}?`)) return;
-    const reason = prompt('Причина:', 'нарушение') ?? '';
+  const banBtn = mk(tx('admin.act_ban', 'Бан'), async (pl) => {
+    if (!confirm(tx('admin.ban_confirm', 'Забанить {name}?').replace('{name}', pl.name))) return;
+    const reason = prompt(tx('admin.reason', 'Причина:'), tx('admin.reason_default', 'нарушение')) ?? '';
     await api(`/api/admin/ban`, { method: 'POST', body: JSON.stringify({ userId: pl.userId ?? pl.characterId, reason }) });
   });
-  const tpBtn = mk('ТП', async (pl) => {
-    const region = prompt('Регион (tabriz/isfahan/shiraz/...):', pl.region ?? 'isfahan') ?? '';
+  const tpBtn = mk(tx('admin.act_tp', 'ТП'), async (pl) => {
+    const region = prompt(tx('admin.region_prompt', 'Регион (tabriz/isfahan/shiraz/...):'), pl.region ?? 'isfahan') ?? '';
     await api('/api/admin/teleport', { method: 'POST', body: JSON.stringify({ characterId: pl.characterId, region }) });
   });
   acts.append(muteBtn, banBtn, tpBtn);
@@ -254,9 +281,9 @@ function renderNewsEditor() {
     const row = document.createElement('div');
     row.className = 'cms-news-item';
     row.innerHTML =
-      '<input type="text" class="cms-input cms-news-title" data-i="' + i + '" maxlength="120" placeholder="Заголовок">' +
-      '<textarea class="cms-input cms-news-body" data-i="' + i + '" rows="3" maxlength="900" placeholder="Текст"></textarea>' +
-      '<button type="button" class="btn btn-ghost cms-news-del" data-i="' + i + '">Удалить</button>';
+      '<input type="text" class="cms-input cms-news-title" data-i="' + i + '" maxlength="120">' +
+      '<textarea class="cms-input cms-news-body" data-i="' + i + '" rows="3" maxlength="900"></textarea>' +
+      '<button type="button" class="btn btn-ghost cms-news-del" data-i="' + i + '"></button>';
     box.append(row);
   });
 
@@ -272,7 +299,7 @@ function renderNewsEditor() {
   const add = document.createElement('button');
   add.type = 'button';
   add.className = 'btn btn-ghost';
-  add.textContent = '+ Добавить новость';
+  add.id = 'cms-news-add';
   add.addEventListener('click', () => {
     collectNews();
     siteContent.news.items.push({ title: { ru: '', en: '', az: '' }, body: { ru: '', en: '', az: '' }, date: '' });
@@ -280,6 +307,23 @@ function renderNewsEditor() {
     fillNews();
   });
   box.append(add);
+  retagCmsNews();               // подписи и плейсхолдеры на текущем языке
+}
+
+/**
+ * Язык редактора новостей — прямо по DOM, без перерисовки.
+ * renderNewsEditor() здесь нельзя вызывать: он стёр бы то, что
+ * пользователь уже написал в поля.
+ */
+function retagCmsNews() {
+  const title = tx('admin.news_ph_title', 'Заголовок');
+  const body = tx('admin.news_ph_body', 'Текст');
+  const del = tx('admin.news_del', 'Удалить');
+  document.querySelectorAll('#cms-news .cms-news-title').forEach((el) => { el.placeholder = title; });
+  document.querySelectorAll('#cms-news .cms-news-body').forEach((el) => { el.placeholder = body; });
+  document.querySelectorAll('#cms-news .cms-news-del').forEach((el) => { el.textContent = del; });
+  const add = document.getElementById('cms-news-add');
+  if (add) add.textContent = tx('admin.news_add', '+ Добавить новость');
 }
 
 document.getElementById('cms-lang')?.addEventListener('change', (e) => {
@@ -304,7 +348,7 @@ document.getElementById('cms-save')?.addEventListener('click', async () => {
     await api('/api/site/content/announcement', { method: 'PUT', body: JSON.stringify({ value: siteContent.announcement }) });
     await api('/api/site/content/maintenance', { method: 'PUT', body: JSON.stringify({ value: siteContent.maintenance }) });
     await api('/api/site/content/news', { method: 'PUT', body: JSON.stringify({ value: siteContent.news }) });
-    cmsNote('Сохранено ✓');
+    cmsNote(tx('admin.cms_saved', 'Сохранено ✓'));
   } catch (e) {
     cmsNote(e.message, true);
   }
@@ -318,8 +362,11 @@ const fbQueue = document.getElementById('fb-queue');
 const fbQueueErr = document.getElementById('fb-queue-error');
 let fbStatus = '';
 
-const FB_LABEL = { bug: 'Баг / ошибка', idea: 'Идея / предложение', balance: 'Баланс', donation: 'Донат / покупки', account: 'Аккаунт', other: 'Другое' };
-const FB_STATUS = { new: 'Новое', read: 'Прочитано', closed: 'Закрыто' };
+// Категории и статусы общие с /feedback.html — берём те же ключи
+// feedback.cat_* / feedback.status_*, чтобы админка и игрок видели
+// одинаковые слова, а не два разных перевода.
+const fbLabel = (cat) => tx(`feedback.cat_${cat}`, cat);
+const fbStatusText = (st) => tx(`feedback.status_${st}`, st);
 
 function fbNote(msg) {
   if (!fbQueueErr) return;
@@ -329,7 +376,10 @@ function fbNote(msg) {
 
 function fbDate(v) {
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(d.getTime())) return '';
+  const lang = document.documentElement.lang || 'ru';
+  const locale = { ru: 'ru-RU', en: 'en-GB', az: 'az-AZ' }[lang] ?? 'ru-RU';
+  return d.toLocaleString(locale, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function fbCard(item) {
@@ -339,7 +389,7 @@ function fbCard(item) {
   const head = document.createElement('div');
   head.className = 'fb-item-head';
   const author = document.createElement('strong');
-  author.textContent = `${item.authorName} · ${FB_LABEL[item.category] ?? item.category}`;
+  author.textContent = `${item.authorName} · ${fbLabel(item.category)}`;
   const meta = document.createElement('span');
   meta.className = 'fb-item-date';
   meta.textContent = fbDate(item.createdAt);
@@ -353,10 +403,15 @@ function fbCard(item) {
   foot.className = 'fb-card-foot';
   const st = document.createElement('span');
   st.className = `fb-status fb-${item.status}`;
-  st.textContent = FB_STATUS[item.status] ?? item.status;
+  st.textContent = fbStatusText(item.status);
   foot.append(st);
 
-  for (const [value, label] of [['new', 'В новое'], ['read', 'Прочитано'], ['closed', 'Закрыть']]) {
+  const statusBtns = [
+    ['new', tx('admin.fb_to_new', 'В новое')],
+    ['read', tx('feedback.status_read', 'Прочитано')],
+    ['closed', tx('admin.fb_to_close', 'Закрыть')],
+  ];
+  for (const [value, label] of statusBtns) {
     if (value === item.status) continue;
     const b = document.createElement('button');
     b.type = 'button';
@@ -374,7 +429,7 @@ function fbCard(item) {
     rep.className = 'fb-reply';
     const repHead = document.createElement('div');
     repHead.className = 'fb-reply-head';
-    repHead.textContent = 'Ответ отправлен';
+    repHead.textContent = tx('admin.fb_reply_sent', 'Ответ отправлен');
     const repDate = document.createElement('span');
     repDate.className = 'fb-item-date';
     repDate.textContent = fbDate(item.repliedAt);
@@ -403,7 +458,7 @@ function fbReplyForm(item) {
   ta.className = 'cms-input';
   ta.rows = 3;
   ta.maxLength = 2000;
-  ta.placeholder = 'Ответ игроку…';
+  ta.placeholder = tx('admin.fb_reply_ph', 'Ответ игроку…');
 
   const actions = document.createElement('div');
   actions.className = 'fb-reply-actions';
@@ -411,7 +466,9 @@ function fbReplyForm(item) {
   const send = document.createElement('button');
   send.type = 'button';
   send.className = 'btn btn-gold fm-mini-btn';
-  send.textContent = item.reply ? 'Сохранить ответ' : 'Ответить и закрыть';
+  send.textContent = item.reply
+    ? tx('admin.fb_save_reply', 'Сохранить ответ')
+    : tx('admin.fb_close_reply', 'Ответить и закрыть');
   send.disabled = true;
   ta.addEventListener('input', () => { send.disabled = !ta.value.trim(); });
   send.addEventListener('click', async () => {
@@ -433,7 +490,7 @@ function fbReplyForm(item) {
     const drop = document.createElement('button');
     drop.type = 'button';
     drop.className = 'btn btn-ghost fm-mini-btn';
-    drop.textContent = 'Убрать ответ';
+    drop.textContent = tx('admin.fb_drop_reply', 'Убрать ответ');
     drop.addEventListener('click', async () => {
       try {
         await api(`/api/feedback/${item.id}`, { method: 'PATCH', body: JSON.stringify({ reply: '' }) });
@@ -474,7 +531,7 @@ async function loadFeedback() {
 
     fbQueue.innerHTML = '';
     if (!data.items?.length) {
-      fbQueue.innerHTML = '<p class="rating-empty">Обращений нет</p>';
+      fbQueue.innerHTML = `<p class="rating-empty">${tx('admin.fb_empty', 'Обращений нет')}</p>`;
       return;
     }
     for (const item of data.items) fbQueue.append(fbCard(item));
@@ -494,4 +551,7 @@ document.querySelectorAll('.fb-tab').forEach((tab) => {
 });
 document.getElementById('fb-reload')?.addEventListener('click', loadFeedback);
 
-void boot();
+// Язык: сохранённый выбор → язык браузера → русский. applyLocale
+// переведёт разметку [data-i18n] и событием eos:locale отдаст словарь
+// сюда — уже на готовом DOM. Поэтому boot() ждём его завершения.
+applyLocale(detectLocale()).catch(() => {}).finally(() => { void boot(); });
