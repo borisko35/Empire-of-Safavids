@@ -62,6 +62,10 @@ export async function applyLocale(code) {
     const value = resolve(dict, el.dataset.i18nAria);
     if (typeof value === 'string') el.setAttribute('aria-label', value);
   }
+  for (const el of document.querySelectorAll('[data-i18n-alt]')) {
+    const value = resolve(dict, el.dataset.i18nAlt);
+    if (typeof value === 'string') el.setAttribute('alt', value);
+  }
 
   document.querySelectorAll('.lang-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.lang === code);

@@ -13,6 +13,13 @@
     "logout": "Çıxış",
     "settings": "Parametrlər",
     "version": "Versiya",
+    "quick_mounts": "Axlıq",
+    "quick_tower": "Qüllə",
+    "quick_pets": "Heyvanlar",
+    "level": "Səviyyə",
+    "gold": "Qızıl",
+    "quests": "Tapşırıqlar",
+    "online_time": "Oyunda",
     "rating": "Reytinq"
   },
   "auth": {
@@ -27,6 +34,11 @@
     "privacy": "Məxfilik siyasətini qəbul edirəm",
     "submit_login": "Oyuna daxil ol",
     "submit_register": "Hesab yarat",
+    "forgot_password": "Şifrəni unutmusunuz?",
+    "reset_password": "Şifrəni sıfırla",
+    "new_password": "Yeni şifrə",
+    "password_reset_sent": "Şifrə sıfırlandı! Yeni şifrə ilə daxil olun.",
+    "password_reset_error": "Şifrəni sıfırlamaq mümkün olmadı",
     "no_account": "Hesabın yoxdur? Qeydiyyatdan keç",
     "has_account": "Hesabın var? Daxil ol",
     "password_hint": "Ən azı 8 simvol, böyük hərf və rəqəm",
@@ -115,7 +127,9 @@
     "region": "Region",
     "guild": "Birlik",
     "party": "Dəstə",
-    "system": "Sistem"
+    "system": "Sistem",
+    "trade": "Ticarət",
+    "war": "Müharibə"
   },
   "history": {
     "title": "Səfəvi imperiyasının tarixi",
@@ -304,6 +318,10 @@
     "news_6_t": "Reytinq və admin paneli",
     "news_6_d": "Saytda top-10 oyunçu və moderatorlar üçün onlayn monitorinq.",
     "footer_note": "Səfəvi imperiyasından ilhamlanan tarixi Action MMORPG",
+    "admin_link": "Sayt idarəsi",
+    "page_index": "Empire of Safavids — Action MMORPG | Səfəvi İmparatorluğu",
+    "page_forum": "Forum — Empire of Safavids",
+    "page_feedback": "Geribildirim — Empire of Safavids",
     "screenshots_title": "Ekran görüntüləri və oyun",
     "ss_combat": "İpək Yolunda epik döyüş",
     "ss_isfahan": "Naqsh-e Jahan meydanı, İsfehan",
