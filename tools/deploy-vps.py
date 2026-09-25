@@ -5,7 +5,13 @@ from pathlib import Path
 
 HOST = "45.32.220.58"
 USER = "root"
-PASSWORD = "REDACTED"
+# Пароль в коде не хранится — иначе он уедет в репозиторий.
+# Перед запуском задайте его в окружении:
+#   PowerShell:  $env:EOS_VPS_PASSWORD = "..."
+#   bash:        export EOS_VPS_PASSWORD="..."
+PASSWORD = os.environ.get("EOS_VPS_PASSWORD")
+if not PASSWORD:
+    sys.exit("EOS_VPS_PASSWORD не задан — пароль нельзя хранить в коде")
 REPO_ROOT = Path(r"D:\My Projects\Empire of Sefevids")
 DEPLOY_DIR = REPO_ROOT / "deploy"
 REMOTE_DIR = "/root/eos-deploy"
