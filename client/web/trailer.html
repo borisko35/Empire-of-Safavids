@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Empire of Safavids — трейлер (превью)</title>
+<!--
+  Превью трейлера. Сценарий — tools/trailer-storyboard.md, видео собирает
+  tools/build-trailer.ps1, когда появится ffmpeg.
+  Эта страница нужна, пока ffmpeg нет: здесь видно ровно то же движение и
+  те же надписи. Можно смотреть, можно записать экран.
+  Открыть: client/web/trailer.html
+-->
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #05090f; color: #EDE6D8;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px; gap: 18px;
+  }
+  h1 { font-size: 15px; font-weight: 500; color: #8a94a6; margin: 0; letter-spacing: .08em; text-transform: uppercase; }
+  .stage { position: relative; width: 100%; max-width: 1280px; aspect-ratio: 16/9; overflow: hidden; border: 1px solid rgba(201,168,76,.35); border-radius: 10px; background: #000; }
+  .slide { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; }
+  .slide.on { opacity: 1; }
+  .slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .slide.zoom img { animation: kb var(--d) linear forwards; }
+  @keyframes kb { from { transform: scale(1); } to { transform: scale(var(--z)); } }
+  .slide.pan img { animation: kp var(--d) linear forwards; }
+  @keyframes kp { from { transform: scale(1.12) translateX(0); } to { transform: scale(1.12) translateX(-3%); } }
+  .txt {
+    position: absolute; left: 0; right: 0; text-align: center; pointer-events: none;
+  }
+  .txt.title { bottom: 22%; font-size: clamp(20px, 4vw, 52px); font-weight: 600; text-shadow: 0 2px 18px rgba(0,0,0,.85); padding: 0 8%; opacity: 0; transition: opacity .5s ease; }
+  .txt.sub   { bottom: 13%; font-size: clamp(12px, 2vw, 30px); color: #F4D26C; text-shadow: 0 2px 14px rgba(0,0,0,.85); padding: 0 8%; opacity: 0; transition: opacity .5s ease; }
+  .txt.show { opacity: 1; }
+  .bar { height: 3px; background: rgba(201,168,76,.18); border-radius: 2px; overflow: hidden; width: 100%; max-width: 1280px; }
+  .bar > i { display: block; height: 100%; width: 0; background: #C9A84C; }
+  .bar > i.run { animation: prog var(--total) linear forwards; }
+  @keyframes prog { from { width: 0; } to { width: 100%; } }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button {
+    font: inherit; font-size: 14px; padding: 9px 20px; border-radius: 8px; cursor: pointer;
+    background: rgba(201,168,76,.2); color: #F4D26C; border: 1px solid rgba(201,168,76,.5);
+  }
+  button:hover { background: rgba(201,168,76,.34); }
+  button.ghost { background: transparent; color: #8a94a6; border-color: rgba(255,255,255,.16); }
+  button.on { background: rgba(201,168,76,.45); color: #fff; }
+  .hint { font-size: 12px; color: #6b7486; max-width: 720px; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<h1>Empire of Safavids — 48 секунд</h1>
+
+<div class="stage" id="stage"></div>
+<div class="bar"><i id="prog"></i></div>
+
+<div class="row">
+  <button id="play">Смотреть</button>
+  <button class="ghost" data-lang="ru">Рус</button>
+  <button class="ghost" data-lang="en">Eng</button>
+  <button class="ghost" data-lang="az">Azə</button>
+</div>
+
+<p class="hint">
+  Это превью: ровно те же кадры, наезды и надписи, что пойдут в видео.
+  Если нужно записать — включай и снимай экран. Клавиша «пробел» — пауза.
+</p>
+
+<script>
+// Сценарий: tools/trailer-storyboard.md
+const SHOTS = '/assets/screenshots/';
+const SCRIPT = {
+  ru: {
+    play: 'Смотреть',
+    scenes: [
+      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Империя Сефевидов', sub: '1501 — 1736' },
+      { img: SHOTS + 'isfahan.png',           dur: 7000, zoom: 1.14, pan: true,  title: 'Семь регионов Персии', sub: '' },
+      { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Бой. Ловкость. PvP', sub: '' },
+      { img: SHOTS + 'dungeon.png',            dur: 7000, zoom: 1.13, pan: true,  title: 'Подземелья и мировые боссы', sub: '' },
+      { img: SHOTS + 'simurgh.png',            dur: 8000, zoom: 1.16, pan: false, title: 'Пять классов. Один ты.', sub: '' },
+      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Бесплатно. В браузере.', sub: 'game.eos-gameonline.com' },
+      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+    ],
+  },
+  en: {
+    play: 'Play',
+    scenes: [
+      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Empire of Safavids', sub: '1501 — 1736' },
+      { img: SHOTS + 'isfahan.png',           dur: 7000, zoom: 1.14, pan: true,  title: 'Seven regions of Persia', sub: '' },
+      { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Fight. Skill. PvP', sub: '' },
+      { img: SHOTS + 'dungeon.png',            dur: 7000, zoom: 1.13, pan: true,  title: 'Dungeons and world bosses', sub: '' },
+      { img: SHOTS + 'simurgh.png',            dur: 8000, zoom: 1.16, pan: false, title: 'Five classes. Just you.', sub: '' },
+      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Free. In your browser.', sub: 'game.eos-gameonline.com' },
+      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+    ],
+  },
+  az: {
+    play: 'Bax',
+    scenes: [
+      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Səfəvi İmperiyası', sub: '1501 — 1736' },
+      { img: SHOTS + 'isfahan.png',           dur: 7000, zoom: 1.14, pan: true,  title: 'Persanın yeddi regionu', sub: '' },
+      { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Döyüş. Bacarıq. PvP', sub: '' },
+      { img: SHOTS + 'dungeon.png',            dur: 7000, zoom: 1.13, pan: true,  title: 'Zindanlar və dünya bossları', sub: '' },
+      { img: SHOTS + 'simurgh.png',            dur: 8000, zoom: 1.16, pan: false, title: 'Beş sinif. Tək sən.', sub: '' },
+      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Pulsuz. Brauzerdə.', sub: 'game.eos-gameonline.com' },
+      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+    ],
+  },
+};
+
+let lang = 'ru';
+let idx = -1;
+let timer = null;
+let playing = false;
+
+const stage = document.getElementById('stage');
+const prog  = document.getElementById('prog');
+const playB = document.getElementById('play');
+
+function totalMs() {
+  return SCRIPT[lang].scenes.reduce((a, s) => a + s.dur, 0);
+}
+
+function render() {
+  const sc = SCRIPT[lang];
+  stage.innerHTML = '';
+  sc.scenes.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'slide' + (s.pan ? ' pan' : ' zoom') + (i === idx ? ' on' : '');
+    d.style.setProperty('--d', s.dur + 'ms');
+    d.style.setProperty('--z', s.zoom);
+    d.innerHTML =
+      '<img src="' + s.img + '" alt="">' +
+      '<div class="txt title"></div><div class="txt sub"></div>';
+    const t = d.querySelector('.txt.title');
+    const u = d.querySelector('.txt.sub');
+    t.textContent = s.title;
+    u.textContent = s.sub;
+    // Текст появляется через 1.2 с и держится до конца кадра минус 0.6 с,
+    // чтобы не резался на следующем переходе
+    if (s.title) setTimeout(() => t.classList.add('show'), 1200);
+    if (s.sub)   setTimeout(() => u.classList.add('show'), 1600);
+    stage.appendChild(d);
+  });
+}
+
+function step() {
+  idx++;
+  const sc = SCRIPT[lang].scenes;
+  if (idx >= sc.length) { stop(); idx = 0; render(); return; }
+  render();
+  const cur = sc[idx];
+  timer = setTimeout(step, cur.dur - 600);
+}
+
+function start() {
+  if (playing) return;
+  playing = true;
+  idx = -1;
+  playB.textContent = '❚❚';
+  prog.classList.add('run');
+  prog.style.setProperty('--total', totalMs() + 'ms');
+  step();
+}
+
+function stop() {
+  playing = false;
+  clearTimeout(timer);
+  prog.classList.remove('run');
+  playB.textContent = SCRIPT[lang].play;
+}
+
+playB.addEventListener('click', () => (playing ? stop() : start()));
+
+document.querySelectorAll('[data-lang]').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('[data-lang]').forEach((x) => x.classList.remove('on'));
+    b.classList.add('on');
+    lang = b.dataset.lang;
+    document.documentElement.lang = lang;
+    playB.textContent = SCRIPT[lang].play;
+    idx = -1;
+    render();
+  });
+});
+document.querySelector('[data-lang="ru"]').classList.add('on');
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); playing ? stop() : start(); }
+});
+
+render();
+</script>
+</body>
+</html>

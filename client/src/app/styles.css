@@ -639,7 +639,12 @@ input, select { font: inherit; }
   padding: 4px 10px; border-radius: 999px;
 }
 
-.target-frame + .world-time { top: 76px; }
+/* ТУТ БЫЛО: .target-frame + .world-time — селектор СОСЕДНИХ элементов.
+   Между рамкой цели (строка 147) и часами (строка 380) двести с лишним
+   строк разметки, поэтому правило НИКОГДА не срабатывало, и часы ложились
+   ровно поверх рамки цели. Игрок видел два наложенных текста.
+   ~ работает на любом расстоянии и смотрит на реальную видимость. */
+#target-frame:not(.hidden) ~ #world-time { top: 88px; }
 .world-time.top-only { top: 12px; }
 
 /* Оверлеи */
@@ -1011,8 +1016,11 @@ input, select { font: inherit; }
   background: rgba(95, 194, 126, 0.08);
 }
 .caravan-active.caravan-arrived .caravan-eta { color: #5fc27e; }
+/* ТУТ БЫЛО bottom: 56px — метка задачи попадала ровно на панель навыков
+   (14px) и на подсказку управления (76px): обе строки слипались в кашу.
+   Теперь стоит выше всех: подсказка кончается на 97px, оттуда и отсчёт. */
 .nav-target {
-  position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 104px; left: 50%; transform: translateX(-50%);
   padding: 6px 14px; border-radius: 8px; font-size: 13px; white-space: nowrap;
   background: rgba(7, 15, 27, 0.72); color: var(--gold-light);
   border: 1px solid rgba(201, 168, 76, 0.4); pointer-events: none;
