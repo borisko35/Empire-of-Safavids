@@ -1187,13 +1187,37 @@ gameRouter.post('/pvp/find-match', secureMiddleware, requireCharacterOwnership()
   })
 );
 
+// ТУТ БЫЛА ДЫРА: winnerId приходил из тела запроса и не проверялся.
+// Теперь исход подтверждают оба игрока, а сервер сверяет, что вызывающий
+// — участник матча, иначе можно было бы накрутить рейтинг себе и снять
+// его с чужого персонажа.
 gameRouter.post('/pvp/complete', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const matchId = Number(req.body.matchId);
+    const claimedWinnerId = String(req.body.winnerId ?? '');
+    if (!Number.isFinite(matchId) || !claimedWinnerId) {
+      return res.status(400).json({ error: 'matchId and winnerId are required' });
+    }
     try {
-      const result = await pvpService.completeMatch(req.body.matchId, req.body.winnerId);
-      // Задача дня «Боец Арены». Раньше висела вечно 0/3
-      await dailyTasks.updateProgress(req.body.winnerId, 'pvp_win', 'any').catch(() => {});
+      const result = await pvpService.reportResult(matchId, req.body.characterId, claimedWinnerId);
+      // Задача дня «Боец Арены» засчитывается только реальной победе,
+      // а не тем, что игрок назвал себя победителем
+      if (result.status === 'settled' && result.winnerId) {
+        await dailyTasks.updateProgress(result.winnerId, 'pvp_win', 'any').catch(() => {});
+      }
       return res.json(result);
+    } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  })
+);
+
+// GET /api/game/pvp/matches/:id/status — закрылся матч или ждёт второго
+// Нужен клиенту, чтобы показать «ожидаем подтверждения соперника».
+gameRouter.get('/pvp/matches/:id/status', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const matchId = Number(req.params.id);
+    if (!Number.isFinite(matchId)) return res.status(400).json({ error: 'bad id' });
+    try {
+      return res.json(await pvpService.getMatchStatus(matchId));
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
 );

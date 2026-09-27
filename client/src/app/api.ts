@@ -798,9 +798,19 @@ export const api = {
 
   // ── PvP Арена ───────────────────────────────────────────
   pvpFindMatch: (characterId: string) => req<{ match: any }>('/api/game/pvp/find-match', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  // Исход боя подтверждают оба игрока, поэтому ответ может быть не
+  // «победа», а «ждём второго». Клиент обязан это учитывать.
   pvpComplete: (characterId: string, matchId: number, winnerId: string) =>
-    req<{ winnerChange: number; loserChange: number; winnerNewRating: number; loserNewRating: number }>(
-      '/api/game/pvp/complete', { method: 'POST', body: JSON.stringify({ characterId, matchId, winnerId }) }),
+    req<{
+      status: 'settled' | 'pending' | 'draw';
+      winnerId?: string; winnerChange?: number; loserChange?: number;
+      winnerNewRating?: number; loserNewRating?: number; settleAfter?: string;
+    }>('/api/game/pvp/complete', { method: 'POST', body: JSON.stringify({ characterId, matchId, winnerId }) }),
+  pvpMatchStatus: (matchId: number) =>
+    req<{
+      status: 'settled' | 'pending' | 'draw';
+      winnerId?: string; winnerChange?: number; loserChange?: number; settleAfter?: string;
+    }>(`/api/game/pvp/matches/${matchId}/status`),
   pvpRankings: (limit = 50) => req<{ rankings: any[] }>(`/api/game/pvp/rankings?limit=${limit}`),
   pvpMe: () => req<{ ranking: any }>('/api/game/pvp/me'),
   pvpHistory: () => req<{ history: any[] }>('/api/game/pvp/history'),
