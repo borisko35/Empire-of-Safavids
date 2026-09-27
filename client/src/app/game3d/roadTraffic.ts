@@ -55,6 +55,14 @@ const M = {
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.4, metalness: 0.5 }),
 };
 
+/** Одна дорога: у неё есть настоящая длина в метрах. */
+type RoadDef = (typeof ROAD_PATHS)[number];
+
+/** Длина дороги в метрах — в неё и переводится скорость шага. */
+function roadLength(road: RoadDef): number {
+  return Math.max(1, Math.hypot(road.to.x - road.from.x, road.to.z - road.from.z));
+}
+
 /** Точка на дороге: t = 0 — начало, t = 1 — конец. */
 function pointOn(path: { from: { x: number; z: number }; to: { x: number; z: number } }, t: number): { x: number; z: number; y: number; angle: number } {
   const { from, to } = path;
@@ -74,6 +82,18 @@ interface Walker {
   phase: number;
   /** Насколько отстаёт от ведущего по t, чтобы шли колонной, а не стеной. */
   lag: number;
+  /**
+   * Длина дороги В МЕТРАХ.
+   *
+   * ТУТ БЫЛО ПРОПИСАНО «/ 12» — то есть «t от 0 до 1 за 12/speed секунд».
+   * Для верблюда со скоростью 1,7 это 7 секунд на всю дорогу, а дорога от
+   * города до караван-сарая — сотни метров. Итог: караваны и путники неслись
+   * мимо со скоростью под 60 м/с, и игрок видел, как они пролетают.
+   *
+   * Теперь t раскладывается на настоящую длину дороги, и скорость в
+   * CARAVAN_SPEED / WALKER_SPEED — это ровно метры в секунду.
+   */
+  len: number;
 }
 
 /**
@@ -116,7 +136,7 @@ function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
     legs.push(pivot);
   }
 
-  return { group: g, legs, t: 0, dir: 1, speed: WALKER_SPEED, phase: 0, lag: 0 };
+  return { group: g, legs, t: 0, dir: 1, speed: WALKER_SPEED, phase: 0, lag: 0, len: 0 };
 }
 
 /** Верблюд с тюком. Ноги — четыре отдельные, чтобы шаг читался. */
@@ -171,7 +191,7 @@ function makeCamel(packColor: THREE.Material): Walker {
     }
   }
 
-  return { group: g, legs, t: 0, dir: 1, speed: CARAVAN_SPEED, phase: 0, lag: 0 };
+  return { group: g, legs, t: 0, dir: 1, speed: CARAVAN_SPEED, phase: 0, lag: 0, len: 0 };
 }
 
 /** Жёлтый восклицательный знак над тем, кто даёт задание. */
@@ -233,7 +253,8 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       w.lag = lags[i];
       // Сзади идёт замыкающий, поэтому у него знак минус: он позади
       group.add(w.group);
-      travellers.push({ ...w, road } as Walker & { road: unknown });
+      w.len = roadLength(road);
+      travellers.push(w as Walker & { road: RoadDef });
     });
   });
 
@@ -259,18 +280,19 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       clickTargets.push(w.group);
     }
     group.add(w.group);
-    travellers.push({ ...w, road } as Walker & { road: unknown });
+    w.len = roadLength(road);
+      travellers.push(w as Walker & { road: RoadDef });
   }
 
   function update(dt: number, now: number, px: number, pz: number): void {
     for (const entry of travellers) {
-      const w = entry as Walker & { road: (typeof ROAD_PATHS)[number] };
+      const w = entry as Walker & { road: RoadDef };
       const road = w.road;
       if (!road) continue;
 
       // Идём вперёд. Отставание держит колонну: у каждого своё t, но оно
       // сдвинуто на lag, поэтому задние идут ровно позади передних.
-      w.t += (w.dir * w.speed * dt) / 12; // 12 — условная длина дороги в t
+      w.t += (w.dir * w.speed * dt) / w.len;
       if (w.t > 1.05) { w.t = 1.05; w.dir = -1; }
       if (w.t < -0.05) { w.t = -0.05; w.dir = 1; }
 

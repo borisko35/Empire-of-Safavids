@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Погода 3D — Empire of Safavids
 // ============================================================
 // Дождь (полосы + капли), молния с громом, ветер (слышен везде,
@@ -18,6 +18,20 @@ const WIND_COUNT = 380;
 const WIND_R = 30;
 const SAND_COUNT = 650;
 const SAND_R = 30;
+/**
+ * Ближняя граница песка.
+ *
+ * ТУТ БЫЛО 4, И ЭТО БЫЛО БЕЛОЕ ПЯТНО ПЕРЕД ПЕРСОНАЖЕМ. Точка
+ * THREE.PointsMaterial рисуется размером В МИРОВЫХ ЕДИНИЦАХ: песчинка
+ * диаметром 0,24 в четырёх метрах от камеры занимает на экране около сотни
+ * пикселей. Плюс у слоя frustumCulled = false и depthWrite: false, то есть
+ * эти круги рисуются поверх всего, включая персонажа. На снимке в песчаной
+ * буре вся сцена была забита мягкими оранжевыми пятнами.
+ *
+ * Теперь песчинка появляется не ближе 16 метров: при размере 0,24 это
+ * около 18 пикселей — читается как пылинка, а не как пятно на объективе.
+ */
+const SAND_NEAR_R = 16;
 const SNOW_COUNT = 900;
 const SNOW_R = 26;
 const SNOW_H = 22;
@@ -156,7 +170,7 @@ export function createWeather(scene: THREE.Scene, audio: typeof audioType): Weat
   const sandSpd = new Float32Array(SAND_COUNT);
   for (let i = 0; i < SAND_COUNT; i++) {
     sandAng[i] = Math.random() * Math.PI * 2;
-    sandRad[i] = 4 + Math.random() * (SAND_R - 4);
+    sandRad[i] = SAND_NEAR_R + Math.random() * (SAND_R - SAND_NEAR_R);
     sandH[i] = Math.random() * 12;
     sandSpd[i] = 1.2 + Math.random() * 2.2;
   }
@@ -464,7 +478,10 @@ export function createWeather(scene: THREE.Scene, audio: typeof audioType): Weat
         for (let i = 0; i < SAND_COUNT; i++) {
           sandAng[i] += sandSpd[i] * d;
           sandRad[i] -= d * 1.5;
-          if (sandRad[i] < 3) sandRad[i] = SAND_R;
+          // Порог пересоздания держим на SAND_NEAR_R, а не на трёх метрах:
+          // иначе песчинка успевает подойти вплотную к камере и на мгновение
+          // закрыть весь экран кругом во весь кадр.
+          if (sandRad[i] < SAND_NEAR_R) sandRad[i] = SAND_R;
           sandH[i] += Math.sin(performance.now() / 700 + i) * d * 1.5;
           if (sandH[i] < 0) sandH[i] = 0;
           if (sandH[i] > 13) sandH[i] = 13;

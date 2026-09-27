@@ -103,15 +103,20 @@ export function createSky(scene: THREE.Scene): SkyHandle {
   glowCanvas.width = glowCanvas.height = 128;
   const gctx = glowCanvas.getContext('2d')!;
   const grad = gctx.createRadialGradient(64, 64, 4, 64, 64, 64);
-  grad.addColorStop(0, 'rgba(255,236,170,0.85)');
-  grad.addColorStop(0.35, 'rgba(255,214,120,0.30)');
+  grad.addColorStop(0, 'rgba(255,236,170,0.55)');
+  grad.addColorStop(0.35, 'rgba(255,214,120,0.20)');
   grad.addColorStop(1, 'rgba(255,200,100,0)');
   gctx.fillStyle = grad;
   gctx.fillRect(0, 0, 128, 128);
   const glowTex = new THREE.CanvasTexture(glowCanvas);
   glowTex.colorSpace = THREE.SRGBColorSpace;
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, fog: false }));
-  sunGlow.scale.set(340, 340, 1);
+  // ТУТ БЫЛО 340 ПРИ ЯРКОСТИ 0,85. Ореол на 1000 метрах — это около 600
+  // пикселей во всю ширину, и на закате он накрывал полсцены: персонаж
+  // стоял спиной к солнцу и тонул в белом пятне, которого не было видно.
+  // Солнечный диск уменьшен, ореол стал заметно скромнее — засветки больше
+  // нет, а закат всё ещё светится.
+  sunGlow.scale.set(190, 190, 1);
   const sunGroup = new THREE.Group();
   sunGroup.add(sun, sunGlow);
   scene.add(sunGroup);

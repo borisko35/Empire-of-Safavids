@@ -692,8 +692,21 @@ export function updateMinimap(
     const sy = (me.z - terrainOrigin.z) * ls - sw / 2;
     ctx.drawImage(terrainLayer, sx, sy, sw, sw, 0, 0, size, size);
   } else {
-    ctx.fillStyle = '#0a1628';
+    // ТУТ БЫЛА ПРОСТЬ ЗАЛИВКА ТЁМНО-СИНИМ. Это запасной путь на случай, когда
+    // слой рельефа не построился, и он выглядел как «миникарта сломалась»:
+    // пустая тёмная сетка с точкой игрока и больше ничем. На снимке игрок
+    // снял именно это и решил, что карта не работает.
+    //
+    // Теперь вместо пустоты рисуется тон сетки и подпись: видно, что это
+    // запасной вариант, а не молча сломанная карта.
+    ctx.fillStyle = '#12233d';
     ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = 'rgba(201,168,76,0.18)';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= size; g += size / 6) {
+      ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, size); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(size, g); ctx.stroke();
+    }
   }
 
   // Сетка

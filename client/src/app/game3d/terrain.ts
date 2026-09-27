@@ -947,6 +947,17 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   // иначе весь город (стены/ворота) висит над землёй
   const baseY = meshHeight(CITY.x, CITY.z);
   city.position.set(CITY.x, baseY, CITY.z);
+
+  /**
+   * Высота земли в локальных координатах группы города.
+   *
+   * Группа стоит на высоте ЦЕНТРА, а стены и башни — на радиусе 116, где
+   * земля уже на другой высоте. Из-за этого всё, что стояло на жёстко
+   * зашитой высоте, висело в воздухе: на снимке под башней было видно землю,
+   * а по стене шла щель с тенью на песке.
+   */
+  const localY = (worldX: number, worldZ: number): number =>
+    meshHeight(worldX, worldZ) - baseY;
   const landscapeCount = COLLIDERS.length;
   // Копируем коллайдеры ландшафта (деревья/камни), сохранённые до обнуления
   const landscapeCopy: typeof COLLIDERS = [];
@@ -995,16 +1006,18 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       // Привратные башни — СНАРУЖИ стены, по бокам прохода: иначе сливаются с торцами
       const tx = gx + dirX * side * 9 + Math.cos(gateAngle) * 3;
       const tz = gz + dirZ * side * 9 + Math.sin(gateAngle) * 3;
-      // Корпус обзорной башни
+      // Корпус обзорной башни. ТУТ БЫЛО ЗАШИТО 7.5: башня стоит у ворот, а
+      // земля там ниже центра города, и башня висела в воздухе.
+      const base = localY(tx, tz);
       const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 10), MAT.sandstoneDark);
-      tower.position.set(tx, 7.5, tz);
+      tower.position.set(tx, base + 7.5, tz);
       tower.castShadow = true;
       // Площадка с перилами и зубцами по кругу
       const deck = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.0, 0.7, 10), MAT.sandstone);
-      deck.position.set(tx, 15.2, tz);
+      deck.position.set(tx, base + 15.2, tz);
       deck.castShadow = true;
       const railing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.14, 6, 12), MAT.wood);
-      railing.position.set(tx, 16.1, tz);
+      railing.position.set(tx, base + 16.1, tz);
       railing.rotation.x = Math.PI / 2;
       city.add(deck, railing);
       // Стойки перил: без них кольцо висело в воздухе
@@ -1126,11 +1139,31 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   });
   const thetaStart = Math.PI / 2 - gateAngle + OPEN; // стандартный угол φ = π/2 − θ (mod 2π)
   const thetaLength = Math.PI * 2 - OPEN * 2;
+  // ТУТ БЫЛО ЗАШИТО: высота стены 6, position.y = 3. То есть стена всегда
+  // стояла на отметке 0 в локальных координатах города — а земля под стеной
+  // на отметке 0 не лежит: группа города стоит на высоте ЦЕНТРА, а стена идёт
+  // по радиусу 116, где рельеф другой. На половине окружности стена уходила
+  // в землю, на половине висела над ней с тенью на песке.
+  //
+  // Стена — одна длинная дуга, поэтому усреднять или брать высоту в одной
+  // точке нельзя: в любом месте окружности должно быть видно, что она стоит
+  // на земле. Берём САМУЮ НИЗКУЮ точку под всей стеной и от неё считаем
+  // вверх, а низ уводим в грунт — тогда зазора не будет нигде.
+  let groundMin = Infinity;
+  for (let k = 0; k < 32; k++) {
+    const a = (k / 32) * Math.PI * 2;
+    groundMin = Math.min(groundMin, localY(CITY.x + Math.cos(a) * CITY.radius, CITY.z + Math.sin(a) * CITY.radius));
+  }
+  const WALL_TOP = 6;      // насколько стена поднимается над самой низкой землёй
+  const WALL_SUNK = 1.5;   // насколько уходит в грунт, чтобы не было щели
+  const wallHeight = WALL_TOP + WALL_SUNK;
+  const wallY = groundMin - WALL_SUNK + wallHeight / 2;
+
   const wall = new THREE.Mesh(
-    new THREE.CylinderGeometry(CITY.radius, CITY.radius, 6, 192, 1, true, thetaStart, thetaLength),
+    new THREE.CylinderGeometry(CITY.radius, CITY.radius, wallHeight, 192, 1, true, thetaStart, thetaLength),
     wallMat,
   );
-  wall.position.y = 3;
+  wall.position.y = wallY;
   wall.castShadow = true; wall.receiveShadow = true;
   city.add(wall);
   // Зубцы по гребню стены
@@ -1146,7 +1179,9 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const stepA = (Math.PI * 2 - OPEN * 2) / merlonCount;
     for (let m = 0; m < merlonCount; m++) {
       const phi = gateAngle + OPEN + stepA * (m + 0.5);
-      mv.set(Math.cos(phi) * CITY.radius, 6.35, Math.sin(phi) * CITY.radius);
+      // Зубцы должны сидеть на гребне стены, а не на зашитой высоте — иначе
+      // после переноса стены вниз они остались бы висеть над ней отдельно.
+      mv.set(Math.cos(phi) * CITY.radius, wallY + wallHeight / 2 + 0.35, Math.sin(phi) * CITY.radius);
       mq.setFromEuler(new THREE.Euler(0, -phi, 0));
       mm.compose(mv, mq, ms);
       merlons.setMatrixAt(m, mm);
