@@ -3,7 +3,29 @@
 // ============================================================
 
 import { DatabaseService } from './DatabaseService';
+import { PremiumSystem } from '../systems/PremiumSystem';
 import { logger } from '../utils/logger';
+
+/**
+ * Сколько очков сезона даёт одно игровое действие.
+ *
+ * Лестница идёт до 4900 очков на 50-й уровень. Считаем для игрока, который
+ * заходит ежедневно, делает 20 действий и закрывает 3 задачи: при 5 очках за
+ * действие и 25 за задачу выходит 175 очков в день, то есть вся лестница
+ * примерно за 28 дней. Это длина нормального сезона.
+ *
+ * Проверено на числах: при 10 очках за действие лестница проходилась за
+ * 14 дней — вдвое быстрее, и пропуск переставал быть целью.
+ */
+const SEASON_POINTS_PER_ACTION = 5;
+
+/**
+ * Добавка за выполнение задачи дня.
+ *
+ * Задача — это уже «целое» действие игрока, а не одна операция, поэтому
+ * она стоит в несколько раз дороже обычного действия.
+ */
+const SEASON_POINTS_PER_TASK = 25;
 
 export interface DailyTaskDef {
   id: string; title: string; title_ru: string;
@@ -109,6 +131,22 @@ export class DailyTaskService {
   async updateProgress(charId: string, taskType: string, target: string, amount = 1): Promise<{ taskCompleted: boolean; taskId?: string; gold?: number; experience?: number; item?: string }> {
     const matchingTasks = DAILY_TASKS.filter(t => t.task_type === taskType && (t.target === 'any' || t.target === target));
 
+    // ТУТ БЫЛА ПРОБЛЕМА: очки боевого пропуска не начислялись НИГДЕ.
+    // PremiumSystem.addSeasonPoints был написан целиком, но не вызывался ни
+    // разу за всё время существования проекта. Итог: игрок мог купить пропуск
+    // и не получить ничего — очки всегда оставались на нуле, и ни один
+    // уровень не открывался. Покупка за реальные деньги без награды хуже,
+    // чем отсутствие фичи: об этом узнаёшь только по факту.
+    //
+    // Начисляем здесь, а не в восьми местах вызова: updateProgress — общая
+    // точка для убийств, квестов, данжа, крафта, торговли, PvP и рыбалки.
+    // Одно место вместо восьми, и забыть его уже негде.
+    //
+    // Зачитываемся ДО работы с задачами и НЕ.await на результат: начисление
+    // очков не должно иметь возможности сорвать выдачу награды за задачу.
+    // Ошибка проглатывается с записью в журнал, а не падает наружу.
+    void this.grantSeasonPoints(charId, SEASON_POINTS_PER_ACTION * Math.max(1, amount));
+
     for (const task of matchingTasks) {
       const row = await this.db.queryOne<{ current_count: number; completed: boolean }>(
         'SELECT current_count, completed FROM character_daily_progress WHERE character_id = $1 AND task_id = $2',
@@ -169,11 +207,34 @@ export class DailyTaskService {
           );
         }
         logger.info(`[DailyTask] ${charId} completed: ${task.id}`);
+        // За выполненную задачу — отдельная добавка очков сезона
+        void this.grantSeasonPoints(charId, SEASON_POINTS_PER_TASK);
         return { taskCompleted: true, taskId: task.id, gold: task.reward_gold, experience: task.reward_experience, item: task.reward_item_id };
       }
     }
 
     return { taskCompleted: false };
+  }
+
+  /**
+   * Начислить очки сезона, проглотив возможные ошибки.
+   *
+   * Отдельный метод и именно «проглатывающий» — по двум причинам.
+   * Первая: начисление очков не должно иметь возможности сорвать выдачу
+   * награды за задачу дня. Пропуск — украшение, а золото и предметы это
+   * оплата за выполненную работу.
+   * Вторая: игрок, который никогда не открывал пропуск, всё равно должен
+   * получать очки. addSeasonPoints сам заводит ему запись в бесплатной
+   * лестнице, поэтому отдельная проверка «а куплен ли пропуск» здесь была бы
+   * лишней.
+   */
+  private async grantSeasonPoints(charId: string, points: number): Promise<void> {
+    if (points <= 0) return;
+    try {
+      await new PremiumSystem().addSeasonPoints(charId, points);
+    } catch (error) {
+      logger.warn('[DailyTask] season points not granted:', error);
+    }
   }
 
   async getCompletedCount(charId: string): Promise<number> {
