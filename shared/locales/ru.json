@@ -775,5 +775,23 @@
     "scenes": "сцен",
     "scenes_in_chapter": "Сцены главы",
     "unlocks_at": "Открывается с"
+  },
+  "worldclock": {
+    "morning": "утро",
+    "noon": "полдень",
+    "afternoon": "день",
+    "evening": "вечер",
+    "dusk": "закат",
+    "night": "ночь",
+    "midnight": "полночь",
+    "dawn": "рассвет",
+    "clear": "ясно",
+    "cloudy": "облачно",
+    "rain": "дождь",
+    "storm": "гроза",
+    "fog": "туман",
+    "sandstorm": "песчаная буря",
+    "snow": "снег",
+    "wind": "ветер"
   }
 }

@@ -3,6 +3,7 @@
 // ============================================================
 
 import { DatabaseService } from './DatabaseService';
+import { RedisService } from './RedisService';
 import { logger } from '../utils/logger';
 
 export interface Guild {
@@ -18,6 +19,7 @@ export interface GuildMember {
 
 export class GuildService {
   private db = DatabaseService.getInstance();
+  private redis = RedisService.getInstance();
 
   async createGuild(name: string, tag: string, leaderId: string, desc: string): Promise<Guild> {
     // Проверяем, не состоит ли уже в гильдии
@@ -60,7 +62,7 @@ export class GuildService {
   }
 
   async getMembers(guildId: string): Promise<GuildMember[]> {
-    return this.db.query<GuildMember>(
+    const members = await this.db.query<GuildMember>(
       `SELECT gm.character_id, c.name as character_name, gm.rank,
               gm.contribution_points, gm.joined_at, c.level, FALSE as online
        FROM guild_members gm
@@ -71,6 +73,23 @@ export class GuildService {
          c.level DESC`,
       [guildId]
     );
+
+    // ТУТ БЫЛО ЛОЖНОЕ «НИКТО НЕ В СЕТИ». В SQL жёстко стояло FALSE as online,
+    // и поле возвращалось с ответом, не глядя в Redis. Итог: список участников
+    // показывал ВСЕХ офлайн, даже тех, кто прямо сейчас играет в этой же
+    // гильдии. Для гильдии это не мелочь: «кто сейчас на связи» — первое,
+    // что ищут в составе, и ради этого в MMO и вступают.
+    // Тот же вызов уже использует FriendsService для друзей — логика одна.
+    if (members.length > 0) {
+      const onlineMap = await this.redis
+        .arePlayersOnline(members.map(m => m.character_id))
+        .catch(() => new Map<string, boolean>());
+      for (const member of members) {
+        member.online = onlineMap.get(member.character_id) ?? false;
+      }
+    }
+
+    return members;
   }
 
   async addMember(guildId: string, charId: string): Promise<void> {

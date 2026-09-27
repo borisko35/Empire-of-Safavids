@@ -775,5 +775,23 @@
     "scenes": "scenes",
     "scenes_in_chapter": "Chapter scenes",
     "unlocks_at": "Unlocks at"
+  },
+  "worldclock": {
+    "morning": "Morning",
+    "noon": "Noon",
+    "afternoon": "Afternoon",
+    "evening": "Evening",
+    "dusk": "Dusk",
+    "night": "Night",
+    "midnight": "Midnight",
+    "dawn": "Dawn",
+    "clear": "Clear",
+    "cloudy": "Cloudy",
+    "rain": "Rain",
+    "storm": "Storm",
+    "fog": "Fog",
+    "sandstorm": "Sandstorm",
+    "snow": "Snow",
+    "wind": "Wind"
   }
 }

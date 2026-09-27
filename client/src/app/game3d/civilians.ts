@@ -84,6 +84,16 @@ const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b
 const PUSH_SPEED_K = 2;
 
 /**
+ * Сколько реплик горожан видно одновременно.
+ *
+ * Пузыри — спрайты с depthTest: false, то есть перекрывают друг друга в
+ * порядке появления. Показывать их все нельзя: в толпе на экране оказывается
+ * сразу полтора десятка прямоугольников, и реплики прочитать невозможно.
+ * Три — столько, что толпа выглядит живой, но текст ещё читается.
+ */
+const MAX_VISIBLE_BUBBLES = 3;
+
+/**
  * Дальность, за которой горожанин переносится к игроку.
  *
  * Раньше это число просто стояло в коде как 200, а комментарий рядом
@@ -529,16 +539,25 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
             if (d > 11) continue;
             claimed.add(a); claimed.add(b);
             const dur = 3500 + Math.random() * 3000;
+            // Оба собеседника разговаривают, но пузырь рисует только ОДИН.
+            //
+            // ТУТ БЫЛО ДВА ПУЗЫРЯ НА КАЖДУЮ ПАРУ. В толпе это давало
+            // десятки прямоугольников, и главное — все они спрайты с
+            // depthTest: false, то есть рисуются в порядке появления и
+            // ПЕРЕКРЫВАЮТ ДРУГ ДРУГА. На снимке один пузырь наезжал на
+            // другой, и от реплики оставался только обрывок («...цаху!»
+            // вместо «Слава шаху!»). Второй пузырь в паре ничего не добавлял:
+            // реплику одного человека в двух местах прочитать невозможно.
             for (const [me, you] of [[a, b], [b, a]] as const) {
               me.state = 'talk';
               me.talkWith = you;
               me.stateUntil = now + dur;
-              me.bubble.visible = true;
-              (me.bubble as THREE.Sprite & { setText?: (t: string) => void }).setText?.(
-                PHRASES[Math.floor(Math.random() * PHRASES.length)],
-              );
-              me.bubbleUntil = now + dur;
             }
+            const speaker = Math.random() < 0.5 ? a : b;
+            speaker.bubbleUntil = now + dur;
+            (speaker.bubble as THREE.Sprite & { setText?: (t: string) => void }).setText?.(
+              PHRASES[Math.floor(Math.random() * PHRASES.length)],
+            );
             break;
           }
         }
@@ -659,7 +678,27 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       c.group.position.x = safe.x;
       c.group.position.z = safe.z;
 
-      if (c.bubble.visible && now >= c.bubbleUntil) c.bubble.visible = false;
+      if (c.bubbleUntil === 0) c.bubble.visible = false;
+    }
+
+    // ПУЗЫРИ: держим их немного и разносим по высоте.
+    //
+    // Показываем реплику у ограниченного числа самых близких горожан, а
+    // остальных гасим. В толпе иначе на экране было бы сразу полтора
+    // десятка прямоугольников — читать нечего, и выглядит как поломка.
+    // Высота ступенчатая, чтобы соседние пузыри не ложились друг на друга.
+    const px = playerX ?? 0;
+    const pz = playerZ ?? 0;
+    const dist2 = (c: Civilian): number => {
+      const dx = c.group.position.x - px;
+      const dz = c.group.position.z - pz;
+      return dx * dx + dz * dz;
+    };
+    const talking = civs.filter(c => c.bubbleUntil > now).sort((a, b) => dist2(a) - dist2(b));
+    for (let i = 0; i < talking.length; i++) {
+      const c = talking[i];
+      c.bubble.visible = i < MAX_VISIBLE_BUBBLES;
+      c.bubble.position.y = 2.45 + (i % 3) * 0.42;
     }
 
     // Расталкивание парное и ПОСЛЕ обновления всех позиций. В resolveStatic

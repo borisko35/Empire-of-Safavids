@@ -961,19 +961,24 @@ export function drawWorldMap(
 }
 
 // ── Мировое время ────────────────────────────────────────────
-const TIME_OF_DAY_RU: Record<string, string> = {
-  morning: 'утро', noon: 'полдень', afternoon: 'день', evening: 'вечер',
-  dusk: 'закат', night: 'ночь', midnight: 'полночь', dawn: 'рассвет',
-};
-const WEATHER_RU: Record<string, string> = {
-  clear: 'ясно', cloudy: 'облачно', rain: 'дождь', storm: 'гроза',
-  fog: 'туман', sandstorm: 'песчаная буря', snow: 'снег', wind: 'ветер',
-};
+// ТУТ БЫЛО ЗАШИТО ПО-РУССКИ. Время суток и погода были словарём с русскими
+// словами прямо в коде: 'утро', 'облачно' и так далее. Итог — игрок, выбравший
+// английский или азербайджанский язык, видел в углу экрана «ночь · облачно».
+// Это видно сразу и сразу бьёт по впечатлению: на сайте написано «три языка»,
+// а половина интерфейса остаётся русской. Переводы лежат в worldclock.
+const WORLD_CLOCK = new Set([
+  'morning', 'noon', 'afternoon', 'evening', 'dusk', 'night', 'midnight', 'dawn',
+  'clear', 'cloudy', 'rain', 'storm', 'fog', 'sandstorm', 'snow', 'wind',
+]);
 
 export function setWorldTime(payload: Record<string, unknown>): void {
   const el = $('world-time');
-  const tod = TIME_OF_DAY_RU[String(payload.timeOfDay ?? payload.time ?? '')] ?? '';
-  const weather = WEATHER_RU[String(payload.weather ?? '')] ?? '';
+  const rawTod = String(payload.timeOfDay ?? payload.time ?? '');
+  const rawWeather = String(payload.weather ?? '');
+  // Неизвестный код пропускаем молча, иначе игрок увидит на экране
+  // «worldclock.morning» — t() отдаёт путь, если ключа нет.
+  const tod = WORLD_CLOCK.has(rawTod) ? t(`worldclock.${rawTod}`) : '';
+  const weather = WORLD_CLOCK.has(rawWeather) ? t(`worldclock.${rawWeather}`) : '';
   const parts = [tod, weather].filter(Boolean);
   el.textContent = parts.join(' · ');
   el.classList.toggle('top-only', $('target-frame').classList.contains('hidden'));

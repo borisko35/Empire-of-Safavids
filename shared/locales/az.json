@@ -775,5 +775,23 @@
     "scenes": "səhnə",
     "scenes_in_chapter": "Faslin səhnələri",
     "unlocks_at": "Açılır"
+  },
+  "worldclock": {
+    "morning": "Səhər",
+    "noon": "Günorta",
+    "afternoon": "Gün axşamı",
+    "evening": "Axşam",
+    "dusk": "Gün batımı",
+    "night": "Gecə",
+    "midnight": "Yarıgecə",
+    "dawn": "Dan sökümü",
+    "clear": "Aydın",
+    "cloudy": "Bulclu",
+    "rain": "Yağış",
+    "storm": "Qursun",
+    "fog": "Duman",
+    "sandstorm": "Qum fırtınası",
+    "snow": "Qar",
+    "wind": "Külək"
   }
 }
