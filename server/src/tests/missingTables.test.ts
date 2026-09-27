@@ -109,16 +109,38 @@ describe('Колонка вклада в гильдии названа так, �
   it('есть миграция, которая это чинит', () => {
     // Правкой 015 не помочь: применённые миграции записываются в
     // schema_migrations по имени файла и второй раз не выполняются
-    expect(fix).toMatch(/RENAME COLUMN/);
     expect(fix).toMatch(/contribution_points/);
+    expect(fix).toMatch(/ALTER TABLE guild_members/);
+  });
+
+  it('старое имя колонки в SQL не упоминается', () => {
+    // ГЛАВНОЕ ПРАВИЛО, ПРОИЗОШЕДШЕЕ ИЗ ПРОВАЛА. Первая версия миграции
+    // сравнивала старую колонку с её именем из 015 — и падала: имя с
+    // нелатинскими символами не совпало при переносе файла, проверка решила,
+    // что переименовывать нечего, а следующая строка уже требовала
+    // contribution_points. Миграция встала и повалила сервер.
+    // Нелатинское имя не упоминаем вообще — иначе исказится снова
+    expect(/[\u4e00-\u9fff]/.test(fix)).toBe(false);
+  });
+
+  it('старая колонка ищется по остаткам, а не по имени', () => {
+    // В guild_members ровно пять колонок: guild_id, character_id, rank,
+    // вклад и joined_at. Значит любая сверх пяти известных — это вклад
+    expect(fix).toMatch(/odd_column/);
+    expect(fix).toMatch(/NOT IN \('guild_id', 'character_id', 'rank', 'joined_at'\)/);
+    expect(fix).toMatch(/RENAME COLUMN %I TO contribution_points/);
+  });
+
+  it('если колонку не нашли — она создаётся, а не теряется', () => {
+    // Иначе миграция прошла бы «успешно», оставив код без колонки, и
+    // падение уехало бы в первое же обращение игрока к гильдии
+    expect(fix).toMatch(/ADD COLUMN contribution_points INTEGER NOT NULL DEFAULT 0/);
   });
 
   it('переименование идемпотентно', () => {
-    // Повторный запуск не должен падать. Проверяем наличие обеих колонок
-    // ДО переименования, а не только сам RENAME
-    expect(fix).toMatch(/has_old/);
-    expect(fix).toMatch(/has_new/);
-    expect(fix).toMatch(/IF has_old AND NOT has_new/);
+    // Повторный запуск не должен падать: если нужная колонка уже есть,
+    // блок выходит сразу
+    expect(fix).toMatch(/contribution_points[\s\S]*?\) THEN\s*\n\s*RETURN;/);
   });
 
   it('NULL приводится к нулю', () => {
