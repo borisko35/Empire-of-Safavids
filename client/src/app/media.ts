@@ -144,71 +144,29 @@ export async function loadMediaPanel(): Promise<void> {
   await renderList(box);
 }
 
-/** По очереди: один большой ролик не должен блокировать остальные */
-async function runUpload(files: File[], box: HTMLElement): Promise<void> {
-  const listBox = box.querySelector('#media-items');
-  for (const file of files) {
-    // Предварительная проверка, чтобы не гонять заведомо лишнее
-    if (!OK_EXT.test(file.name)) {
-      toast(`${file.name}: ${t('media.bad_format')}`, 'error');
-      continue;
-    }
-    const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(file.name);
-    const limit = isVideo ? MAX_VIDEO : MAX_IMAGE;
-    if (file.size > limit) {
-      toast(`${file.name}: ${t('media.too_big')} ${humanSize(limit)}`, 'error');
-      continue;
-    }
-
-    const item = document.createElement('div');
-    item.className = 'media-item';
-    const name = document.createElement('div');
-    name.className = 'media-item-name';
-    name.textContent = file.name;
-    const bar = document.createElement('div');
-    bar.className = 'media-bar';
-    const fill = document.createElement('i');
-    bar.append(fill);
-    const status = document.createElement('div');
-    status.className = 'media-status';
-    const cancel = document.createElement('button');
-    cancel.className = 'media-cancel';
-    cancel.type = 'button';
-    cancel.textContent = t('media.cancel');
-    item.append(name, bar, status, cancel);
-    listBox?.prepend(item);
-
-    let cancelFn: () => void = () => {};
-    cancel.addEventListener('click', () => cancelFn());
-
-    try {
-      await uploadFile(
-        file,
-        (sent, total) => {
-          fill.style.width = `${Math.round((sent / total) * 100)}%`;
-          status.textContent = `${Math.round((sent / total) * 100)}% · ${humanSize(sent)} / ${humanSize(total)}`;
-        },
-        (fn) => { cancelFn = fn; },
-      );
-      item.classList.add('media-item--done');
-      status.textContent = t('media.uploaded');
-      cancel.remove();
-      await renderList(box);
-    } catch (err) {
-      item.classList.add('media-item--error');
-      status.textContent = (err as Error).message;
-      cancel.remove();
-    }
-  }
-}
-
-/** Список уже загруженного: превью, ссылка, копирование, удаление */
+/**
+ * Отрисовать список загруженного внутрь панели.
+ *
+ * ТУТ БЫЛА ПОЛОМКА, ИЗ-ЗА КОТОРОЙ ПАНЕЛЬ БЫЛА ПУСТОЙ. Список вставлялся
+ * через replaceWith на сам контейнер #media-list, если вложенного списка ещё
+ * нет: replaceWith ЗАМЕНЯЕТ элемент, а не дополняет его. Контейнер с зоной
+ * загрузки исчезал, при следующем открытии getElementById('media-list')
+ * возвращал null, функция выходила сразу — и панель оставалась пустой
+ * навсегда, при живом сервере и рабочих правах.
+ *
+ * Теперь контейнер #media-list не трогаем: список создаём внутри один раз,
+ * а при повторном вызове переиспользуем.
+ */
 async function renderList(box: HTMLElement): Promise<void> {
-  const listBox = $('media-items') ?? box;
-  const holder = document.createElement('div');
-  holder.id = 'media-items';
-  holder.className = 'media-items';
-  listBox.replaceWith(holder);
+  // Уже есть вложенный список (повторное открытие) — переиспользуем его
+  let holder = box.querySelector<HTMLElement>('#media-items');
+  if (!holder) {
+    holder = document.createElement('div');
+    holder.id = 'media-items';
+    holder.className = 'media-items';
+    box.append(holder);
+  }
+  holder.innerHTML = '';
 
   const res = await fetch(apiUrl('/api/admin/media'), {
     headers: { Authorization: `Bearer ${token()}` },
@@ -231,12 +189,17 @@ async function renderList(box: HTMLElement): Promise<void> {
     holder.append(empty);
     return;
   }
+  holder.append(...buildRows(data.files, box));
+}
 
-  for (const f of data.files) {
+/** Собрать строки списка. Вынесено, чтобы renderList не разрастался */
+function buildRows(files: MediaFile[], box: HTMLElement): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  for (const f of files) {
     const row = document.createElement('div');
     row.className = 'media-row';
 
-    // Превью: картинка или первый кадр ролика
+    // Превью: картинка целиком, ролик — с кадром и проигрыванием при наведении
     const thumb = document.createElement('div');
     thumb.className = 'media-thumb';
     if (f.kind === 'image') {
@@ -312,6 +275,64 @@ async function renderList(box: HTMLElement): Promise<void> {
 
     info.append(name, meta, link, actions);
     row.append(thumb, info);
-    holder.append(row);
+    out.push(row);
+  }
+  return out;
+}
+/** По очереди: один большой ролик не должен блокировать остальные */
+async function runUpload(files: File[], box: HTMLElement): Promise<void> {
+  const listBox = box.querySelector('#media-items');
+  for (const file of files) {
+    // Предварительная проверка, чтобы не гонять заведомо лишнее
+    if (!OK_EXT.test(file.name)) {
+      toast(`${file.name}: ${t('media.bad_format')}`, 'error');
+      continue;
+    }
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov)$/i.test(file.name);
+    const limit = isVideo ? MAX_VIDEO : MAX_IMAGE;
+    if (file.size > limit) {
+      toast(`${file.name}: ${t('media.too_big')} ${humanSize(limit)}`, 'error');
+      continue;
+    }
+
+    const item = document.createElement('div');
+    item.className = 'media-item';
+    const name = document.createElement('div');
+    name.className = 'media-item-name';
+    name.textContent = file.name;
+    const bar = document.createElement('div');
+    bar.className = 'media-bar';
+    const fill = document.createElement('i');
+    bar.append(fill);
+    const status = document.createElement('div');
+    status.className = 'media-status';
+    const cancel = document.createElement('button');
+    cancel.className = 'media-cancel';
+    cancel.type = 'button';
+    cancel.textContent = t('media.cancel');
+    item.append(name, bar, status, cancel);
+    listBox?.prepend(item);
+
+    let cancelFn: () => void = () => {};
+    cancel.addEventListener('click', () => cancelFn());
+
+    try {
+      await uploadFile(
+        file,
+        (sent, total) => {
+          fill.style.width = `${Math.round((sent / total) * 100)}%`;
+          status.textContent = `${Math.round((sent / total) * 100)}% · ${humanSize(sent)} / ${humanSize(total)}`;
+        },
+        (fn) => { cancelFn = fn; },
+      );
+      item.classList.add('media-item--done');
+      status.textContent = t('media.uploaded');
+      cancel.remove();
+      await renderList(box);
+    } catch (err) {
+      item.classList.add('media-item--error');
+      status.textContent = (err as Error).message;
+      cancel.remove();
+    }
   }
 }

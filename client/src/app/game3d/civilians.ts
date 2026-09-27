@@ -33,6 +33,19 @@ interface Civilian {
   /** Позиция в начале кадра — по ней ограничиваем суммарный сдвиг (pushLimit) */
   frameStartX: number | undefined;
   frameStartZ: number | undefined;
+  /**
+   * Кадр, до которого горожанин невидим.
+   *
+   * Нужно для переноса к игроку: перенос на 200+ м БЫЛ ВИДЕН. Комментарий
+   * в коде объяснял это «за пределами видимости», но камера у нас видит до
+   * 1600 м, а туман прячет на 240-850 м (зависит от качества и погоды) — то
+   * есть на 200 м человек ещё отчётливо виден. Игрок видел, как фигурка
+   * исчезает с холма и появляется у него под боком.
+   *
+   * Теперь перенос происходит при group.visible = false, и горожанин
+   * проявляется за полсекунды уже на новом месте.
+   */
+  hiddenUntil: number;
 }
 
 export interface CiviliansHandle {
@@ -69,6 +82,17 @@ const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b
  * когда горожанина расталкивают или выталкивают из стены.
  */
 const PUSH_SPEED_K = 2;
+
+/**
+ * Дальность, за которой горожанин переносится к игроку.
+ *
+ * Раньше это число просто стояло в коде как 200, а комментарий рядом
+ * объяснял его «за пределами видимости, дальность прорисовки ~150 м».
+ * Проверил по коду: camera.far = 1600, а туман прячет на 240-850 м. То есть
+ * 200 м — это как раз видимая зона, и перенос было видно своими глазами.
+ * Теперь число вынесено сюда, а сам перенос невидим.
+ */
+const LEASH = 200;
 
 /** Предельный сдвиг за этот кадр для данного горожанина, в метрах */
 function pushLimit(c: Civilian, dt: number): number {
@@ -271,16 +295,37 @@ function resolveStatic(x: number, z: number, r: number, self: Civilian, dt: numb
   return { x: out.x, z: out.z };
 }
 
-function freeSpot(cx: number, cz: number): { x: number; z: number } {
+/**
+ * Свободное место для прогулки.
+ *
+ * ТУТ БЫЛА ПРИЧИНА, ПОЧЕМУ ГУРЬЯНЕ РАЗБРЕКЛИСЬ ПО ВСЕМУ МИРУ. Центр
+ * прогулки был жёстко зашит на CITY, а л��вца (перенос к игроку дальше
+ * 200 м) ставила горожан рядом с игроком. Следующая цель всегда оказывалась
+ * в городе — то есть за 200+ метров. Горожане непрерывно шли обратно через
+ * открытое поле, и игрок в поле видел их разбросанными по холмам в разных
+ * стадиях этого перехода.
+ *
+ * Теперь «дом» горожан — то место, где находится игрок. В городе это сам
+ * город (площадь Накш-е Джахан, мечеть, фонтан по-прежнему обходятся), а
+ * в поле — окрестности игрока. Горожане живут там, где игрок, и не бегают
+ * через весь мир.
+ */
+function freeSpot(cx: number, cz: number, homeX = CITY.x, homeZ = CITY.z): { x: number; z: number } {
+  const inCity = Math.hypot(homeX - CITY.x, homeZ - CITY.z) < HOME_R;
   candidates: for (let tries = 0; tries < 12; tries++) {
     const a = Math.random() * Math.PI * 2;
-    const r = 8 + Math.random() * (HOME_R - 8);
-    const x = CITY.x + Math.cos(a) * r;
-    const z = CITY.z + Math.sin(a) * r;
+    // В горре держались теснее (не только чтобы не шли по площади), в поле
+    // просторнее: там нет зданий, которые пришлось бы обходить
+    const span = inCity ? HOME_R : 46;
+    const r = 8 + Math.random() * (span - 8);
+    const x = homeX + Math.cos(a) * r;
+    const z = homeZ + Math.sin(a) * r;
     // Не в фонтане, не в мечети, не в воде, не внутри построек
     if (Math.hypot(x - (CITY.x + 6), z - (CITY.z + 6)) < 7) continue;
     if (Math.abs(x - CITY.x) < 14 && Math.abs(z - (CITY.z - 8)) < 11) continue;
     if (waterMask(x, z) > 0.2) continue;
+    // Слишком близко к игроку: иначе горожане лезут под ноги и толкаются
+    if (Math.hypot(x - cx, z - cz) < 6) continue;
     for (const c of COLLIDERS) {
       if (Math.hypot(x - c.x, z - c.z) < c.r + 1.2) continue candidates;
     }
@@ -303,9 +348,19 @@ function freeSpot(cx: number, cz: number): { x: number; z: number } {
 function freeSpotNear(px: number, pz: number): { x: number; z: number } {
   candidates: for (let tries = 0; tries < 14; tries++) {
     const a = Math.random() * Math.PI * 2;
-    // 70-110 м от игрока: достаточно далеко, чтобы человек не возник перед
-    // носом, и достаточно близко, чтобы быть видно нормальным зрением
-    const r = 70 + Math.random() * 40;
+    // ТУТ БЫЛА ПРИЧИНА, ПОЧЕМУ ГОРЖАНЕ ВЫГЛЯДЕЛИ РАЗБРОСАННЫМИ ПО ХОЛМАМ.
+    // Перенос ставил их кольцом 70-110 м вокруг игрока. Это не «рядом с
+    // игроком», это дальняя кромка видимости: все 22 человека оказывались
+    // понаспахту на горизонте, отдельно друг от друга, и издалека поле
+    // выглядело испорченным. Комментарий утверждал, что 70-110 м «достаточно
+    // близко, чтобы быть видно нормальным зрением» — ровно это и портило
+    // картинку: они были видно, но далеко.
+    //
+    // Теперь 13-38 м: человек в пределах двух экранов от игрока, толпа
+    // читается как толпа, а не как далёкие фигурки. Кольцо шириной 25 м при
+    // 22 горожанах даёт примерно один человек на 100 м² — оживлённо, но не
+    // тесно. И не «перед носом»: ближе 13 м не ставим.
+    const r = 13 + Math.random() * 25;
     const x = px + Math.cos(a) * r;
     const z = pz + Math.sin(a) * r;
     if (waterMask(x, z) > 0.2) continue;
@@ -314,7 +369,7 @@ function freeSpotNear(px: number, pz: number): { x: number; z: number } {
     }
     return { x, z };
   }
-  return { x: px + 70, z: pz };
+  return { x: px + 16, z: pz };
 }
 
 export function createCivilians(scene: THREE.Scene): CiviliansHandle {
@@ -421,17 +476,28 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       stateUntil: 0, talkWith: null, phase: Math.random() * 10,
       lastDist: Math.hypot(p.x, p.z), stuckFor: 0,
       frameStartX: p.x, frameStartZ: p.z,
+      hiddenUntil: 0,
     });
   }
 
   let talkTimer = 5000;
 
-  function face(a: Civilian, x: number, z: number): void {
+  /**
+   * Повернуть горожанина к точке.
+   *
+   * dt обязателен: раньше доля поворота была фиксированной на кадр (0.15),
+   * и на слабой машине при 30 fps поворот был втрое медленнее, чем на 90.
+   * Со стороны это читалось как «ходит боком» — модель ещё доворачивалась,
+   * а ноги уже шли вперёд. Теперь скорость поворота одинакова при любой
+   * частоте кадров.
+   */
+  function face(a: Civilian, x: number, z: number, dt: number): void {
     const want = Math.atan2(x - a.group.position.x, z - a.group.position.z);
     let d = want - a.group.rotation.y;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    a.group.rotation.y += d * 0.15;
+    // 9 в секунду вместо доли на кадр: одинаково быстро при 30 и при 90 fps
+    a.group.rotation.y += d * Math.min(1, dt * 9);
   }
 
   function update(dt: number, now: number, playerX?: number, playerZ?: number): void {
@@ -485,7 +551,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       c.frameStartZ = c.group.position.z;
 
       if (c.state === 'talk') {
-        if (c.talkWith) face(c, c.talkWith.group.position.x, c.talkWith.group.position.z);
+        if (c.talkWith) face(c, c.talkWith.group.position.x, c.talkWith.group.position.z, dt);
         c.body.position.y = 1.05 + Math.sin(now / 300 + c.phase) * 0.02;
         // Жестикуляция: правая рука поднята
         c.armR.rotation.x = -0.9 + Math.sin(now / 250 + c.phase) * 0.25;
@@ -505,7 +571,8 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         c.legL.rotation.x *= 0.9;
         c.legR.rotation.x *= 0.9;
         if (now >= c.stateUntil) {
-          const t = freeSpot(c.group.position.x, c.group.position.z);
+          // Дом там, где игрок: иначе в поле горожане шли обратно в город
+          const t = freeSpot(c.group.position.x, c.group.position.z, playerX, playerZ);
           c.target = t;
           c.state = 'walk';
         }
@@ -536,7 +603,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
             if (Math.hypot(fixed.x - wantX, fixed.z - wantZ) > step * 0.5) continue;
             c.group.position.x = fixed.x;
             c.group.position.z = fixed.z;
-            face(c, wantX, wantZ);
+            face(c, wantX, wantZ, dt);
             placed = true;
             break;
           }
@@ -557,7 +624,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
 
           if (c.stuckFor > 3) {
             // Реально застрял (упёрся в глухую стену) — ищем другую цель
-            c.target = freeSpot(c.group.position.x, c.group.position.z);
+            c.target = freeSpot(c.group.position.x, c.group.position.z, playerX, playerZ);
             c.stuckFor = 0;
             c.lastDist = Math.hypot(c.target.x - c.group.position.x, c.target.z - c.group.position.z);
           }
@@ -582,6 +649,13 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       // только если кто-то действительно внутри, поэтому стоящие не
       // скользят сами по себе.
       const safe = resolveStatic(c.group.position.x, c.group.position.z, 0.5, c, dt, playerX, playerZ);
+      // ТУТ БЫЛО «СКОЛЬЗЕНИЕ». Итоговое выталкивание двигало горожанина, но
+      // не поворачивало: тот ехал в одну сторону, а смотрел в другую — со
+      // стороны это выглядело как ходьба боком или задом. Поворачиваем по
+      // ФАКТИЧЕСКОМУ сдвигу: сдвиг и есть реальное движение.
+      if (Math.hypot(safe.x - c.group.position.x, safe.z - c.group.position.z) > 1e-3) {
+        face(c, safe.x, safe.z, dt);
+      }
       c.group.position.x = safe.x;
       c.group.position.z = safe.z;
 
@@ -660,16 +734,33 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       }
     }
 
-    // Перенос населения к игроку. Порог 200 м — это заведомо за пределами
-    // видимости (дальность прорисовки у нас ~150 м), поэтому перенос нельзя
-    // увидеть глазом. На 130 м перенос мог произойти прямо перед игроком —
-    // человек «материализовался» бы на виду. Состояние сбрасываем
-    // обязательно: иначе перенесённый горожанин сохранит цель в старом
-    // месте и будет всю дорогу «застревать», отталкиваясь от всех подряд.
+    // Перенос населения к игроку.
+    //
+    // ТУТ БЫЛА ПОЛОМКА, ИЗ-ЗА КОТОРОЙ БЫЛО ВИДНО ПЕРЕНОС. Комментарий ниже
+    // утверждал, что 200 м — «заведомо за пределами видимости, дальность
+    // прорисовки у нас ~150 м». Ни то ни другое неправда: камера у нас видит
+    // до 1600 м (camera.far = 1600, потом fogFar + 750), а туман прячет на
+    // 240-850 м в зависимости от качества и погоды. На 200 м горожанин был
+    // виден отчётливо, и игрок наблюдал, как фигурка исчезает с холма и
+    // появляется у него под боком.
+    //
+    // Теперь перенос делается при group.visible = false: исчезновение
+    // происходит на дальнем холме (в дымке), а появление — рядом, как у
+    // любого NPC, который подгрузился рядом с игроком. Порог 200 м
+    // оставлен: с новым «домом» (см. freeSpot) горожане и так держатся
+    // рядом, и лавца срабатывает только когда игрок убегает быстрее них.
+    //
+    // Состояние сбрасываем обязательно: иначе перенесённый горожанин
+    // сохранит цель в старом месте и будет всю дорогу «застревать»,
+    // отталкиваясь от всех подряд.
     if (playerX !== undefined && playerZ !== undefined) {
       for (const c of civs) {
         const dist = Math.hypot(c.group.position.x - playerX, c.group.position.z - playerZ);
-        if (dist < 200) continue;
+        if (dist < LEASH) continue;
+        // Скрываем ДО переноса, иначе на одном кадре горожанин стоит в
+        // старом месте, а на следующем уже в новом — видимый скачок
+        c.group.visible = false;
+        c.hiddenUntil = now + 500;
         const p = freeSpotNear(playerX, playerZ);
         c.group.position.x = p.x;
         c.group.position.z = p.z;
@@ -683,6 +774,15 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         c.bubble.visible = false;
         c.bubbleUntil = 0;
       }
+    }
+
+    // Проявление перенесённых. Пока group.visible = false, горожанин не
+    // участвует в отрисовке — и заодно не стоит кадры впустую, когда игрок
+    // ушёл далеко.
+    for (const c of civs) {
+      if (c.group.visible) continue;
+      if (now < c.hiddenUntil) continue;
+      c.group.visible = true;
     }
   }
 
