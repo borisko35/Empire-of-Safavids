@@ -2902,7 +2902,9 @@ export async function loadSettings(): Promise<void> {
   const newName = $('set-new-name') as HTMLInputElement;
   const statusEl = $('rename-status');
 
-  $('btn-change-pass')?.addEventListener('click', async () => {
+  // Форма, а не просто кнопка: Enter в поле пароля тоже отправляет —
+  // это привычно игроку. Без preventDefault страница перезагрузилась бы.
+  const doChangePass = async (): Promise<void> => {
     if (!oldPass.value || !newPass.value || newPass.value !== newPass2.value) {
       toast('Неверно заполнены поля пароля', 'error'); return;
     }
@@ -2911,6 +2913,15 @@ export async function loadSettings(): Promise<void> {
       toast('Пароль изменён!', 'success');
       oldPass.value = ''; newPass.value = ''; newPass2.value = '';
     } catch (e) { toast((e as Error).message, 'error'); }
+  };
+  $('form-change-pass')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void doChangePass();
+  });
+  $('btn-change-pass')?.addEventListener('click', (e) => {
+    // Кнопка type="submit" — форма вызовет submit сама, гасим повтор
+    e.preventDefault();
+    void doChangePass();
   });
 
   $('btn-rename')?.addEventListener('click', async () => {

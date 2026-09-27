@@ -23,28 +23,28 @@
       </div>
 
       <form id="form-login" class="auth-form" autocomplete="on">
-        <label><span data-i18n="auth.email"></span><input type="email" id="login-email" required></label>
-        <label><span data-i18n="auth.password"></span><input type="password" id="login-password" required minlength="8"></label>
+        <label><span data-i18n="auth.email"></span><input type="email" id="login-email" required autocomplete="username"></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="login-password" required minlength="8" autocomplete="current-password"></label>
         <button class="btn btn-gold" type="submit" data-i18n="auth.submit_login"></button>
         <button type="button" class="btn btn-ghost link-btn" id="btn-forgot-password" data-i18n="auth.forgot_password"></button>
       </form>
 
       <!-- Форма сброса пароля -->
       <form id="form-reset-password" class="auth-form hidden" autocomplete="off">
-        <label><span data-i18n="auth.email"></span><input type="email" id="reset-email" required></label>
-        <label><span data-i18n="auth.new_password"></span><input type="password" id="reset-new-password" required minlength="8"></label>
-        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reset-confirm-password" required minlength="8"></label>
+        <label><span data-i18n="auth.email"></span><input type="email" id="reset-email" required autocomplete="username"></label>
+        <label><span data-i18n="auth.new_password"></span><input type="password" id="reset-new-password" required minlength="8" autocomplete="new-password"></label>
+        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reset-confirm-password" required minlength="8" autocomplete="new-password"></label>
         <button class="btn btn-gold" type="submit" data-i18n="auth.reset_password"></button>
         <button type="button" class="btn btn-ghost link-btn" id="btn-back-to-login">← <span data-i18n="auth.login"></span></button>
       </form>
 
       <form id="form-register" class="auth-form hidden" autocomplete="off">
-        <label><span data-i18n="auth.username"></span><input type="text" id="reg-username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+"></label>
-        <label><span data-i18n="auth.email"></span><input type="email" id="reg-email" required></label>
-        <label><span data-i18n="auth.password"></span><input type="password" id="reg-password" required minlength="8">
+        <label><span data-i18n="auth.username"></span><input type="text" id="reg-username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocomplete="username"></label>
+        <label><span data-i18n="auth.email"></span><input type="email" id="reg-email" required autocomplete="email"></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="reg-password" required minlength="8" autocomplete="new-password">
           <small data-i18n="auth.password_hint"></small></label>
-        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reg-confirm" required minlength="8"></label>
-        <label><span data-i18n="auth.birth_year"></span><input type="number" id="reg-birth-year" required min="1900" max="2020" placeholder="1990"></label>
+        <label><span data-i18n="auth.confirm_password"></span><input type="password" id="reg-confirm" required minlength="8" autocomplete="new-password"></label>
+        <label><span data-i18n="auth.birth_year"></span><input type="number" id="reg-birth-year" required min="1900" max="2020" placeholder="1990" autocomplete="bday-year"></label>
         <label class="check"><input type="checkbox" id="reg-terms" required><span data-i18n="auth.terms"></span></label>
         <label class="check"><input type="checkbox" id="reg-privacy" required><span data-i18n="auth.privacy"></span></label>
         <p class="adults">🔞 <span data-i18n="auth.adults_only"></span></p>
@@ -83,8 +83,8 @@
       <h2 data-i18n="guest.claim_title"></h2>
       <p class="guest-note" data-i18n="guest.claim_note"></p>
       <form id="form-claim" class="auth-form" autocomplete="off">
-        <label><span data-i18n="auth.email"></span><input type="email" id="claim-email" required></label>
-        <label><span data-i18n="auth.password"></span><input type="password" id="claim-password" required minlength="8">
+        <label><span data-i18n="auth.email"></span><input type="email" id="claim-email" required autocomplete="username"></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="claim-password" required minlength="8" autocomplete="new-password">
           <small data-i18n="auth.password_hint"></small></label>
         <button class="btn btn-gold" type="submit" data-i18n="guest.claim_submit"></button>
         <button type="button" class="btn btn-ghost link-btn" id="btn-claim-cancel" data-i18n="common.cancel"></button>
@@ -104,7 +104,7 @@
       <form class="char-create" id="form-create">
         <h2 data-i18n="chars.create"></h2>
         <label><span data-i18n="chars.name"></span>
-          <input type="text" id="new-name" required minlength="2" maxlength="24">
+          <input type="text" id="new-name" required minlength="2" maxlength="24" autocomplete="off">
           <small data-i18n="chars.name_hint"></small>
         </label>
         <label><span data-i18n="chars.server"></span>
@@ -260,16 +260,20 @@
     <!-- Панель настроек -->
     <div class="hud side-panel hidden" id="panel-settings">
       <h3><span data-icon="gear"></span>Настройки</h3>
-      <div class="settings-section">
+      <!-- Поля пароля обёрнуты в форму: без этого Chrome ругается
+           «Password field is not contained in a form» и не предлагает
+           сохранять пароль. autocomplete нужен, чтобы браузер знал,
+           какой это пароль: старый или новый. -->
+      <form class="settings-section" id="form-change-pass" autocomplete="on">
         <h4>Смена пароля</h4>
-        <input type="password" id="set-old-pass" placeholder="Старый пароль">
-        <input type="password" id="set-new-pass" placeholder="Новый пароль">
-        <input type="password" id="set-new-pass2" placeholder="Повторите пароль">
-        <button id="btn-change-pass">Изменить пароль</button>
-      </div>
+        <input type="password" id="set-old-pass" placeholder="Старый пароль" autocomplete="current-password">
+        <input type="password" id="set-new-pass" placeholder="Новый пароль" autocomplete="new-password">
+        <input type="password" id="set-new-pass2" placeholder="Повторите пароль" autocomplete="new-password">
+        <button id="btn-change-pass" type="submit">Изменить пароль</button>
+      </form>
       <div class="settings-section">
         <h4>Смена ника (500 АЗЭН)</h4>
-        <input type="text" id="set-new-name" placeholder="Новое имя" maxlength="24">
+        <input type="text" id="set-new-name" placeholder="Новое имя" maxlength="24" autocomplete="off">
         <button id="btn-rename">Сменить имя</button>
         <span id="rename-status"></span>
       </div>

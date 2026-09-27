@@ -65,6 +65,19 @@ class AudioEngine {
   private _muted = localStorage.getItem('eos_mute') === '1';
   private _musicVol = readPct('eos_music_vol', 50);
   private _sfxVol = readPct('eos_sfx_vol', 70);
+  /**
+   * Видел ли браузер настоящий жест игрока.
+   *
+   * Браузеры запрещают создавать AudioContext без жеста: контекст
+   * рождается « suspended », и Chrome ругается в консоль. Раньше этим
+   * занимался installAuthMusicTrigger() — но ensure() звали ещё и
+   * ensureLoading()/ensureGame() при входе в мир, и если игрок попадал
+   * в мир по ссылке или с автовходом, контекст создавался раньше жеста.
+   * Теперь проверка стоит внутри самого ensure() — оттуда не пройти.
+   */
+  private gestured = false;
+  /** Что надо сделать, когда жест наконец случится */
+  private pendingEnsure: (() => void) | null = null;
 
   get muted() { return this._muted; }
   /** Громкость музыки, проценты 0..100 */
@@ -86,8 +99,19 @@ class AudioEngine {
     this.setAmbienceEnabled(false);
   }
 
-  /** Создать контекст (только после жеста пользователя) */
+  /**
+   * Создать контекст — но только после жеста пользователя.
+   *
+   * Если жеста ещё не было, контекст НЕ создаётся: браузер всё равно
+   * запустит его в suspended, а игрок получит предупреждение в консоли
+   * и тишину. Вместо этого запоминаем, что нужно, и делаем это на
+   * первом же клике или нажатии клавиши.
+   */
   ensure(): void {
+    if (!this.gestured) {
+      this.pendingEnsure = () => this.ensure();
+      return;
+    }
     if (this.ctx) {
       if (this.ctx.state === 'suspended') void this.ctx.resume();
       if (!this.musicTimer) this.startMusic();
@@ -246,10 +270,19 @@ class AudioEngine {
    */
   installAuthMusicTrigger(): void {
     const trigger = () => {
+      this.gestured = true;
+      // Догоняем то, что не смогли сделать до жеста
+      if (this.pendingEnsure) {
+        const run = this.pendingEnsure;
+        this.pendingEnsure = null;
+        run();
+      }
       if (this.mode !== 'game') this.ensureAuth();
     };
-    document.addEventListener('pointerdown', trigger);
-    document.addEventListener('keydown', trigger);
+    // pointerdown срабатывает раньше click, поэтому контекст готов
+    // уже к моменту, когда начнёт играть приветственная музыка
+    document.addEventListener('pointerdown', trigger, { once: false });
+    document.addEventListener('keydown', trigger, { once: false });
   }
 
   /** Персонаж в городе — включить гомон базара */
