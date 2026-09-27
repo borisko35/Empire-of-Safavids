@@ -1237,6 +1237,61 @@ input, select { font: inherit; }
 .friend-name { flex: 1; color: var(--cream); }
 .friend-info { color: var(--cream-dim); font-size: 11px; }
 
+/* ── Панель «Фото и видео» ─────────────────────────────────── */
+.media-drop {
+  border: 2px dashed rgba(201, 168, 76, 0.35); border-radius: 10px;
+  padding: 18px 12px; text-align: center; cursor: pointer; margin-bottom: 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.media-drop:hover, .media-drop--over {
+  border-color: var(--gold); background: rgba(201, 168, 76, 0.08);
+}
+.media-drop-title { font-size: 13px; color: var(--cream); margin-bottom: 4px; }
+.media-drop-sub { font-size: 11px; color: var(--cream-dim); line-height: 1.5; }
+.media-input { display: none; }
+
+.media-usage { font-size: 11px; color: var(--cream-dim); margin-bottom: 10px; }
+.media-items { display: flex; flex-direction: column; gap: 8px; }
+
+.media-item {
+  background: rgba(255, 255, 255, 0.04); border-radius: 7px; padding: 8px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.media-item--done { border-left: 2px solid #4AA86A; }
+.media-item--error { border-left: 2px solid #ff8d7e; }
+.media-item-name {
+  font-size: 12px; color: var(--cream); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.media-bar { height: 4px; background: rgba(255, 255, 255, 0.12); border-radius: 2px; overflow: hidden; }
+.media-bar > i { display: block; height: 100%; width: 0; background: var(--gold); transition: width 0.2s; }
+.media-status { font-size: 11px; color: var(--cream-dim); }
+.media-cancel {
+  align-self: flex-start; font: inherit; font-size: 11px; padding: 2px 8px;
+  border-radius: 5px; cursor: pointer; background: transparent;
+  color: #ff8d7e; border: 1px solid rgba(255, 141, 126, 0.4);
+}
+
+.media-row { display: flex; gap: 9px; align-items: flex-start; padding: 7px; border-radius: 7px; background: rgba(255, 255, 255, 0.04); }
+/* Превью: картинка целиком, ролик — с кадром и проигрыванием при наведении */
+.media-thumb { width: 84px; height: 54px; flex: none; border-radius: 5px; overflow: hidden; background: #000; }
+.media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.media-link {
+  width: 100%; font: inherit; font-size: 10px; padding: 4px 6px;
+  background: rgba(7, 15, 27, 0.6); color: var(--cream-dim);
+  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 5px;
+}
+.media-actions { display: flex; gap: 6px; }
+.media-copy, .media-del {
+  font: inherit; font-size: 10px; padding: 2px 8px;
+  border-radius: 5px; cursor: pointer; background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15); color: var(--cream-dim);
+}
+.media-copy:hover { border-color: var(--gold); color: var(--gold-light); }
+.media-del { color: #ff8d7e; border-color: rgba(255, 141, 126, 0.4); }
+.media-del:hover { background: rgba(255, 141, 126, 0.12); }
+
 /* ── PvP-арена ───────────────────────────────────────────────
    Экран боя: таймер, две полосы здоровья, имя соперника. Панель в
    углу, чтобы не закрывать обзор — бой идёт в мире, а не в отдельной

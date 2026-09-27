@@ -998,6 +998,13 @@ async function loadAdminRights(): Promise<void> {
     session.isAdminRole = 'gm';
   }
   $('btn-panel-admin')?.classList.toggle('hidden', !session.isAdmin);
+  // Загрузка файлов открыта сотрудникам сайта, а не только тем, у кого
+  // выставлен флаг админа: у разработчика роль 'developer' без флага.
+  // Роли повторяют серверный SITE_STAFF_ROLES, иначе кнопка была бы видна
+  // кому-то, кому сервер всё равно ответит 403.
+  const STAFF_ROLES = ['owner', 'administrator', 'admin', 'moderator', 'developer', 'dev', 'gm'];
+  const isStaff = session.isAdmin || STAFF_ROLES.includes(session.isAdminRole ?? '');
+  $('btn-panel-media')?.classList.toggle('hidden', !isStaff);
 }
 
 function wireSettings(): void {

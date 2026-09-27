@@ -32,6 +32,8 @@ import guildsRouter from '../routes/guilds';
 import progressionRouter from '../routes/progression';
 import { npcRouter } from '../routes/npc';
 import { siteRouter } from '../routes/site';
+import { mediaRouter } from '../routes/media';
+import { mediaDir } from '../services/MediaService';
 import { forumRouter } from '../routes/forum';
 import { feedbackRouter } from '../routes/feedback';
 import { skillsRouter } from '../routes/skills';
@@ -102,6 +104,8 @@ app.use('/api/guilds', guildsRouter);
 app.use('/api/progression', progressionRouter);
 app.use('/api/npc', npcRouter);
 app.use('/api/site', siteRouter);
+// Загрузка фото и видео силами сотрудников
+app.use('/api/admin/media', mediaRouter);
 // Форум (чтение открыто, запись — авторизованным) и обратная связь
 app.use('/api/forum', forumRouter);
 app.use('/api/feedback', feedbackRouter);
@@ -109,6 +113,18 @@ app.use('/api/feedback', feedbackRouter);
 // Веб-страница игры (лендинг с историей Сефевидов и загрузкой)
 app.use(express.static(WEB_DIR));
 app.use('/locales', express.static(LOCALES_DIR));
+// Раздача загруженных файлов. Имена у файлов сгенерированные, поэтому
+// кеш можно держать вечно: файл с тем же именем не появится второй раз.
+app.use('/media', express.static(mediaDir(), {
+  maxAge: '365d',
+  immutable: true,
+  index: false,
+  dotfiles: 'deny',
+  setHeaders: (res) => {
+    // Ролик должен играть прямо в браузере, а не скачиваться
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  },
+}));
 
 // Файл загрузки и установки игры на компьютер
 app.get('/download/installer', (_req, res) => {

@@ -324,6 +324,12 @@
       <h3><span data-icon="shield"></span><span>Admin</span></h3>
       <div id="admin-list"></div>
     </div>
+    <!-- Фото и видео: заливка для сотрудников. Отдельная панель, потому
+         что файлы нужны часто и админка от них только засоряется. -->
+    <div class="hud side-panel hidden" id="panel-media">
+      <h3><span data-icon="scroll"></span><span data-i18n="media.title"></span></h3>
+      <div id="media-list"></div>
+    </div>
 
     <!-- Диалог с NPC -->
     <div class="hud side-panel hidden" id="panel-dialog">
@@ -363,6 +369,10 @@
       <button data-panel="panel-chronicles" data-icon="star8" title="Хроники" type="button"></button>
       <button data-panel="panel-story" data-icon="crown" title="Сюжет" type="button"></button>
       <button data-panel="panel-admin" data-icon="shield" title="Админ" type="button" id="btn-panel-admin" class="hidden"></button>
+      <!-- Загрузка фото и видео. Кнопка появляется сотрудникам сайта
+           так же, как админская, но отдельно: файлы нужны чаще, чем
+           разбирательства с игроками. -->
+      <button data-panel="panel-media" data-icon="scroll" title="Фото и видео" type="button" id="btn-panel-media" class="hidden"></button>
       <button data-panel="panel-skills" data-icon="bolt" title="Навыки" type="button"></button>
       <button data-panel="panel-settings" data-icon="gear" title="Настройки" type="button"></button>
     </div>

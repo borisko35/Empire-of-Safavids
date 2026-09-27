@@ -11,6 +11,7 @@ import { session, Character } from './state';
 import { toast, refreshBars, loadInventory } from './hud';
 import { onTutorialAction } from './tutorial';
 import { onSearching as onPvpSearching, onPvpHide } from './pvp';
+import { loadMediaPanel } from './media';
 import { RARITY_COLORS } from '../ui/icons';
 
 // Простая словарь имен предметов для магазина (itemId -> русское название)
@@ -2826,6 +2827,7 @@ const LOADERS: Record<string, () => Promise<void>> = {
   'panel-tower': loadTower,
   'panel-reputation': loadReputation,
   'panel-admin': loadAdmin,
+  'panel-media': loadMediaPanel,
   'panel-skills': loadSkills,
   'panel-settings': loadSettings,
 };

@@ -76,6 +76,9 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
       FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      # Куда складывать загруженные фото и видео. Без этой переменной сервер
+      # положил бы файлы внутрь контейнера, и они пропали бы при пересборке.
+      MEDIA_DIR: /app/uploads/media
       LOG_LEVEL: info
     depends_on:
       migrate:
@@ -86,6 +89,9 @@ services:
       - server_logs:/app/server/logs
       # Установщик Windows для кнопки «Скачать» на лендинге
       - ../site/install:/app/server/site/install:ro
+      # Загруженные фото и видео. Том, а не папка в образе: пересборка
+      # контейнера не должна уносить файлы сотрудников
+      - media_uploads:/app/uploads/media
     restart: unless-stopped
 
   # ── PostgreSQL ──────────────────────────────────────────────
@@ -123,3 +129,6 @@ volumes:
   caddy_data:
   caddy_config:
   server_logs:
+  # Загруженные сотрудниками фото и видео живут в томе, а не в образе:
+  # пересборка контейнера не должна уносить их
+  media_uploads:
