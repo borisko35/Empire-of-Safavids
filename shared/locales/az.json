@@ -221,6 +221,7 @@
     "inside_failed": "Binaya daxil olmaq mümkün olmadı"
   },
   "chat": {
+    "cooldown": "Çox tez. {sec} saniye gözləyin.",
     "title": "Çat",
     "placeholder": "Mesaj…",
     "send": "Göndər",

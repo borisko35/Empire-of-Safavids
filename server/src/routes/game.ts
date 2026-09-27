@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { secureMiddleware } from '../middleware/auth';
 import { AuctionService } from '../services/AuctionService';
+import { auctionRateLimiter } from '../middleware/rateLimiter';
 import { CraftingService } from '../services/CraftingService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { startPvpArena } from '../systems/PvpArenaFlow';
@@ -110,7 +111,10 @@ gameRouter.get('/auction', secureMiddleware, asyncHandler(async (req: Request, r
   return res.json({ listings });
 }));
 
-gameRouter.post('/auction/list', secureMiddleware, requireCharacterOwnership(),
+// Ограничение частоты на выставление лотов и покупку. Пресет на 20 в минуту
+// был написан, но не подключён: покупка лота пишет в базу и двигает золото
+// нескольких сторон, и без ограничения ею можно было нагрузить базу
+gameRouter.post('/auction/list', auctionRateLimiter, secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const schema = Joi.object({
       characterId: Joi.string().uuid().required(),
@@ -136,7 +140,7 @@ gameRouter.post('/auction/list', secureMiddleware, requireCharacterOwnership(),
   })
 );
 
-gameRouter.post('/auction/:listingId/buy', secureMiddleware, requireCharacterOwnership(),
+gameRouter.post('/auction/:listingId/buy', auctionRateLimiter, secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const result = await auctionService.buyListing(req.params.listingId, req.body.characterId);
     return res.json(result);

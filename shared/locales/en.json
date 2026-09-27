@@ -221,6 +221,7 @@
     "inside_failed": "Could not enter the building"
   },
   "chat": {
+    "cooldown": "Too fast. Wait {sec} sec.",
     "title": "Chat",
     "placeholder": "Message…",
     "send": "Send",

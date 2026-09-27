@@ -11,6 +11,7 @@
 
 import { Router, Request, Response } from 'express';
 import { secureMiddleware } from '../middleware/auth';
+import { apiRateLimiter } from '../middleware/rateLimiter';
 import { isSiteStaff } from '../middleware/adminCheck';
 import { asyncHandler } from '../utils/asyncHandler';
 import { DatabaseService } from '../services/DatabaseService';
@@ -57,7 +58,7 @@ function dto(r: FeedbackRow) {
 }
 
 // ── Отправить обращение ─────────────────────────────────────
-feedbackRouter.post('/', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+feedbackRouter.post('/', apiRateLimiter, secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const category = String(req.body?.category ?? 'other');
   const message = String(req.body?.message ?? '').trim();
 

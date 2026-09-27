@@ -894,9 +894,17 @@ function wireSocket(): void {
       chatMessage(displayName, prefix + message, false, role ?? null);
     });
   }
-  // гильдия/пати ошибки
-  socket.on('chat:error', ({ message }: { message: string }) => {
-    chatMessage(null, message, true);
+  // Ошибки чата: сервер отдаёт код, а не готовый текст
+  socket.on('chat:error', (e: { message?: string; code?: string; waitMs?: number }) => {
+    // Отказ по задержке. Показываем, сколько ждать, иначе игрок решит, что
+    // его сообщения не доходят, и перестанет писать вовсе
+    if (e.code === 'CHAT_COOLDOWN') {
+      const sec = Math.max(1, Math.ceil((e.waitMs ?? 1000) / 1000));
+      chatMessage(null, t('chat.cooldown').replace('{sec}', String(sec)), true);
+      return;
+    }
+    // Остальные ошибки приходят готовым текстом с сервера
+    if (e.message) chatMessage(null, e.message, true);
   });
 
   socket.on('notification', (msg: { message?: string; text?: string; title?: string }) => {

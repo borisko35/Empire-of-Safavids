@@ -16,6 +16,7 @@
 
 import { Router, Request, Response } from 'express';
 import { secureMiddleware, optionalAuth } from '../middleware/auth';
+import { apiRateLimiter } from '../middleware/rateLimiter';
 import { isSiteStaff } from '../middleware/adminCheck';
 import { asyncHandler } from '../utils/asyncHandler';
 import { DatabaseService } from '../services/DatabaseService';
@@ -198,7 +199,7 @@ forumRouter.get('/topics/:id', optionalAuth, asyncHandler(async (req: Request, r
 }));
 
 // ── Создать тему ────────────────────────────────────────────
-forumRouter.post('/topics', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+forumRouter.post('/topics', apiRateLimiter, secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const categoryId = String(req.body?.categoryId ?? '').trim();
   const title = String(req.body?.title ?? '').trim();
   const body = String(req.body?.body ?? '').trim();
@@ -224,7 +225,7 @@ forumRouter.post('/topics', secureMiddleware, asyncHandler(async (req: Request, 
 }));
 
 // ── Ответить ────────────────────────────────────────────────
-forumRouter.post('/topics/:id/posts', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+forumRouter.post('/topics/:id/posts', apiRateLimiter, secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const body = String(req.body?.body ?? '').trim();
   if (!body) return res.status(400).json({ error: 'Пустой ответ' });
   if (body.length > MAX_BODY) return res.status(400).json({ error: `Текст — не длиннее ${MAX_BODY} символов` });

@@ -979,6 +979,28 @@ export class GameSocketHandler {
   // ============================================================
   // Чат (world / region / guild / party)
   // ============================================================
+  /**
+   * Когда игрок последний раз написал в каждый канал.
+   *
+   * ТУТ БЫЛА ДЫРА. Задержки CHAT_LIMITS были объявлены, но не применялись
+   * нигде: обработчик только резал длину сообщения. Ограничения на частоту
+   * не существовало вовсе, и один клиент мог забить мировой чат со скоростью
+   * отправки кадров — остальные игроки не могли ничего написать в принципе.
+   *
+   * Отдельно на канал, а не общий счётчик: иначе переход из региона в мир
+   * съедал бы паузу, и игрок решил бы, что игра зависла. И отдельно на
+   * персонажа, а не на соединение: у игрока может быть открыто несколько
+   * вкладок, и закрытие лишней не должно выглядеть как наказание.
+   */
+  private chatLastSent = new Map<string, Partial<Record<ChatChannel, number>>>();
+
+  /** Задержка для канала. Гильдейский и групповой идут по общей ветке. */
+  private chatCooldownFor(channel: ChatChannel): number {
+    if (channel === 'world') return CHAT_LIMITS.WORLD_CHAT_COOLDOWN_MS;
+    if (channel === 'region') return CHAT_LIMITS.REGION_CHAT_COOLDOWN_MS;
+    return CHAT_LIMITS.GUILD_CHAT_COOLDOWN_MS;
+  }
+
   private handleChatMessage(
     socket: AuthenticatedSocket,
     data: { message: string; channel: ChatChannel }
@@ -987,6 +1009,25 @@ export class GameSocketHandler {
 
     const sanitized = data.message.slice(0, CHAT_LIMITS.MAX_MESSAGE_LENGTH).trim();
     if (!sanitized) return;
+
+    // Проверка задержки. Молча проглатывать нельзя: игрок решил бы, что его
+    // сообщения не доходят, и просто перестал бы писать. Поэтому при отказе
+    // отправляем chat:error с временем ожидания — клиент умеет это показывать
+    const cooldown = this.chatCooldownFor(data.channel);
+    if (cooldown > 0) {
+      const now = Date.now();
+      const marks = this.chatLastSent.get(socket.characterId) ?? {};
+      const lastAt = marks[data.channel] ?? 0;
+      const waitMs = lastAt + cooldown - now;
+      if (waitMs > 0) {
+        // Код, а не готовый текст: перевод живёт на клиенте, иначе игрок
+        // увидел бы служебное слово. Клиент сам подставит время ожидания
+        socket.emit('chat:error', { code: 'CHAT_COOLDOWN', waitMs });
+        return;
+      }
+      marks[data.channel] = now;
+      this.chatLastSent.set(socket.characterId, marks);
+    }
 
     const payload = {
       characterId: socket.characterId,
@@ -1145,6 +1186,9 @@ export class GameSocketHandler {
     this.lastPositionPersist.delete(socket.characterId);
     this.lastQuestEval.delete(socket.characterId);
     this.comboChains.delete(socket.characterId);
+    // Задержки чата тоже: иначе карта росла бы на каждого зашедшего игрока
+    // и держала в памяти его id до перезапуска сервера
+    this.chatLastSent.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
     const shardId = socket.shardId ?? 'isfahan';
