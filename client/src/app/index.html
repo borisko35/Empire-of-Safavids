@@ -537,14 +537,10 @@
       </div>
     </div>
 
-    <!-- Оверлеи -->
-    <div class="overlay hidden" id="overlay-death">
-      <div class="death-card">
-        <p class="skull">☠</p>
-        <p data-i18n="world.died"></p>
-        <p class="dim" data-i18n="world.respawned"></p>
-      </div>
-    </div>
+    <!-- Оверлеи. Экран смерти (deathScreen.ts) здесь НЕ живёт: он строится
+         из модуля, потому что у него есть кнопки, отсчёт и обработка отказа
+         сервера. Статичный #overlay-death мигал и сразу пропадал — игрок не
+         успевал ничего понять. -->
     <div class="overlay hidden" id="overlay-menu">
       <div class="menu-card main-menu">
         <div class="menu-logo">

@@ -21,6 +21,7 @@ import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { audio } from '../audio';
+import { session } from '../state';
 import { getSettings, graphicsProfile, type GraphicsLevel } from '../settings';
 import { chatVisible } from '../hud';
 
@@ -911,9 +912,13 @@ export class World3D {
     if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) iz -= 1;
     if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) ix -= 1;
     if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) ix += 1;
+    // Мёртвый не ходит. Экран смерти закрывает обзор, но клавиши под
+    // рукой остаются: без этой заглушки персонаж уезжал из-под оверлея,
+    // и при респавне на месте было видно рывок обратно.
+    if (session.dead) { ix = 0; iz = 0; }
     if (this.keys.has('KeyQ')) this.yaw += dt * 2.2;
     if (this.keys.has('KeyE')) this.yaw -= dt * 2.2;
-    this.crouch = this.keys.has('KeyC') || this.keys.has('ControlLeft');
+    this.crouch = !session.dead && (this.keys.has('KeyC') || this.keys.has('ControlLeft'));
 
     const len = Math.hypot(ix, iz);
     const onBridge = bridgeAt(me.pos.x, me.pos.z);
@@ -1056,7 +1061,10 @@ export class World3D {
       if (b.kind === 'player') {
         const p = this.entities.players.get(id)!;
         moving = p.moving; spd = p.moving ? 5.5 : 0;
-        if (isMe) dead = document.getElementById('overlay-death')?.classList.contains('hidden') === false;
+        // Труп рисуется по состоянию из state, а не по классу оверлея:
+        // экран смерти строит deathScreen, и 3D-слой не должен знать,
+        // как он выглядит в DOM
+        if (isMe) dead = session.dead;
       } else {
         const m = this.entities.monsters.get(id)!;
         moving = !m.deadAt && Math.hypot(m.target.x - m.pos.x, m.target.z - m.pos.z) > 0.15;

@@ -1092,11 +1092,22 @@ input, select { font: inherit; }
   margin: 8px 0;
 }
 .death-hint { color: var(--cream-dim); font-size: 13px; margin: 0 0 24px; }
+/* Причина отказа сервера (например, не хватило золота). Экран смерти при
+   этом остаётся: игрок должен выбрать другой вариант, а не получить пустоту. */
+.death-error {
+  color: var(--crimson-hot); font-size: 13px; margin: -16px 0 20px;
+  padding: 8px 12px; border-radius: 8px;
+  background: rgba(186, 42, 55, 0.15); border: 1px solid rgba(186, 42, 55, 0.4);
+}
+.death-error.hidden { display: none; }
 .death-buttons { display: flex; gap: 12px; justify-content: center; }
 .death-btn {
   font: inherit; font-size: 14px; padding: 10px 20px; border-radius: 8px;
   border: 1px solid; cursor: pointer; transition: all 0.2s;
 }
+/* Пока ждём ответа сервера, кнопки неактивны — иначе можно было бы
+   наслать десяток одинаковых запросов респавна */
+.death-btn:disabled { opacity: 0.5; cursor: default; }
 .death-btn--free {
   background: rgba(46, 139, 139, 0.2); color: var(--teal);
   border-color: rgba(46, 139, 139, 0.5);

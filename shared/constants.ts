@@ -88,6 +88,8 @@ export const SOCKET_EVENTS = {
   PLAYER_DIED: 'player:died',
   PLAYER_RESPAWNED: 'player:respawned',
   MOVE_REJECTED: 'move:rejected',
+  /** Решение игрока: где возрождаться (см. RESPAWN_TYPES) */
+  RESPAWN: 'respawn',
 
   // Interiors (здания с входом/выходом)
   INTERIOR_ENTER: 'interior:enter',
@@ -123,7 +125,58 @@ export const SERVER_EVENTS = {
   DUNGEON_COMPLETED: 'dungeon:completed', // данж завершён: награды
   DAILY_TASK_COMPLETED: 'daily:task',  // задача дня закрыта: золото/опыт/предмет начислены
   COMBAT_BLOCKED: 'combat:defense',    // принято активное блок/уклонение
+  RESPAWN_ERROR: 'respawn:error',      // отказ в респавне (см. RESPAWN_REJECT)
 } as const;
+
+// ── Смерть и возрождение ──────────────────────────────────────
+// Игрок не возрождается мгновенно: сервер ждёт решения игрока
+// (город / на месте) и только затем воскрешает.
+export const RESPAWN_TYPES = {
+  /** На стартовой точке региона, бесплатно */
+  CITY: 'city',
+  /** На месте смерти, за долю золота (DEATH.SPOT_COST_GOLD_RATE) */
+  SPOT: 'spot',
+} as const;
+
+export type RespawnType = (typeof RESPAWN_TYPES)[keyof typeof RESPAWN_TYPES];
+
+/** Причины отказа в респавне: клиент по ним выбирает надпись из переводов */
+export const RESPAWN_REJECT = {
+  /** Сокет не аутентифицирован */
+  NOT_AUTH: 'not_auth',
+  /** Игрок и не был мёртв — состояние уже снято (или клиент прислал мусор) */
+  NOT_DEAD: 'not_dead',
+  /** Тип не из RESPAWN_TYPES */
+  INVALID_TYPE: 'invalid_type',
+  /** Не хватило золота на респавн на месте */
+  NO_GOLD: 'no_gold',
+  /** На месте смерти слишком глубоко — там возродиться нельзя */
+  SPOT_BLOCKED: 'spot_blocked',
+} as const;
+
+export const DEATH = {
+  /**
+   * Страховочный таймер на СЕРВЕРЕ: сколько живут мёртвые, пока игрок
+   * не выбрал способ возрождения. Без него обрыв связи, закрытая вкладка
+   * или молчащий клиент оставляли персонажа мёртвым навсегда. Клиент
+   * показывает тот же отсчёт, но таймер держит сервер: клиентскому
+   * таймеру нельзя доверять (его можно не дослать, а страница может
+   * быть перезагружена).
+   */
+  AUTO_RESPAWN_SEC: 15,
+  /** Доля золота за возрождение на месте смерти */
+  SPOT_COST_GOLD_RATE: 0.05,
+  /**
+   * Минимум к списанию. Без него 0 золота даёт 0 комиссии, то есть
+   * бесплатный респавн на месте — ровно то, чего мы хотим избежать.
+   */
+  SPOT_COST_MIN_GOLD: 1,
+} as const;
+
+/** Цена респавна на месте для баланса в N золота (округление вниз) */
+export function spotRespawnCost(gold: number): number {
+  return Math.max(DEATH.SPOT_COST_MIN_GOLD, Math.floor(Math.max(0, gold) * DEATH.SPOT_COST_GOLD_RATE));
+}
 
 // Каналы Redis pub/sub
 

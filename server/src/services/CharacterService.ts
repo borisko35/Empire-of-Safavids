@@ -273,27 +273,62 @@ export class CharacterService {
     return affected > 0;
   }
 
-  /** Возрождение после смерти: пол-HP на стартовой точке региона. */
-  async respawn(characterId: string): Promise<{ hp: number; maxHp: number; position: { x: number; y: number; z: number } }> {
-    const current = await this.db.queryOne<{ region: string }>(
-      'SELECT region FROM characters WHERE id = $1',
-      [characterId]
-    );
-    const spawn = getRegionSpawn(current?.region ?? Region.TABRIZ);
-    const position = { x: spawn.x, y: 0, z: spawn.z };
-    const row = await this.db.queryOne<{ hp: number; max_hp: number }>(
+  /**
+   * Возрождение после смерти: 50% HP/маны и полная стамина.
+   *
+   * `spot` — точка смерти (респавн на месте за золото). Без неё игрок
+   * возвращается на стартовую точку региона.
+   * `goldCost` списывается В ТОМ ЖЕ UPDATE, что и восстановление: две
+   * отдельные операции оставляли бы окно, в котором персонаж уже живой,
+   * а золото ещё не списано (или наоборот). `WHERE gold >= $3` делает
+   * проверку и списание атомарными — конкурентный вызов не сможет
+   * воскресить бесплатно.
+   *
+   * Ничего не бросает: неудача описана в результате, вызывающий решает,
+   * что показать игроку.
+   */
+  async respawn(
+    characterId: string,
+    options: { spot?: { x: number; z: number }; goldCost?: number } = {}
+  ): Promise<
+    | { ok: true; hp: number; maxHp: number; gold: number; position: { x: number; y: number; z: number } }
+    | { ok: false; reason: 'not_found' | 'no_gold' }
+  > {
+    // Респавн на месте — точка уже известна, регион за ней не нужен
+    let position: { x: number; z: number };
+    if (options.spot) {
+      position = { x: options.spot.x, z: options.spot.z };
+    } else {
+      const current = await this.db.queryOne<{ region: string }>(
+        'SELECT region FROM characters WHERE id = $1',
+        [characterId]
+      );
+      position = getRegionSpawn(current?.region ?? Region.TABRIZ);
+    }
+    const point = { x: position.x, y: 0, z: position.z };
+    const cost = Math.max(0, Math.floor(options.goldCost ?? 0));
+    const row = await this.db.queryOne<{ hp: number; max_hp: number; gold: number }>(
       `UPDATE characters SET
          hp = GREATEST(1, FLOOR(max_hp * 0.5)),
          mana = GREATEST(FLOOR(max_mana * 0.5), 0),
          stamina = max_stamina,
          position = $2::jsonb,
+         gold = gold - $3,
          updated_at = NOW()
-       WHERE id = $1
-       RETURNING hp, max_hp`,
-      [characterId, JSON.stringify(position)]
+       WHERE id = $1 AND gold >= $3
+       RETURNING hp, max_hp, gold`,
+      [characterId, JSON.stringify(point), cost]
     );
-    if (!row) throw new Error('Character not found');
-    return { hp: row.hp, maxHp: row.max_hp, position };
+    if (row) {
+      return { ok: true, hp: row.hp, maxHp: row.max_hp, gold: Number(row.gold), position: point };
+    }
+    // UPDATE ничего не вернул: либо персонажа нет, либо не хватило золота
+    if (cost <= 0) return { ok: false, reason: 'not_found' };
+    const exists = await this.db.queryOne<{ id: string }>(
+      'SELECT id FROM characters WHERE id = $1',
+      [characterId]
+    );
+    return exists ? { ok: false, reason: 'no_gold' } : { ok: false, reason: 'not_found' };
   }
 
   /** Максимальный уровень (из общих констант) */

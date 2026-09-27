@@ -29,6 +29,7 @@ import {
   showGuestBanner, promptClaimAccount,
 } from './hud';
 import { initTutorial, onTutorialAction, tickTutorial } from './tutorial';
+import { initDeathScreen, hideDeathScreen, isDead } from './deathScreen';
 import { loadAccountLinks } from './accountLinks';
 import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
 import { icon, type IconName } from '../ui/icons';
@@ -60,7 +61,6 @@ let lastExploreCheck = 0;
 // Уже отправленные explore-цели (чтобы не спамить endpoint каждый тик)
 const exploreSent = new Set<string>();
 let night = 0;
-let deathTimer: ReturnType<typeof setTimeout> | null = null;
 
 
 // ── Стрелка-навигатор: цель активного квеста ─────────────────
@@ -562,7 +562,9 @@ export function leaveWorld(): void {
   if (navTimer) { clearInterval(navTimer); navTimer = null; }
   world3d?.setNavTarget(null);
   socket.disconnect();
-  if (deathTimer) clearTimeout(deathTimer);
+  // Экран смерти не должен пережить выход из мира: он перекрывал бы
+  // экран выбора персонажа (у него z-index выше экранов)
+  hideDeathScreen();
   // Бонусы остаются в игре, но их таймер в HUD должен перестать тикать
   clearBuffs();
   world3d?.dispose();
@@ -582,6 +584,11 @@ export function showScreen(id: string): void {
 
 function wireSocket(): void {
   socket.off();
+
+  // Экран смерти подписывается ЗДЕСЬ, а не в boot(): строка выше снимает
+  // все подписки сокета, так что модуль обязан пересоздать их при каждом
+  // входе в мир. Сам оверлей при этом создаётся один раз.
+  initDeathScreen();
 
   socket.on('connect', () => {
     if (session.character) {
@@ -865,21 +872,27 @@ function wireSocket(): void {
   });
 
   // ── Смерть и возрождение ──
-  socket.on('player:died', () => {
-    document.getElementById('overlay-death')?.classList.remove('hidden');
+  // Оверлей с выбором возрождения открывает deathScreen (он же слушает
+  // player:died и player:respawned). Здесь только звук и поплавок в мире:
+  // два оверлея смерти на экране — это каша из двух наложенных экранов.
+  socket.on(SOCKET_EVENTS.PLAYER_DIED, () => {
     audio.playerDeath();
     if (me) world?.addFloater(me.pos.x, me.pos.z - 1, t('world.died'), '#ff8d7e');
   });
 
-  socket.on('player:respawned', ({ hp, maxHp, position }: { hp: number; maxHp: number; position: Vec3 }) => {
-    document.getElementById('overlay-death')?.classList.add('hidden');
-    session.hp = hp;
-    session.maxHp = maxHp;
+  socket.on(SOCKET_EVENTS.PLAYER_RESPAWNED, (d: {
+    hp: number; maxHp: number; position: Vec3; gold?: number; type?: string;
+  }) => {
+    session.hp = d.hp;
+    session.maxHp = d.maxHp;
+    if (d.gold !== undefined && session.character) session.character.gold = d.gold;
     if (me) {
-      me.pos = { ...position };
-      me.target = { ...position };
+      me.pos = { ...d.position };
+      me.target = { ...d.position };
     }
-    toast(t('world.respawned'), 'success');
+    // «Возрождение на стартовой точке» — только для города; после
+    // респавна на месте смерти надпись была бы враньём
+    toast(d.type === 'spot' ? t('panels.death_respawned_spot') : t('world.respawned'), 'success');
     refreshBars();
   });
 
@@ -1227,6 +1240,9 @@ function wireSettings(): void {
 
 function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
   if (!me || !world || !session.character) return;
+  // Мёртвый не атакует. Раньше удары улетали на сервер сразу после
+  // смерти и применялись к цели сразу после респавна.
+  if (isDead()) return;
   if (!world.targetId) {
     toast(t('world.attack_hint'), 'info');
     return;
@@ -1243,6 +1259,7 @@ function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
 }
 
 function basicAttack(): void {
+  if (isDead()) return;        // мёртвый не дерётся и не включает боевую тему
   audio.pokeCombat();          // боевая тема на время драки
   emitCombat('attack');
 }
@@ -1326,7 +1343,9 @@ function loop(now: number): void {
   world3d?.update(dt, now, night);
 
   // Пакеты движения — по факту позиции, которую задал 3D-движок
-  if (me.moving && now - lastMoveSent > MOVE_SEND_MS) {
+  // Мёртвый не шлёт пакеты движения: сервер их всё равно игнорирует,
+  // а лишний трафик только мешал бы увидеть, что персонаж стоит.
+  if (me.moving && !isDead() && now - lastMoveSent > MOVE_SEND_MS) {
     lastMoveSent = now;
     socket.emit('player:move', {
       position: { ...me.pos },

@@ -24,7 +24,10 @@ import { LevelingSystem } from '../systems/LevelingSystem';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
-import { SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn } from '../../../shared/constants';
+import {
+  SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn,
+  DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType,
+} from '../../../shared/constants';
 import { isDeepWater } from '../utils/spawn';
 
 interface AuthenticatedSocket extends Socket {
@@ -40,6 +43,21 @@ interface AuthenticatedSocket extends Socket {
 }
 
 type ChatChannel = 'world' | 'region' | 'guild' | 'party';
+
+/** Состояние смерти: точка, где умер, и страховочный таймер сервера */
+interface DeadState {
+  /** Где именно погиб (живая позиция из Redis, в БД она отстаёт до 5 сек) */
+  position: { x: number; y: number; z: number };
+  /** Страховочный таймер автореспавна; см. armAutoRespawn */
+  timer?: ReturnType<typeof setTimeout>;
+  /**
+   * Респавн уже выполняется. Два запроса подряд (клик по кнопке плюс
+   * таймер, или просто два пакета от читера) проходят проверку
+   * «игрок мёртв» почти одновременно, и без этого флага оплаченный
+   * респавн на месте списывал бы 5% золота дважды.
+   */
+  busy: boolean;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +89,12 @@ export class GameSocketHandler {
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
+  /**
+   * Мёртвые игроки: characterId -> состояние смерти.
+   * Пока запись есть, персонаж не может двигаться, бить и получать урон,
+   * а респавн происходит только по решению игрока или по таймеру.
+   */
+  private deadPlayers = new Map<string, DeadState>();
   /** Таймер арены: следит за временем боя */
   private arenaTimer?: NodeJS.Timeout;
 
@@ -78,6 +102,7 @@ export class GameSocketHandler {
   stopArenaTimer(): void {
     if (this.arenaTimer) clearInterval(this.arenaTimer);
   }
+
   // Кулдауны навыков: characterId -> (skillId -> готовность с epoch ms)
   private skillCooldowns = new Map<string, Map<string, number>>();
   // Троттлинг записи позиции в PostgreSQL: characterId -> последняя запись
@@ -168,6 +193,13 @@ export class GameSocketHandler {
         await this.handleCombatAction(socket, action);
       });
 
+      // Решение после смерти: возродиться в городе или на месте.
+      // Раньше сервер воскрешал мгновенно и такого события не слушал —
+      // клиентский deathScreen отправлял 'respawn' в пустоту.
+      socket.on(SOCKET_EVENTS.RESPAWN, async (data: { type?: string }) => {
+        await this.handleRespawn(socket, data);
+      });
+
       // Чат
       socket.on(SOCKET_EVENTS.CHAT_MESSAGE, (data: { message: string; channel: ChatChannel }) => {
         this.handleChatMessage(socket, data);
@@ -203,6 +235,11 @@ export class GameSocketHandler {
   private async regenTick(): Promise<void> {
     for (const socket of this.activePlayers.values()) {
       if (!socket.characterId) continue;
+      // Мёртвым регенерация не идёт. Иначе hp > 0 появлялся бы у трупа
+      // уже через 5 секунд после смерти: игрок мог выйти, перезайти и
+      // оказаться живым бесплатно, а «респавн на месте за золото» терял
+      // смысл — деньги можно было не платить, просто переподключившись.
+      if (this.deadPlayers.has(socket.characterId)) continue;
       try {
         // Вода определяется по последней известной серверу позиции —
         // клиенту нельзя просто сказать «я в воде», чтобы не тратить стамину
@@ -351,6 +388,20 @@ export class GameSocketHandler {
         logger.info(`Player rescued from water to region spawn: ${character.id} (${character.region})`);
       }
 
+      // Подстраховка от «мёртвого» входа. Штатно такого быть не может:
+      // состояние смерти всегда снимается респавном или таймером. Но если
+      // сервер упал/перезапустился между смертью и респавном, в БД остался
+      // hp = 0, и игрок зашёл бы в мир трупом без единого шанса выйти.
+      if (character.hp <= 0) {
+        const revived = await this.characterService.respawn(character.id).catch(() => null);
+        if (revived?.ok) {
+          character.position = revived.position;
+          character.hp = revived.hp;
+          character.maxHp = revived.maxHp;
+          logger.info(`Player revived on login: ${character.id} (${character.region})`);
+        }
+      }
+
       socket.userId = userId;
       socket.characterId = character.id;
       socket.region = character.region;
@@ -442,12 +493,19 @@ export class GameSocketHandler {
     if (!socket.characterId || !socket.region) return;
     const characterId = socket.characterId;
 
-    // Частота пакетов
+    // Частота пакетов. Считаем ДО проверки смерти: ограничение пакетов
+    // должно работать и для мёртвого, иначе флуд в состоянии смерти
+    // проходил бы без санкций.
     const rateCheck = this.antiCheat.validatePacketRate(characterId);
     if (!rateCheck.valid) {
       await this.punish(socket, 'packet_flood', rateCheck.reason ?? 'packet flood', 2);
       return;
     }
+
+    // Мёртвый не ходит. Пакеты просто игнорируются: ни позиция в Redis,
+    // ни запись в БД, ни трансляция соседям, ни проверка античита движения
+    // (она бы сравнивала движение с местом смерти и ругалась на скорость).
+    if (this.deadPlayers.has(characterId)) return;
 
     // Скорость / телепорт
     const moveCheck = this.antiCheat.validateMovement(characterId, data.position);
@@ -550,6 +608,9 @@ export class GameSocketHandler {
 
   private async handleCombatAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
     if (!socket.characterId || !socket.region) return;
+    // Мёртвый не бьёт: ни во что, ни по кому. Без проверки можно было бы
+    // держать боевые пакеты в очереди и применить их сразу после респавна.
+    if (this.deadPlayers.has(socket.characterId)) return;
 
     // Защитные действия выполняются без цели
     if (action.actionType === 'dodge' || action.actionType === 'block') {
@@ -636,6 +697,12 @@ export class GameSocketHandler {
     action: CombatAction,
     comboMult = 1
   ): Promise<void> {
+    // Мёртвая цель не принимает урон. Без проверки добавленный по сети удар
+    // снова «убивал» бы труп, заново ставил состояние смерти и перезапускал
+    // таймер автореспавна — игрок, зашедший на PvP, мог бесконечно
+    // продлевать себе смерть.
+    if (this.deadPlayers.has(target.id)) return;
+
     // Лечащий навык: восстанавливает HP цели (масштаб от интеллекта мистика)
     if (action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId)) {
       const healAmount = Math.round(
@@ -926,23 +993,44 @@ export class GameSocketHandler {
     await this.handlePlayerDeath(dead, undefined);
   }
 
-  /** Смерть игрока: респавн на стартовой точке региона + карма убийце */
+  /**
+   * Смерть игрока.
+   *
+   * Раньше здесь СРАЗУ стоял респавн на стартовой точке региона, и игрок
+   * не вил ничего, кроме мелькнувшей надписи. Теперь смерть — состояние:
+   * сервер запоминает точку, где погиб, и ждёт решения игрока (город или
+   * место за золото) либо срабатывает страховочный таймер.
+   */
   private async handlePlayerDeath(dead: Character, killer?: Character): Promise<void> {
-    const deadSocket = this.activePlayers.get(dead.id);
-    deadSocket?.emit(SOCKET_EVENTS.PLAYER_DIED, { killerId: killer?.id });
+    // Повторная смерть (два урона в одном кадре, добивание трупа) —
+    // состояние уже есть, второй таймер только запутал бы логику
+    if (this.deadPlayers.has(dead.id)) return;
 
-    const respawned = await this.characterService.respawn(dead.id);
-    // Синк позиции в Redis: клиент телепортируется на стартовую точку,
-    // и ИИ должен видеть игрока там же, а не на месте смерти
-    await this.redis.setPlayerPosition(dead.id, respawned.position).catch(() => {});
-    // Сбросить базовую точку античита на точку респавна — иначе первое
-    // движение после возрождения выглядит как телепорт/speed_hack
-    this.antiCheat.resetPosition(dead.id, respawned.position);
-    deadSocket?.emit(SOCKET_EVENTS.PLAYER_RESPAWNED, {
-      hp: respawned.hp,
-      maxHp: respawned.maxHp,
-      position: respawned.position,
-      region: dead.region,
+    const deadSocket = this.activePlayers.get(dead.id);
+
+    // Точка смерти — живая позиция из Redis: в БД она записывается раз
+    // в 5 секунд, и «респавн на месте» уводил бы игрока на пару метров
+    // в сторону от того места, где он реально упал.
+    const live = await this.redis.getPlayerPosition(dead.id).catch(() => null) as
+      { x?: number; z?: number } | null;
+    const position = {
+      x: Number.isFinite(live?.x) ? Number(live?.x) : dead.position?.x ?? 0,
+      y: 0,
+      z: Number.isFinite(live?.z) ? Number(live?.z) : dead.position?.z ?? 0,
+    };
+
+    // Страховочный таймер (почему он на сервере — в armAutoRespawn).
+    // Снимается в clearDeadState на ЛЮБОМ респавне, поэтому повторно
+    // он уже не сработает.
+    this.deadPlayers.set(dead.id, { position, busy: false });
+    this.armAutoRespawn(dead.id);
+
+    deadSocket?.emit(SOCKET_EVENTS.PLAYER_DIED, {
+      killerId: killer?.id,
+      killerName: killer?.name ?? null,
+      respawnInSec: DEATH.AUTO_RESPAWN_SEC,
+      gold: dead.gold,
+      spotCostGold: spotRespawnCost(dead.gold),
     });
 
     // Монстры забывают погибшего и возвращаются на спавн — иначе
@@ -958,6 +1046,183 @@ export class GameSocketHandler {
     }
 
     logger.info(`Player died: ${dead.name}${killer ? ` (killed by ${killer.name})` : ''}`);
+  }
+
+  // ============================================================
+  // Возрождение: решение игрока или страховочный таймер
+  // ============================================================
+
+  /**
+   * Снять состояние смерти и её таймер.
+   * Вызывается при ЛЮБОМ респавне (решение игрока, таймер, вход с hp=0),
+   * поэтому запись не может «залипнуть» и сработать повторно.
+   */
+  private clearDeadState(characterId: string): void {
+    const dead = this.deadPlayers.get(characterId);
+    if (!dead) return;
+    if (dead.timer) clearTimeout(dead.timer);
+    this.deadPlayers.delete(characterId);
+  }
+
+  /**
+   * Взвести (или перевзвести) страховочный таймер автореспавна.
+   *
+   * ПОЧЕМУ ТАЙМЕР НА СЕРВЕРЕ, А НЕ ТОЛЬКО НА КЛИЕНТЕ:
+   *  1) обрыв связи, закрытая вкладка, перезагрузка страницы — клиент
+   *     просто не пришлёт 'respawn', и персонаж остался бы мёртвым навсегда;
+   *  2) клиентскому таймеру нельзя доверять: его можно не дослать, страницу
+   *     можно перезагрузить, скрипт — не выполнить вовсе;
+   *  3) сервер всё равно обязан привести персонажа в валидное состояние,
+   *     даже если клиента больше нет.
+   * Перевзводится вместо того, чтобы сгорать: если в момент срабатывания
+   * шёл чужой респавн (или БД ошиблась), страховка обязана выстрелить
+   * позже, а не потеряться.
+   */
+  private armAutoRespawn(characterId: string): void {
+    const dead = this.deadPlayers.get(characterId);
+    if (!dead) return;
+    if (dead.timer) clearTimeout(dead.timer);
+    dead.timer = setTimeout(() => {
+      this.completeRespawn(characterId, RESPAWN_TYPES.CITY, 'auto').catch((error: unknown) => {
+        logger.error('Auto respawn failed:', error);
+        this.armAutoRespawn(characterId);
+      });
+    }, DEATH.AUTO_RESPAWN_SEC * 1000);
+  }
+
+  /**
+   * Запрос «respawn» от клиента: { type: 'city' | 'spot' }.
+   * Всё остальное сервер решает сам (цену, точку, куда попасть).
+   */
+  private async handleRespawn(socket: AuthenticatedSocket, data: { type?: string }): Promise<void> {
+    if (!socket.characterId) {
+      socket.emit(SERVER_EVENTS.RESPAWN_ERROR, { reason: RESPAWN_REJECT.NOT_AUTH });
+      return;
+    }
+    const type = data?.type;
+    // Строка из сокета — не доверенный ввод: посторонние значения
+    // приводим к отказу, а не к респавну по умолчанию
+    if (type !== RESPAWN_TYPES.CITY && type !== RESPAWN_TYPES.SPOT) {
+      socket.emit(SERVER_EVENTS.RESPAWN_ERROR, { reason: RESPAWN_REJECT.INVALID_TYPE });
+      return;
+    }
+    if (!this.deadPlayers.has(socket.characterId)) {
+      // Уже жив: респавн не нужен, экран смерти можно закрывать
+      socket.emit(SERVER_EVENTS.RESPAWN_ERROR, { reason: RESPAWN_REJECT.NOT_DEAD });
+      return;
+    }
+    await this.completeRespawn(socket.characterId, type, 'player');
+  }
+
+  /**
+   * Собственно возрождение. Точка входа одна и для решения игрока, и для
+   * страховочного таймера: значит, состояние смерти снимается одинаково,
+   * а второй респавн невозможен (состояния уже нет).
+   */
+  private async completeRespawn(characterId: string, type: RespawnType, source: 'player' | 'auto'): Promise<void> {
+    const dead = this.deadPlayers.get(characterId);
+    if (!dead) return;
+    if (dead.busy) {
+      // Респавн идёт прямо сейчас (клик по кнопке плюс сработавший
+      // таймер). Если он удастся — состояние снимет он; если откажет,
+      // страховка обязана выстрелить позже, поэтому перевзводим таймер
+      this.armAutoRespawn(characterId);
+      return;
+    }
+    // Проверка и установка флага без await между ними: второй запрос,
+    // пришедший в том же тике, честно игнорируется
+    dead.busy = true;
+
+    const character = await this.characterService.getCharacterById(characterId).catch(() => null);
+    if (!character) {
+      // Персонажа больше нет — состояние смерти незачем держать
+      this.clearDeadState(characterId);
+      return;
+    }
+
+    let goldCost = 0;
+    let spot: { x: number; z: number } | undefined;
+    if (type === RESPAWN_TYPES.SPOT) {
+      // В глубокой воде воскреснуть нельзя: игрок появился бы там, где
+      // не тонет, но и выбраться без стамины не мог. Отказ с причиной
+      // лучше молчаливого переноса в город — кнопка обещала место.
+      if (isDeepWater(dead.position.x, dead.position.z)) {
+        dead.busy = false;
+        this.activePlayers.get(characterId)?.emit(SERVER_EVENTS.RESPAWN_ERROR, {
+          reason: RESPAWN_REJECT.SPOT_BLOCKED,
+        });
+        return;
+      }
+      goldCost = spotRespawnCost(character.gold);
+      spot = { x: dead.position.x, z: dead.position.z };
+    }
+
+    // Проверка баланса и списание — в одном UPDATE (CharacterService.respawn).
+    // Денег не хватило: НИКАКОГО респавна, экран смерти остаётся, игрок
+    // может выбрать город. Отдать ему бесплатное место «на месте» — значит
+    // продавать респавн за 5% золота, не списывая их.
+    const result = await this.characterService
+      .respawn(characterId, { spot, goldCost })
+      .catch((error: unknown) => {
+        logger.error('Respawn failed:', error);
+        return null;
+      });
+    if (!result) {
+      // Запрос не прошёл. Снимаем флаг занятости И ПЕРЕЗВОДИМ ТАЙМЕР.
+      //
+      // ТУТ БЫЛА ДЫРА, ИЗ-ЗА КОТОРОЙ ИГРОК ОСТАВАЛСЯ МЁРТВЫМ НАВСЕГДА.
+      // Рассуждение было такое: мол, таймер авто-возрождения ещё висит и
+      // подстрахует. Но когда completeRespawn вызывает сам таймер, таймер к
+      // этому моменту УЖЕ ИЗРАСХОДОВАН — он и привёл нас сюда. Значит, если
+      // база кратко ответила ошибкой в момент авто-возрождения, повтора не
+      // было: запись оставалась в deadPlayers, флаг снимался, и всё. Персонаж
+      // мёртв, кнопки не помогают, таймера нет. Единственный выход —
+      // перезайти, и это ровно та поломка, ради которой страховка и делалась.
+      //
+      // База может кратко отвалиться хоть на одну секунду, и это не должно
+      // навсегда оставлять игрока на экране смерти.
+      dead.busy = false;
+      this.armAutoRespawn(characterId);
+      this.activePlayers.get(characterId)?.emit(SERVER_EVENTS.RESPAWN_ERROR, {
+        reason: RESPAWN_REJECT.NOT_DEAD,
+      });
+      return;
+    }
+    if (!result.ok) {
+      if (result.reason === 'no_gold') {
+        dead.busy = false;
+        this.activePlayers.get(characterId)?.emit(SERVER_EVENTS.RESPAWN_ERROR, {
+          reason: RESPAWN_REJECT.NO_GOLD,
+          cost: goldCost,
+          gold: character.gold,
+        });
+        return;
+      }
+      this.clearDeadState(characterId);
+      return;
+    }
+
+    // Всё прошло: снимаем таймер (повторно он уже не сработает)
+    this.clearDeadState(characterId);
+
+    // Синк позиции в Redis: клиент телепортируется, и ИИ должен видеть
+    // игрока там же, а не на месте смерти
+    await this.redis.setPlayerPosition(characterId, result.position).catch(() => {});
+    // Сбросить базовую точку античита на точку респавна — иначе первое
+    // движение после возрождения выглядит как телепорт/speed_hack
+    this.antiCheat.resetPosition(characterId, result.position);
+    this.activePlayers.get(characterId)?.emit(SOCKET_EVENTS.PLAYER_RESPAWNED, {
+      hp: result.hp,
+      maxHp: result.maxHp,
+      position: result.position,
+      region: character.region,
+      gold: result.gold,
+      cost: goldCost,
+      type,
+      source,
+    });
+
+    logger.info(`Player respawned: ${character.name} (${type}, ${source}, cost ${goldCost})`);
   }
 
   // ============================================================
@@ -1191,6 +1456,10 @@ export class GameSocketHandler {
     this.chatLastSent.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
+    // Состояние смерти здесь НЕ снимаем: страховочный таймер обязан
+    // доработать и записать респавн в БД сам — иначе вышедший посреди
+    // смерти вернулся бы в трупе (hp = 0) и не смог бы ничего сделать.
+    // Успел переподключиться до таймера — респавн уйдёт в его новый сокет.
     const shardId = socket.shardId ?? 'isfahan';
     await this.redis.removePlayerFromRegion(shardId, socket.region, socket.characterId).catch(() => {});
     // Шард опустел — выгрузить его монстров

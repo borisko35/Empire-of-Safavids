@@ -100,6 +100,12 @@ export const session = {
   /** Активная лодка (из панели рыбалки); null — игрок на суше */
   boat: null as null | { id: string; nameRu: string; waterSpeed: number; swimSpeed: number; fishingBonus: number; catchLimit: number },
   level: 0, experience: 0,
+  /**
+   * Персонаж мёртв: открыт экран смерти, ходить и бить нельзя.
+   * Флаг, а не проверка класса оверлея в DOM: экран смерти строит
+   * deathScreen, и 3D-слой не должен знать, как он выглядит.
+   */
+  dead: false,
   /** Убийства за сессию: monsterId -> количество (для прогресса квестов) */
   kills: {} as Record<string, number>,
   /** Прогресс квестов с сервера: questId -> { status, progress } */
