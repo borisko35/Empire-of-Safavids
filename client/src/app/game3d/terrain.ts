@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // 3D-мир: рельеф, биомы, вода, города — Empire of Safavids
 // ============================================================
 // Бесшовный ландшафт 2400x2400: поля вокруг Исфахана, пустыня с
@@ -539,17 +539,103 @@ export function buildScatter(scene: THREE.Scene): void {
 }
 
 // ── Дороги: грунтовые и каменные + караванные пути ─────────
-export function buildRoads(scene: THREE.Scene): void {
-  const roads: { from: { x: number; z: number }; to: { x: number; z: number }; w: number; stone: boolean }[] = [
-    { from: { x: CITY.x, z: CITY.z }, to: { x: 0,   z: 0  }, w: 4.0, stone: true  },
-    { from: { x: 0,    z: 0   }, to: { x: CAMP.x, z: CAMP.z }, w: 3.5, stone: false },
-    { from: { x: CITY.x, z: CITY.z }, to: { x: PORT.x, z: PORT.z }, w: 3.0, stone: false },
-    { from: { x: CITY.x, z: CITY.z }, to: { x: CARAVANSERAI.x, z: CARAVANSERAI.z }, w: 3.0, stone: false },
-  ];
+/**
+ * Материал полотна дороги: утоптанная земля, а не однотонная заливка.
+ *
+ * ТУТ БЫЛА ПЛОСКАЯ ЗАЛИВКА ЦВЕТОМ, И ЭТО ТОТ САМЫЙ «НЕКРАСИВЫЙ» ВИД. Ровная
+ * полоса одного тона поверх земли читается как покрашенная, а не как
+ * дорога. Добавлены три вещи, которые делают её похожей на грунт:
+ *
+ * 1. Светлый центр и потемнение к обочинам — настоящая дорога темнее там,
+ *    где её топтали, и светлее посередине, где проезжают повозки.
+ * 2. Мелкий щебень и колеи, повторяющиеся текстурой вдоль полотна.
+ * 3. Прозрачные кромки. Раньше по краям стояли отдельные бордюры высотой
+ *    40 см, и именно они давали ту самую жёсткую тёмную кромку, из-за
+ *    которой дорога выглядела наклеенной. Теперь край просто растворяется
+ *    в земле, и границы видно только тем, что земля под ними чуть светлее.
+ *
+ * alphaTest, а не blending: полотно лежит вплотную к земле, и при обычной
+ * полупрозрачности сортировка давала бы мерцание, когда игрок вплотную
+ * подходит к дороге.
+ */
+function roadMaterial(stone: boolean): THREE.MeshStandardMaterial {
+  const c = document.createElement('canvas');
+  c.width = 128; c.height = 128;
+  const g = c.getContext('2d')!;
 
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0xd4b47a, roughness: 0.9, metalness: 0.0 });
-  const stoneRoadMat = new THREE.MeshStandardMaterial({ color: 0x9a9080, roughness: 0.8, metalness: 0.0 });
-  const edgeMat = new THREE.MeshStandardMaterial({ color: 0x7a6a5a, roughness: 1.0, metalness: 0.0 });
+  // Основа: поперёк полотна светлее к центру, темнее к обочинам
+  const base = g.createLinearGradient(0, 0, 128, 0);
+  const light = stone ? '#a8a294' : '#d9b87e';
+  const dark = stone ? '#6f6a5e' : '#a5824f';
+  base.addColorStop(0, dark);
+  base.addColorStop(0.5, light);
+  base.addColorStop(1, dark);
+  g.fillStyle = base;
+  g.fillRect(0, 0, 128, 128);
+
+  // Щебень и колеи
+  for (let i = 0; i < 700; i++) {
+    const x = Math.random() * 128;
+    const y = Math.random() * 128;
+    const s = 1 + Math.random() * 2.2;
+    const shade = Math.random() < 0.5 ? 0 : 255;
+    g.fillStyle = `rgba(${shade},${shade},${shade},${0.04 + Math.random() * 0.09})`;
+    g.fillRect(x, y, s, s);
+  }
+  for (const lane of [0.32, 0.68]) {
+    g.fillStyle = 'rgba(0,0,0,0.10)';
+    g.fillRect(Math.round(128 * lane) - 2, 0, 4, 128);
+  }
+
+  // Растворяем кромки в землю
+  g.globalCompositeOperation = 'destination-out';
+  for (const [x0, x1] of [[0, 22], [128, 106]] as const) {
+    const grad = g.createLinearGradient(x0, 0, x1, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.fillRect(Math.min(x0, x1), 0, Math.abs(x1 - x0), 128);
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.95,
+    metalness: 0.0,
+    alphaTest: 0.5,
+  });
+}
+
+/**
+ * Дороги между settlements — общие данные для полотна и для движения.
+ *
+ * Вынесены наружу, потому что по этим же линиям теперь ходят караваны и
+ * путники (см. roadTraffic.ts). Раньше список жил внутри buildRoads, и караваны
+ * были зашиты в него же тремя статичными верблюдами на фиксированных точках:
+ * стоят навечно, не идут, и привязаны к ИНДЕКСУ roads[3]. Стоило добавить
+ * пятую дорогу в список — и караваны уехали бы на другую.
+ */
+export const ROAD_PATHS: {
+  from: { x: number; z: number };
+  to: { x: number; z: number };
+  w: number;
+  stone: boolean;
+}[] = [
+  { from: { x: CITY.x, z: CITY.z }, to: { x: 0, z: 0 }, w: 4.0, stone: true },
+  { from: { x: 0, z: 0 }, to: { x: CAMP.x, z: CAMP.z }, w: 3.5, stone: false },
+  { from: { x: CITY.x, z: CITY.z }, to: { x: PORT.x, z: PORT.z }, w: 3.0, stone: false },
+  { from: { x: CITY.x, z: CITY.z }, to: { x: CARAVANSERAI.x, z: CARAVANSERAI.z }, w: 3.0, stone: false },
+];
+
+export function buildRoads(scene: THREE.Scene): void {
+  const roads = ROAD_PATHS;
+
+  const roadMat = roadMaterial(false);
+  const stoneRoadMat = roadMaterial(true);
 
   // Вспомогательная функция: строит одну дорогу как единый BufferGeometry
   function buildSingleRoad(
@@ -561,7 +647,11 @@ export function buildRoads(scene: THREE.Scene): void {
   ): void {
     const dx = to.x - from.x, dz = to.z - from.z;
     const totalLen = Math.hypot(dx, dz);
-    const segCount = Math.max(8, Math.ceil(totalLen / 2));
+    // ТУТ БЫЛО ДЕЛИМУЮ 2, И ШАГ ПОЛУЧАЛСЯ СЛИШКОМ КРУПНЫМ. Дорога шла
+    // двумяметровыми кусками, а рельеф между ними проваливался: полотно
+    // провисало или, наоборот, торчало из земли клином. Метр — мельче
+    // любой неровности, которую тут можно поймать.
+    const segCount = Math.max(8, Math.ceil(totalLen / 1));
 
     // Нормаль и перпендикуляр
     const angle = Math.atan2(dx, dz);
@@ -577,11 +667,21 @@ export function buildRoads(scene: THREE.Scene): void {
       const tt = si / segCount;
       const cx = from.x + dx * tt;
       const cz = from.z + dz * tt;
-      const cy = groundHeight(cx, cz);
-      // левая и правая крайние точки
+      // ТУТ БЫЛА ГЛАВНАЯ ОШИБКА ПОЛОТНА. Высота бралась ОДИН РАЗ, в
+      // центре полосы, и обе крайние точки ставились на неё же. Но земля
+      // по краям дороги лежит на другой высоте, и на любом уклоне или
+      // бугорке полотно с одной стороны уходило в землю, а с другой
+      // висело над ней. На снимках это читалось как светлая лента, которая
+      // то тонет в земле, то повисает в воздухе.
+      //
+      // Теперь высота снимается в каждой крайней точке, и поднимается над
+      // более высокой из них — так полотно никогда не провалится.
       const lx = cx - px * width / 2, lz = cz - pz * width / 2;
       const rx = cx + px * width / 2, rz = cz + pz * width / 2;
-      posArr.push(lx, cy + 0.05, lz, rx, cy + 0.05, rz);
+      const ly = groundHeight(lx, lz);
+      const ry = groundHeight(rx, rz);
+      const y = Math.max(ly, ry) + 0.07;
+      posArr.push(lx, y, lz, rx, y, rz);
       uvArr.push(0, tt, 1, tt);
     }
     for (let si = 0; si < segCount; si++) {
@@ -596,75 +696,27 @@ export function buildRoads(scene: THREE.Scene): void {
     geo.computeVertexNormals();
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
-    mesh.castShadow = true;
+    // ТУТ БЫЛ ЧЁРНЫЙ КОСОЙ ШТРИХ ПО ЗЕМЛЕ. Дорога — это полость, лежащая
+    // на земле, и она ставила castShadow. Тень от полосы, поднятой на 5 см,
+    // ложилась рядом с ней тёмной чертой — на ровной пустыне это и было те
+    // чёрные диагонали на снимке. Принимать тень полотно должно (чтобы
+    // всадники и деревья клали на дорогу свою тень), а отбрасывать — нет:
+    // земля под дорогой и так в тени.
+    mesh.castShadow = false;
     scene.add(mesh);
-
-    // Бордюры
-    for (const side of [-1, 1]) {
-      const off = width / 2 + 0.12;
-      const cp: number[] = [], cu: number[] = [], ci: number[] = [];
-      for (let si = 0; si <= segCount; si++) {
-        const tt = si / segCount;
-        const cx = from.x + dx * tt;
-        const cz = from.z + dz * tt;
-        const ch = groundHeight(cx, cz);
-        cp.push(cx + px * off * side, ch + 0.4, cz + pz * off * side);
-        cp.push(cx - px * 0.09 * side, ch + 0.4, cz - pz * 0.09 * side);
-        cu.push(0, tt, 1, tt);
-      }
-      for (let si = 0; si < segCount; si++) {
-        const a = si * 2, b = si * 2 + 1, c = (si + 1) * 2, d = (si + 1) * 2 + 1;
-        ci.push(a, c, b, b, c, d);
-      }
-      const cg = new THREE.BufferGeometry();
-      cg.setAttribute('position', new THREE.Float32BufferAttribute(cp, 3));
-      cg.setAttribute('uv', new THREE.Float32BufferAttribute(cu, 2));
-      cg.setIndex(ci);
-      cg.computeVertexNormals();
-      const cm = new THREE.Mesh(cg, edgeMat);
-      cm.castShadow = true;
-      cm.receiveShadow = true;
-      scene.add(cm);
-    }
   }
 
   for (const r of roads) {
     buildSingleRoad(scene, r.from, r.to, r.w, r.stone ? stoneRoadMat : roadMat);
   }
 
-  // Караваны на пути к караван-сараю
-  const caravanPath = roads[3]; // Исфahan → Караван-сарай
-  for (let i = 0; i < 3; i++) {
-    const t = 0.2 + i * 0.25; // через каждые 25% пути
-    const cx = caravanPath.from.x + (caravanPath.to.x - caravanPath.from.x) * t;
-    const cz = caravanPath.from.z + (caravanPath.to.z - caravanPath.from.z) * t;
-    const ch = groundHeight(cx, cz);
-    const angle = Math.atan2(caravanPath.to.x - caravanPath.from.x, caravanPath.to.z - caravanPath.from.z);
-
-    const caravan = new THREE.Group();
-    // Верблюд
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 2.0), MAT.wood);
-    body.position.y = 1.2;
-    const hump = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 5), MAT.wood);
-    hump.position.set(0, 2.0, 0);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.8), MAT.wood);
-    head.position.set(0, 1.8, 1.2);
-    const leg1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.0, 5), MAT.trunk);
-    leg1.position.set(-0.4, 0.5, -0.6);
-    const leg2 = leg1.clone(); leg2.position.z = 0.6;
-    const leg3 = leg1.clone(); leg3.position.x = 0.4;
-    const leg4 = leg3.clone(); leg4.position.z = 0.6;
-    caravan.add(body, hump, head, leg1, leg2, leg3, leg4);
-
-    // Тюк на спине
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.5, 0.8), MAT.clothTeal);
-    pack.position.set(0, 2.3, 0);
-    caravan.add(pack);
-
-    caravan.position.set(cx, ch, cz);
-    caravan.rotation.y = angle;
-    scene.add(caravan);
-  }
+  // Караваны уехали в roadTraffic.ts.
+  //
+  // ТУТ СТОЯЛИ ТРИ СТАТИЧНЫХ ВЕРБЛЮДА. Они не двигались никогда: стояли в
+  // точках 0.2, 0.45 и 0.7 пути и ждали. Поле было пустым не потому, что
+  // движения не было, а потому, что его и не существовало — просто три
+  // деревянных ящика на обочине. Теперь по дорогам идут настоящие караваны,
+  // а заодно и случайные путники с квестами.
 
   // ── Мосты ──
   const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x8a7040, roughness: 0.9 });

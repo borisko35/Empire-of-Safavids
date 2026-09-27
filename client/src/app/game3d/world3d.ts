@@ -17,6 +17,7 @@ import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
 import { createCivilians, CiviliansHandle } from './civilians';
+import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
@@ -77,6 +78,7 @@ export class World3D {
   private fauna!: FaunaHandle;
   private npcs!: NpcsHandle;
   private civilians!: CiviliansHandle;
+  private roadTraffic!: RoadTrafficHandle;
   private weather!: WeatherHandle;
   private interiors!: InteriorsHandle;
   private doorTargets: THREE.Object3D[] = [];
@@ -291,6 +293,7 @@ export class World3D {
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
     this.civilians = createCivilians(this.scene);
+    this.roadTraffic = createRoadTraffic(this.scene);
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
@@ -590,7 +593,11 @@ export class World3D {
   private pickNpc(): boolean {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
-    const hits = ray.intersectObjects(this.npcs.clickTargets, true);
+    // Путники на дорогах кликабельны наравне с городскими NPC: те же
+    // userData, тот же обработчик, та же панель задач. Без них «случайные
+    // НПС с квестами» были бы просто фигурками, к которым не подойти.
+    const hits = ray.intersectObjects(
+      [...this.npcs.clickTargets, ...this.roadTraffic.clickTargets], true);
     if (!hits.length || hits[0].distance > 22) return false;
     const panel = hits[0].object.userData.npcPanel as string | undefined;
     const name = hits[0].object.userData.npcName as string | undefined;
@@ -1147,6 +1154,7 @@ export class World3D {
     this.npcs.update(dt, now);
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
+    this.roadTraffic.update(dt, now, me.pos.x, me.pos.z);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
     // Солнце/луна по дуге: источник света следует за светилом.
