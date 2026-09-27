@@ -13,7 +13,7 @@ import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene'
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
 import { GATE, groundHeight, waterSurfaceY } from './game3d/terrain';
-import { STAMINA, GAME_VERSION } from '../../../shared/constants';
+import { STAMINA, GAME_VERSION, SOCKET_EVENTS } from '../../../shared/constants';
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
@@ -327,6 +327,13 @@ function hideLoading(): void {
 }
 
 /** Имя, класс и уровень героя — карточка главного меню (Esc) */
+/**
+ * Пока летит запрос на вход или выход, повторные клики по двери
+ * игнорируются. Без этого при медленной сети можно успеть отправить
+ * несколько запросов и получить два телепорта подряд.
+ */
+let doorBusy = false;
+
 function fillMenuInfo(): void {
   // Версию берём из общей константы: раньше «v0.2.0» было вписано прямо
   // в разметку и разошлось с GAME_VERSION на сервере
@@ -340,6 +347,92 @@ function fillMenuInfo(): void {
     info.textContent =
       `${c.name} · ${t('panels.char_class')}: ${c.class} · ${t('panels.char_level')}: ${c.level}`;
   }
+}
+
+/**
+ * Вход в здание и выход из него.
+ *
+ * ТУТ БЫЛА НЕДОСТАЮЩАЯ ЗВЕНО. 3D-слой давно умел определять клик по двери
+ * (pickDoor) и телепортировать по подтверждению сервера (enterBuildingAt /
+ * exitBuildingAt), десять комнат были нарисованы и стояли в сцене — но
+ * обработчик двери в world3d.init НЕ ПЕРЕДАВАЛИ. Сценарий: игрок подходит к
+ * двери, жмёт, ничего не происходит, дверь выглядит как часть стены.
+ * Пять публичных методов World3D при этом ни разу не вызывались.
+ *
+ * Почему телепорт только по ответу сервера, а не сразу на клик. Сервер
+ * проверяет, что игрок действительно у двери, и двигает позицию в базе и
+ * Redis. Если телепортировать локально, не дождавшись ответа, первый же
+ * пакет движения из старой точки прилетит раньше, чем сервер сбросит
+ * трекинг, и античит выкинет за спидхак. Поэтому клик только спрашивает
+ * сервер, а перемещение происходит в ответе на его «да».
+ */
+function enterOrExitBuilding(action: string, buildingId: string, nameRu: string): void {
+  if (!world3d) return;
+  // Ссылку берём в локальную переменную: внутри обратного вызова сервера
+  // TypeScript уже не видит сужения «world3d не пуст», полученного выше, —
+  // а ссылка на мир за это время не исчезает: сменить её может только
+  // полная пересборка сцены, которая пересоздаёт и эту функцию
+  const w3d = world3d;
+  // Пока запрос летит, повторные клики игнорируем: иначе при медленной
+  // сети можно застрять в ожидании и получить два телепорта подряд
+  if (doorBusy) return;
+  doorBusy = true;
+
+  const event = action === 'exit' ? SOCKET_EVENTS.INTERIOR_EXIT : SOCKET_EVENTS.INTERIOR_ENTER;
+  let settled = false;
+  const done = (): void => {
+    if (settled) return;
+    settled = true;
+    doorBusy = false;
+  };
+
+  // Страховка: если сервер не ответил ни отказом, ни успехом (обрыв связи,
+  // перезагрузка сервера), дверь должна перестать «залипать» иначе
+  window.setTimeout(() => {
+    if (settled) return;
+    done();
+    toast(t('world.inside_failed'), 'error');
+  }, 6000);
+
+  socket.emit(
+    event,
+    { buildingId },
+    (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => {
+      done();
+      if (!res?.ok) {
+        // Причины сервер отдаёт по-английски. Показываем перевод по
+        // смыслу, а не сырую строку: игрок не должен видеть служебный текст
+        const map: Record<string, string> = {
+          'Too far from the door': t('world.inside_far'),
+          'Not inside': t('world.inside_not_inside'),
+          'Unknown building': t('world.inside_unknown'),
+          'Not authenticated': t('world.inside_not_auth'),
+        };
+        toast(map[res?.reason ?? ''] ?? t('world.inside_failed'), 'error');
+        return;
+      }
+      if (!res.target) {
+        toast(t('world.inside_failed'), 'error');
+        return;
+      }
+      const ok = action === 'exit'
+        ? w3d.exitBuildingAt(res.target)
+        : w3d.enterBuildingAt(buildingId, res.target);
+      if (!ok) {
+        // Сервер разрешил, а локально перемещение не вышло: значит
+        // локальное состояние разошлось с серверным. Молчать нельзя —
+        // игрок увидит, что стоит у двери, и решит, что игра сломалась
+        toast(t('world.inside_failed'), 'error');
+        return;
+      }
+      toast(
+        action === 'exit'
+          ? t('world.inside_exit')
+          : t('world.inside_enter').replace('{name}', nameRu || buildingId),
+        'success',
+      );
+    },
+  );
 }
 
 /** Открыть панель по имени — как кнопка-переключатель, но без двойного клика */
@@ -396,6 +489,7 @@ export async function enterWorld(character: Character): Promise<void> {
       // Диалог: ветвящаяся беседа, тон/дружба, засчитывает talk-цели квестов
       if (npcId) void openNpcDialogue(npcId).catch(() => {});
     },
+    onDoor: (action, buildingId, nameRu) => void enterOrExitBuilding(action, buildingId, nameRu),
   });
 
   me = {

@@ -211,7 +211,14 @@
     "slot_accessory": "Аксессуар",
     "stat_bonus": "Бонус характеристик",
     "water_danger": "Опасность в воде!",
-    "water_danger_hint": "В воде есть твари. В лодке они тебя не видят."
+    "water_danger_hint": "В воде есть твари. В лодке они тебя не видят.",
+    "inside_enter": "Вы вошли: {name}",
+    "inside_exit": "Вы вышли из здания",
+    "inside_far": "Подойдите к двери поближе",
+    "inside_not_inside": "Вы не внутри здания",
+    "inside_unknown": "Это здание недоступно",
+    "inside_not_auth": "Сначала войдите в игру",
+    "inside_failed": "Не удалось войти в здание"
   },
   "chat": {
     "title": "Чат",

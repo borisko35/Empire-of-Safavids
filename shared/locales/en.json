@@ -211,7 +211,14 @@
     "slot_accessory": "Accessory",
     "stat_bonus": "Stat bonus",
     "water_danger": "Danger in the water!",
-    "water_danger_hint": "There are things in the water. In a boat they cannot see you."
+    "water_danger_hint": "There are things in the water. In a boat they cannot see you.",
+    "inside_enter": "You entered: {name}",
+    "inside_exit": "You left the building",
+    "inside_far": "Get closer to the door",
+    "inside_not_inside": "You are not inside a building",
+    "inside_unknown": "This building is unavailable",
+    "inside_not_auth": "Sign in to the game first",
+    "inside_failed": "Could not enter the building"
   },
   "chat": {
     "title": "Chat",

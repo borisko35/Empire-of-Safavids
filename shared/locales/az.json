@@ -211,7 +211,14 @@
     "slot_accessory": "Aksesuar",
     "stat_bonus": "Stat bonusu",
     "water_danger": "Suda təhlükə!",
-    "water_danger_hint": "Suda nəsə var. Qayıqda səni görmirlər."
+    "water_danger_hint": "Suda nəsə var. Qayıqda səni görmirlər.",
+    "inside_enter": "Daxil oldunuz: {name}",
+    "inside_exit": "Binadan çıxdınız",
+    "inside_far": "Qapıya yaxınlaşın",
+    "inside_not_inside": "Siz binada deyilsiniz",
+    "inside_unknown": "Bu bina əlçatan deyil",
+    "inside_not_auth": "Əvvəlcə oyuna daxil olun",
+    "inside_failed": "Binaya daxil olmaq mümkün olmadı"
   },
   "chat": {
     "title": "Çat",
