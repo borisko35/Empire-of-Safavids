@@ -12,14 +12,16 @@ const tutorialService = new TutorialService();
 
 // GET /api/tutorial/steps — все шаги туториала
 tutorialRouter.get('/steps', secureMiddleware, asyncHandler(async (_req: Request, res: Response) => {
-  return res.json({ steps: tutorialService.getAllSteps() });
+  return res.json({ steps: tutorialService.getAllSteps(), totalSteps: tutorialService.totalSteps });
 }));
 
 // GET /api/tutorial/:characterId — прогресс туториала
+// totalSteps отдаём, чтобы клиент не держал свою копию числа шагов:
+// раньше оно было зашито как 9, и расходилось с сервером при любой правке
 tutorialRouter.get('/:characterId', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const progress = await tutorialService.getProgress(req.params.characterId);
   const step = tutorialService.getStep(progress.step);
-  return res.json({ progress, currentStep: step });
+  return res.json({ progress, currentStep: step, totalSteps: tutorialService.totalSteps });
 }));
 
 // POST /api/tutorial/:characterId/advance — перейти к следующему шагу

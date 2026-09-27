@@ -26,6 +26,11 @@ export interface PoetryGameState {
   gameId: string;
   challengeId: string;
   selectedLines: number[];      // Индексы выбранных строк (в порядке выбора)
+  /** Перемешанный порядок, зафиксированный при старте игры.
+   *  Раньше порядок перемешивался заново в каждом запросе, и игрок
+   *  собирал стихотворение по одной последовательности, а сервер
+   *  проверял по другой — правильный ответ засчитывался почти случайно. */
+  order: number[];
   isComplete: boolean;
   isCorrect: boolean;
 }
@@ -131,20 +136,43 @@ export const POETRY_CHALLENGES: PoetryChallenge[] = [
 export class PoetryOfHafiz {
   private games = new Map<string, PoetryGameState>();
 
+  /**
+   * Перемешать индексы строк. Фишер–Йетс — честный тасователь:
+   * sort(() => Math.random() - 0.5) даёт заметно неравномерный порядок.
+   * `keep` — начало диапазона, чтобы при заданной сложности вариантов
+   * было больше, чем нужно для сборки (лишние строки — часть игры).
+   */
+  private static shuffleIndices(from: number, to: number): number[] {
+    const idx = Array.from({ length: to - from }, (_, i) => from + i);
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    return idx;
+  }
+
   /** Начать новую игру */
-  startGame(playerId: string, difficulty?: string): PoetryGameState | null {
-    // Выбрать стихотворение по сложности
+  startGame(playerId: string, difficulty?: string, challengeId?: string): PoetryGameState | null {
+    // Выбрать стихотворение: по id, если выбрано конкретное, иначе по сложности
     let pool = POETRY_CHALLENGES;
+    if (challengeId) {
+      const byId = pool.filter(p => p.id === challengeId);
+      if (byId.length) pool = byId;
+    }
     if (difficulty) pool = pool.filter(p => p.difficulty === difficulty);
     if (pool.length === 0) pool = POETRY_CHALLENGES;
 
     const challenge = pool[Math.floor(Math.random() * pool.length)];
+
+    // Порядок вариантов — один на игру, дальше он неизменен
+    const order = PoetryOfHafiz.shuffleIndices(0, challenge.options.length);
 
     const gameId = `poetry_${playerId}_${Date.now()}`;
     const state: PoetryGameState = {
       gameId,
       challengeId: challenge.id,
       selectedLines: [],
+      order,
       isComplete: false,
       isCorrect: false,
     };
@@ -174,13 +202,17 @@ export class PoetryOfHafiz {
     return game;
   }
 
-  /** Проверить ответ */
+  /**
+   * Проверить ответ: игрок выбирал варианты в порядке `order`, который
+   * был показан ему с самого начала. Правильные строки идут в том же
+   * порядке — сверяем тексты выбранных вариантов с эталоном.
+   */
   private checkAnswer(game: PoetryGameState, challenge: PoetryChallenge): boolean {
-    // Перемешанные варианты — нужно проверить, что выбранные строки совпадают с правильными
-    const shuffled = [...challenge.options].sort(() => Math.random() - 0.5);
-    const selectedTexts = game.selectedLines.map(i => shuffled[i]?.text);
-    const correctTexts = challenge.lines.map(l => l.text);
-    return JSON.stringify(selectedTexts) === JSON.stringify(correctTexts);
+    if (game.selectedLines.length !== challenge.lines.length) return false;
+    return game.selectedLines.every((optionIndex, step) => {
+      const line = challenge.options[game.order[optionIndex]];
+      return line?.text === challenge.lines[step].text;
+    });
   }
 
   /** Получить результат */
@@ -188,13 +220,13 @@ export class PoetryOfHafiz {
     return this.games.get(gameId) ?? null;
   }
 
-  /** Получить стихотворение (с перемешанными вариантами) */
+  /** Получить стихотворение в зафиксированном для этой игры порядке вариантов */
   getChallenge(gameId: string): { challenge: PoetryChallenge; shuffled: PoetryLine[] } | null {
     const game = this.games.get(gameId);
     if (!game) return null;
     const challenge = POETRY_CHALLENGES.find(c => c.id === game.challengeId);
     if (!challenge) return null;
-    const shuffled = [...challenge.options].sort(() => Math.random() - 0.5);
+    const shuffled = game.order.map(i => challenge.options[i]).filter(Boolean);
     return { challenge, shuffled };
   }
 

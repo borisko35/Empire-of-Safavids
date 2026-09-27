@@ -10,7 +10,11 @@ export type AnalyticsEvent =
   | 'level_up' | 'item_crafted' | 'item_purchased'
   | 'auction_listing' | 'auction_sale' | 'dungeon_completed'
   | 'boss_killed' | 'pvp_kill' | 'guild_created'
-  | 'premium_purchased' | 'battle_pass_purchased' | 'achievement_earned';
+  | 'premium_purchased' | 'battle_pass_purchased' | 'achievement_earned'
+  // Воронка гостевого входа: guest_login — сколько людей начали играть
+  // без регистрации, guest_claimed — сколько из них оставили аккаунт.
+  // Конверсия второго в первое и есть главная метрика новой фичи.
+  | 'guest_login' | 'guest_claimed';
 
 export class AnalyticsService {
   private db = DatabaseService.getInstance();

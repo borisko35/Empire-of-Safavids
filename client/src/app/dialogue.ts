@@ -7,7 +7,9 @@
 import { api } from './api';
 import { session } from './state';
 import { t } from './i18n';
+import { playCutscene, requestCutsceneForQuest, type CutsceneData } from './cutscene';
 import { toast } from './hud';
+import { onTutorialAction } from './tutorial';
 
 interface DialogLine {
   id: string;
@@ -34,6 +36,8 @@ export async function openNpcDialogue(npcId: string): Promise<void> {
   if (!el) return;
   el.classList.remove('hidden');
   el.classList.add('active');
+  // Шаг туториала «поговори с NPC» засчитывается здесь
+  onTutorialAction('talk_npc', npcId);
 
   try {
     const data = await api.npcDialog(npcId, undefined, session.character?.id);
@@ -149,7 +153,12 @@ async function handleChoice(choiceIndex: number): Promise<void> {
     if (data.questsCompleted?.length) {
       for (const q of data.questsCompleted) {
         toast(`Квест завершён: ${q.titleRu} (+${q.experience} ${t('world.exp')})`, 'success');
+        void requestCutsceneForQuest(q.questId);
       }
+    }
+    // Сюжетная сцена на принятии квеста: сервер прислал её с этим ответом
+    if (data.cutscene) {
+      playCutscene(data.cutscene as CutsceneData);
     }
     window.dispatchEvent(new CustomEvent('quest:accepted'));
   } catch (err) {

@@ -2,7 +2,12 @@
 // Общие константы — Empire of Safavids
 // ============================================================
 
-export const GAME_VERSION = '0.2.0';
+/**
+ * Версия игры. Показывается на лендинге (бейдж берёт из /health) и в меню
+ * персонажа. Раньше в index.html было захардкожено «v0.2.0» отдельно от
+ * константы — версии расходились. Теперь меню подставляет значение отсюда.
+ */
+export const GAME_VERSION = '0.3.0';
 export const MAX_LEVEL = 100;
 export const MAX_CHARACTERS_PER_ACCOUNT = 3;
 export const MAX_INVENTORY_SLOTS = 100;
@@ -38,6 +43,24 @@ export const CHAT_LIMITS = {
   MAX_MESSAGE_LENGTH: 500,
   WORLD_CHAT_COOLDOWN_MS: 5000,
   REGION_CHAT_COOLDOWN_MS: 1000,
+};
+
+// ── Выносливость ─────────────────────────────────────────────
+// Доли от максимальной стамины в секунду. Клиент считает плавно для
+// полоски, сервер — раз в 5 секунд для базы; ставки должны совпадать,
+// иначе серверный player:resources будет дёргать полоску.
+// Раньше стамина вообще не тратилась: плыть можно было бесконечно.
+export const STAMINA = {
+  /** Расход при плавании (доля от максимума в секунду) */
+  SWIM_DRAIN_PER_SEC: 0.05,
+  /** Восстановление на суше после отдыха (быстрое) */
+  LAND_REGEN_PER_SEC: 0.14,
+  /** Обычное медленное восстановление */
+  IDLE_REGEN_PER_SEC: 0.035,
+  /** Ниже этой доли бег (Shift) невозможен */
+  SPRINT_MIN: 0.05,
+  /** Сколько стамины стоит 1 секунда плавания на «одном уровне» (для UI) */
+  get SWIM_DRAIN_PER_5S(): number { return this.SWIM_DRAIN_PER_SEC * 5; },
 };
 
 // Socket события
@@ -88,6 +111,7 @@ export const SERVER_EVENTS = {
   QUEST_COMPLETED: 'quest:completed',  // квест завершён: награды начислены
   WORLD_EVENT: 'world:event',          // мировой ивент: старт/победа над боссом
   DUNGEON_COMPLETED: 'dungeon:completed', // данж завершён: награды
+  DAILY_TASK_COMPLETED: 'daily:task',  // задача дня закрыта: золото/опыт/предмет начислены
   COMBAT_BLOCKED: 'combat:defense',    // принято активное блок/уклонение
 } as const;
 

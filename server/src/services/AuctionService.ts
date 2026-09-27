@@ -29,6 +29,12 @@ export interface ShopItem {
   stock?: number;       // undefined = бесконечно
   minLevel?: number;
   discount?: number;    // 0–1
+  /**
+   * 'boat' — не предмет сумки, а отдельное средство передвижения
+   * (как кони). Покупка идёт через BoatSystem, а не addItems.
+   * undefined — обычный предмет.
+   */
+  kind?: 'boat';
 }
 
 // Товары NPC-магазинов по регионам
@@ -53,6 +59,9 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'con_exp_scroll', price: 600, currency: 'gold', minLevel: 20 },
       { itemId: 'wpn_qizilbash_saber', price: 3000, currency: 'gold', minLevel: 20 },
       { itemId: 'arm_silk_robe', price: 6000, currency: 'gold', minLevel: 25 },
+      // Снаряжение для воды: снимает замедление в реке и экономит выносливость
+      { itemId: 'acc_boots_silk', price: 700, currency: 'gold', minLevel: 10 },
+      { itemId: 'acc_boots_seafarer', price: 2600, currency: 'gold', minLevel: 25 },
     ],
   },
   'shop_khorasan_rare': {
@@ -61,6 +70,18 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'mat_turquoise', price: 400, currency: 'gold' },
       { itemId: 'mat_dragon_scale', price: 60000, currency: 'gold', minLevel: 70 },
       { itemId: 'acc_silk_road_amulet', price: 22000, currency: 'gold', minLevel: 60 },
+      { itemId: 'acc_cloim_rain', price: 7000, currency: 'gold', minLevel: 40 },
+    ],
+  },
+  // Шираз: рукописи и лекарственные травы. Раньше qst_hafiz_scroll и
+  // mat_rose_petals не выдавал НИКТО — три квеста и ежедневное задание
+  // «Сбор Трав» было невозможно пройти в принципе.
+  'shop_shiraz_scribe': {
+    nameRu: 'Писальский ряд Шираза',
+    items: [
+      { itemId: 'qst_hafiz_scroll', price: 250, currency: 'gold' },
+      { itemId: 'mat_rose_petals', price: 90, currency: 'gold' },
+      { itemId: 'con_mana_potion', price: 45, currency: 'gold' },
     ],
   },
   'shop_premium': {
@@ -78,6 +99,8 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'mat_iron_ore', price: 3, currency: 'silver' },
       { itemId: 'con_mana_potion', price: 15, currency: 'silver' },
       { itemId: 'con_health_potion_m', price: 20, currency: 'silver' },
+      // Лепестки роз для алхимика — дешёвое ежедневное задание
+      { itemId: 'mat_rose_petals', price: 2, currency: 'silver' },
     ],
   },
   'shop_isfahan_stable': {
@@ -86,6 +109,22 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'mount_arabian_horse', price: 5000, currency: 'gold', minLevel: 1 },
       { itemId: 'mount_bactrian_camel', price: 8000, currency: 'gold', minLevel: 10 },
       { itemId: 'mount_qizilbash_warhorse', price: 25000, currency: 'gold', minLevel: 30 },
+      // Лодки покупаются отдельно (BoatSystem), но продаются в той же
+      // конюшне — лодка и конь для игрока одного типа «средство передвижения»
+      { itemId: 'boat_rowboat', price: 400, currency: 'gold', minLevel: 1, kind: 'boat' },
+      { itemId: 'boat_fishing_skid', price: 1400, currency: 'gold', minLevel: 8, kind: 'boat' },
+      { itemId: 'boat_caravel', price: 9000, currency: 'gold', minLevel: 25, kind: 'boat' },
+    ],
+  },
+  // Притирка: рыбаки сдают улов и берут приманку
+  'shop_isfahan_fishmonger': {
+    nameRu: 'Притирка Исфахана',
+    items: [
+      { itemId: 'bait_worm', price: 3, currency: 'gold' },
+      { itemId: 'fish_sprat', price: 9, currency: 'gold' },
+      { itemId: 'fish_crucian', price: 18, currency: 'gold' },
+      { itemId: 'fish_pike', price: 70, currency: 'gold' },
+      { itemId: 'fish_catfish', price: 48, currency: 'gold' },
     ],
   },
 };

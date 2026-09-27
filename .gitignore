@@ -61,10 +61,20 @@ site/install/log.html
 site/install/styles.css
 server/scripts/daemon/
 
-# ������� � ����������� ����������� � ������� �� ���������
+# Файлы для настройки доступа к VPS (личные, не часть репозитория)
 tools/setup-ssh-key.winscp.txt
 tools/*.winscp.txt
 
 # Python
 __pycache__/
 *.pyc
+
+# Временная папка выкатки на VPS (создаётся перед деплоем, в репозиторий не идёт)
+deploy-update/
+
+# Старые копии исходников и сборки внутри deploy/.
+# За ними никто не следил: deploy/server/src разошёлся с настоящим
+# server/src, и править можно было не тот файл. Боевой compose собирает
+# из корня репозитория (context: ..), поэтому эти папки никому не нужны.
+deploy/server/
+deploy/client/

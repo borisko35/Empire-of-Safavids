@@ -16,6 +16,8 @@ import { GAME_SERVERS } from '../../../shared/constants';
 import { Region } from '../types/game.types';
 import { CharacterService } from '../services/CharacterService';
 import { RedisService } from '../services/RedisService';
+import { GameLoop } from '../systems/GameLoop';
+import type { Weather } from '../systems/WorldTimeSystem';
 
 export const adminRouter = Router();
 const adminService = new AdminService();
@@ -84,6 +86,24 @@ adminRouter.post('/teleport', adminCheck, asyncHandler(async (req: Request, res:
   }
   await adminService.teleportCharacter(req.userId!, characterId, position, region);
   return res.json({ success: true, message: 'Character teleported' });
+}));
+
+// ============================================================
+// POST /api/admin/weather — Ручная смена погоды (kind='auto' — вернуть расписание)
+// Без этого каждый эффект погоды приходилось ждать по 4 минуты в цикле.
+// ============================================================
+const WEATHER_KINDS = ['clear', 'cloudy', 'rain', 'storm', 'fog', 'sandstorm', 'snow', 'wind'];
+
+adminRouter.post('/weather', adminCheck, asyncHandler(async (req: Request, res: Response) => {
+  const raw = String(req.body?.kind ?? 'auto');
+  if (raw !== 'auto' && !WEATHER_KINDS.includes(raw)) {
+    return res.status(400).json({ error: `Unknown weather kind: ${raw}` });
+  }
+  const sys = GameLoop.getInstance().getWorldTimeSystem();
+  sys.setWeatherOverride(raw === 'auto' ? null : (raw as Weather));
+  // Сразу рассылаем — иначе клиенты увидят погоду только через минуту
+  await sys.broadcastWorldTime();
+  return res.json({ success: true, weather: raw });
 }));
 
 // ============================================================

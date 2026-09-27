@@ -17,6 +17,11 @@ const SESSION_TTL_7D  = 7 * 24 * 3600;   // 7 дней в секундах
 const SESSION_TTL_30D = 30 * 24 * 3600;  // 30 дней («запомнить меня»)
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MINUTES    = 15;
+// Гостевой вход: сколько гостей один IP может создать за сутки.
+// Без предела через гостевую дверь можно наделать сколько угодно
+// аккаунтов — и обойти бан по аккаунту, и набить базу мусором.
+const MAX_GUESTS_PER_IP  = 5;
+const GUEST_WINDOW_SEC   = 24 * 3600;
 
 export class AuthService {
   private db           = DatabaseService.getInstance();
@@ -49,8 +54,8 @@ export class AuthService {
     const userId = uuidv4();
 
     await this.db.query(
-      `INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+      `INSERT INTO users (id, username, email, password_hash, has_password, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, TRUE, NOW(), NOW())`,
       [userId, data.username, data.email.toLowerCase(), passwordHash]
     );
 
@@ -59,6 +64,98 @@ export class AuthService {
 
     // Автоматический вход после регистрации
     return this.createSession(userId, data.username, false);
+  }
+
+  // ============================================================
+  // ГОСТЕВОЙ ВХОД
+  // ============================================================
+  /**
+   * Создаёт гостевой аккаунт в один клик — без email и пароля.
+   *
+   * Зачем: это самая большая дыра в воронке. Человек пришёл по ссылке,
+   * увидел форму регистрации (имя, почта, пароль, два согласия, год
+   * рождения) и закрыл вкладку. Здесь между «заинтересовался» и «играет»
+   * стоит стена. Гость играет сразу, а аккаунт можно присвоить позже —
+   * user_id не меняется, поэтому весь прогресс сохраняется.
+   *
+   * Ограничение по IP обязательно: иначе через гостевой вход можно
+   * наделать сколько угодно аккаунтов (и обойти бан по аккаунту).
+   */
+  async guestLogin(ip: string): Promise<AuthResponse> {
+    const key = `auth:guests:${ip}`;
+    const count = parseInt((await this.redis.get(key)) ?? '0');
+    if (count >= MAX_GUESTS_PER_IP) {
+      throw this.authError('guest_rate_limited',
+        `С этого адреса уже создано ${count} гостевых аккаунтов`);
+    }
+    await this.redis.incr(key);
+    await this.redis.expire(key, GUEST_WINDOW_SEC);
+
+    const userId = uuidv4();
+    const username = await this.pickGuestUsername();
+    // .invalid — домен, который нельзя зарегистрировать (RFC 2606),
+    // поэтому такой адрес физически не может совпасть с чужим
+    const email = `guest_${userId}@guest.invalid`;
+    // Хэш случайного пароля: войти в гостя по паролю невозможно,
+    // но колонка NOT NULL satisfied и код логина не меняется
+    const passwordHash = await bcrypt.hash(uuidv4() + uuidv4(), 12);
+
+    await this.db.query(
+      `INSERT INTO users (id, username, email, password_hash, is_guest, last_login_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, TRUE, NOW(), NOW(), NOW())`,
+      [userId, username, email, passwordHash]
+    );
+
+    analytics.track('guest_login', { ip }, userId);
+    logger.info(`[Auth] Guest created: ${username} from ${ip}`);
+
+    const session = await this.createSession(userId, username, true);
+    return { ...session, isGuest: true };
+  }
+
+  /**
+   * Присвоение гостевого аккаунта: игрок задаёт email и пароль.
+   * user_id остаётся прежним, поэтому персонаж, вещи, уровень,
+   * квесты и всё остальное сохраняется.
+   */
+  async claim(userId: string, email: string, password: string): Promise<void> {
+    const user = await this.db.queryOne<{ is_guest: boolean }>(
+      'SELECT is_guest FROM users WHERE id = $1', [userId]
+    );
+    if (!user) throw this.authError('user_not_found');
+    if (!user.is_guest) throw this.authError('already_claimed');
+
+    if (password.length < 8) throw this.authError('weak_password');
+
+    const emailTaken = await this.db.queryOne(
+      'SELECT id FROM users WHERE email = $1', [email.toLowerCase()]
+    );
+    if (emailTaken) throw this.authError('email_taken');
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await this.db.query(
+      `UPDATE users SET email = $1, password_hash = $2, has_password = TRUE, is_guest = FALSE,
+              claimed_at = NOW(), updated_at = NOW()
+       WHERE id = $3`,
+      [email.toLowerCase(), passwordHash, userId]
+    );
+
+    analytics.track('guest_claimed', { ip: 'self' }, userId);
+    logger.info(`[Auth] Guest claimed: userId=${userId}`);
+  }
+
+  /** Подбирает свободное имя вида Гость_4821 (в users.username 20 символов) */
+  private async pickGuestUsername(): Promise<string> {
+    for (let i = 0; i < 12; i++) {
+      const n = Math.floor(1000 + Math.random() * 9000);
+      const name = `Гость_${n}`;
+      const taken = await this.db.queryOne(
+        'SELECT id FROM users WHERE username = $1', [name]
+      );
+      if (!taken) return name;
+    }
+    // Крайне маловероятный случай: добавляем счётчик к id
+    return `Гость_${uuidv4().slice(0, 8)}`;
   }
 
   // ============================================================
@@ -154,10 +251,10 @@ export class AuthService {
     const user = await this.db.queryOne<{
       id: string; username: string; email: string;
       is_banned: boolean; ban_reason: string | null; ban_until: Date | null;
-      is_admin: boolean; admin_role: string | null;
+      is_admin: boolean; admin_role: string | null; is_guest: boolean;
       created_at: Date; last_login_at: Date;
     }>(
-      'SELECT id, username, email, is_banned, ban_reason, ban_until, is_admin, admin_role, created_at, last_login_at FROM users WHERE id = $1',
+      'SELECT id, username, email, is_banned, ban_reason, ban_until, is_admin, admin_role, is_guest, created_at, last_login_at FROM users WHERE id = $1',
       [userId]
     );
     if (!user) return null;
@@ -186,6 +283,7 @@ export class AuthService {
       isBanned: user.is_banned,
       banReason: user.ban_reason ?? undefined,
       banUntil: user.ban_until ? new Date(user.ban_until) : undefined,
+      isGuest: user.is_guest,
       createdAt: new Date(user.created_at),
       lastLoginAt: new Date(user.last_login_at),
     };
@@ -299,7 +397,7 @@ export class AuthService {
     if (!user) throw this.authError('user_not_found');
     const newHash = await bcrypt.hash(newPassword, 12);
     await this.db.query(
-      'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+      'UPDATE users SET password_hash = $1, has_password = TRUE, updated_at = NOW() WHERE id = $2',
       [newHash, user.id]
     );
     logger.info(`[Auth] Password reset for: ${email}`);

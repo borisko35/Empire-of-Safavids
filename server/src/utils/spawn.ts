@@ -55,4 +55,28 @@ export function isDeepWater(x: number, z: number): boolean {
   return false;
 }
 
+/**
+ * Есть ли здесь вода вообще — включая мелководье у берега.
+ * Рыбалка с берега возможна только там, где вода ещё не кончилась.
+ */
+export function isWater(x: number, z: number): boolean {
+  if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r) return true;
+  if (Math.hypot(x - POND.x, z - POND.z) < POND.r) return true;
+  for (const river of [RIVER_A, RIVER_B]) {
+    for (let i = 0; i < river.length - 1; i++) {
+      if (distToSegment(x, z, river[i].x, river[i].z, river[i + 1].x, river[i + 1].z) < 6) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Можно ли здесь поставить лодку на воду. Мосты — суша: лодка под
+ * мостом не пройдёт, а игрок с лодкой на мосту — абсурд.
+ */
+export function canFloatAt(x: number, z: number): boolean {
+  if (onBridge(x, z)) return false;
+  return isWater(x, z);
+}
+
 export { getRegionSpawn };

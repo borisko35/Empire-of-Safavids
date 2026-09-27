@@ -7,7 +7,7 @@
 
 import { Region } from '../types/game.types';
 import { MONSTERS_DATABASE } from '../data/monsters';
-import { AISystem } from './AISystem';
+import { AISystem, TargetPlayer } from './AISystem';
 import { WorldTimeSystem, Weather } from './WorldTimeSystem';
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';
@@ -41,6 +41,13 @@ const SPAWN_POINTS: SpawnPoint[] = [
   makePoint({ id: 'sp_tabriz_02', monsterId: 'mob_bandit_warrior', region: Region.TABRIZ,      position: { x: -80, y: 0, z: 120 }, maxCount: 3, respawnTime: 90,   weatherBonus: { fog: 1.5 } }),
   makePoint({ id: 'sp_tabriz_scorp', monsterId: 'mob_desert_scorpion', region: Region.TABRIZ,   position: { x: 220, y: 0, z: 70  }, maxCount: 4, respawnTime: 45,   weatherBonus: { sandstorm: 2.0 } }),
   makePoint({ id: 'sp_tabriz_wolf',  monsterId: 'mob_wolf',         region: Region.TABRIZ,      position: { x: -90, y: 0, z: 130 }, maxCount: 3, respawnTime: 60,   weatherBonus: { fog: 1.5 } }),
+  // ─ Озеро у истоков (глубокая вода: центр -420,-160, радиус 170)
+  // Подводные существа стоят точно в воде — иначе ИИ не смог бы их
+  // удержать в воде, и они «зависали» бы на берегу.
+  makePoint({ id: 'sp_lake_piranha',  monsterId: 'mob_lake_piranha',          region: Region.TABRIZ, position: { x: -420, y: 0, z: -100 }, maxCount: 3, respawnTime: 40,  weatherBonus: {} }),
+  makePoint({ id: 'sp_lake_sturgeon', monsterId: 'mob_lake_sturgeon_horror', region: Region.TABRIZ, position: { x: -500, y: 0, z: -200 }, maxCount: 2, respawnTime: 75,  weatherBonus: { fog: 1.4 } }),
+  makePoint({ id: 'sp_lake_ghost',    monsterId: 'mob_lake_ghost_fish',       region: Region.TABRIZ, position: { x: -350, y: 0, z: -230 }, maxCount: 1, respawnTime: 150, weatherBonus: { storm: 1.6 } }),
+  makePoint({ id: 'sp_lake_leviathan', monsterId: 'mob_lake_leviathan',       region: Region.TABRIZ, position: { x: -430, y: 0, z: -190 }, maxCount: 1, respawnTime: 900, weatherBonus: {} }),
   // ─ Шираз
   makePoint({ id: 'sp_shir_01',   monsterId: 'mob_bandit_scout',   region: Region.SHIRAZ,      position: { x: 110, y: 0, z: -91 }, maxCount: 4, respawnTime: 75,   weatherBonus: {} }),
   makePoint({ id: 'sp_shir_02',   monsterId: 'mob_fog_assassin',   region: Region.SHIRAZ,      position: { x: -110, y: 0, z: -90 }, maxCount: 2, respawnTime: 240,  weatherBonus: { fog: 2.0 } }),
@@ -170,6 +177,11 @@ export class SpawnSystem {
       position: pos,
       hp: def.hp,
       type: def.type,
+      // Клиенту нужно знать, кого рисовать на поверхности: подводное
+      // существо торчит из воды спиной, а не висит на SWIM_FEET под ней,
+      // иначе его не видно и не в кого бить
+      aquatic: def.aquatic === true,
+      aquaticSize: def.aquaticSize,
     }).catch(() => {});
 
     logger.debug(`[Spawn] ${def.nameRu} spawned at ${sp.region} on ${shardId} (${sp.id})`);
@@ -200,7 +212,7 @@ export class SpawnSystem {
    * Тик ИИ всех активных монстров. Игроки передаются по ключу
    * «шард:регион» — монстр видит только игроков своего шарда.
    */
-  tickAI(nearbyPlayers: Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>): {
+  tickAI(nearbyPlayers: Map<string, TargetPlayer[]>): {
     shardId: string; region: Region; instanceId: string; targetId?: string; skillId?: string; type: string;
   }[] {
     const attacks: { shardId: string; region: Region; instanceId: string; targetId?: string; skillId?: string; type: string }[] = [];

@@ -25,11 +25,15 @@ export const DAILY_TASKS: DailyTaskDef[] = [
     task_type: 'kill_elite', target: 'elite', required_count: 5,
     reward_gold: 500, reward_experience: 1000, reward_item_id: 'pot_health_medium', reward_item_qty: 3,
     min_level: 10, reset_hours: 24 },
-  { id: 'daily_collect', title: 'Herb Gathering', title_ru: 'Сбор Трав',
-    description: 'Collect 15 rose petals', description_ru: 'Собрать 15 лепестков роз',
-    task_type: 'collect', target: 'mat_rose_petals', required_count: 15,
-    reward_gold: 100, reward_experience: 200, reward_item_id: 'pot_mana_small', reward_item_qty: 3,
-    min_level: 1, region: 'isfahan', reset_hours: 24 },
+  // ТУТ БЫЛА ЗАДАЧА «Сбор Трав»: собрать 15 лепестков роз. Сбора в игре
+  // НЕТ — mat_rose_petals встречается только как цель квеста, добыть его
+  // нечем. Задача была невыполнима в принципе. Заменил на рыбалку: ловля
+  // работает (FishingSystem) и подходит новичку.
+  { id: 'daily_fishing', title: 'Fisher of the Day', title_ru: 'Рыбак Дня',
+    description: 'Catch 5 fish', description_ru: 'Поймать 5 рыб',
+    task_type: 'fish', target: 'any', required_count: 5,
+    reward_gold: 150, reward_experience: 300, reward_item_id: 'food_kebab', reward_item_qty: 2,
+    min_level: 1, reset_hours: 24 },
   { id: 'daily_dungeon', title: 'Dungeon Rush', title_ru: 'Рейд в Подземелье',
     description: 'Complete 2 dungeons', description_ru: 'Пройти 2 подземелья',
     task_type: 'dungeon', target: 'any', required_count: 2,

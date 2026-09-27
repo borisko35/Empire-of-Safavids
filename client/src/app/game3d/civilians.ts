@@ -25,10 +25,19 @@ interface Civilian {
   stateUntil: number;
   talkWith: Civilian | null;
   phase: number;
+  /** Расстояние до цели в прошлом кадре — по нему видно, что горожанин
+   *  реально буксует, а не просто подошёл ближе */
+  lastDist: number;
+  /** Сколько секунд подряд не приближается к цели */
+  stuckFor: number;
+  /** Позиция в начале кадра — по ней ограничиваем суммарный сдвиг (pushLimit) */
+  frameStartX: number | undefined;
+  frameStartZ: number | undefined;
 }
 
 export interface CiviliansHandle {
-  update(dt: number, now: number): void;
+  /** playerX/playerZ — чтобы горожане обходили и игрока, а не шли сквозь него */
+  update(dt: number, now: number, playerX?: number, playerZ?: number): void;
   dispose(): void;
 }
 
@@ -44,6 +53,27 @@ const PHRASES = [
 ];
 
 const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b4e5a, 0x5a7a8b];
+
+/**
+ * Предел сдвига горожанина, В СЕКУНДУ, как доля от его обычной скорости.
+ *
+ * Раньше предел задавался в метрах НА КАДР, и это была ошибка: реальная
+ * скорость оказывалась равной «метры × число кадров в секунду». На быстром
+ * компьютере (240 fps) 0,12 м на кадр — это 104 км/ч, а 0,3 м — 260 км/ч.
+ * Пользователь видел «450 км/с», потом «220 км/с»: соотношение 450/220 = 2,
+ * и ровно во столько же я уменьшил предел (0,3 → 0,12). Ограничитель работал
+ * правильно, но величина была задана не в тех единицах.
+ *
+ * Теперь предел умножается на dt, то есть задаёт скорость в м/с и от частоты
+ * кадров не зависит: 2 × 1,4 м/с = 2,8 м/с (10 км/ч) — это быстрый толчок,
+ * когда горожанина расталкивают или выталкивают из стены.
+ */
+const PUSH_SPEED_K = 2;
+
+/** Предельный сдвиг за этот кадр для данного горожанина, в метрах */
+function pushLimit(c: Civilian, dt: number): number {
+  return c.speed * dt * PUSH_SPEED_K;
+}
 const SKIN = [0xe4b284, 0xc89878, 0xa87858];
 const HAIR = [0x2a2018, 0x4a3220, 0x6e563a, 0x8a8a8a];
 const PANTS = [0x3a3630, 0x4a4438, 0x2e3a4a];
@@ -79,28 +109,166 @@ function makeBubble(): THREE.Sprite {
 
 const HOME_R = 85;
 
-/** Выталкивание из статичных коллайдеров (дома, стены, фонтан). */
-function resolveStatic(x: number, z: number, r: number): { x: number; z: number } {
-  let px = x, pz = z;
-  for (let pass = 0; pass < 2; pass++) {
-    let pushed = false;
+/**
+ * Выталкивание из препятствий. Раньше учитывались только постройки —
+ * горожане свободно проходили друг сквозь друга и сквозь игрока.
+ * Теперь учитываются и другие горожане (CIV_COLLIDERS, который раньше
+ * заполнялся, но никогда не читался), и сам игрок.
+ *
+ * Обход — скольжение вдоль препятствия, а не отказ от цели: пока
+ * горожанин скользит, он выглядит так, будто обходит стену.
+ *
+ * ПОМЕЧЕНО: в конце делается отдельный проход ТОЛЬКО по постройкам.
+ * Без него толкачка от соседа (она применяется последней) успевала
+ * засунуть горожанина в стену: при раскачке «стена ↔ сосед» после трёх
+ * проходов оставалось положение внутри стены (замер: 0.76 м). Стены —
+ * единственное жёсткое ограничение, они должны побеждать всегда.
+ */
+
+/** Суммарная глубина вхождения точки в постройки (0 — чисто) */
+function staticsOverlap(x: number, z: number, r: number): number {
+  let sum = 0;
+  for (const c of COLLIDERS) {
+    const d = Math.hypot(x - c.x, z - c.z);
+    const min = c.r + r;
+    if (d < min) sum += min - d;
+  }
+  return sum;
+}
+
+/**
+ * Выносит точку из построек.
+ *
+ * Перебираем НЕСКОЛЬКО направлений выхода и берём то, где суммарное
+ * вхождение в постройки минимально. Одного «вытолкнуть из самого глубокого»
+ * мало: два перекрывающихся дома образуют ловушку, где выход из одного — это
+ * вход в другой, и цикл раскачивается, не сходясь (замер: горожанин оставался
+ * на 0.42 м внутри дома, а телепорт расталкивания давал сдвиг 0.98 м за кадр).
+ * Выбор лучшего из кандидатов гарантирует, что значение не растёт, поэтому
+ * цикл сходится.
+ *
+ * maxMove — ЖЁСТКИЙ предел сдвига за один вызов, в метрах. Без него вынос
+ * из стены городской стены (радиус 4.1 м) за 6 проходов уносил горожанина
+ * на 27 м за кадр — при 60 кадрах это 1600 м/с, то есть телепорт (пользователь
+ * увидел «450 км/с»). Вынос — это страховка от застревания, а не ходьба:
+ * оставшееся вхождение доберётся за следующие кадры.
+ */
+function pushOutOfStatics(x: number, z: number, r: number, maxMove: number): { x: number; z: number } {
+  let cx = x, cz = z;
+  let best = staticsOverlap(cx, cz, r);
+  if (best <= 0) return { x: cx, z: cz };
+
+  for (let pass = 0; pass < 6 && best > 0; pass++) {
+    // Самое глубокое нарушение задаёт радиус, из которого выбираем направления
+    let deepX = 0, deepZ = 0, deepMin = 0, deepOver = 0;
     for (const c of COLLIDERS) {
-      const dx = px - c.x, dz = pz - c.z;
+      const d = Math.hypot(cx - c.x, cz - c.z);
+      const min = c.r + r;
+      if (d >= min) continue;
+      if (deepOver === 0 || min - d > deepOver) {
+        deepOver = min - d;
+        deepX = c.x; deepZ = c.z; deepMin = min;
+      }
+    }
+    if (deepOver === 0) break;
+
+    const dd = Math.hypot(cx - deepX, cz - deepZ);
+    // Запас 1 мм обязателен: при выходе ровно на границу из-за округления
+    // расстояние пересчитывается как 2.0999… против 2.1, и цикл «зависает».
+    const reach = deepMin + 0.001;
+    const base = dd > 1e-4 ? Math.atan2(cz - deepZ, cx - deepX) : 0;
+    let foundBetter = false;
+    // 0 — прямо от центра постройки, далье с поворотами: вдоль стены и по диагоналям
+    for (const a of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.6, -2.6, Math.PI]) {
+      const ang = base + a;
+      const tx = deepX + Math.cos(ang) * reach;
+      const tz = deepZ + Math.sin(ang) * reach;
+      const over = staticsOverlap(tx, tz, r);
+      if (over < best - 1e-6) {
+        best = over;
+        cx = tx; cz = tz;
+        foundBetter = true;
+        if (best <= 0) break;
+      }
+    }
+    // Ни одно направление не улучшило — дальше крутить бессмысленно
+    if (!foundBetter) break;
+    // Дальше сдвигать нельзя: предел за этот вызов достигнут, остаток
+    // вхождения доберётся за следующие кадры
+    if (Math.hypot(cx - x, cz - z) >= maxMove) break;
+  }
+  // Страховка: даже если цикл успел пройти дальше лимита, подрезаем сдвиг
+  const shift = Math.hypot(cx - x, cz - z);
+  if (shift > maxMove) {
+    const k = maxMove / shift;
+    cx = x + (cx - x) * k;
+    cz = z + (cz - z) * k;
+  }
+  return { x: cx, z: cz };
+}
+
+function resolveStatic(x: number, z: number, r: number, self: Civilian, dt: number, px?: number, pz?: number): { x: number; z: number } {
+  let cx = x, cz = z;
+  for (let pass = 0; pass < 3; pass++) {
+    let pushed = false;
+
+    // Дома, стены, фонтан
+    for (const c of COLLIDERS) {
+      const dx = cx - c.x, dz = cz - c.z;
       const d = Math.hypot(dx, dz);
       const min = c.r + r;
       if (d < min) {
-        if (d > 1e-4) {
-          px = c.x + (dx / d) * min;
-          pz = c.z + (dz / d) * min;
-        } else {
-          px = c.x + min;
-        }
+        if (d > 1e-4) { cx = c.x + (dx / d) * min; cz = c.z + (dz / d) * min; }
+        else { cx = c.x + min; }
         pushed = true;
       }
     }
+
+    // Другие горожане: расталкиваемся, но не наезжаем на себя.
+    // Как и с игроком — толчок отменяется, если он заводит в стену.
+    for (const c of CIV_COLLIDERS) {
+      if (Math.abs(c.x - self.group.position.x) < 1e-6 && Math.abs(c.z - self.group.position.z) < 1e-6) continue;
+      const dx = cx - c.x, dz = cz - c.z;
+      const d = Math.hypot(dx, dz);
+      const min = c.r + r;
+      if (d < min) {
+        const bx = cx, bz = cz;
+        if (d > 1e-4) { cx = c.x + (dx / d) * min; cz = c.z + (dz / d) * min; }
+        else { cx = c.x + min; }
+        if (staticsOverlap(cx, cz, r) > 0) { cx = bx; cz = bz; }
+        else pushed = true;
+      }
+    }
+
+    // Игрок: обходим, но не отталкиваемся от него как от стены.
+    // Толчок МЯГКИЙ: если он заводит горожанина в стену — отменяем его.
+    // Раньше толчок применялся безусловно, и когда игрок стоял у дома,
+    // горожанин вдавливался в стену каждый кадр: вынос из стены сдвигает
+    // максимум на pushLimit, столько же заталкивало обратно — получался
+    // затор, и горожанин уезжал вглубь дома (замер: 0.97 м).
+    // Сквозь стену человека не выталкивают — если не выходит, стоит на месте.
+    if (px !== undefined && pz !== undefined) {
+      const dx = cx - px, dz = cz - pz;
+      const d = Math.hypot(dx, dz);
+      const min = r + 0.9;
+      if (d < min) {
+        const bx = cx, bz = cz;
+        if (d > 1e-4) { cx = px + (dx / d) * min; cz = pz + (dz / d) * min; }
+        else { cx = px + min; }
+        if (staticsOverlap(cx, cz, r) > 0) { cx = bx; cz = bz; }
+        else pushed = true;
+      }
+    }
+
     if (!pushed) break;
   }
-  return { x: px, z: pz };
+
+  // Финальный проход ТОЛЬКО по постройкам: после него горожанин гарантированно
+  // не внутри стены, даже если его туда засунула толкачка соседей или игрок.
+  // Сдвиг ограничен по скорости (см. PUSH_SPEED_K), поэтому за кадр горожанин
+  // не «улетает» и результат не зависит от частоты кадров.
+  const out = pushOutOfStatics(cx, cz, r, pushLimit(self, dt));
+  return { x: out.x, z: out.z };
 }
 
 function freeSpot(cx: number, cz: number): { x: number; z: number } {
@@ -121,11 +289,43 @@ function freeSpot(cx: number, cz: number): { x: number; z: number } {
   return { x: cx, z: cz };
 }
 
+/**
+ * Свободное место ВОКРУГ ИГРОКА, а не центра города.
+ *
+ * Нужно потому, что 16 горожан на город радиусом 116 м — это один человек
+ * на 1 400 м². Раньше это было незаметно: горожане телепортировались со
+ * скоростью «450 км/с» и постоянно проносились рядом с игроком. Как только
+ * скорость починили, выяснилось, что рядом с игроком их просто нет — «они
+ * исчезли». Поэтому тех, кто оказался далеко, переносим к игроку: это
+ * стандартный приём для фоновых NPC, и заметить перенос нельзя, потому что
+ * перенос происходит за пределами видимости.
+ */
+function freeSpotNear(px: number, pz: number): { x: number; z: number } {
+  candidates: for (let tries = 0; tries < 14; tries++) {
+    const a = Math.random() * Math.PI * 2;
+    // 70-110 м от игрока: достаточно далеко, чтобы человек не возник перед
+    // носом, и достаточно близко, чтобы быть видно нормальным зрением
+    const r = 70 + Math.random() * 40;
+    const x = px + Math.cos(a) * r;
+    const z = pz + Math.sin(a) * r;
+    if (waterMask(x, z) > 0.2) continue;
+    for (const c of COLLIDERS) {
+      if (Math.hypot(x - c.x, z - c.z) < c.r + 1.4) continue candidates;
+    }
+    return { x, z };
+  }
+  return { x: px + 70, z: pz };
+}
+
 export function createCivilians(scene: THREE.Scene): CiviliansHandle {
   const all = new THREE.Group();
   scene.add(all);
   const civs: Civilian[] = [];
-  const COUNT = 8;
+  // 8 горожан на город радиусом 116 м — почти пусто: редко находились пары
+  // рядом, и перекрёстки выглядели вымершими. 16 всё ещё дёшево по
+  // геометрии (примитивы без текстур), а теперь ещё и переносятся к игроку,
+  // так что в кадре всегда есть кто-то. 22 — заметно оживлённее.
+  const COUNT = 22;
 
   for (let i = 0; i < COUNT; i++) {
     const g = new THREE.Group();
@@ -219,6 +419,8 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       state: 'idle', target: { x: p.x, z: p.z },
       speed: 1.1 + Math.random() * 0.7,
       stateUntil: 0, talkWith: null, phase: Math.random() * 10,
+      lastDist: Math.hypot(p.x, p.z), stuckFor: 0,
+      frameStartX: p.x, frameStartZ: p.z,
     });
   }
 
@@ -232,20 +434,35 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     a.group.rotation.y += d * 0.15;
   }
 
-  function update(dt: number, now: number): void {
+  function update(dt: number, now: number, playerX?: number, playerZ?: number): void {
     CIV_COLLIDERS.length = 0;
 
-    // Разговоры: раз в 6-10с пара стоящих рядом начинает болтать
+    // Разговоры. Раньше требовалось, чтобы ОБА стояли без дела и ждали не
+    // больше одной пары за 6-10 с. При восьми горожанах на город радиусом
+    // 116 м это почти никогда не случалось — город был безмолвным. Теперь
+    // разговор может начаться и с идущим мимо, проверка чаще и за один
+    // раз набирается несколько пар.
     talkTimer -= dt * 1000;
     if (talkTimer <= 0) {
-      talkTimer = 6000 + Math.random() * 4000;
-      const idle = civs.filter(c => c.state === 'idle');
-      outer: for (let i = 0; i < idle.length; i++) {
-        for (let j = i + 1; j < idle.length; j++) {
-          const a = idle[i], b = idle[j];
-          const d = Math.hypot(a.group.position.x - b.group.position.x, a.group.position.z - b.group.position.z);
-          if (d < 10) {
-            const dur = 3500 + Math.random() * 2500;
+      talkTimer = 3000 + Math.random() * 3500;
+      // Уже занятые разговором не трогаем
+      const free = civs.filter(c => c.state !== 'talk');
+      // Сначала те, кто и так стоит: разговор с прохожим на полпути к цели
+      // замораживал его посреди улицы, и город наполовину замирал
+      // (замер: 44% времени все горожане болтали вместо ~20%).
+      const idle = free.filter(c => c.state === 'idle');
+      const walking = free.filter(c => c.state === 'walk');
+      const claimed = new Set<Civilian>();
+      for (const pool of [idle, walking]) {
+        for (let i = 0; i < pool.length; i++) {
+          if (claimed.has(pool[i])) continue;
+          for (let j = i + 1; j < pool.length; j++) {
+            if (claimed.has(pool[j])) continue;
+            const a = pool[i], b = pool[j];
+            const d = Math.hypot(a.group.position.x - b.group.position.x, a.group.position.z - b.group.position.z);
+            if (d > 11) continue;
+            claimed.add(a); claimed.add(b);
+            const dur = 3500 + Math.random() * 3000;
             for (const [me, you] of [[a, b], [b, a]] as const) {
               me.state = 'talk';
               me.talkWith = you;
@@ -256,7 +473,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
               );
               me.bubbleUntil = now + dur;
             }
-            break outer;
+            break;
           }
         }
       }
@@ -264,6 +481,8 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
 
     for (const c of civs) {
       CIV_COLLIDERS.push({ x: c.group.position.x, z: c.group.position.z, r: 0.5 });
+      c.frameStartX = c.group.position.x;
+      c.frameStartZ = c.group.position.z;
 
       if (c.state === 'talk') {
         if (c.talkWith) face(c, c.talkWith.group.position.x, c.talkWith.group.position.z);
@@ -297,19 +516,50 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         if (d < 0.5) {
           c.state = 'idle';
           c.stateUntil = now + 2000 + Math.random() * 5000;
+          c.stuckFor = 0;
         } else {
-          face(c, c.target.x, c.target.z);
+          // Обход препятствий поворотом направления. Раньше позиция
+          // выталкивалась из коллайдера радиально: при прямом желании идти
+          // в стену горожанин упирался в неё и стоял, не скользя вдоль —
+          // выглядело как «не обходит». Теперь пробуем прямо, потом с
+          // поворотами влево/вправо: это обычный обход угла.
           const step = Math.min(d, c.speed * dt);
-          let nx = c.group.position.x + (dx / d) * step;
-          let nz = c.group.position.z + (dz / d) * step;
-          // Не идём сквозь дома и стены: скользим, иначе новая цель
-          const fixed = resolveStatic(nx, nz, 0.5);
-          if (Math.hypot(fixed.x - nx, fixed.z - nz) > step * 0.9) {
-            const t = freeSpot(c.group.position.x, c.group.position.z);
-            c.target = t;
-          } else {
+          let placed = false;
+          for (const turn of [0, 0.9, -0.9, 1.7, -1.7, 2.5, -2.5]) {
+            const ct = Math.cos(turn), st = Math.sin(turn);
+            const dirX = (dx / d) * ct - (dz / d) * st;
+            const dirZ = (dx / d) * st + (dz / d) * ct;
+            const wantX = c.group.position.x + dirX * step;
+            const wantZ = c.group.position.z + dirZ * step;
+            const fixed = resolveStatic(wantX, wantZ, 0.5, c, dt, playerX, playerZ);
+            // Вытолкнуло обратно — этот поворот не годится, пробуем следующий
+            if (Math.hypot(fixed.x - wantX, fixed.z - wantZ) > step * 0.5) continue;
             c.group.position.x = fixed.x;
             c.group.position.z = fixed.z;
+            face(c, wantX, wantZ);
+            placed = true;
+            break;
+          }
+          if (!placed) {
+            // Упёрся со всех сторон: остаёмся на месте, лишь выдавливаемся
+            // из препятствия, если всё же оказались внутри
+            const fixed = resolveStatic(c.group.position.x, c.group.position.z, 0.5, c, dt, playerX, playerZ);
+            c.group.position.x = fixed.x;
+            c.group.position.z = fixed.z;
+          }
+
+          // Буксует ли горожанин? Смотрим на реальное сближение с целью,
+          // а не на величину сдвига.
+          const newDist = Math.hypot(c.target.x - c.group.position.x, c.target.z - c.group.position.z);
+          if (newDist >= c.lastDist - step * 0.25) c.stuckFor += dt;
+          else c.stuckFor = 0;
+          c.lastDist = newDist;
+
+          if (c.stuckFor > 3) {
+            // Реально застрял (упёрся в глухую стену) — ищем другую цель
+            c.target = freeSpot(c.group.position.x, c.group.position.z);
+            c.stuckFor = 0;
+            c.lastDist = Math.hypot(c.target.x - c.group.position.x, c.target.z - c.group.position.z);
           }
           // Походка: ноги и руки в противофазе
           const swing = Math.sin(now / 130 + c.phase) * 0.55;
@@ -324,7 +574,115 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       const gy = groundHeight(c.group.position.x, c.group.position.z);
       c.group.position.y += (gy - c.group.position.y) * Math.min(1, dt * 6);
 
+      // Проверка «не занимать чужое место» для ВСЕХ состояний. Выше
+      // выталкивание вызывалось только в ветке walk, поэтому стоящий
+      // (idle) или болтающий (talk) горожанин не отодвигался, когда к нему
+      // подходил игрок: тот мог стоять вплотную по 2-7 секунд, пока тот не
+      // дошёл до следующей цели (замер: до −0.95 м). Здесь срабатывает
+      // только если кто-то действительно внутри, поэтому стоящие не
+      // скользят сами по себе.
+      const safe = resolveStatic(c.group.position.x, c.group.position.z, 0.5, c, dt, playerX, playerZ);
+      c.group.position.x = safe.x;
+      c.group.position.z = safe.z;
+
       if (c.bubble.visible && now >= c.bubbleUntil) c.bubble.visible = false;
+    }
+
+    // Расталкивание парное и ПОСЛЕ обновления всех позиций. В resolveStatic
+    // каждый горожанин расталкивается по вчерашним координатам остальных
+    // (CIV_COLLIDERS заполняется в этом же проходе), и когда двое сходятся
+    // лоб в лоб, толкачки друг друга «переезжают» — пара слипалась почти
+    // в ноль (замер: −0.99 м).
+    //
+    // Двигаем того, кому ничего не мешит, и только если не выходит никого —
+    // делим толчок пополам. Сдвиг всегда МЕЛКИЙ (pushLimit): раздвинуться на
+    // целый метр за кадр — это 60 м/с, то есть заметный телепорт. Мелкими
+    // шагами пара расходится за несколько кадров и выглядит как толкотня.
+    const place = (c: Civilian, tx: number, tz: number): boolean => {
+      const f = pushOutOfStatics(tx, tz, 0.5, pushLimit(c, dt));
+      // Нас отбросило — значит путь перекрыт, этот вариант не годится
+      if (Math.hypot(f.x - tx, f.z - tz) > 0.02) return false;
+      c.group.position.x = f.x;
+      c.group.position.z = f.z;
+      return true;
+    };
+
+    for (let pass = 0; pass < 8; pass++) {
+      let moved = false;
+      for (let i = 0; i < civs.length; i++) {
+        for (let j = i + 1; j < civs.length; j++) {
+          const a = civs[i], b = civs[j];
+          const dx = b.group.position.x - a.group.position.x;
+          const dz = b.group.position.z - a.group.position.z;
+          const d = Math.hypot(dx, dz);
+          const min = 1.0; // 0.5 + 0.5 — сумма радиусов
+          if (d >= min) continue;
+          // Совпали точно — разводим по произвольной оси, иначе деление на ноль
+          const ux = d > 1e-4 ? dx / d : 1;
+          const uz = d > 1e-4 ? dz / d : 0;
+          // Шаг за проход ограничен: полное раздвижение на метр за кадр —
+          // это телепорт (60 м/с). За несколько проходов пара разойдётся.
+          const away = Math.min(pushLimit(a, dt), min - d + 0.01);
+          if (place(a, a.group.position.x - ux * away, a.group.position.z - uz * away)) { moved = true; continue; }
+          if (place(b, b.group.position.x + ux * away, b.group.position.z + uz * away)) { moved = true; continue; }
+          // Оба упираются (зажаты в проёме) — сдвигаем обоих понемногу.
+          // Полный толчок тут невозможен: любой сильный сдвиг упирается в
+          // стену и отбрасывается обратно. Мелкий шаг за несколько проходов
+          // набирает нужное расстояние, тогда как деление пополам оставляло
+          // пару слипшейся (замер: −1.00 м, то есть полное совпадение точек).
+          const stepOut = Math.min(0.15, away);
+          const aFix = pushOutOfStatics(a.group.position.x - ux * stepOut, a.group.position.z - uz * stepOut, 0.5, pushLimit(a, dt));
+          const bFix = pushOutOfStatics(b.group.position.x + ux * stepOut, b.group.position.z + uz * stepOut, 0.5, pushLimit(b, dt));
+          a.group.position.x = aFix.x;
+          a.group.position.z = aFix.z;
+          b.group.position.x = bFix.x;
+          b.group.position.z = bFix.z;
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+
+    // Последний рубеж: суммарный сдвиг за кадр не может превысить
+    // pushLimit(c, dt) — то есть 2× обычной скорости в м/с, независимо от
+    // частоты кадров. Сколько бы раз ни сработали вынос и расталкивание,
+    // горожанин физически не может переместиться быстрее быстрого шага.
+    for (const c of civs) {
+      const sx = c.frameStartX, sz = c.frameStartZ;
+      if (sx === undefined || sz === undefined) continue;
+      const dx = c.group.position.x - sx, dz = c.group.position.z - sz;
+      const shift = Math.hypot(dx, dz);
+      const limit = pushLimit(c, dt);
+      if (shift > limit) {
+        const k = limit / shift;
+        c.group.position.x = sx + dx * k;
+        c.group.position.z = sz + dz * k;
+      }
+    }
+
+    // Перенос населения к игроку. Порог 200 м — это заведомо за пределами
+    // видимости (дальность прорисовки у нас ~150 м), поэтому перенос нельзя
+    // увидеть глазом. На 130 м перенос мог произойти прямо перед игроком —
+    // человек «материализовался» бы на виду. Состояние сбрасываем
+    // обязательно: иначе перенесённый горожанин сохранит цель в старом
+    // месте и будет всю дорогу «застревать», отталкиваясь от всех подряд.
+    if (playerX !== undefined && playerZ !== undefined) {
+      for (const c of civs) {
+        const dist = Math.hypot(c.group.position.x - playerX, c.group.position.z - playerZ);
+        if (dist < 200) continue;
+        const p = freeSpotNear(playerX, playerZ);
+        c.group.position.x = p.x;
+        c.group.position.z = p.z;
+        c.group.position.y = groundHeight(p.x, p.z);
+        c.state = 'idle';
+        c.stateUntil = now + 200 + Math.random() * 1500;
+        c.target = { x: p.x, z: p.z };
+        c.talkWith = null;
+        c.lastDist = 0;
+        c.stuckFor = 0;
+        c.bubble.visible = false;
+        c.bubbleUntil = 0;
+      }
     }
   }
 

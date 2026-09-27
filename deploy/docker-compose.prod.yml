@@ -69,6 +69,13 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env}
       CLIENT_ORIGIN: ${CLIENT_ORIGIN:-https://${DOMAIN}}
+      # Вход через внешние сервисы. Пустое значение — не ошибка: OAuthService
+      # считает провайдера выключенным и прячет кнопку. Пока переменные не
+      # перечислены здесь, значения из deploy/.env до контейнера не доходят.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
       LOG_LEVEL: info
     depends_on:
       migrate:

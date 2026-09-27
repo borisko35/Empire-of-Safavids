@@ -8,12 +8,20 @@
 // игроке, поэтому дальность мира не ограничивает небо.
 
 import * as THREE from 'three';
+import type { WeatherKind } from './weather';
 
-const SKY_RADIUS = 1500;
+/** Радиус небесной сферы вокруг игрока. Дальняя плоскость камеры
+ *  обязана быть больше — иначе часть неба отсекается и на её месте
+ *  видно чёрный фон (раньше здесь стоял «купол» из пустоты). */
+export const SKY_RADIUS = 1500;
 const CELESTIAL_RADIUS = 1080;
 
 export interface SkyHandle {
   update(dt: number, now: number, hour01: number, center: { x: number; z: number }): void;
+  /** Погода: облака — их цвет, высота, плотность и скорость дрейфа */
+  setWeather(kind: WeatherKind): void;
+  /** 0 — ясно, 1 — плотная облачность. Мир должен приглушать свет */
+  readonly overcast: number;
   /** Направление на солнце (y < 0 — солнце под горизонтом) */
   sunDirection: THREE.Vector3;
   /** Цвет горизонта — для тумана сцены */
@@ -147,18 +155,62 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     color: 0xffffff, roughness: 1, transparent: true, opacity: 0.92, flatShading: true,
     emissive: 0x8a93a8, emissiveIntensity: 0.24,
   });
-  const clouds: { group: THREE.Group; speed: number }[] = [];
-  for (let i = 0; i < 9; i++) {
+  const CLOUD_COUNT = 9;
+  const clouds: { group: THREE.Group; speed: number; baseY: number; phase: number; baseScale: number }[] = [];
+  for (let i = 0; i < CLOUD_COUNT; i++) {
     const cloud = makePuffCloud(cloudMat);
-    const a = (i / 9) * Math.PI * 2 + Math.random();
+    const a = (i / CLOUD_COUNT) * Math.PI * 2 + Math.random();
     const r = 260 + Math.random() * 820;
-    cloud.position.set(Math.cos(a) * r, 95 + Math.random() * 55, Math.sin(a) * r);
-    clouds.push({ group: cloud, speed: 1.0 + Math.random() * 1.6 });
+    const y = 95 + Math.random() * 55;
+    cloud.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+    const sc = 0.85 + Math.random() * 0.5;
+    cloud.scale.setScalar(sc);
+    clouds.push({
+      group: cloud, speed: 1.0 + Math.random() * 1.6, baseY: y,
+      phase: (i + 0.5) / CLOUD_COUNT, baseScale: sc,
+    });
     scene.add(cloud);
   }
 
+  // ── Погода: вид неба и туч ──
+  // Раньше все девять «пухов» были белыми и одинаковыми круглый год:
+  // в дождь и бурю они оставались белыми, а небо — солнечным.
+  interface SkyLook {
+    /** Насколько небо затянуто (0–1) — от этого приглушается свет мира */
+    overcast: number;
+    /** Насколько тучи чёрные */
+    dark: number;
+    /** Множитель скорости дрейфа */
+    speed: number;
+    /** Насколько облака опустились (0–1) */
+    low: number;
+    /** Доля видимых облаков: в ясную погоду пара кучевых, в буре — всё небо */
+    cover: number;
+  }
+  const WEATHER_LOOK: Record<WeatherKind, SkyLook> = {
+    clear:     { overcast: 0.00, dark: 0.00, speed: 1.0, low: 0.00, cover: 0.34 },
+    cloudy:    { overcast: 0.55, dark: 0.30, speed: 1.3, low: 0.15, cover: 0.78 },
+    rain:      { overcast: 0.90, dark: 0.62, speed: 1.9, low: 0.42, cover: 1.00 },
+    storm:     { overcast: 1.00, dark: 0.97, speed: 3.2, low: 0.62, cover: 1.00 },
+    fog:       { overcast: 0.80, dark: 0.40, speed: 0.5, low: 0.50, cover: 0.90 },
+    sandstorm: { overcast: 0.88, dark: 0.28, speed: 2.6, low: 0.20, cover: 0.70 },
+    snow:      { overcast: 0.95, dark: 0.45, speed: 1.2, low: 0.50, cover: 1.00 },
+    wind:      { overcast: 0.40, dark: 0.08, speed: 2.9, low: 0.10, cover: 0.50 },
+  };
+  /** Пасмурная палитра — к ней подмешивается обычная, по времени суток */
+  const OVERCAST: Palette = { top: new THREE.Color(0x515c69), horizon: new THREE.Color(0x7c8791) };
+  const SANDY = new THREE.Color(0xc8a870);
+  let weatherKind: WeatherKind = 'clear';
+  let look: SkyLook = { ...WEATHER_LOOK.clear };
+  let overcastK = 0;
+
   const sunDirection = new THREE.Vector3(0, 1, 0);
   const horizonColor = new THREE.Color();
+
+  function setWeather(kind: WeatherKind): void {
+    weatherKind = kind;
+    look = { ...(WEATHER_LOOK[kind] ?? WEATHER_LOOK.clear) };
+  }
 
   function update(dt: number, now: number, dayFraction: number, center: { x: number; z: number }): void {
     const hour01 = dayFraction * 24; // 0–23
@@ -205,21 +257,45 @@ export function createSky(scene: THREE.Scene): SkyHandle {
       };
     }
 
+    // Пасмурность: в дождь и бурю небо сереет (иначе чёрные тучи висели бы
+    // над солнечным голубым небом — выглядело бы нелепо)
+    if (overcastK > 0.01) {
+      const o = overcastK * 0.6;
+      pal = {
+        top: pal.top.clone().lerp(OVERCAST.top, o),
+        horizon: pal.horizon.clone().lerp(OVERCAST.horizon, o),
+      };
+    }
+
     uniforms.topColor.value.copy(pal.top);
     uniforms.bottomColor.value.copy(pal.horizon);
     horizonColor.copy(pal.horizon);
 
-    starMat.opacity = Math.min(1, Math.max(0, -e * 3.4));
+    // Погода догоняет небо плавно: смена за минуту не должна «щёлкать»
+    overcastK += (look.overcast - overcastK) * Math.min(1, dt * 0.6);
+
+    starMat.opacity = Math.min(1, Math.max(0, -e * 3.4)) * (1 - overcastK * 0.9);
     stars.rotation.y = now / 240000;
 
-    // Дрейф облаков
+    // Солнце и луна тускнеют за тучами
+    const glowDim = 1 - overcastK * 0.75;
+    (sunGlow.material as THREE.SpriteMaterial).opacity = 0.9 * glowDim;
+    (moonGlow.material as THREE.SpriteMaterial).opacity = 0.45 * glowDim;
+
+    // Дрейф и вид облаков — от погоды
+    const nightK = Math.min(1, Math.max(0, -e * 2.4));
     for (const c of clouds) {
-      c.group.position.x += dt * c.speed;
+      c.group.position.x += dt * c.speed * look.speed;
       if (c.group.position.x > center.x + 1150) c.group.position.x = center.x - 1150;
-      // лёгкая пульсация в цвет неба: ночью облака темнее
-      const nightK = Math.min(1, Math.max(0, -e * 2.4));
-      cloudMat.color.setRGB(1 - nightK * 0.82, 1 - nightK * 0.82, 1 - nightK * 0.78);
+      c.group.visible = c.phase <= look.cover;
+      c.group.position.y = c.baseY * (1 - look.low * 0.45);
+      c.group.scale.setScalar(c.baseScale * (1 + overcastK * 0.6));
     }
+    // Цвет туч: ночью темнее, в дожде сизо-серые, в буре почти чёрные
+    const dark = Math.max(nightK * 0.8, look.dark);
+    cloudMat.color.setRGB(1 - dark * 0.93, 1 - dark * 0.94, 1 - dark * 0.88);
+    if (weatherKind === 'sandstorm') cloudMat.color.lerp(SANDY, 0.45);
+    cloudMat.emissiveIntensity = 0.24 * (1 - overcastK * 0.85);
   }
 
   function dispose(): void {
@@ -232,5 +308,12 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     cloudMat.dispose();
   }
 
-  return { update, sunDirection, horizonColor, dispose };
+  return {
+    update,
+    setWeather,
+    get overcast() { return overcastK; },
+    sunDirection,
+    horizonColor,
+    dispose,
+  };
 }

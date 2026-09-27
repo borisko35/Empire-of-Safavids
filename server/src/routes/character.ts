@@ -5,11 +5,13 @@ import { CombatService } from '../services/CombatService';
 import { QuestService } from '../services/QuestService';
 import { EnhancementSystem } from '../systems/EnhancementSystem';
 import { EquipmentCache } from '../services/EquipmentCache';
+import { getBuffService } from '../services/BuffService';
 import { CharacterClass } from '../types/game.types';
 import { secureMiddleware } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { MAX_CHARACTERS_PER_ACCOUNT, DEFAULT_SERVER_ID, isValidServerId } from '../../../shared/constants';
 import { DatabaseService } from '../services/DatabaseService';
+import { ReferralService } from '../services/ReferralService';
 import { logger } from '../utils/logger';
 
 export const characterRouter = Router();
@@ -18,11 +20,15 @@ const combatService = new CombatService();
 const questService = new QuestService();
 const enhancementSystem = new EnhancementSystem();
 const equipmentCache = EquipmentCache.getInstance();
+const buffService = getBuffService();
 
 const createCharacterSchema = Joi.object({
   name: Joi.string().min(2).max(24).pattern(/^[a-zA-Zа-яА-Я0-9_\- ]+$/).required(),
   class: Joi.string().valid(...Object.values(CharacterClass)).required(),
   serverId: Joi.string().default(DEFAULT_SERVER_ID),
+  // Код приглашения из ссылки ?ref=. Разрешаем пустой: приглашение
+  // необязательно, и его отсутствие — не ошибка
+  referralCode: Joi.string().trim().uppercase().allow('', null).max(16).default(''),
 });
 
 // GET /api/characters — список персонажей пользователя
@@ -45,8 +51,20 @@ characterRouter.post('/', secureMiddleware, asyncHandler(async (req: Request, re
     return res.status(400).json({ error: 'Unknown game server' });
   }
 
-  const character = await characterService.createCharacter(req.userId!, value.name, value.class, value.serverId);
+  const character = await characterService.createCharacter(
+    req.userId!, value.name, value.class, value.serverId, value.referralCode,
+  );
   return res.status(201).json({ character });
+}));
+
+// GET /api/characters/referral — мой код приглашения, ссылка и статистика
+// Отдельный маршрут, а не поле в персонаже: код принадлежит аккаунту,
+// а не персонажу, и виден игроку независимо от того, кем он играет.
+characterRouter.get('/referral', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  // Ссылку собираем на том же домене, откуда пришёл игрок, иначе в
+  // сообщении другу уйдёт адрес разработки вместо боевого
+  const origin = process.env.CLIENT_ORIGIN ?? `${req.protocol}://${req.get('host') ?? ''}`;
+  return res.json(await new ReferralService().getInfo(req.userId!, origin));
 }));
 
 // POST /api/characters/:id/rename — смена ника за АЗЭНЫ
@@ -122,6 +140,21 @@ characterRouter.get('/:id/equipment', secureMiddleware, asyncHandler(async (req:
   }
   const equipment = await characterService.getEquipment(req.params.id);
   return res.json(equipment);
+}));
+
+// GET /api/characters/:id/buffs — активные временные бонусы
+// (кебаб +5% к урону, свиток +50% к опыту и т.п.)
+characterRouter.get('/:id/buffs', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character || character.userId !== req.userId) {
+    return res.status(404).json({ error: 'Character not found' });
+  }
+  const buffs = await buffService.getActive(req.params.id);
+  return res.json({
+    buffs,
+    damageMultiplier: await buffService.getDamageMultiplier(req.params.id),
+    expMultiplier: await buffService.getExpMultiplier(req.params.id),
+  });
 }));
 
 // POST /api/characters/:id/equipment/equip — надеть предмет { itemId }

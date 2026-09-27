@@ -9,6 +9,7 @@ import { api, EquipmentState } from './api';
 import { t } from './i18n';
 import { session, Character } from './state';
 import { toast, refreshBars, loadInventory } from './hud';
+import { onTutorialAction } from './tutorial';
 import { RARITY_COLORS } from '../ui/icons';
 
 // Простая словарь имен предметов для магазина (itemId -> русское название)
@@ -31,6 +32,9 @@ const SHOP_ITEM_NAMES: Record<string, string> = {
   'mount_arabian_horse': 'Арабский скакун',
   'mount_bactrian_camel': 'Двугорбый верблюд',
   'mount_qizilbash_warhorse': 'Боевой конь Кызылбаша',
+  'acc_boots_silk': 'Сапоги Шёлкового Пути',
+  'acc_boots_seafarer': 'Сапоги Морехода',
+  'acc_cloim_rain': 'Плащ Муссонного Дождя',
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -456,6 +460,8 @@ export async function loadShop(): Promise<void> {
             if (typeof res.syrian === 'number') session.character.syrianGold = res.syrian;
           }
           refreshBars();
+          // Шаг туториала «купи зелье»: засчитывается только нужный предмет
+          onTutorialAction('buy_item', item.itemId);
           toast(t('panels.bought'), 'success');
           await loadShop();
         }));
@@ -684,18 +690,146 @@ export async function loadParty(): Promise<void> {
 
 // ── Караваны ─────────────────────────────────────────────────
 
+// ── Предупреждение о водной опасности ─────────────────────────
+/**
+ * Подводные существа бьют только того, кто в воде. Без предупреждения
+ * игрок выплывает на середину озера и получает урон из ниоткуда: на
+ * берегу монстр не агрится вообще, и заметить «невидимого» врага
+ * заранее нечем. Знак появляется, как только тварь рядом.
+ *
+ * Список существ не зашит: признак aquatic приходит с сервера при спавне.
+ */
+
+/** Подсказка про опасность показывается один раз за сессию */
+let waterDangerHinted = false;
+
+/**
+ * Раз в секунду из игрового цикла. Показываем знак только когда игрок
+ * действительно в воде: с берега и из лодки подводные существа не бьют,
+ * так что тревожить там нечем.
+ */
+export function checkWaterDanger(opts: {
+  swimming: boolean;
+  inBoat: boolean;
+  monsters: { aquatic?: boolean; pos: { x: number; z: number } }[];
+}): void {
+  const el = $('water-danger');
+  if (!el) return;
+  const p = session.selfPos;
+
+  const dangerous = opts.swimming && !opts.inBoat && opts.monsters.some(m =>
+    m.aquatic === true && Math.hypot(m.pos.x - p.x, m.pos.z - p.z) < 20
+  );
+
+  el.classList.toggle('hidden', !dangerous);
+  if (dangerous) {
+    el.textContent = t('world.water_danger');
+    if (!waterDangerHinted) {
+      waterDangerHinted = true;
+      toast(t('world.water_danger_hint'), 'error');
+    }
+  }
+}
+
+/** Сброс при выходе в мир заново (новый вход) */
+export function resetWaterDanger(): void {
+  waterDangerHinted = false;
+  $('water-danger')?.classList.add('hidden');
+}
+
+/** Таймер каравана: тикает, пока открыта панель «Караваны» */
+let caravanTimer: number | null = null;
+/**
+ * Приход каравана уже запрошен у сервера. Без этого флага панель
+ * перезагружала себя бесконечно: каждая перезагрузка создавала новую
+ * строку, таймер снова видел «время пришло» и снова вызывал перезагрузку.
+ */
+let caravanArrivalAskedFor = '';
+
+function fmtCaravanEta(msLeft: number): string {
+  const total = Math.max(0, Math.ceil(msLeft / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return m > 0 ? `${m}:${String(s).padStart(2, '0')}` : `${s} ${t('panels.trade_sec')}`;
+}
+
 export async function loadTrade(): Promise<void> {
   if (!session.character) return;
   try {
-    const { contracts } = await api.tradeContracts();
+    const { contracts, active, serverTime } = await api.tradeContracts(cid());
     const box = $('trade-list');
     if (!box) return;
     box.innerHTML = '';
-    if (!contracts.length) {
+    if (caravanTimer !== null) { clearInterval(caravanTimer); caravanTimer = null; }
+
+    // ── Мой караван в пути: счётчик до прихода ──
+    // Новый контракт (или его отсутствие) сбрасывает защиту от повторного
+    // опроса сервера по поводу уже обработанного прихода
+    if (caravanArrivalAskedFor && (!active || active.contractId !== caravanArrivalAskedFor)) {
+      caravanArrivalAskedFor = '';
+    }
+    if (active) {
+      const def = contracts.find(c => c.id === active.contractId);
+      const row = rowEl('inv-item caravan-active');
+      // Отдельные узлы под каждый кусок текста. Раньше здесь стояло
+      // label.textContent = ... — присваивание стирало сам счётчик
+      // и название контракта после первого же тика.
+      const titleEl = document.createElement('span');
+      const etaBox = document.createElement('b');
+      etaBox.className = 'caravan-eta';
+      const nameEl = document.createElement('span');
+      const label = document.createElement('span');
+      label.className = 'inv-name';
+      label.append(titleEl, etaBox, nameEl);
+      row.append(label);
+      box.append(row);
+      nameEl.textContent = def ? ` · ${def.nameRu}` : '';
+
+      // Смещение часов игрока и сервера — иначе таймер врал бы на минуты
+      const clockOffset = serverTime - Date.now();
+      const paint = () => {
+        // Панель закрыли — строка исчезла из DOM. Останавливаем таймер,
+        // иначе он будет тикать раз в секунду до конца сессии впустую.
+        if (!row.isConnected) {
+          if (caravanTimer !== null) { clearInterval(caravanTimer); caravanTimer = null; }
+          return;
+        }
+        const left = active.arrivesAt - (Date.now() + clockOffset);
+        if (left > 0) {
+          titleEl.textContent = `${t('panels.trade_caravan_title')}: `;
+          etaBox.textContent = fmtCaravanEta(left);
+          row.classList.remove('caravan-arrived');
+        } else {
+          // Время пришло: показываем «прибыл» и один раз просим сервер
+          // вернуть груз. Повторно не спрашиваем — иначе панель замкнётся
+          // на себя (каждый ответ снова показывает «пришло»).
+          titleEl.textContent = `${t('panels.trade_caravan_arrived')} `;
+          etaBox.textContent = '';
+          row.classList.add('caravan-arrived');
+          if (active.status === 'transit' && caravanArrivalAskedFor !== active.contractId) {
+            caravanArrivalAskedFor = active.contractId;
+            void loadTrade();
+          }
+        }
+      };
+      // Только после вставки в DOM: paint() проверяет row.isConnected
+      paint();
+
+      // Пока едет — груз в караване, сдавать нечего
+      if (active.status === 'transit') {
+        caravanTimer = window.setInterval(paint, 1000);
+      }
+    }
+
+    // emptyBox чистит весь бокс, поэтому вызываем его только когда каравана
+    // нет — иначе он стирал бы строку «караван в пути»
+    if (!contracts.length && !active) {
       emptyBox(box);
       return;
     }
     for (const c of contracts) {
+      // Пока караван в пути, новый контракт взять нельзя
+      if (active) break;
       const row = rowEl('inv-item');
       const label = document.createElement('span');
       label.className = 'inv-name';
@@ -703,30 +837,61 @@ export async function loadTrade(): Promise<void> {
       row.append(label);
       if (c.rewardSilver) label.textContent += ` + ${c.rewardSilver} серебра`;
       if (c.rewardSyrian) label.textContent += ` + ${c.rewardSyrian} сир. золота`;
+      label.title = `${t('panels.trade_travel')}: ${c.travelMinutes} ${t('panels.trade_min')}`;
       row.append(actionButton(t('panels.trade_accept'), async () => {
-        await api.tradeAccept(cid(), c.id);
-        toast(t('panels.trade_accepted'), 'success');
+        try {
+          await api.tradeAccept(cid(), c.id);
+          toast(t('panels.trade_accepted'), 'success');
+        } catch (e) {
+          const code = String((e as { code?: string })?.code ?? '');
+          if (code.includes('no_items') || code.includes('not_enough')) toast(t('panels.trade_err_no_cargo'), 'error');
+          else if (code.includes('level_low')) toast(t('panels.trade_err_level'), 'error');
+          else if (code.includes('wrong_region')) toast(t('panels.trade_err_wrong_city'), 'error');
+          else if (code.includes('unavailable')) toast(t('panels.trade_err_unavailable'), 'error');
+          else toast(t('panels.trade_err_none'), 'error');
+        }
+        await loadTrade();
       }));
       box.append(row);
     }
-    const deliverRow = rowEl('inv-item dungeon-status');
-    const hint = document.createElement('span');
-    hint.className = 'inv-name';
-    hint.textContent = t('panels.trade_hint');
+    // Подсказка на отдельной строке: в общем ряду с кнопками она
+    // сжималась в узкую колонку и переносилась на шесть строк
+    const deliverRow = rowEl('inv-item dungeon-status trade-actions');
+    const hint = document.createElement('div');
+    hint.className = 'inv-name trade-hint';
+    hint.textContent = active ? t('panels.trade_hint_active') : t('panels.trade_hint');
     deliverRow.append(hint);
-    deliverRow.append(actionButton(t('panels.trade_deliver'), async () => {
-      const res = await api.tradeDeliver(cid());
-      if (session.character) {
-        session.character.gold += res.gold;
-        session.character.isfahanSilver = (session.character.isfahanSilver ?? 0) + (res.silver ?? 0);
-        session.character.syrianGold = (session.character.syrianGold ?? 0) + (res.syrian ?? 0);
+    const btnRow = document.createElement('div');
+    btnRow.className = 'trade-buttons';
+    deliverRow.append(btnRow);
+    btnRow.append(actionButton(t('panels.trade_deliver'), async () => {
+      // Раньше ошибки молча проглатывались внешним catch — игрок нажимал
+      // «Сдать» и не понимал, почему ничего не происходит
+      try {
+        const res = await api.tradeDeliver(cid());
+        if (session.character) {
+          session.character.gold += res.gold;
+          session.character.isfahanSilver = (session.character.isfahanSilver ?? 0) + (res.silver ?? 0);
+          session.character.syrianGold = (session.character.syrianGold ?? 0) + (res.syrian ?? 0);
+        }
+        refreshBars();
+        toast(`${t('panels.trade_done')}: +◉ ${res.gold}`, 'success');
+      } catch (e) {
+        const code = String((e as { code?: string })?.code ?? (e as Error)?.message ?? '');
+        if (code.includes('in_transit')) toast(t('panels.trade_err_in_transit'), 'error');
+        else if (code.includes('not_delivered')) toast(t('panels.trade_err_wrong_city'), 'error');
+        else toast(t('panels.trade_err_none'), 'error');
       }
-      refreshBars();
-      toast(`${t('panels.trade_done')}: +◉ ${res.gold}`, 'success');
+      await loadTrade();
     }));
-    deliverRow.append(actionButton(t('panels.trade_cancel'), async () => {
-      await api.tradeCancel(cid());
-      toast(t('panels.trade_cancelled'), 'info');
+    btnRow.append(actionButton(t('panels.trade_cancel'), async () => {
+      try {
+        await api.tradeCancel(cid());
+        toast(t('panels.trade_cancelled'), 'info');
+      } catch {
+        toast(t('panels.trade_err_none'), 'error');
+      }
+      await loadTrade();
     }));
     box.append(deliverRow);
 
@@ -935,6 +1100,86 @@ async function renderLeaderboard(container: HTMLElement, type: string): Promise<
     }
   } catch {
     listEl.innerHTML = '<div class="lb-empty">Ошибка загрузки</div>';
+  }
+}
+
+// ── Приглашение друга ──────────────────────────────────────
+//
+// Панель стоит рядом с «Друзьями»: кто зовёт друзей, ищет их там.
+// Главное здесь — кнопка копирования ссылки. Без неё ссылка есть,
+// но игрок не сможет ею поделиться, и вся механика умирает.
+
+async function loadReferral(): Promise<void> {
+  const box = $('referral-content');
+  if (!box) return;
+  box.innerHTML = '';
+  try {
+    const info = await api.referralInfo();
+
+    const desc = document.createElement('p');
+    desc.className = 'ref-desc';
+    desc.textContent = t('referral.desc');
+    box.append(desc);
+
+    // Ссылка крупным шрифтом: её нужно разглядеть, а потом скопировать
+    const link = document.createElement('div');
+    link.className = 'ref-link';
+    link.textContent = info.link;
+    box.append(link);
+
+    // Копирование. navigator.clipboard требует https и может быть
+    // недоступен на http — поэтому есть запасной путь через textarea
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'ref-copy';
+    copyBtn.type = 'button';
+    copyBtn.textContent = t('referral.copy');
+    copyBtn.addEventListener('click', async () => {
+      const ok = await copyText(info.link);
+      copyBtn.textContent = ok ? t('referral.copied') : t('referral.copy_failed');
+      setTimeout(() => { copyBtn.textContent = t('referral.copy'); }, 2500);
+    });
+    box.append(copyBtn);
+
+    // Сколько пригласил и сколько заработал — без этого мотивации звать нет
+    const stats = document.createElement('div');
+    stats.className = 'ref-stats';
+    stats.textContent = t('referral.stats')
+      .replace('{n}', String(info.invited))
+      .replace('{gold}', String(info.earnedGold));
+    box.append(stats);
+
+    const reward = document.createElement('p');
+    reward.className = 'ref-reward';
+    reward.textContent = t('referral.reward');
+    box.append(reward);
+  } catch {
+    const empty = document.createElement('div');
+    empty.className = 'lb-empty';
+    empty.textContent = t('referral.unavailable');
+    box.append(empty);
+  }
+}
+
+/** Скопировать текст. Возвращает false, если браузер не дал доступ к буферу */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Запасной путь: временный textarea + execCommand. Работает и без
+    // разрешения на буфер, и на http, где clipboard API может быть закрыт
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px';
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -1267,6 +1512,97 @@ async function loadPoetry(): Promise<void> {
   }
 }
 
+// ── Сюжет: главы ───────────────────────────────────────────
+
+interface ChapterView {
+  chapter: { id: string; order: number; title: string; titleRu: string; description: string; descriptionRu: string; region: string; minLevel: number };
+  quests: { id: string; titleRu: string; status: 'completed' | 'active' | 'locked' }[];
+  done: number; total: number; percent: number; unlocked: boolean; started: boolean;
+  cutscenes: { id: string; titleRu: string; watched: boolean }[];
+}
+
+export async function loadStory(): Promise<void> {
+  if (!session.character) return;
+  const box = $('story-content');
+  if (!box) return;
+  try {
+    const data = await api.storyState(session.character.id);
+    box.innerHTML = '';
+
+    const total = document.createElement('div');
+    total.className = 'story-total';
+    total.textContent = `${t('story.progress')}: ${data.totalDone} / ${data.totalQuests} · ${t('story.scenes')}: ` +
+      `${data.chapters.reduce((a, c) => a + c.cutscenes.filter(s => s.watched).length, 0)} / ${data.cutscenesTotal}`;
+    box.append(total);
+
+    const bar = document.createElement('div');
+    bar.className = 'story-bar';
+    const fill = document.createElement('i');
+    fill.style.width = `${data.totalQuests ? (data.totalDone / data.totalQuests) * 100 : 0}%`;
+    bar.append(fill);
+    box.append(bar);
+
+    for (const ch of data.chapters as ChapterView[]) {
+      const isCurrent = ch.chapter.id === data.currentChapterId;
+      const card = document.createElement('div');
+      card.className = 'chapter' + (ch.unlocked ? '' : ' locked') + (isCurrent ? ' current' : '');
+
+      const h = document.createElement('h4');
+      h.textContent = `${ch.chapter.order}. ${ch.chapter.titleRu}`;
+      card.append(h);
+
+      const p = document.createElement('p');
+      p.textContent = ch.chapter.descriptionRu;
+      card.append(p);
+
+      const b = document.createElement('div');
+      b.className = 'story-bar';
+      const bf = document.createElement('i');
+      bf.style.width = `${ch.percent * 100}%`;
+      b.append(bf);
+      card.append(b);
+
+      for (const q of ch.quests) {
+        const line = document.createElement('span');
+        line.className = `chapter-q ${q.status}`;
+        line.textContent = q.titleRu;
+        card.append(line);
+      }
+
+      if (!ch.unlocked) {
+        const lock = document.createElement('span');
+        lock.className = 'chapter-q locked';
+        lock.textContent = `${t('story.unlocks_at')} ${ch.chapter.minLevel}`;
+        card.append(lock);
+      }
+
+      if (ch.cutscenes.length) {
+        // Узлы DOM, а не innerHTML: иначе <span> попадал в textContent
+        // и игрок видел в панели «✓ <span class="watched">Призыв</span>»
+        const scenes = document.createElement('div');
+        scenes.className = 'chapter-scenes';
+        scenes.append(document.createTextNode(`${t('story.scenes_in_chapter')}: `));
+        ch.cutscenes.forEach((s, i) => {
+          if (i > 0) scenes.append(document.createTextNode(' · '));
+          const span = document.createElement('span');
+          if (s.watched) {
+            span.className = 'watched';
+            span.textContent = `✓ ${s.titleRu}`;
+          } else {
+            span.textContent = s.titleRu;
+          }
+          scenes.append(span);
+        });
+        card.append(scenes);
+      }
+
+      box.append(card);
+    }
+  } catch {
+    box.innerHTML = '<div class="inv-empty">—</div>';
+  }
+}
+
 // ── Хроники Сефевидов ─────────────────────────────────────
 
 async function loadChronicles(): Promise<void> {
@@ -1305,13 +1641,27 @@ async function loadChronicles(): Promise<void> {
     listEl.className = 'chronicles-grid';
     box.append(listEl);
 
+    // Прогресс энциклопедии: видно, что контент открывается по мере игры
+    if (typeof data.unlocked === 'number' && data.total > 0) {
+      const prog = document.createElement('div');
+      prog.className = 'chronicles-progress';
+      prog.textContent = `Открыто ${data.unlocked} из ${data.total} записей`;
+      box.append(prog);
+    }
+
     renderChronicles(listEl, data.entries, '');
   } catch {
     box.innerHTML = '<div class="lb-empty">Хроники недоступны</div>';
   }
 }
 
-function renderChronicles(container: HTMLElement, entries: { id: string; category: string; title: string; titleRu: string; content: string; contentRu: string }[], category: string): void {
+interface ChronicleView {
+  id: string; category: string; title: string; titleRu: string;
+  content: string; contentRu: string;
+  unlocked: boolean; unlockHintRu: string | null;
+}
+
+function renderChronicles(container: HTMLElement, entries: ChronicleView[], category: string): void {
   container.innerHTML = '';
   const filtered = category ? entries.filter(e => e.category === category) : entries;
 
@@ -1322,11 +1672,28 @@ function renderChronicles(container: HTMLElement, entries: { id: string; categor
 
   for (const entry of filtered) {
     const card = document.createElement('div');
-    card.className = 'chronicle-card';
-    card.innerHTML =
-      `<span class="chronicle-cat">${entry.category}</span>` +
-      `<h4>${entry.titleRu}</h4>` +
-      `<p>${entry.contentRu.slice(0, 120)}…</p>`;
+    // Считаем запись закрытой только когда сервер явно сказал false:
+    // иначе при разговоре со старой версией сервера панель «закрылась» бы целиком.
+    const locked = entry.unlocked === false;
+    // Закрытая запись не показывает текст и не открывается: так условие
+    // открытия работает, а не рисует серую карточку с полным текстом.
+    card.className = locked ? 'chronicle-card locked' : 'chronicle-card';
+    card.style.position = 'relative';
+    if (locked) {
+      card.innerHTML =
+        `<span class="chronicle-lock">🔒</span>` +
+        `<span class="chronicle-cat">${entry.category}</span>` +
+        `<h4>???</h4>` +
+        (entry.unlockHintRu
+          ? `<p class="chronicle-hint">Откроется после: ${entry.unlockHintRu}</p>`
+          : '<p class="chronicle-hint">Откроется позже</p>');
+    } else {
+      card.innerHTML =
+        `<span class="chronicle-cat">${entry.category}</span>` +
+        `<h4>${entry.titleRu}</h4>` +
+        `<p>${entry.contentRu.slice(0, 120)}…</p>`;
+    }
+    if (locked) { container.append(card); continue; }
     card.addEventListener('click', () => {
       const modal = document.createElement('div');
       modal.className = 'death-overlay';
@@ -1429,30 +1796,39 @@ async function loadAchievements(): Promise<void> {
 // ── Ежедневные задачи ──────────────────────────────────────
 
 async function loadTasks(): Promise<void> {
-  const box = $('panel-tasks');
+  // Раньше бралась сама панель, и innerHTML стирал её заголовок вместе с
+  // иконкой. Остальные панели берут внутренний div — так и здесь.
+  const box = $('tasks-content');
   if (!box) return;
   box.innerHTML = '';
   try {
-    const data = await api.tasks();
+    const charId = session.character?.id;
+    if (!charId) return;
+    const data = await api.tasks(charId);
     const stats = document.createElement('div');
     stats.className = 'lb-my-rank';
-    stats.textContent = `Выполнено сегодня: ${data.completedCount}`;
+    stats.textContent = `${t('site.tasks_done')}: ${data.completedCount}`;
     box.append(stats);
     if (!data.tasks.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Задач пока нет — зайдите позже';
+      empty.textContent = t('site.tasks_empty');
       box.append(empty);
       return;
     }
-    for (const t of data.tasks) {
+    for (const task of data.tasks) {
       const row = document.createElement('div');
       row.className = 'friend-entry';
-      const pct = Math.min(100, Math.round((t.current / t.required_count) * 100));
-      row.innerHTML = `<span class="friend-name">${t.title_ru}</span>` +
-        `<span class="friend-info">${t.current}/${t.required_count}</span>` +
+      const pct = Math.min(100, Math.round((task.current / task.required_count) * 100));
+      // Название и подпись берём по языку игрока: у задач есть и ru, и en
+      const en = document.documentElement.lang === 'en';
+      const name = en ? task.title : task.title_ru;
+      const desc = en ? task.description : task.description_ru;
+      row.innerHTML = `<span class="friend-name">${name}</span>` +
+        `<span class="friend-info">${task.current}/${task.required_count}</span>` +
         `<span class="lb-value">${pct}%</span>`;
-      if (t.completed) row.style.borderLeft = '2px solid #4AA86A';
+      row.title = desc ?? '';
+      if (task.completed) row.style.borderLeft = '2px solid #4AA86A';
       box.append(row);
     }
   } catch { box.innerHTML = '<div class="lb-empty">Задачи недоступны</div>'; }
@@ -1924,6 +2300,24 @@ export async function loadAdmin(): Promise<void> {
   }));
   box.append(goldRow);
 
+  // ── Погода: переключение вручную ──
+  // Раньше погода менялась только сама, по расписанию раз в 4 минуты:
+  // чтобы увидеть грозу или снег, надо было ждать нужный слот.
+  adminSub(box, t('admin.weather'));
+  const weatherRow = rowEl('inv-item');
+  for (const kind of ['clear', 'cloudy', 'rain', 'storm', 'fog', 'sandstorm', 'snow', 'wind']) {
+    const label = t(`admin.weather_${kind}`);
+    weatherRow.append(actionButton(label, async () => {
+      await api.adminWeather(kind);
+      toast(`${t('admin.weather')}: ${label}`, 'success');
+    }));
+  }
+  weatherRow.append(actionButton(t('admin.weather_auto'), async () => {
+    await api.adminWeather('auto');
+    toast(t('admin.weather_auto_done'), 'success');
+  }));
+  box.append(weatherRow);
+
   if (!isSenior()) return;
 
   // ── Деньги (senior+) ──
@@ -2098,6 +2492,304 @@ function expForLevel(level: number): number {
   return Math.round(100 * Math.pow(level, 1.6));
 }
 
+// ── Рыбалка ─────────────────────────────────────────────────
+
+/** Состояние рыбалки клиента: таймер поклёвки и поплавок */
+let fishCast: { castId: string; biteAt: number; waitTotalMs: number } | null = null;
+let fishClockOffset = 0;   // серверное время минус клиентское
+let fishTimer: number | null = null;
+let fishBiteShown = false;
+
+/** Смещение часов: иначе таймер поклёвки врал бы на минуты */
+export function syncFishingClock(serverTime: number): void {
+  fishClockOffset = serverTime - Date.now();
+}
+
+export function fishingCastId(): string | null {
+  return fishCast?.castId ?? null;
+}
+
+function stopFishingTimer(): void {
+  if (fishTimer !== null) { clearInterval(fishTimer); fishTimer = null; }
+}
+
+/**
+ * Забросить удочку. Позицию берём у мира, а не у курсора: клиент мог бы
+ * «забросить» в озеро из другого конца карты. Сервер всё равно проверит.
+ */
+export async function fishingCastLine(): Promise<void> {
+  if (!session.character) return;
+  // Живая позиция, а не session.character.position: та приходит с сервера
+  // раз в несколько секунд, и удочка улетела бы не туда
+  const position = session.selfPos;
+  if (!position) { toast(t('panels.fishing_err_no_pos'), 'error'); return; }
+  try {
+    const res = await api.fishingCast(session.character.id, { x: position.x, z: position.z });
+    fishCast = res.cast;
+    syncFishingClock(res.serverTime);
+    fishBiteShown = false;
+    paintFishing();
+    toast(t('panels.fishing_cast'), 'info');
+  } catch (e) {
+    const code = String((e as { code?: string })?.code ?? '');
+    const map: Record<string, string> = {
+      fishing_not_near_water: 'panels.fishing_err_no_water',
+      fishing_need_boat: 'panels.fishing_err_need_boat',
+      fishing_already_cast: 'panels.fishing_err_busy',
+      fishing_boat_tired: 'panels.fishing_err_boat_tired',
+    };
+    toast(t(map[code] ?? 'panels.fishing_err_other'), 'error');
+  }
+}
+
+/** Подсечь. Задержку считает сервер — клиент присылает только факт */
+export async function fishingReel(): Promise<void> {
+  if (!session.character || !fishCast) return;
+  try {
+    const res = await api.fishingReel(session.character.id, fishCast.castId);
+    if (res.messageRu) toast(res.messageRu, 'success');
+    if (res.gold && session.character) {
+      session.character.gold += res.gold;
+      refreshBars();
+    }
+    fishCast = null;
+    stopFishingTimer();
+    await loadFishing();
+  } catch (e) {
+    const code = String((e as { code?: string })?.code ?? '');
+    if (code.includes('too_early')) toast(t('panels.fishing_err_early'), 'error');
+    else if (code.includes('too_late')) toast(t('panels.fishing_err_late'), 'error');
+    else if (code.includes('empty_hook')) toast(t('panels.fishing_err_empty'), 'error');
+    else toast(t('panels.fishing_err_other'), 'error');
+    fishCast = null;
+    stopFishingTimer();
+    paintFishing();
+  }
+}
+
+/** Перерисовать блок рыбалки: поплавок, кнопки, усталость лодки */
+export function paintFishing(): void {
+  const box = $('fishing-content');
+  if (!box) return;
+
+  const status = $('fishing-status');
+  const reelBtn = $('fishing-reel') as HTMLButtonElement | null;
+  const castBtn = $('fishing-cast') as HTMLButtonElement | null;
+  const cancelBtn = $('fishing-cancel') as HTMLButtonElement | null;
+  const phase = $('fishing-phase');
+  if (!status || !reelBtn || !castBtn || !phase) return;
+
+  if (!fishCast) {
+    status.textContent = t('panels.fishing_ready');
+    phase.textContent = '';
+    phase.className = 'fishing-float';
+    reelBtn.classList.add('hidden');
+    castBtn.classList.remove('hidden');
+    cancelBtn?.classList.add('hidden');
+    stopFishingTimer();
+    return;
+  }
+
+  castBtn.classList.add('hidden');
+  reelBtn.classList.remove('hidden');
+  cancelBtn?.classList.remove('hidden');
+
+  const tick = () => {
+    const left = fishCast!.biteAt - (Date.now() + fishClockOffset);
+    if (left > 0) {
+      status.textContent = `${t('panels.fishing_wait')} ${Math.ceil(left / 1000)}`;
+      phase.textContent = '';
+      phase.className = 'fishing-float';
+      if (fishBiteShown) {
+        // Таймер сработал раньше реального клёва (расхождение часов) —
+        // возвращаем ожидание, чтобы не подсечь в пустоту
+        fishBiteShown = false;
+      }
+      return;
+    }
+    // Клюнуло: поплавок уходит под воду, кнопка подсечки мигает
+    if (!fishBiteShown) {
+      fishBiteShown = true;
+      status.textContent = t('panels.fishing_bite');
+    }
+    phase.textContent = '↓';
+    phase.className = 'fishing-float bite';
+  };
+  tick();
+  stopFishingTimer();
+  fishTimer = window.setInterval(tick, 250);
+}
+
+/**
+ * Гараж лодок: список купленных и кнопка «встать на воду».
+ * Без этого лодку было негде активировать — только через API.
+ */
+async function renderBoatGarage(): Promise<HTMLElement> {
+  const wrap = document.createElement('div');
+  const head = document.createElement('div');
+  head.className = 'panel-subhead';
+  head.textContent = t('panels.fishing_garage');
+  wrap.append(head);
+
+  if (!session.character) return wrap;
+  let owned: { boatId: string; isActive: boolean; fatigue: number }[] = [];
+  let catalog: Record<string, { id: string; nameRu: string; waterSpeed: number; fishingBonus: number; price: number; minLevel: number; descriptionRu: string }> = {};
+  try {
+    const res = await api.boats(session.character.id);
+    owned = res.boats;
+    catalog = res.catalog;
+  } catch {
+    const err = document.createElement('div');
+    err.className = 'inv-empty';
+    err.textContent = '—';
+    wrap.append(err);
+    return wrap;
+  }
+
+  if (!owned.length) {
+    const none = document.createElement('div');
+    none.className = 'inv-empty';
+    none.textContent = t('panels.fishing_no_boats');
+    wrap.append(none);
+    return wrap;
+  }
+
+  for (const b of owned) {
+    const def = catalog[b.boatId];
+    if (!def) continue;
+    const row = rowEl('inv-item');
+    const label = document.createElement('span');
+    label.className = 'inv-name';
+    label.textContent = def.nameRu;
+    label.title = def.descriptionRu;
+    row.append(label);
+    row.append(actionButton(t('panels.fishing_board'), async () => {
+      try {
+        await api.boatActivate(session.character!.id, b.boatId, {
+          x: session.selfPos.x, z: session.selfPos.z,
+        });
+        toast(t('panels.fishing_boarded'), 'success');
+      } catch {
+        toast(t('panels.fishing_err_no_water'), 'error');
+      }
+      await loadFishing();
+    }));
+    wrap.append(row);
+  }
+  return wrap;
+}
+
+/** Панель «Рыбалка»: лодка, заброс, улов */
+export async function loadFishing(): Promise<void> {
+  if (!session.character) return;
+  const box = $('fishing-content');
+  if (!box) return;
+  try {
+    const { cast, boat, boatFatigue, fish, serverTime } = await api.fishingState(session.character.id);
+    session.boat = boat
+      ? {
+          id: (boat as { id?: string }).id ?? 'boat',
+          nameRu: boat.nameRu,
+          waterSpeed: (boat as { waterSpeed?: number }).waterSpeed ?? 0.8,
+          swimSpeed: (boat as { swimSpeed?: number }).swimSpeed ?? 5,
+          fishingBonus: (boat as { fishingBonus?: number }).fishingBonus ?? 1,
+          catchLimit: boat.catchLimit,
+        }
+      : null;
+    syncFishingClock(serverTime);
+    fishBiteShown = false;
+    if (cast) {
+      fishCast = { castId: cast.castId, biteAt: cast.biteAt, waitTotalMs: cast.waitTotalMs };
+    } else {
+      fishCast = null;
+    }
+    box.innerHTML = '';
+
+    // ── Лодка ──
+    if (boat) {
+      const used = Math.min(boatFatigue, boat.catchLimit);
+      const boatRow = rowEl('inv-item');
+      const name = document.createElement('span');
+      name.className = 'inv-name';
+      name.textContent = `${t('panels.fishing_boat')}: ${boat.nameRu}`;
+      boatRow.append(name);
+      boatRow.append(actionButton(t('panels.fishing_land'), async () => {
+        await api.boatDeactivate(session.character!.id);
+        await loadFishing();
+      }));
+      box.append(boatRow);
+
+      const bar = document.createElement('div');
+      bar.className = 'fishing-bar';
+      if (used >= boat.catchLimit) bar.classList.add('fat');
+      const fill = document.createElement('i');
+      fill.style.width = `${(used / boat.catchLimit) * 100}%`;
+      bar.append(fill);
+      const barRow = rowEl('inv-item');
+      const cap = document.createElement('span');
+      cap.className = 'inv-qty';
+      cap.textContent = `${t('panels.fishing_tired')}: ${used}/${boat.catchLimit}`;
+      barRow.append(bar, cap);
+      box.append(barRow);
+    } else {
+      // Лодки в гараже: можно встать на воду, чтобы ловить глубже
+      box.append(await renderBoatGarage());
+    }
+
+    // ── Заброс и подсечка ──
+    const actRow = rowEl('inv-item fishing-actions');
+    const status = document.createElement('span');
+    status.className = 'inv-name';
+    status.id = 'fishing-status';
+    const phase = document.createElement('span');
+    phase.className = 'fishing-float';
+    phase.id = 'fishing-phase';
+
+    const castBtn = actionButton(t('panels.fishing_cast_btn'), fishingCastLine) as HTMLButtonElement;
+    castBtn.id = 'fishing-cast';
+    const reelBtn = actionButton(t('panels.fishing_reel_btn'), fishingReel) as HTMLButtonElement;
+    reelBtn.id = 'fishing-reel';
+
+    const cancelBtn = actionButton(t('panels.fishing_cancel'), async () => {
+      if (fishCast) await api.fishingCancel(session.character!.id, fishCast.castId);
+      fishCast = null;
+      await loadFishing();
+    });
+    cancelBtn.id = 'fishing-cancel';
+    cancelBtn.classList.add('hidden');
+
+    actRow.append(status, phase, castBtn, reelBtn, cancelBtn);
+    box.append(actRow);
+
+    // ── Что здесь ловится ──
+    const listHead = document.createElement('div');
+    listHead.className = 'panel-subhead';
+    listHead.textContent = t('panels.fishing_catchable');
+    box.append(listHead);
+
+    const level = session.character.level;
+    for (const f of fish) {
+      if (f.minLevel > level) continue;
+      const row = rowEl('inv-item');
+      const name = document.createElement('span');
+      name.className = `inv-name fish-${f.rarity}`;
+      name.textContent = `${f.nameRu} · ${f.weightKg < 1 ? Math.round(f.weightKg * 1000) + ' г' : f.weightKg + ' кг'}`;
+      if (f.deepOnly) {
+        const tag = document.createElement('small');
+        tag.className = 'fish-tag';
+        tag.textContent = t('panels.fishing_deep_only');
+        name.append(tag);
+      }
+      row.append(name);
+      box.append(row);
+    }
+  } catch {
+    box.innerHTML = `<div class="inv-empty">—</div>`;
+  } finally {
+    paintFishing();
+  }
+}
+
 const LOADERS: Record<string, () => Promise<void>> = {
   'panel-character': loadCharacterPanel,
   'panel-dungeons': loadDungeons,
@@ -2107,11 +2799,14 @@ const LOADERS: Record<string, () => Promise<void>> = {
   'panel-party': loadParty,
   'panel-trade': loadTrade,
   'panel-mount-stable': loadMounts,
+  'panel-fishing': loadFishing,
   'panel-leaderboard': loadLeaderboard,
   'panel-friends': loadFriends,
   'panel-chess': loadChess,
   'panel-poetry': loadPoetry,
   'panel-chronicles': loadChronicles,
+  'panel-referral': loadReferral,
+  'panel-story': loadStory,
   'panel-guild': loadGuild,
   'panel-achievements': loadAchievements,
   'panel-tasks': loadTasks,

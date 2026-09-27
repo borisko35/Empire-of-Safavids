@@ -7,6 +7,7 @@ import { session, Character } from '../state';
 import { t } from '../i18n';
 import { CLASS_COLORS } from '../../ui/icons';
 import { showScreen } from '../world';
+import { createCharacterWithReferral } from '../referral';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -40,7 +41,8 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
     const name = ($('new-name') as HTMLInputElement).value.trim();
     const serverId = ($('new-server') as HTMLSelectElement).value;
     try {
-      const { character } = await api.createCharacter(name, selectedClass, serverId);
+      // Создаём через обёртку: она приложит код приглашения и потратит его
+      const { character } = await createCharacterWithReferral(name, selectedClass, serverId);
       ($('new-name') as HTMLInputElement).value = '';
       onEnter(character);
     } catch (err) {

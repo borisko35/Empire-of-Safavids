@@ -86,6 +86,10 @@ export function createNavigator(scene: THREE.Scene): NavigatorHandle {
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 0.12), mat);
   tail.position.z = -0.5;
   group.add(shaft, head, tail);
+  // Стрелка уменьшена и поднята: раньше она висела в 3.15 м над землёй
+  // при длине около 2 м, то есть перекрывала голову и корпус персонажа —
+  // на близкой камере это выглядело как гигантская фигура поверх героя.
+  group.scale.setScalar(0.5);
   group.visible = false;
   scene.add(group);
 
@@ -141,7 +145,9 @@ export function createNavigator(scene: THREE.Scene): NavigatorHandle {
       // Стрелка смотрит на ближайшую точку маршрута (а не сквозь стену)
       const next = route.length > 1 ? route[1] : target;
       group.rotation.y = Math.atan2(next.x - player.x, next.z - player.z);
-      group.position.set(player.x, 3.15 + Math.sin(now / 300) * 0.14, player.z);
+      // 4.3 м — над головой (персонаж ~1.9 м) и с запасом, чтобы стрелка
+      // не наезжала на плечи вблизи
+      group.position.set(player.x, 4.3 + Math.sin(now / 300) * 0.14, player.z);
       mat.emissiveIntensity = 0.8 + Math.sin(now / 170) * 0.3;
     },
 

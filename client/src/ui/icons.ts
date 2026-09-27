@@ -47,6 +47,10 @@ export const ICONS = {
   play: '<path d="M6 3l14 9-14 9z"/>',
   home: '<path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   book: '<path d="M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm0 1h16M5 8h3m-3 3h3m-3 3h2"/>',
+
+  // ── Вода и рыбалка ──────────────────────────────────────
+  fish: '<path d="M2 12c3.5-4.5 7-6.5 11-6.5 3 0 5.5 1 7 3l-1.8 1.2L20 12l-1.8 2.3L20 15.5c-1.5 2-4 3-7 3-4 0-7.5-2-11-6.5z"/><circle cx="16.5" cy="10.5" r="1.1" fill="#0d1117"/>',
+  boat: '<path d="M2 15h20l-2.5 4.5a1 1 0 0 1-.9.5H5.4a1 1 0 0 1-.9-.5z"/><path d="M12 2v12M12 4l7 3-7 2z" fill="none" stroke="currentColor" stroke-width="1.8"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -74,6 +78,7 @@ export const ITEM_ICONS: Record<string, IconName> = {
   consumable: 'potion',
   material: 'ore',
   quest: 'scroll',
+  trophy: 'skull',   // добыча с монстров
 };
 
 /** Цвета редкости (единая палитра с бейджами) */

@@ -1,10 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from './DatabaseService';
-import { Character, CharacterClass, CharacterStats, Region, ItemType } from '../types/game.types';
+import { Character, CharacterClass, CharacterStats, Region, ItemType, EquipmentBonuses } from '../types/game.types';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ITEMS_DATABASE } from '../data/items';
-import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn } from '../../../shared/constants';
+import { getBuffService, ITEM_BUFFS, type ActiveBuff } from './BuffService';
+import { ReferralService } from './ReferralService';
+import { logger } from '../utils/logger';
+import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -24,6 +27,29 @@ const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   },
 };
 
+/**
+ * Что восстанавливает расходник. Вынесено из класса, чтобы тесты
+ * целостности могли сверить таблицу с каталогом предметов: предмет,
+ * обещающий в описании восстановление, обязан здесь быть — иначе
+ * useItem бросает «Item has no usable effect».
+ */
+export const USE_ITEM_EFFECTS: Record<string, { hp?: number; mana?: number; stamina?: number }> = {
+  con_health_potion_s: { hp: 200 },
+  con_health_potion_m: { hp: 800 },
+  con_mana_potion: { mana: 300 },
+  con_stamina_food: { stamina: 150 },
+  // Второй слой расходников (префикс pot_/food_) был описан в каталоге,
+  // но отсутствовал здесь — useItem бросал «Item has no usable effect»,
+  // то есть выпить зелье или съесть кебаб было невозможно. Значения взяты
+  // из описаний предметов. Бонус к силе/урону из описаний пока не
+  // реализован: для этого нужна система временных модификаторов.
+  pot_health_small: { hp: 50 },
+  pot_health_medium: { hp: 150 },
+  pot_mana_small: { mana: 40 },
+  pot_stamina_small: { stamina: 30 },
+  food_kebab: { hp: 80 },
+};
+
 export class CharacterService {
   private db = DatabaseService.getInstance();
   private leveling = new LevelingSystem();
@@ -32,7 +58,9 @@ export class CharacterService {
     userId: string,
     name: string,
     characterClass: CharacterClass,
-    serverId: string = DEFAULT_SERVER_ID
+    serverId: string = DEFAULT_SERVER_ID,
+    /** Код приглашения из ссылки ?ref= — может быть пустым */
+    referralCode?: string,
   ): Promise<Character> {
     const stats = BASE_STATS[characterClass];
     const maxHp = 100 + stats.endurance * 10;
@@ -74,6 +102,19 @@ export class CharacterService {
         character.region, character.serverId, character.gold, character.createdAt, character.updatedAt,
       ]
     );
+
+    // Приглашение друга засчитывается здесь, а не при регистрации:
+    // золото лежит в characters.gold, и на момент регистрации аккаунта
+    // персонажа ещё нет. Ошибка начисления не должна помешать игроку
+    // создать персонажа, поэтому просто логируем.
+    try {
+      await new ReferralService().attribute(referralCode, {
+        id: character.id,
+        userId,
+      });
+    } catch (err) {
+      logger.warn(`[Referral] не удалось засчитать приглашение: ${(err as Error).message}`);
+    }
 
     return character;
   }
@@ -157,13 +198,24 @@ export class CharacterService {
     return character;
   }
 
+  /**
+   * Начислить опыт. Единственная точка для всех источников (убийства,
+   * квесты, рыбалка, караваны, данжи, группа), поэтому временной бонус
+   * «+50% к опыту» применяется именно здесь и работает везде сразу.
+   *
+   * Множитель каждый раз считается от базовой суммы заново, а не
+   * накапливается: повторный запрос не умножит опыт дважды.
+   */
   async addExperience(characterId: string, amount: number): Promise<{ leveledUp: boolean; newLevel: number }> {
     const character = await this.getCharacterById(characterId);
     if (!character) throw new Error('Character not found');
 
+    const mult = await getBuffService().getExpMultiplier(characterId);
+    const total = Math.floor(amount * mult);
+
     // Делегируем единой системе прокачки (прирост статов/навыков при level up)
-    const result = await this.leveling.addExperience(character, amount, 'experience_gain');
-    return { leveledUp: result.leveledUp, newLevel: result.newLevel };
+    const result = await this.leveling.addExperience(character, total, 'experience_gain');
+    return { leveledUp: result.leveledUp, newLevel: result.leveledUp ? result.newLevel : character.level };
   }
 
   async updatePosition(characterId: string, position: { x: number; y: number; z: number }): Promise<void> {
@@ -240,8 +292,13 @@ export class CharacterService {
   // Регенерация и ресурсы
   // ============================================================
 
-  /** Медленная регенерация ресурсов (за 5-секундный тик сервера). */
-  async regenResources(characterId: string): Promise<{
+  /**
+   * Регенерация ресурсов (за 5-секундный тик сервера).
+   * `inWater` — игрок в глубокой воде: стамина не восстанавливается, а
+   * расходуется. Раньше она regen'илась одинаково для стоящего, бегущего
+   * и плывущего — плыть можно было бесконечно.
+   */
+  async regenResources(characterId: string, inWater = false): Promise<{
     hp: number; maxHp: number; mana: number; maxMana: number;
     stamina: number; maxStamina: number; level: number; experience: number; gold: number;
   } | null> {
@@ -249,11 +306,14 @@ export class CharacterService {
       `UPDATE characters SET
          hp      = LEAST(max_hp,      hp + GREATEST(1, FLOOR(max_hp * 0.012) * 5)),
          mana    = LEAST(max_mana,    mana + GREATEST(1, FLOOR(max_mana * 0.02) * 5)),
-         stamina = LEAST(max_stamina, stamina + GREATEST(1, FLOOR(max_stamina * 0.04) * 5)),
+         stamina = CASE WHEN $2::boolean
+                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $3) * 5))
+                        ELSE LEAST(max_stamina, stamina + GREATEST(1, FLOOR(max_stamina * 0.04) * 5))
+                   END,
          updated_at = NOW()
        WHERE id = $1
        RETURNING hp, max_hp, mana, max_mana, stamina, max_stamina, level, experience, gold`,
-      [characterId]
+      [characterId, inWater, STAMINA.SWIM_DRAIN_PER_5S]
     );
     if (!row) return null;
     return {
@@ -494,13 +554,16 @@ export class CharacterService {
   };
 
   /** Экипированные предметы и агрегированные бонусы характеристик (+5% за уровень заточки). */
-  async getEquipment(characterId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats }> {
+  async getEquipment(characterId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats; bonuses: EquipmentBonuses }> {
     const rows = await this.db.query<{ slot: string; item_id: string; enhancement: number }>(
       'SELECT slot, item_id, enhancement FROM character_equipment WHERE character_id = $1',
       [characterId]
     );
     const items: EquippedItem[] = [];
     const stats: CharacterStats = { strength: 0, agility: 0, intelligence: 0, endurance: 0, charisma: 0 };
+    // Бонусы воды копятся отдельно от характеристик: они не должны попадать
+    // в сумму «Бонус характеристик» в панели персонажа
+    const bonuses: EquipmentBonuses = { waterSpeed: 0, swimStamina: 0 };
     for (const r of rows) {
       const def = ITEMS_DATABASE[r.item_id];
       const enhancement = Number(r.enhancement);
@@ -517,8 +580,10 @@ export class CharacterService {
       for (const [key, value] of Object.entries(def?.stats ?? {})) {
         if (key in stats) stats[key as keyof CharacterStats] += Math.round(Number(value) * mult);
       }
+      bonuses.waterSpeed = Math.min(1, bonuses.waterSpeed + (def?.waterSpeed ?? 0) * mult);
+      bonuses.swimStamina = Math.min(0.75, bonuses.swimStamina + (def?.swimStamina ?? 0) * mult);
     }
-    return { items, stats };
+    return { items, stats, bonuses };
   }
 
   /** Надеть предмет: списывается из сумки, предыдущий предмет слота возвращается в неё. */
@@ -605,31 +670,46 @@ export class CharacterService {
   // Расходники
   // ============================================================
 
-  private static USE_ITEM_EFFECTS: Record<string, { hp?: number; mana?: number; stamina?: number }> = {
-    con_health_potion_s: { hp: 200 },
-    con_health_potion_m: { hp: 800 },
-    con_mana_potion: { mana: 300 },
-    con_stamina_food: { stamina: 150 },
-  };
+  private static USE_ITEM_EFFECTS = USE_ITEM_EFFECTS;
 
-  /** Использовать расходник: списывает предмет и применяет эффект восстановления. */
+  /**
+   * Использовать расходник: списывает предмет, восстанавливает ресурсы
+   * и/или выдаёт временный бонус (кебаб, свиток учёного).
+   */
   async useItem(characterId: string, itemId: string): Promise<{
     hp: number; maxHp: number; mana: number; maxMana: number; stamina: number; maxStamina: number;
+    buff: ActiveBuff | null;
   }> {
     const def = ITEMS_DATABASE[itemId];
     if (!def) throw new Error('Item not found');
     if (def.type !== ItemType.CONSUMABLE) throw new Error('Item is not consumable');
     const effect = CharacterService.USE_ITEM_EFFECTS[itemId];
-    if (!effect) throw new Error('Item has no usable effect');
+    // Предмет может не восстанавливать ресурсы, а давать временный бонус
+    // (Свиток Учёного) — тогда всё, что он обещает, это бонус.
+    const buffId = ITEM_BUFFS[itemId];
+    if (!effect && !buffId) throw new Error('Item has no usable effect');
 
     await this.removeItems(characterId, [{ itemId, qty: 1 }]);
+    const buff = buffId ? await getBuffService().grant(characterId, buffId) : null;
 
     const sets: string[] = [];
     const params: number[] = [];
     let i = 2; // $1 = characterId
-    if (effect.hp)      { sets.push(`hp = LEAST(max_hp, hp + $${i})`);          params.push(effect.hp); i++; }
-    if (effect.mana)    { sets.push(`mana = LEAST(max_mana, mana + $${i})`);    params.push(effect.mana); i++; }
-    if (effect.stamina) { sets.push(`stamina = LEAST(max_stamina, stamina + $${i})`); params.push(effect.stamina); i++; }
+    if (effect?.hp)      { sets.push(`hp = LEAST(max_hp, hp + $${i})`);          params.push(effect.hp); i++; }
+    if (effect?.mana)    { sets.push(`mana = LEAST(max_mana, mana + $${i})`);    params.push(effect.mana); i++; }
+    if (effect?.stamina) { sets.push(`stamina = LEAST(max_stamina, stamina + $${i})`); params.push(effect.stamina); i++; }
+    // Предмет без мгновенного восстановления: трогаем только отметку времени
+    if (!sets.length) {
+      await this.db.query('UPDATE characters SET updated_at = NOW() WHERE id = $1', [characterId]);
+      const cur = await this.getCharacterById(characterId);
+      if (!cur) throw new Error('Character not found');
+      return {
+        hp: cur.hp, maxHp: cur.maxHp,
+        mana: cur.mana, maxMana: cur.maxMana,
+        stamina: cur.stamina, maxStamina: cur.maxStamina,
+        buff,
+      };
+    }
     const row = await this.db.queryOne<Record<string, number>>(
       `UPDATE characters SET ${sets.join(', ')}, updated_at = NOW()
        WHERE id = $1
@@ -641,6 +721,7 @@ export class CharacterService {
       hp: Number(row.hp), maxHp: Number(row.max_hp),
       mana: Number(row.mana), maxMana: Number(row.max_mana),
       stamina: Number(row.stamina), maxStamina: Number(row.max_stamina),
+      buff,
     };
   }
 }

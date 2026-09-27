@@ -31,16 +31,25 @@ router.get('/achievements/:id/progress', authMiddleware, async (req: any, res) =
 });
 
 // ── Daily Tasks ─────────────────────────────────────────
+// ТУТ БЫЛА ОШИБКА: маршрут передавал req.userId, а сервис ищет по
+// character_daily_progress.character_id. Идентификатор аккаунта и
+// идентификатор персонажа — разные числа, поэтому прогресс всегда был
+// нулевым: задачи дня нельзя было выполнить в принципе.
 router.get('/tasks', authMiddleware, async (req: any, res) => {
+  const characterId = String(req.query.characterId ?? '');
+  if (!characterId) return res.status(400).json({ error: 'characterId is required' });
   const char = await (await import('../services/DatabaseService')).DatabaseService.getInstance()
-    .queryOne<{ level: number }>('SELECT level FROM characters WHERE id = $1', [req.userId]);
-  const tasks = await dailyTasks.getAvailable(req.userId, char?.level ?? 1);
-  const completedCount = await dailyTasks.getCompletedCount(req.userId);
+    .queryOne<{ level: number }>('SELECT level FROM characters WHERE id = $1', [characterId]);
+  if (!char) return res.status(404).json({ error: 'Character not found' });
+  const tasks = await dailyTasks.getAvailable(characterId, char.level);
+  const completedCount = await dailyTasks.getCompletedCount(characterId);
   res.json({ tasks, completedCount });
 });
 
 router.get('/tasks/progress', authMiddleware, async (req: any, res) => {
-  const completedCount = await dailyTasks.getCompletedCount(req.userId);
+  const characterId = String(req.query.characterId ?? '');
+  if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+  const completedCount = await dailyTasks.getCompletedCount(characterId);
   res.json({ completedCount });
 });
 

@@ -114,14 +114,36 @@ export class WorldTimeSystem {
     return 'winter';
   }
 
+  /**
+   * Ручная установка погоды из админ-панели: держим её, пока не вернут
+   * автоматический режим (null). Нужно, чтобы можно было сразу посмотреть
+   * все погодные эффекты, не дожидаясь 4-минутного слота расписания.
+   */
+  private weatherOverride: Weather | null = null;
+
+  setWeatherOverride(kind: Weather | null): void {
+    this.weatherOverride = kind;
+    logger.info(`[WorldTime] Погода: ${kind ?? 'авто (по расписанию)'}`);
+  }
+
+  getWeatherOverride(): Weather | null {
+    return this.weatherOverride;
+  }
+
   private getCurrentWeather(): Weather {
+    // Ручной режим админа важнее расписания
+    if (this.weatherOverride) return this.weatherOverride;
     // Слоты по 4 минуты: погода заметно меняется прямо во время игры.
     // Раньше было 30 минут — дождь/бурю можно было не дождаться за сессию.
-    // Распределение: ясно чаще, дождь/буря/песчанка регулярно, снег редко.
+    // Снега в таблице не было НИ ОДНОГО слота: клиент его всё равно не умел
+    // рисовать, поэтому «зимней» погоды в игре просто не существовало.
+    // Цикл теперь 30 слотов (2 часа) — разнообразие заметно богаче.
     const weathers: Weather[] = [
       'clear', 'clear', 'clear', 'cloudy', 'cloudy', 'wind',
       'rain', 'rain', 'cloudy', 'fog', 'storm', 'clear',
-      'sandstorm', 'wind', 'clear', 'rain', 'storm', 'sandstorm',
+      'sandstorm', 'wind', 'clear', 'rain', 'storm', 'snow',
+      'clear', 'cloudy', 'rain', 'snow', 'wind', 'clear',
+      'cloudy', 'fog', 'clear', 'clear', 'rain', 'snow',
     ];
     const idx = Math.floor(Date.now() / (4 * 60 * 1000)) % weathers.length;
     return weathers[idx];

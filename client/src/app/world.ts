@@ -5,27 +5,45 @@
 
 import { socket } from './net';
 import { api } from './api';
-import { t } from './i18n';
+import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
-import { loadPanelContent } from './panels';
+import { loadPanelContent, checkWaterDanger, resetWaterDanger } from './panels';
+import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
-import { GATE } from './game3d/terrain';
+import { GATE, groundHeight, waterSurfaceY } from './game3d/terrain';
+import { STAMINA, GAME_VERSION } from '../../../shared/constants';
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
 import {
+  getSettings, updateSettings, applyDisplayMode, onSettingsChange,
+  type DisplayMode, type GraphicsLevel,
+} from './settings';
+import {
   chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap,
   drawWorldMap,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
-  tickCooldowns, toast,
+  tickCooldowns, toast, loadBuffs, clearBuffs,
+  showGuestBanner, promptClaimAccount,
 } from './hud';
+import { initTutorial, onTutorialAction, tickTutorial } from './tutorial';
+import { loadAccountLinks } from './accountLinks';
 import { icon, type IconName } from '../ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
 const MOVE_SEND_MS = 100;   // частота пакетов движения (лимит анти-чита 30/сек)
+
+/**
+ * В этой точке вода глубже, чем брод: сухопутному монстру сюда нельзя.
+ * Порог тот же, что и переход в плавание у игрока (world3d SWIM_MIN_DEPTH).
+ */
+function swimNeeded(x: number, z: number): boolean {
+  const surf = waterSurfaceY(x, z);
+  return surf !== null && surf - groundHeight(x, z) > 1.2;
+}
 
 let world3d: World3D | null = null;
 let world: World | null = null;
@@ -33,6 +51,8 @@ let me: PlayerEntity | null = null;
 let raf = 0;
 let lastFrame = 0;
 let lastMoveSent = 0;
+/** Обратный отсчёт до следующей проверки «опасность в воде» (раз в секунду) */
+let dangerTick = 0;
 let lastMinimapDraw = 0;
 let lastWorldmapDraw = 0;
 let lastExploreCheck = 0;
@@ -200,6 +220,137 @@ async function refreshNavTarget(): Promise<void> {
 
 // ── Вход в мир ───────────────────────────────────────────────
 
+/** Один кадр браузера — дать экрану загрузки отрисоваться до тяжёлой сборки */
+function nextPaint(): Promise<void> {
+  return new Promise((r) => requestAnimationFrame(() => r()));
+}
+
+/**
+ * Минимальная длительность экрана загрузки, мс.
+ * Реальный мир собирается за ~1,3 с, и экран «моргал» — вход в игру
+ * выглядел как сбой. Теперь полоса плавно добирает до 100% и держит
+ * экран, пока не пройдёт это время. Если загрузка реально дольше
+ * (слабый ПК, медленная сеть) — ждём её, а не обрываем.
+ */
+const MIN_LOADING_MS = 10_500;
+/** Подсказки, которые сменяются на экране загрузки */
+const LOADING_TIPS = [
+  'loading.tip_1', 'loading.tip_2', 'loading.tip_3',
+  'loading.tip_4', 'loading.tip_5', 'loading.tip_6',
+];
+/** Как часто меняется подсказка, мс */
+const TIP_EVERY_MS = 1900;
+
+let loadingStart = 0;
+let loadingShown = 0;
+let loadingTarget = 0;
+let loadingLabel = '';
+let loadingRaf = 0;
+let tipAt = 0;
+let tipIx = 0;
+
+/** Прогресс и подпись на экране загрузки (0..1) */
+function setLoading(fraction: number, text: string): void {
+  const fill = $('loading-fill');
+  if (fill) fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  const label = $('loading-text');
+  if (label) label.textContent = text;
+}
+
+/**
+ * Плавная анимация полосы: реальный прогресс не может «перепрыгнуть»
+ * Allowed — так заполнение выглядит живым, а не рывком. Подсказка внизу
+ * меняется каждые TIP_EVERY_MS, чтобы ожидание не было пустым.
+ */
+function startLoadingLoop(): void {
+  const tick = (): void => {
+    const elapsed = performance.now() - loadingStart;
+    const k = Math.max(0, Math.min(1, elapsed / MIN_LOADING_MS));
+    // easeOutCubic: быстрый разгон, мягкое торможение у 100%
+    const allowed = 1 - Math.pow(1 - k, 3);
+    const goal = Math.min(loadingTarget, allowed);
+    if (goal > loadingShown) loadingShown = goal;
+    setLoading(loadingShown, loadingLabel);
+    if (elapsed - tipAt >= TIP_EVERY_MS) {
+      tipAt = elapsed;
+      tipIx = (tipIx + 1) % LOADING_TIPS.length;
+      const tip = $('loading-tip');
+      if (tip) {
+        tip.textContent = t(LOADING_TIPS[tipIx]);
+        tip.classList.remove('tip-fade');
+        void tip.offsetWidth; // рестарт CSS-анимации появления
+        tip.classList.add('tip-fade');
+      }
+    }
+    loadingRaf = requestAnimationFrame(tick);
+  };
+  loadingRaf = requestAnimationFrame(tick);
+}
+
+/** Задать реальный прогресс, не перескакивая к тому, что уже нарисовано */
+function markLoading(fraction: number, text: string): void {
+  loadingTarget = fraction;
+  loadingLabel = text;
+}
+
+/** Задать реальный прогресс и включить экран загрузки */
+function showLoading(fraction: number, text: string): void {
+  loadingStart = performance.now();
+  loadingShown = 0;
+  loadingTarget = fraction;
+  loadingLabel = text;
+  tipAt = 0;
+  tipIx = 0;
+  const tip = $('loading-tip');
+  if (tip) tip.textContent = t(LOADING_TIPS[0]);
+  setLoading(0, text);
+  $('overlay-loading')?.classList.remove('hidden');
+  cancelAnimationFrame(loadingRaf);
+  startLoadingLoop();
+}
+
+/** Дойти до 100% и дождаться MIN_LOADING_MS, затем спрятать экран */
+async function finishLoading(): Promise<void> {
+  loadingTarget = 1;
+  loadingLabel = t('loading.ready');
+  const left = MIN_LOADING_MS - (performance.now() - loadingStart);
+  if (left > 0) await new Promise((r) => setTimeout(r, left));
+  setLoading(1, t('loading.ready'));
+  hideLoading();
+}
+
+function hideLoading(): void {
+  cancelAnimationFrame(loadingRaf);
+  loadingRaf = 0;
+  $('overlay-loading')?.classList.add('hidden');
+}
+
+/** Имя, класс и уровень героя — карточка главного меню (Esc) */
+function fillMenuInfo(): void {
+  // Версию берём из общей константы: раньше «v0.2.0» было вписано прямо
+  // в разметку и разошлось с GAME_VERSION на сервере
+  const ver = $('menu-version');
+  if (ver) ver.textContent = `v${GAME_VERSION}`;
+
+  const c = session.character;
+  if (!c) return;
+  const info = $('menu-char-info');
+  if (info) {
+    info.textContent =
+      `${c.name} · ${t('panels.char_class')}: ${c.class} · ${t('panels.char_level')}: ${c.level}`;
+  }
+}
+
+/** Открыть панель по имени — как кнопка-переключатель, но без двойного клика */
+function openPanelById(panel: string): void {
+  const el = document.getElementById(panel);
+  if (!el) return;
+  el.classList.remove('hidden');
+  document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`)
+    ?.classList.add('active');
+  loadPanelContent(panel);
+}
+
 export async function enterWorld(character: Character): Promise<void> {
   session.character = character;
   session.hp = character.hp; session.maxHp = character.maxHp;
@@ -209,6 +360,10 @@ export async function enterWorld(character: Character): Promise<void> {
   session.experience = character.experience;
 
   showScreen('screen-world');
+  // Экран загрузки со своей темой — пока собирается мир
+  showLoading(0.08, t('loading.entering'));
+  audio.ensureLoading();
+  await nextPaint();
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {
     el.innerHTML = icon(el.dataset.icon as IconName, 18);
   });
@@ -222,6 +377,9 @@ export async function enterWorld(character: Character): Promise<void> {
 
   world = new World();
   world3d = new World3D();
+  // Сборка мира тяжёлая (~сотни тысяч вершин) — отдаём кадр на отрисовку
+  markLoading(0.2, t('loading.building'));
+  await nextPaint();
   world3d.init(document.getElementById('game3d-root') as HTMLElement, {
     onAttack: () => basicAttack(),
     onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
@@ -252,6 +410,22 @@ export async function enterWorld(character: Character): Promise<void> {
   };
   world.players.set(me.id, me);
   world3d.attach(world, me);
+  markLoading(0.85, t('loading.connecting'));
+  await nextPaint();
+  fillMenuInfo();
+  wireSettings();
+  void loadAdminRights();
+  void loadBuffs();
+  if (session.isGuest) showGuestBanner();
+  // Туториал новичка. Раньше не вызывался НИ РАЗУ, хотя был написан целиком:
+  // игрок попадал в город с двадцатью кнопками без единой подсказки.
+  void initTutorial(me.id);
+  // Шаг «атакуй мечом» засчитывается на замахе (3D-слой сообщает через крючок)
+  world3d?.setOnAttack(() => onTutorialAction('attack'));
+  // Шаг «осмотритесь» засчитывается на реальном повороте камеры мышью
+  world3d?.setOnCamera(() => onTutorialAction('camera'));
+  resetWaterDanger();
+  await finishLoading();
   audio.ensureGame();
 
   // Отладочный хук для e2e-проверок (не влияет на игру)
@@ -294,6 +468,8 @@ export function leaveWorld(): void {
   world3d?.setNavTarget(null);
   socket.disconnect();
   if (deathTimer) clearTimeout(deathTimer);
+  // Бонусы остаются в игре, но их таймер в HUD должен перестать тикать
+  clearBuffs();
   world3d?.dispose();
   world3d = null;
   world = null; me = null;
@@ -358,13 +534,16 @@ function wireSocket(): void {
   });
 
   // ── Монстры ──
-  socket.on('monster:spawned', (payload: { instanceId: string; monsterId: string; nameRu: string; position: Vec3; hp: number; maxHp?: number; type: string }) => {
+  socket.on('monster:spawned', (payload: { instanceId: string; monsterId: string; nameRu: string; position: Vec3; hp: number; maxHp?: number; type: string; aquatic?: boolean; aquaticSize?: number }) => {
     if (!world) return;
     world.monsters.set(payload.instanceId, {
       instanceId: payload.instanceId,
       monsterId: payload.monsterId,
       nameRu: payload.nameRu,
       type: payload.type,
+      // Подводное: рисуется спиной над водой, иначе его не видно
+      aquatic: payload.aquatic === true,
+      aquaticSize: payload.aquaticSize ?? 0.25,
       pos: { ...payload.position },
       target: { ...payload.position },
       speed: 3.5,
@@ -379,8 +558,15 @@ function wireSocket(): void {
     const m = world?.monsters.get(instanceId);
     if (!m) return;
     if (action.destination) {
-      m.target = { ...action.destination };
-      m.speed = 3.2;
+      // Сухопутный монстр не идёт туда, где пришлось бы плыть: раньше
+      // разбойник уходил в озеро и там замирал. Уже в воде — даём выйти.
+      const dest = action.destination;
+      if (!swimNeeded(dest.x, dest.z) || swimNeeded(m.pos.x, m.pos.z)) {
+        m.target = { ...dest };
+        m.speed = 3.2;
+      } else {
+        m.target = { x: m.pos.x, y: m.pos.y, z: m.pos.z };
+      }
     }
     if ((action.type === 'attack' || action.type === 'skill') && action.targetId && world) {
       const victim = world.players.get(action.targetId);
@@ -402,6 +588,10 @@ function wireSocket(): void {
     w.addFloater(m.pos.x, m.pos.z - 1.2, '☠', '#F4D26C');
     setTimeout(() => world?.monsters.delete(instanceId), 950);
     audio.kill();
+    if (killerId === me?.id) {
+      // Шаг туториала «убей монстра» засчитывается здесь
+      onTutorialAction('kill_monster', m.monsterId);
+    }
     if (killerId === me?.id) {
       session.kills[m.monsterId] = (session.kills[m.monsterId] ?? 0) + 1;
       session.experience += expReward;
@@ -444,10 +634,29 @@ function wireSocket(): void {
         toast(`${t('world.levelup')} ${q.newLevel}!`, 'success');
       }
     }
+    // Сюжетная сцена на ключевом квесте. Запрашиваем у сервера по одному
+    // на каждый завершённый квест: так покрыты все пути завершения, а
+    // сервер отдаёт сцену только один раз.
+    for (const q of quests) {
+      void requestCutsceneForQuest(q.questId);
+    }
     void loadQuests();
     void loadInventory();
     void refreshNavTarget();
     refreshBars();
+  });
+
+  // Задача дня закрыта: сервер уже начислил золото, опыт и предмет.
+  // Без этого сообщения игрок узнал бы о награде только по цифре в кошельке.
+  socket.on('daily:task', ({ gold, experience, item }: {
+    taskId: string; gold?: number; experience?: number; item?: string;
+  }) => {
+    const parts: string[] = [];
+    if (gold) parts.push(`+${gold} ${t('world.gold')}`);
+    if (experience) parts.push(`+${experience} ${t('world.exp')}`);
+    if (item) parts.push(item);
+    audio.levelUp();
+    toast(`${t('site.tasks_done_toast')}: ${parts.join(' · ')}`, 'success');
   });
 
   // ── Бой ──
@@ -621,11 +830,21 @@ export function setBind(action: string, code: string): void {
 function wireInput(): void {
   window.onkeydown = (e) => {
     if (chatVisible()) return;
+    // Кат-сцена перехватывает ввод: пока она идёт, игра не управляется,
+    // иначе «дальше» нажималась бы вместе с движением персонажа
+    if (isCutscenePlaying()) {
+      e.preventDefault();
+      if (e.code === 'Space' || e.code === 'Enter') advance();
+      else if (e.code === 'Escape') document.getElementById('cutscene-skip')?.dispatchEvent(new Event('click'));
+      return;
+    }
     if (e.code === 'Enter') {
       e.preventDefault();
       if (document.pointerLockElement) document.exitPointerLock();
       openChat();
     } else if (e.code === 'Escape') {
+      // Настройки закрывает собственный обработчик — меню не трогаем
+      if (!$('overlay-settings')?.classList.contains('hidden')) return;
       document.getElementById('overlay-menu')?.classList.toggle('hidden');
     } else if (e.code === getBind('map')) {
       const overlay = document.getElementById('overlay-map');
@@ -648,6 +867,7 @@ function wireInput(): void {
       panel?.classList.toggle('hidden');
       // Клавиша I открывает панель так же, как клик по кнопке — иначе сумка пустая
       if (panel && !panel.classList.contains('hidden')) void loadInventory();
+      onTutorialAction('open_inventory');
     } else if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
       const skill = session.skills[idx];
@@ -659,6 +879,17 @@ function wireInput(): void {
   window.addEventListener('quest:accepted', () => { void refreshNavTarget(); void refreshQuestPanelJ(); });
 
   $('btn-continue')?.addEventListener('click', () => document.getElementById('overlay-menu')?.classList.add('hidden'));
+
+  // Быстрые действия главного меню открывают свои панели
+  const quick = (id: string, panel: string) => {
+    $(id)?.addEventListener('click', () => {
+      $('overlay-menu')?.classList.add('hidden');
+      openPanelById(panel);
+    });
+  };
+  quick('btn-quick-mounts', 'panel-mount-stable');
+  quick('btn-quick-tower', 'panel-tower');
+  quick('btn-quick-pets', 'panel-pets');
   $('btn-exit')?.addEventListener('click', () => {
     document.getElementById('overlay-menu')?.classList.add('hidden');
     void api.logout().catch(() => {});
@@ -702,10 +933,148 @@ function wireInput(): void {
       btn.classList.toggle('active', !panel?.classList.contains('hidden'));
       if (btn.dataset.panel === 'panel-regions') void loadRegions();
       if (btn.dataset.panel === 'panel-quests') void loadQuests();
-      if (btn.dataset.panel === 'panel-inventory') void loadInventory();
+      if (btn.dataset.panel === 'panel-inventory') {
+        void loadInventory();
+        // Шаг туториала засчитывается и по иконке мышью, не только по клавише I —
+        // иначе новичок, нажавший иконку, застрял бы на шаге
+        onTutorialAction('open_inventory');
+      }
       loadPanelContent(btn.dataset.panel);
     });
   }
+
+  wireSettings();
+}
+
+// ── Настройки ────────────────────────────────────────────────
+// Панель #overlay-settings была мёртвым кодом: кнопка «Настройки»
+// ничего не открывала, слайдеры громкости ни к чему не были подключены,
+// а «качество графики» ничего не меняло в движке. Здесь всё это оживает.
+let settingsWired = false;
+
+/** Настройки → движок: громкость, графика, подсказки, мини-карта */
+function applySettingsToEngine(): void {
+  const s = getSettings();
+  audio.setMusicVolume(s.music);
+  audio.setSfxVolume(s.sfx);
+  world3d?.setGraphics(s.graphics, s.fog);
+  $('controls-hint')?.classList.toggle('hidden', !s.hints);
+  $('minimap')?.classList.toggle('hidden', !s.minimap);
+}
+
+/**
+ * Права администратора: сервер знает, кто админ, но клиент об этом не
+ * спрашивал, а кнопка админки в разметке была навсегда скрыта классом
+ * hidden. Из-за этого переключатель погоды и остальные админ-инструменты
+ * были недостижимы — приходилось дёргать API вручную из консоли.
+ */
+async function loadAdminRights(): Promise<void> {
+  try {
+    const res = await api.authMe();
+    const d = res.data;
+    session.isAdmin = !!d.isAdmin;
+    session.isAdminRole = d.adminRole || 'gm';
+  } catch {
+    session.isAdmin = false;
+    session.isAdminRole = 'gm';
+  }
+  $('btn-panel-admin')?.classList.toggle('hidden', !session.isAdmin);
+}
+
+function wireSettings(): void {
+  if (settingsWired) return;
+  settingsWired = true;
+
+  const displayBox = $('set-display');
+  const gfxBox = $('set-graphics');
+  const music = $('set-music') as HTMLInputElement;
+  const sfx = $('set-sfx') as HTMLInputElement;
+  const mute = $('set-mute') as HTMLInputElement;
+  const lang = $('set-lang') as HTMLSelectElement;
+  const hints = $('set-hints') as HTMLInputElement;
+  const minimap = $('set-minimap') as HTMLInputElement;
+  const fog = $('set-fog') as HTMLInputElement;
+
+  // Значения настроек → элементы панели
+  const paint = (): void => {
+    const s = getSettings();
+    displayBox?.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-mode') === s.display);
+    });
+    gfxBox?.querySelectorAll('button').forEach((b) => {
+      b.classList.toggle('active', b.getAttribute('data-level') === s.graphics);
+    });
+    if (music) music.value = String(s.music);
+    if (sfx) sfx.value = String(s.sfx);
+    if (mute) mute.checked = audio.muted;
+    if (lang) lang.value = detectLocale();
+    if (hints) hints.checked = s.hints;
+    if (minimap) minimap.checked = s.minimap;
+    if (fog) fog.checked = s.fog;
+  };
+
+  const open = (): void => {
+    paint();
+    $('overlay-menu')?.classList.add('hidden');
+    $('overlay-settings')?.classList.remove('hidden');
+    // Привязанные аккаунты подгружаем при открытии настроек: они могли
+    // измениться (например, игрок только что привязал Google), и в момент
+    // входа в игру их ещё не было
+    void loadAccountLinks();
+  };
+  const close = (): void => $('overlay-settings')?.classList.add('hidden');
+
+  $('btn-settings')?.addEventListener('click', open);
+  $('settings-close')?.addEventListener('click', close);
+  $('btn-claim')?.addEventListener('click', () => { void promptClaimAccount(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && !$('overlay-settings')?.classList.contains('hidden')) close();
+  });
+
+  // ── Экранный режим: полный экран / без рамок / с рамкой ──
+  displayBox?.addEventListener('click', (e) => {
+    const mode = (e.target as HTMLElement).closest('button')?.getAttribute('data-mode') as DisplayMode | null;
+    if (!mode) return;
+    updateSettings({ display: mode });
+    void applyDisplayMode(mode);
+    paint();
+  });
+
+  // ── Качество графики: 6 уровней от «слабой» до «ультра» ──
+  gfxBox?.addEventListener('click', (e) => {
+    const level = (e.target as HTMLElement).closest('button')?.getAttribute('data-level') as GraphicsLevel | null;
+    if (!level) return;
+    updateSettings({ graphics: level });
+    paint();
+  });
+
+  // ── Звук ──
+  music?.addEventListener('input', () => updateSettings({ music: Number(music.value) }));
+  sfx?.addEventListener('input', () => updateSettings({ sfx: Number(sfx.value) }));
+  mute?.addEventListener('change', () => {
+    audio.setMuted(mute.checked);
+    paint();
+  });
+
+  // ── Язык: словарь перезагружается и переподставляет все data-i18n ──
+  lang?.addEventListener('change', () => {
+    localStorage.setItem('eos.locale', lang.value);
+    void loadLocale(lang.value).then(paint);
+  });
+
+  // ── Прочее ──
+  hints?.addEventListener('change', () => updateSettings({ hints: hints.checked }));
+  minimap?.addEventListener('change', () => updateSettings({ minimap: minimap.checked }));
+  fog?.addEventListener('change', () => updateSettings({ fog: fog.checked }));
+
+  // Любое изменение настроек: подтянуть активные кнопки и применить в движке
+  onSettingsChange(() => {
+    paint();
+    applySettingsToEngine();
+  });
+
+  // Применить сохранённое к текущему миру (одним прогоном через подписку)
+  updateSettings(getSettings());
 }
 
 // ── Бой ──────────────────────────────────────────────────────
@@ -728,6 +1097,7 @@ function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
 }
 
 function basicAttack(): void {
+  audio.pokeCombat();          // боевая тема на время драки
   emitCombat('attack');
 }
 
@@ -743,6 +1113,9 @@ function useSkill(skillId: string): void {
   session.stamina -= skill.staminaCost;
   startCooldown(skillId, skill.cooldown);
   refreshBars();
+  // Шаг туториала «используй навык» засчитывается здесь
+  onTutorialAction('use_skill', skill.id);
+  audio.pokeCombat();
   emitCombat('skill', skillId);
 }
 
@@ -815,12 +1188,60 @@ function loop(now: number): void {
     });
   }
 
-  // Ресурсы: медленная регенерация (косметика, сервер перепроверит)
+  // ── Выносливость ──
+  // Раньше стамина не тратилась нигде, кроме навыков: плыть можно было
+  // бесконечно. Теперь плавание её расходует, а на суше она восстанавливается
+  // (после отдыха — быстрее). Сервер считает то же самое раз в 5 секунд.
+  // Снаряжение для воды (сапоги/плащ) уменьшает расход и снимает замедление.
+  world3d?.setWaterBonus(session.waterBonus.waterSpeed, session.waterBonus.swimStamina);
+  // Лодка (если встал на воду) заменяет сапоги в воде: лучший бонус, не сумма
+  const boat = session.boat;
+  world3d?.setBoat(
+    boat ? boat.id : null,
+    boat ? boat.waterSpeed : 0,
+    boat ? 0.5 : 0,               // в лодке выносливость почти не тратится
+    boat ? boat.swimSpeed : 0,
+  );
+
+  // Знак «опасность в воде» — раз в секунду, не каждый кадр
+  dangerTick -= dt;
+  if (dangerTick <= 0) {
+    dangerTick = 1;
+    if (world) {
+      checkWaterDanger({
+        swimming: world3d?.isSwimming ?? false,
+        inBoat: session.boat !== null,
+        monsters: [...world.monsters.values()],
+      });
+    }
+  }
+  // Живая позиция для рыбалки и прочих «где я сейчас» запросов.
+  // session.character.position обновляется только раз в несколько секунд
+  // с сервера — для заброса удочки такая задержка означала бы промах.
+  if (me) {
+    const p = session.selfPos;
+    p.x = me.pos.x; p.z = me.pos.z;
+  }
+  const swimming = world3d?.isSwimming ?? false;
+  if (swimming) {
+    const drain = STAMINA.SWIM_DRAIN_PER_SEC * (1 - (world3d?.waterStaminaSave ?? 0));
+    session.stamina = Math.max(0, session.stamina - session.maxStamina * drain * dt);
+  } else {
+    const rate = session.stamina < session.maxStamina * 0.6
+      ? STAMINA.LAND_REGEN_PER_SEC
+      : STAMINA.IDLE_REGEN_PER_SEC;
+    session.stamina = Math.min(session.maxStamina, session.stamina + session.maxStamina * rate * dt);
+  }
+  // Устал — бег и усиленное плавание отключаются
+  world3d?.setSprintAllowed(session.stamina > session.maxStamina * STAMINA.SPRINT_MIN);
+  if (world3d?.exhaustedNow) toast(t('world.exhausted'), 'error');
+
   session.mana = Math.min(session.maxMana, session.mana + session.maxMana * 0.02 * dt);
-  session.stamina = Math.min(session.maxStamina, session.stamina + session.maxStamina * 0.035 * dt);
   if (Math.random() < dt * 0.5) refreshBars();
 
   tickCooldowns();
+  // Туториал: шаг «иди» засчитывается по реально пройденному расстоянию
+  tickTutorial();
 
   // Мини-карта: игрок в центре, монстры вокруг (раз в ~0.5с)
   if (now - lastMinimapDraw > 500) {

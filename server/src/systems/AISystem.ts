@@ -5,6 +5,7 @@
 import { Vector3 } from '../types/game.types';
 import { MonsterDefinition } from '../data/monsters';
 import { logger } from '../utils/logger';
+import { isDeepWater } from '../utils/spawn';
 
 export type AIState =
   | 'idle'       // Стоит на месте
@@ -14,6 +15,15 @@ export type AIState =
   | 'retreat'    // Отступает (низкий HP)
   | 'call_help'  // Зовёт помощь
   | 'dead';
+
+/** Игрок, видимый ИИ: позиция, здоровье и признак «сидит в лодке» */
+export interface TargetPlayer {
+  id: string;
+  position: Vector3;
+  hp: number;
+  /** В лодке: подводные существа игнорируют таких (см. tick) */
+  inBoat?: boolean;
+}
 
 export interface AIContext {
   monsterId: string;
@@ -53,7 +63,9 @@ export class AISystem {
     const instanceId = `${definition.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     // Генерируем точки патруля вокруг спавна
-    const patrolPoints = this.generatePatrolPoints(position, 15, 4);
+    const patrolPoints = definition.aquatic
+      ? this.generateWaterPatrolPoints(position, 25, 4)
+      : this.generatePatrolPoints(position, 15, 4);
 
     const ctx: AIContext = {
       monsterId: definition.id,
@@ -82,15 +94,29 @@ export class AISystem {
   // ============================================================
   // Главный тик ИИ (200мс)
   // ============================================================
-  tick(instanceId: string, nearbyPlayers: { id: string; position: Vector3; hp: number }[]): AIAction {
+  tick(instanceId: string, nearbyPlayers: TargetPlayer[]): AIAction {
     const ctx = this.contexts.get(instanceId);
     if (!ctx || ctx.state === 'dead') return { type: 'idle' };
 
     const now = Date.now();
     const hpPercent = ctx.currentHp / ctx.maxHp;
+    const aquatic = ctx.definition.aquatic === true;
+
+    // Подводное существо охотится только на того, кто в воде. Стоящий на
+    // берегу для него невидим, а уехавший на лодке — в безопасности:
+    // иначе покупка лодки ничего не давала бы в самом опасном месте.
+    if (aquatic) {
+      for (const [id] of ctx.aggroTable) {
+        const p = nearbyPlayers.find(x => x.id === id);
+        if (!p || !isDeepWater(p.position.x, p.position.z) || p.inBoat) {
+          ctx.aggroTable.delete(id);
+        }
+      }
+    }
 
     // Обновляем аггро по ближайшим игрокам
     for (const player of nearbyPlayers) {
+      if (aquatic && (!isDeepWater(player.position.x, player.position.z) || player.inBoat)) continue;
       const dist = this.distance(ctx.position, player.position);
       if (dist <= ctx.definition.aggroRange && !ctx.aggroTable.has(player.id)) {
         ctx.aggroTable.set(player.id, 0);
@@ -116,8 +142,26 @@ export class AISystem {
       const dist = Math.hypot(dx, dz);
       if (dist > 0.4) {
         const step = Math.min(dist, ctx.definition.moveSpeed * dt);
-        ctx.position.x += (dx / dist) * step;
-        ctx.position.z += (dz / dist) * step;
+        const nx = ctx.position.x + (dx / dist) * step;
+        const nz = ctx.position.z + (dz / dist) * step;
+        // Сухопутный монстр не лезет в глубокую воду: если шаг уводит
+        // в озеро, а сами мы ещё на суше — стоим у кромки. Если уже
+        // в воде (например, загнали) — даём выбраться.
+        // Подводное — наоборот: не вылезает на берег, а если всё же
+        // оказалось на суше (вытащило течением, спавн сухопутный) —
+        // возвращается в воду, иначе оно «зависало» бы на берегу.
+        if (aquatic) {
+          if (isDeepWater(nx, nz)) {
+            ctx.position.x = nx;
+            ctx.position.z = nz;
+          } else if (!isDeepWater(ctx.position.x, ctx.position.z)) {
+            ctx.position.x = ctx.spawnPoint.x;
+            ctx.position.z = ctx.spawnPoint.z;
+          }
+        } else if (!isDeepWater(nx, nz) || isDeepWater(ctx.position.x, ctx.position.z)) {
+          ctx.position.x = nx;
+          ctx.position.z = nz;
+        }
       }
     }
     ctx.lastTickAt = now;
@@ -131,13 +175,14 @@ export class AISystem {
   private evaluateState(
     ctx: AIContext,
     hpPercent: number,
-    players: { id: string; position: Vector3 }[]
+    players: TargetPlayer[]
   ): AIState {
-    // Отступление при низком HP (только для обычных монстров)
-    if (hpPercent < 0.15 && ctx.definition.type === 'normal') return 'retreat';
+    const aquatic = ctx.definition.aquatic === true;
+    // Подводное существо не отступает на сушу: там ему некуда деваться
+    if (hpPercent < 0.15 && ctx.definition.type === 'normal' && !aquatic) return 'retreat';
 
     // Зов помощи при 30% HP
-    if (hpPercent < 0.30 && ctx.definition.type !== 'world_boss') return 'call_help';
+    if (hpPercent < 0.30 && ctx.definition.type !== 'world_boss' && !aquatic) return 'call_help';
 
     // Есть цель в аггро-таблице
     if (ctx.aggroTable.size > 0) {
@@ -167,7 +212,7 @@ export class AISystem {
   // ============================================================
   private executeState(
     ctx: AIContext,
-    _players: { id: string; position: Vector3; hp: number }[],
+    _players: TargetPlayer[],
     now: number
   ): AIAction {
     switch (ctx.state) {
@@ -175,6 +220,7 @@ export class AISystem {
         return { type: 'idle' };
 
       case 'patrol': {
+        if (ctx.patrolPoints.length === 0) return { type: 'idle' };
         const target = ctx.patrolPoints[ctx.patrolIndex];
         if (this.distance(ctx.position, target) < 1.5) {
           ctx.patrolIndex = (ctx.patrolIndex + 1) % ctx.patrolPoints.length;
@@ -207,7 +253,10 @@ export class AISystem {
       }
 
       case 'call_help':
-        return { type: 'call_help' };
+        // Звать помощь, но не стоять столбом: отходим к спавну. Раньше у
+        // этого состояния не было destination, монстр замирал на месте
+        // до самого боя — в том числе посреди воды.
+        return { type: 'call_help', destination: ctx.spawnPoint };
 
       default:
         return { type: 'idle' };
@@ -291,14 +340,44 @@ export class AISystem {
   }
 
   private generatePatrolPoints(center: Vector3, radius: number, count: number): Vector3[] {
-    return Array.from({ length: count }, (_, i) => {
-      const angle = (i / count) * Math.PI * 2;
-      return {
-        x: center.x + Math.cos(angle) * radius * (0.5 + Math.random() * 0.5),
+    // Точки патруля — только на суше. Иначе разбойник выбирал маршрут
+    // через озеро, уходил в воду и там замирал.
+    const points: Vector3[] = [];
+    for (let i = 0; points.length < count && i < count * 10; i++) {
+      const angle = (points.length / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+      const r = radius * (0.5 + Math.random() * 0.5);
+      const p = {
+        x: center.x + Math.cos(angle) * r,
         y: center.y,
-        z: center.z + Math.sin(angle) * radius * (0.5 + Math.random() * 0.5),
+        z: center.z + Math.sin(angle) * r,
       };
-    });
+      if (isDeepWater(p.x, p.z)) continue;
+      points.push(p);
+    }
+    return points;
+  }
+
+  /**
+   * Точки патруля подводного существа — только в глубокой воде.
+   * Обратная задача generatePatrolPoints: там точки ищутся на суше,
+   * потому что сухопутный монстр не умеет плавать.
+   */
+  private generateWaterPatrolPoints(center: Vector3, radius: number, count: number): Vector3[] {
+    const points: Vector3[] = [];
+    for (let i = 0; points.length < count && i < count * 20; i++) {
+      const angle = (points.length / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.9;
+      const r = radius * (0.4 + Math.random() * 0.6);
+      const p = {
+        x: center.x + Math.cos(angle) * r,
+        y: center.y,
+        z: center.z + Math.sin(angle) * r,
+      };
+      if (!isDeepWater(p.x, p.z)) continue;
+      points.push(p);
+    }
+    // Если вокруг спавна мелко (озеро небольшое), патрулируем хотя бы
+    // вокруг самой точки — иначе существо стояло бы столбом
+    return points.length ? points : [{ ...center }];
   }
 
   getContext(instanceId: string): AIContext | undefined {

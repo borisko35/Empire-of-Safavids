@@ -5,9 +5,11 @@ import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache } from '../services/EquipmentCache';
+import { getBuffService } from '../services/BuffService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
+import { DailyTaskService } from '../services/DailyTaskService';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
@@ -48,9 +50,11 @@ export class GameSocketHandler {
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
+  private buffs = getBuffService();
   private defenseStates = DefenseStates.getInstance();
   private dungeons = DungeonService.getInstance();
   private worldEvents = WorldEventSystem.getInstance();
+  private dailyTasks = new DailyTaskService();
   private partySystem = new PartySystem();
 
   // Активные игроки: characterId -> сокет
@@ -166,7 +170,12 @@ export class GameSocketHandler {
     for (const socket of this.activePlayers.values()) {
       if (!socket.characterId) continue;
       try {
-        const res = await this.characterService.regenResources(socket.characterId);
+        // Вода определяется по последней известной серверу позиции —
+        // клиенту нельзя просто сказать «я в воде», чтобы не тратить стамину
+        const pos = await this.redis.getPlayerPosition(socket.characterId).catch(() => null) as
+          { x: number; z: number } | null;
+        const inWater = !!pos && isDeepWater(pos.x, pos.z);
+        const res = await this.characterService.regenResources(socket.characterId, inWater);
         if (res) socket.emit(SERVER_EVENTS.RESOURCES, res);
       } catch (error) {
         logger.debug('Regen tick skipped:', error);
@@ -330,6 +339,11 @@ export class GameSocketHandler {
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
 
+      // Время и погода сразу при входе. Раньше они приходили только общим
+      // вещанием раз в минуту, поэтому игрок до минуты видел «ясно» и бурю,
+      // которая шла прямо в момент входа. То же самое касалось реконнекта.
+      socket.emit(SERVER_EVENTS.WORLD_TIME, GameLoop.getInstance().getWorldTime());
+
       // Снапшот активных монстров этого шарда в регионе (заспавненных до входа)
       const ai = GameLoop.getInstance().getSpawnSystem().getAI();
       for (const ctx of ai.getAllInstances()) {
@@ -426,10 +440,16 @@ export class GameSocketHandler {
   // Бой: ресурсы, кулдауны, лечение, урон, смерть, карма
   // ============================================================
 
-  /** Персонаж с учётом боевых бонусов экипировки (копия статов) */
+  /**
+   * Персонаж с учётом боевых бонусов экипировки И временных эффектов
+   * (миграция 030). Порядок важен: сначала снаряжение, потом бонусы —
+   * оба считаются от базовых статов.
+   */
   private async withEquipment(character: Character): Promise<Character> {
     const stats = await this.equipment.mergeInto(character);
-    return { ...character, stats };
+    const withGear = { ...character, stats };
+    const withBuffs = await this.buffs.mergeInto(withGear);
+    return { ...withGear, stats: withBuffs };
   }
 
   /**
@@ -586,7 +606,10 @@ export class GameSocketHandler {
     }
 
     const result = this.combatService.calculateDamage(attacker, target, action, comboMult);
-    result.damage = Math.floor(result.damage * defenseMult);
+    // Временный бонус «+5% к урону» (кебаб). Множитель, а не стат:
+    // бонус не должен попадать в панель характеристик и не трогать броню.
+    const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
+    result.damage = Math.floor(result.damage * defenseMult * dmgBuff);
 
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
@@ -676,6 +699,9 @@ export class GameSocketHandler {
     } as unknown as Character;
 
     const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult);
+    // Тот же бонус «+5% к урону», что и в PvP-ударе
+    const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
+    result.damage = Math.floor(result.damage * dmgBuff);
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result });
       return;
@@ -745,6 +771,11 @@ export class GameSocketHandler {
       });
       if (dungeonDone) {
         socket.emit(SERVER_EVENTS.DUNGEON_COMPLETED, dungeonDone);
+        // Задачи дня: «Рейд в Подземелье». Раньше она висела вечно 0/2 —
+        // updateProgress не вызывался НИ РАЗУ
+        await this.dailyTasks.updateProgress(attacker.id, 'dungeon', 'any').catch((e: unknown) => {
+          logger.debug('Daily task (dungeon) failed:', e);
+        });
       }
 
       // Прогресс квестов: kill-цели + завершение смешанных квестов
@@ -759,6 +790,34 @@ export class GameSocketHandler {
       const allCompleted = [...completedQuests, ...evaluated.filter(e => !completedQuests.some(c => c.questId === e.questId))];
       if (allCompleted.length) {
         socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: allCompleted });
+        // Задачи дня: «Марафон Квестов». За один раз могло закрыться
+        // несколько квестов, поэтому прибавляем сразу amount
+        await this.dailyTasks
+          .updateProgress(attacker.id, 'quest_complete', 'any', allCompleted.length)
+          .catch((e: unknown) => {
+            logger.debug('Daily task (quest) failed:', e);
+          });
+      }
+
+      // Задачи дня за убийства. Тип монстра известен точно:
+      // 'normal' | 'elite' | 'boss' | 'world_boss'
+      for (const [taskType, target] of [
+        ['kill', 'any'],
+        ['kill_elite', 'elite'],
+        ['kill_boss', 'world_boss'],
+      ] as const) {
+        // Задача «убить элитных» не должна считать обычных, и наоборот
+        if (taskType === 'kill_elite' && def.type !== 'elite') continue;
+        if (taskType === 'kill_boss' && def.type !== 'world_boss') continue;
+        const done = await this.dailyTasks.updateProgress(attacker.id, taskType, target).catch((e: unknown) => {
+          logger.debug(`Daily task (${taskType}) failed:`, e);
+          return null;
+        });
+        if (done?.taskCompleted) {
+          socket.emit(SERVER_EVENTS.DAILY_TASK_COMPLETED, {
+            taskId: done.taskId, gold: done.gold, experience: done.experience, item: done.item,
+          });
+        }
       }
 
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.serverId ?? 'isfahan', attacker.region), {

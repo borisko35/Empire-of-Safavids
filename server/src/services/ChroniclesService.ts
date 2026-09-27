@@ -4,6 +4,8 @@
 // Образовательный контент: открывается по мере прохождения квестов.
 // Уникальная культурная фишка, отличающая игру от других MMORPG.
 
+import { QUESTS_DATABASE } from '../data/quests';
+
 export interface ChronicleEntry {
   id: string;
   category: 'history' | 'culture' | 'geography' | 'biography' | 'mythology';
@@ -61,7 +63,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Тебриз — Первая Столица',
     content: 'Tabriz served as the first capital of the Safavid Empire. Its strategic location on the Silk Road made it a hub of trade, culture, and diplomacy. The Grand Bazaar of Tabriz, a UNESCO World Heritage site, still stands today.',
     contentRu: 'Тебриз был первой столицей Сефевидской империи. Его стратегическое положение на Шёлковом пути сделало его центром торговли, культуры и дипломатии. Великий базар Тебриза, объект Всемирного наследия ЮНЕСКО, стоит и по сей день.',
-    unlockCondition: 'main_002_governor',
+    unlockCondition: 'main_002_first_blood',
   },
   {
     id: 'chron_isfahan_glory',
@@ -70,7 +72,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Исфахан — Половина Мира',
     content: 'Under Shah Abbas the Great, Isfahan became one of the largest and most beautiful cities in the world. The famous saying "Isfahan nesf-e jahan" (Isfahan is half the world) reflected its grandeur, with its Naqsh-e Jahan Square, magnificent mosques, and bridges.',
     contentRu: 'При Шахе Аббасе Великом Исфахан стал одним из крупнейших и красивейших городов мира. Знаменитая поговорка "Исфахан — половина мира" отражала его величие: площадь Накш-е Джехан, великолепные мечети и мосты.',
-    unlockCondition: 'main_005_isfahan',
+    unlockCondition: 'side_isfahan_silk_order',
   },
 
   // ── КУЛЬТУРА ─────────────────────────────────────────────
@@ -90,7 +92,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Хафиз Ширази',
     content: 'Khwāja Shams-ud-Dīn Muḥammad Ḥāfeẓ-e Shīrāzī (1315–1390) is considered one of the greatest poets of the Persian language. His ghazals explore themes of love, spirituality, and wine. Iranians still use his Divan for bibliomancy (fāl-e Ḥāfeẓ).',
     contentRu: 'Хваджа Шамс-уд-Дин Мухаммад Хафиз Ширази (1315–1390) считается одним из величайших поэтов персидского языка. Его газели исследуют темы любви, духовности и вина. Иранцы до сих пор используют его Диван для гадания (фал-е Хафиз).',
-    unlockCondition: 'poem_ghazal_1',
+    unlockCondition: 'side_poet_shiraz',
   },
   {
     id: 'chron_rumi',
@@ -99,7 +101,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Руми — Мистический Поэт',
     content: 'Jalal ad-Din Muhammad Rumi (1207–1273) was a Sufi mystic whose poetry transcends borders. His Masnavi, known as "the Quran in Persian," explores divine love through parables. The Whirling Dervishes of Konya perform his sacred dance to this day.',
     contentRu: 'Джалалад-Дин Мухаммад Руми (1207–1273) был суфийским мистиком, чья поэзия превосходит границы. Его Маснави, известная как "Коран на персидском", исследует божественную любовь через притчи. Вертящиеся дервиши Конии исполняют его священный танец по сей день.',
-    unlockCondition: 'main_004_sufi_order',
+    unlockCondition: 'side_010_sheikh_tomb',
   },
 
   // ── ГЕОГРАФИЯ ────────────────────────────────────────────
@@ -139,7 +141,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Шах Аббас Великий',
     content: 'Shah Abbas I (1571–1629) transformed the Safavid Empire into a golden age. He moved the capital to Isfahan, reformed the army, encouraged art and architecture, and opened trade with Europe. His reign is considered the peak of Persian civilization.',
     contentRu: 'Шах Аббас I (1571–1629) превратил Сефевидскую империю в золотой век. Он перенёс столицу в Исфахан, реформировал армию, поощрял искусство и архитектуру, открыл торговлю с Европой. Его правление считается вершиной персидской цивилизации.',
-    unlockCondition: 'main_005_isfahan',
+    unlockCondition: 'main_050_gulf_battle',
   },
 
   // ── МИФОЛОГИЯ ────────────────────────────────────────────
@@ -150,7 +152,7 @@ export const CHRONICLES: ChronicleEntry[] = [
     titleRu: 'Симург',
     content: 'The Simurgh is a mythical bird in Persian mythology, depicted as enormous and wise. In Ferdowsi\'s Shahnameh, the Simurgh raised the hero Zal and later saved him from a storm. It symbolizes divine guidance and protection.',
     contentRu: 'Симург — мифическая птица в персидской мифологии, огромная и мудрая. В Шахнаме Фирдоуси Симург вырастил героя Зала и позже спас его от бури. Он символизирует божественное руководство и защиту.',
-    unlockCondition: 'main_006_simurgh_nest',
+    unlockCondition: 'world_simurgh_hunt',
   },
   {
     id: 'chron_rustam',
@@ -163,6 +165,13 @@ export const CHRONICLES: ChronicleEntry[] = [
   },
 ];
 
+export interface ChronicleEntryView extends ChronicleEntry {
+  /** Открыта ли запись для этого персонажа */
+  unlocked: boolean;
+  /** Название квеста, который открывает запись (для подсказки в интерфейсе) */
+  unlockHintRu: string | null;
+}
+
 export class ChroniclesService {
   /** Получить все записи */
   getAll(): ChronicleEntry[] {
@@ -174,11 +183,29 @@ export class ChroniclesService {
     return CHRONICLES.filter(c => c.category === category);
   }
 
-  /** Получить открытые записи (по выполненным квестам) */
+  /**
+   * Записи с флагом «открыто» для персонажа.
+   * Раньше getUnlocked никем не вызывался: маршрут отдавал все записи
+   * подряд, игрок видел весь текст сразу, а условия открытия были
+   * чистой декорацией.
+   */
+  getView(completedQuests: string[]): ChronicleEntryView[] {
+    const done = new Set(completedQuests);
+    return CHRONICLES.map(c => {
+      const unlocked = c.unlockCondition === 'default' || done.has(c.unlockCondition);
+      let hint: string | null = null;
+      if (!unlocked) {
+        const quest = QUESTS_DATABASE[c.unlockCondition];
+        hint = quest ? quest.titleRu : c.unlockCondition;
+      }
+      return { ...c, unlocked, unlockHintRu: hint };
+    });
+  }
+
+  /** Только открытые записи */
   getUnlocked(completedQuests: string[]): ChronicleEntry[] {
-    return CHRONICLES.filter(c =>
-      c.unlockCondition === 'default' || completedQuests.includes(c.unlockCondition)
-    );
+    const done = new Set(completedQuests);
+    return CHRONICLES.filter(c => c.unlockCondition === 'default' || done.has(c.unlockCondition));
   }
 
   /** Получить одну запись */

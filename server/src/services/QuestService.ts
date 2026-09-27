@@ -193,6 +193,7 @@ export class QuestService {
 
     const state = (await this.getState(characterId)).filter(s => s.status === 'active');
     const completed: CompletedQuestInfo[] = [];
+    let inventory: Record<string, number> | null = null;
 
     for (const st of state) {
       const def = QUESTS_DATABASE[st.questId];
@@ -200,23 +201,43 @@ export class QuestService {
       if (!def.objectives.some(o => !o.optional && o.type !== 'kill')) continue; // чисто kill уже проверены
 
       const required = def.objectives.filter(o => !o.optional);
-      const inventory = await this.characters.getItemQuantities(characterId);
+      const collect = required.filter(o => o.type === 'collect');
+      if (collect.length && !inventory) inventory = await this.characters.getItemQuantities(characterId);
+
+      // Collect-прогресс НИКОГДА не записывался: цели проверялись по инвентарю
+      // прямо здесь, а в character_quests оставался нулевой. Из-за этого в
+      // журнале заданий всегда горело «0/8», даже когда шкуры лежали в сумке.
+      let progress = st.progress;
+      if (collect.length) {
+        const next: Record<string, number> = { ...st.progress };
+        let changed = false;
+        for (const o of collect) {
+          const have = Math.min(o.required, inventory?.[o.target] ?? 0);
+          if (next[o.id] !== have) { next[o.id] = have; changed = true; }
+        }
+        if (changed) {
+          await this.db.query(
+            'UPDATE character_quests SET progress = $2::jsonb WHERE character_id = $1 AND quest_id = $3',
+            [characterId, JSON.stringify(next), st.questId],
+          ).catch(() => {});
+          progress = next;
+        }
+      }
 
       const objectiveDone = (o: QuestObjectiveDef): boolean => {
-        if (o.type === 'kill') return (st.progress[o.id] ?? 0) >= o.required;
-        if (o.type === 'collect') return (inventory[o.target] ?? 0) >= o.required;
+        if (o.type === 'kill') return (progress[o.id] ?? 0) >= o.required;
+        if (o.type === 'collect') return (inventory?.[o.target] ?? 0) >= o.required;
         // talk/explore закрываются только явными событиями:
         // talk — через recordTalk (диалог), explore — через recordExplore
         // (клиент рядом с точкой). Проверка региона здесь НЕ нужна,
         // иначе квест завершался бы без похода к цели.
-        if (o.type === 'talk' || o.type === 'explore') return (st.progress[o.id] ?? 0) >= o.required;
+        if (o.type === 'talk' || o.type === 'explore') return (progress[o.id] ?? 0) >= o.required;
         return false;
       };
 
       if (!required.every(objectiveDone)) continue;
 
       // Списать collect-груз
-      const collect = required.filter(o => o.type === 'collect');
       if (collect.length) {
         try {
           await this.characters.removeItems(
@@ -228,7 +249,15 @@ export class QuestService {
         }
       }
 
-      completed.push(await this.completeQuest(characterId, def, st.progress));
+      // talk/explore прогресс уже проставлен событиями, collect — выше.
+      // Дописываем недостающее, иначе у завершённого квеста в журнале
+      // оставались незакрытые цели.
+      const finalProgress: Record<string, number> = { ...progress };
+      for (const o of required) {
+        if (finalProgress[o.id] == null) finalProgress[o.id] = o.required;
+      }
+
+      completed.push(await this.completeQuest(characterId, def, finalProgress));
     }
 
     return completed;

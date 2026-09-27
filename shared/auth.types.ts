@@ -24,6 +24,8 @@ export interface AuthResponse {
   userId: string;
   username: string;
   expiresAt: Date;
+  /** true — аккаунт гостевой: его стоит предложить сохранить */
+  isGuest?: boolean;
 }
 
 export interface AuthUser {
@@ -38,6 +40,8 @@ export interface AuthUser {
   banUntil?: Date;
   createdAt: Date;
   lastLoginAt: Date;
+  /** true — аккаунт гостевой, ещё не присвоен игроком */
+  isGuest?: boolean;
 }
 
 export interface SessionState {
@@ -45,6 +49,28 @@ export interface SessionState {
   token: string | null;
   user: AuthUser | null;
   expiresAt: Date | null;
+}
+
+/** Внешние сервисы входа: пароль не придумываем — один клик */
+export type OAuthProvider = 'google' | 'facebook';
+
+/** Публичная часть настройки: секрет в браузер не попадает никогда */
+export interface OAuthPublicConfig {
+  provider: OAuthProvider;
+  clientId: string;
+  /** Куда провайдер вернёт игрока */
+  redirectUri: string;
+  /** Адрес, на который клиент отправляет игрока */
+  authorizeUrl: string;
+}
+
+export interface OAuthProfile {
+  provider: OAuthProvider;
+  providerId: string;
+  email: string;
+  emailVerified: boolean;
+  displayName: string;
+  avatarUrl?: string;
 }
 
 export type AuthError =
@@ -58,7 +84,13 @@ export type AuthError =
   | 'account_banned'
   | 'session_expired'
   | 'network_error'
-  | 'server_error';
+  | 'server_error'
+  | 'guest_rate_limited'
+  | 'not_guest'
+  | 'already_claimed'
+  | 'provider_disabled'
+  | 'invalid_state'
+  | 'provider_error';
 
 export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   invalid_credentials: 'Неверный email или пароль',
@@ -72,4 +104,10 @@ export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   session_expired:     'Сессия истекла. Войдите снова',
   network_error:       'Ошибка сети. Проверьте подключение',
   server_error:        'Ошибка сервера. Попробуйте позже',
+  guest_rate_limited:  'Слишком много гостевых аккаунтов с этого устройства. Попробуйте позже',
+  not_guest:           'Это не гостевой аккаунт',
+  already_claimed:     'Аккаунт уже сохранён',
+  provider_disabled:   'Этот способ входа пока не настроен',
+  invalid_state:       'Вход устарел. Попробуйте ещё раз',
+  provider_error:      'Не удалось войти через внешний сервис',
 };

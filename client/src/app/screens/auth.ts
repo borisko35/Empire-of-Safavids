@@ -23,10 +23,67 @@ function showAuthError(err: unknown): void {
   showError(localized && localized !== `errors.${code}` ? localized : ((err as Error).message || t('common.error')));
 }
 
+/**
+ * Показывает кнопки Google/Facebook, если сервер их поддерживает, и
+ * переводит игрока к провайдеру.
+ *
+ * Провайдера лучше знать заранее: код и state возвращаются на адрес игры
+ * одним набором параметров, и на экране входа не сказано, кто прислал код.
+ */
+async function initOAuthButtons(): Promise<void> {
+  let providers: { provider: string }[] = [];
+  try {
+    const res = await api.oauthConfig();
+    providers = res.data.providers ?? [];
+  } catch {
+    return; // сервер не ответил — тихо оставляем только гостя и пароль
+  }
+  if (providers.length === 0) return;
+
+  for (const p of providers) {
+    const btn = document.getElementById(`btn-${p.provider}`) as HTMLButtonElement | null;
+    if (!btn) continue;
+    btn.classList.remove('hidden');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const { data } = await api.oauthStart(p.provider);
+        // Запоминаем провайдера: его код вернётся на адрес игры
+        sessionStorage.setItem('eos_oauth_provider', p.provider);
+        window.location.href = data.authorizeUrl;
+      } catch (err) {
+        showAuthError(err);
+        btn.disabled = false;
+      }
+    });
+  }
+  $('oauth-row')?.classList.remove('hidden');
+}
+
 export function initAuthScreen(onSuccess: () => void): void {
   // Переключение вкладок
   $('tab-login').addEventListener('click', () => switchTab(true));
   $('tab-register').addEventListener('click', () => switchTab(false));
+
+  // Гостевой вход: одна кнопка, без формы. Снимает главную стену между
+  // «заинтересовался» и «играет»: раньше для первого входа требовались
+  // имя, почта, пароль, два согласия и год рождения.
+  $('btn-guest').addEventListener('click', async () => {
+    const btn = $('btn-guest') as HTMLButtonElement;
+    btn.disabled = true;
+    try {
+      const { data } = await api.guestLogin();
+      persistAuth(data.token, data.userId, data.username, true);
+      onSuccess();
+    } catch (err) {
+      showAuthError(err);
+      btn.disabled = false;
+    }
+  });
+
+  // Внешние входы. Показываются только если сервер их поддерживает:
+  // кнопка, ведущая в никуда, хуже, чем её отсутствие.
+  void initOAuthButtons();
 
   // Кнопка "Забыли пароль?"
   $('btn-forgot-password').addEventListener('click', () => showResetForm());

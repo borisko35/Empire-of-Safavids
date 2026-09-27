@@ -52,7 +52,44 @@
       </form>
 
       <p class="form-error hidden" id="auth-error"></p>
+
+      <!-- Гостевой вход: главная кнопка для новых игроков.
+           Регистрация спрятана под неё — это убирает стену между
+           «заинтересовался» и «играет». -->
+      <div class="guest-entry">
+        <button class="btn btn-primary btn-lg" type="button" id="btn-guest" data-i18n="auth.play_now"></button>
+        <p class="guest-note" data-i18n="auth.guest_note"></p>
+
+        <!-- Внешние входы. Показываются только если они настроены на сервере
+             (иначе кнопка вела бы в никуда). -->
+        <div class="oauth-row hidden" id="oauth-row">
+          <span class="oauth-sep" data-i18n="auth.or"></span>
+          <button type="button" class="oauth-btn oauth-google" id="btn-google">
+            <span class="oauth-glyph">G</span><span data-i18n="auth.sign_in_google"></span>
+          </button>
+          <button type="button" class="oauth-btn oauth-facebook" id="btn-facebook">
+            <span class="oauth-glyph">f</span><span data-i18n="auth.sign_in_facebook"></span>
+          </button>
+        </div>
+      </div>
+
       <a class="back-link" href="/">← Empire of Safavids</a>
+    </div>
+  </section>
+
+  <!-- ═══ Экран сохранения гостевого аккаунта ═══ -->
+  <section class="screen hidden" id="screen-claim">
+    <div class="auth-card">
+      <h2 data-i18n="guest.claim_title"></h2>
+      <p class="guest-note" data-i18n="guest.claim_note"></p>
+      <form id="form-claim" class="auth-form" autocomplete="off">
+        <label><span data-i18n="auth.email"></span><input type="email" id="claim-email" required></label>
+        <label><span data-i18n="auth.password"></span><input type="password" id="claim-password" required minlength="8">
+          <small data-i18n="auth.password_hint"></small></label>
+        <button class="btn btn-gold" type="submit" data-i18n="guest.claim_submit"></button>
+        <button type="button" class="btn btn-ghost link-btn" id="btn-claim-cancel" data-i18n="common.cancel"></button>
+      </form>
+      <p class="form-error hidden" id="claim-error"></p>
     </div>
   </section>
 
@@ -95,6 +132,15 @@
       <div class="bar stamina"><i id="bar-stamina"></i><span id="txt-stamina"></span></div>
       <div class="bar exp"><i id="bar-exp"></i><span id="txt-exp"></span></div>
       <div class="char-line gold-line"><span id="hud-gold"></span><span id="hud-azens"></span><span id="hud-region"></span></div>
+    </div>
+
+    <!-- Временные бонусы (кебаб, свиток учёного) с обратным отсчётом -->
+    <div class="hud buff-bar hidden" id="buff-bar"></div>
+
+    <!-- Гостевой аккаунт: предложение сохранить прогресс -->
+    <div class="hud guest-banner hidden" id="guest-banner">
+      <span data-i18n="guest.save_prompt"></span>
+      <button type="button" class="btn btn-gold btn-sm" id="btn-claim" data-i18n="guest.save_now"></button>
     </div>
 
     <!-- Рамка цели -->
@@ -165,6 +211,11 @@
       <h3><span data-icon="mount"></span>Конюшня</h3>
       <div id="mount-stable-content"></div>
     </div>
+    <div class="hud side-panel hidden" id="panel-fishing">
+      <h3><span data-icon="fish"></span><span data-i18n="panels.fishing"></span></h3>
+      <div id="fishing-content"></div>
+    </div>
+    <div class="hud water-danger hidden" id="water-danger"></div>
     <div class="hud side-panel hidden" id="panel-house">
       <h3><span data-icon="home"></span>Недвижимость</h3>
       <div id="house-list"></div>
@@ -176,6 +227,12 @@
     <div class="hud side-panel hidden" id="panel-friends">
       <h3><span data-icon="user"></span>Друзья</h3>
       <div id="friends-list"></div>
+    </div>
+    <!-- Приглашение друга. Панель добавлена рядом с «Друзьями»: игрок,
+         который зовёт друзей, ищет их именно там. -->
+    <div class="hud side-panel hidden" id="panel-referral">
+      <h3><span data-icon="user"></span><span data-i18n="referral.title"></span></h3>
+      <div id="referral-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-achievements">
       <h3><span data-icon="crown"></span>Достижения</h3>
@@ -237,6 +294,28 @@
       <h3><span data-icon="book"></span>Хроники</h3>
       <div id="chronicles-content"></div>
     </div>
+    <div class="hud side-panel hidden" id="panel-story">
+      <h3><span data-icon="scroll"></span><span data-i18n="story.title"></span></h3>
+      <div id="story-content"></div>
+    </div>
+
+    <!-- Кат-сцена: сервер присылает сцену один раз, здесь только показ -->
+    <div class="cutscene hidden" id="cutscene">
+      <div class="cutscene-frame">
+        <div class="cutscene-head">
+          <span id="cutscene-place" class="cutscene-place"></span>
+          <span id="cutscene-speaker" class="cutscene-chapter"></span>
+        </div>
+        <div class="cutscene-body">
+          <div id="cutscene-who" class="cutscene-who"></div>
+          <p id="cutscene-text" class="cutscene-text"></p>
+        </div>
+        <div class="cutscene-foot">
+          <button id="cutscene-skip" class="btn" type="button" data-i18n="story.skip"></button>
+          <button id="cutscene-next" class="btn btn-primary" type="button" data-i18n="story.next"></button>
+        </div>
+      </div>
+    </div>
     <div class="hud side-panel hidden" id="panel-admin">
       <h3><span data-icon="shield"></span><span>Admin</span></h3>
       <div id="admin-list"></div>
@@ -264,9 +343,11 @@
       <button data-panel="panel-party" data-icon="user" title="Группа" type="button"></button>
       <button data-panel="panel-trade" data-icon="silk" title="Караваны" type="button"></button>
       <button data-panel="panel-mount-stable" data-icon="mount" title="Конюшня" type="button"></button>
+      <button data-panel="panel-fishing" data-icon="fish" title="Рыбалка" type="button"></button>
       <button data-panel="panel-house" data-icon="home" title="Дом" type="button"></button>
       <button data-panel="panel-leaderboard" data-icon="crown" title="Рейтинги" type="button"></button>
       <button data-panel="panel-friends" data-icon="user" title="Друзья" type="button"></button>
+      <button data-panel="panel-referral" data-icon="user" title="Пригласить друга" type="button"></button>
       <button data-panel="panel-achievements" data-icon="crown" title="Достижения" type="button"></button>
       <button data-panel="panel-tasks" data-icon="scroll" title="Задачи" type="button"></button>
       <button data-panel="panel-pets" data-icon="heart" title="Питомцы" type="button"></button>
@@ -276,7 +357,8 @@
       <button data-panel="panel-chess" data-icon="crown" title="Шахматы" type="button"></button>
       <button data-panel="panel-poetry" data-icon="scroll" title="Поэзия" type="button"></button>
       <button data-panel="panel-chronicles" data-icon="star8" title="Хроники" type="button"></button>
-      <button data-panel="panel-admin" data-icon="shield" type="button" id="btn-panel-admin" class="hidden"></button>
+      <button data-panel="panel-story" data-icon="crown" title="Сюжет" type="button"></button>
+      <button data-panel="panel-admin" data-icon="shield" title="Админ" type="button" id="btn-panel-admin" class="hidden"></button>
       <button data-panel="panel-skills" data-icon="bolt" title="Навыки" type="button"></button>
       <button data-panel="panel-settings" data-icon="gear" title="Настройки" type="button"></button>
     </div>
@@ -340,26 +422,45 @@
     <!-- ═══ Оверлей настроек ═══ -->
     <div class="overlay hidden" id="overlay-settings">
       <div class="settings-card">
-        <h2 class="settings-title">⚙ Настройки</h2>
+        <h2 class="settings-title" data-i18n="settings.title"></h2>
+
+        <div class="settings-group">
+          <h4 class="settings-legend" data-i18n="settings.display"></h4>
+          <div class="segmented" id="set-display">
+            <button type="button" data-mode="fullscreen" data-i18n="settings.display_fullscreen"></button>
+            <button type="button" data-mode="borderless" data-i18n="settings.display_borderless"></button>
+            <button type="button" data-mode="windowed" data-i18n="settings.display_windowed"></button>
+          </div>
+          <p class="settings-note" data-i18n="settings.display_note"></p>
+        </div>
+
+        <div class="settings-group">
+          <h4 class="settings-legend" data-i18n="settings.graphics"></h4>
+          <div class="segmented segmented-wrap" id="set-graphics">
+            <button type="button" data-level="low" data-i18n="settings.gfx_low"></button>
+            <button type="button" data-level="medium" data-i18n="settings.gfx_medium"></button>
+            <button type="button" data-level="good" data-i18n="settings.gfx_good"></button>
+            <button type="button" data-level="high" data-i18n="settings.gfx_high"></button>
+            <button type="button" data-level="epic" data-i18n="settings.gfx_epic"></button>
+            <button type="button" data-level="ultra" data-i18n="settings.gfx_ultra"></button>
+          </div>
+        </div>
+
         <div class="settings-group">
           <label class="settings-row">
-            <span>🔊 Громкость музыки</span>
+            <span data-i18n="settings.music"></span>
             <input type="range" id="set-music" min="0" max="100" value="50">
           </label>
           <label class="settings-row">
-            <span>🔊 Громкость эффектов</span>
+            <span data-i18n="settings.sfx"></span>
             <input type="range" id="set-sfx" min="0" max="100" value="70">
           </label>
           <label class="settings-row">
-            <span>🖥 Качество графики</span>
-            <select id="set-quality">
-              <option value="low">Низкое</option>
-              <option value="medium" selected>Среднее</option>
-              <option value="high">Высокое</option>
-            </select>
+            <span data-i18n="settings.mute"></span>
+            <input type="checkbox" id="set-mute">
           </label>
           <label class="settings-row">
-            <span>🌍 Язык</span>
+            <span data-i18n="settings.language"></span>
             <select id="set-lang">
               <option value="ru">Русский</option>
               <option value="en">English</option>
@@ -367,33 +468,58 @@
             </select>
           </label>
           <label class="settings-row">
-            <span>💡 Показывать подсказки</span>
+            <span data-i18n="settings.hints"></span>
             <input type="checkbox" id="set-hints" checked>
           </label>
           <label class="settings-row">
-            <span>🗺 Показывать мини-карту</span>
+            <span data-i18n="settings.minimap"></span>
             <input type="checkbox" id="set-minimap" checked>
           </label>
           <label class="settings-row">
-            <span>☁ Туман войны</span>
+            <span data-i18n="settings.fog"></span>
             <input type="checkbox" id="set-fog" checked>
           </label>
         </div>
-        <button class="btn btn-gold" id="settings-close" type="button">Применить</button>
-        <div class="settings-keys">
-          <h4>Управление</h4>
-          <div class="key-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Движение</div>
-          <div class="key-row"><kbd>Shift</kbd> Бег</div>
-          <div class="key-row"><kbd>Пробел</kbd> Прыжок</div>
-          <div class="key-row"><kbd>Enter</kbd> Чат</div>
-          <div class="key-row"><kbd>1</kbd>–<kbd>4</kbd> Навыки</div>
-          <div class="key-row"><kbd>M</kbd> Карта мира</div>
-          <div class="key-row"><kbd>F</kbd> Персонаж</div>
-          <div class="key-row"><kbd>G</kbd> Гильдия</div>
-          <div class="key-row"><kbd>J</kbd> Квесты</div>
-          <div class="key-row"><kbd>Z</kbd> Отладка коллайдеров</div>
-          <div class="key-row"><kbd>Esc</kbd> Меню / Закрыть</div>
+
+        <button class="btn btn-gold" id="settings-close" type="button" data-i18n="settings.apply"></button>
+
+        <!-- Привязанные аккаунты. Стоит в настройках, потому что это
+             про безопасность входа: игрок должен видеть, какими способами
+             он может войти, и не потерять к аккаунту доступ. -->
+        <div class="settings-group link-group">
+          <h4 class="settings-legend" data-i18n="link.title"></h4>
+          <p class="link-hint" data-i18n="link.hint"></p>
+          <div id="link-accounts"></div>
+          <div id="link-add"></div>
+          <p class="link-error hidden" id="link-error"></p>
         </div>
+
+        <div class="settings-keys">
+          <h4 data-i18n="settings.controls"></h4>
+          <div class="key-row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <span data-i18n="settings.k_move"></span></div>
+          <div class="key-row"><kbd>Shift</kbd> <span data-i18n="settings.k_run"></span></div>
+          <div class="key-row"><kbd>Space</kbd> <span data-i18n="settings.k_jump"></span></div>
+          <div class="key-row"><kbd>C</kbd> <span data-i18n="settings.k_crouch"></span></div>
+          <div class="key-row"><kbd>Enter</kbd> <span data-i18n="settings.k_chat"></span></div>
+          <div class="key-row"><kbd>1</kbd>–<kbd>4</kbd> <span data-i18n="settings.k_skills"></span></div>
+          <div class="key-row"><kbd>M</kbd> <span data-i18n="settings.k_map"></span></div>
+          <div class="key-row"><kbd>F</kbd> <span data-i18n="settings.k_char"></span></div>
+          <div class="key-row"><kbd>G</kbd> <span data-i18n="settings.k_guild"></span></div>
+          <div class="key-row"><kbd>J</kbd> <span data-i18n="settings.k_quests"></span></div>
+          <div class="key-row"><kbd>Z</kbd> <span data-i18n="settings.k_debug"></span></div>
+          <div class="key-row"><kbd>Esc</kbd> <span data-i18n="settings.k_esc"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Экран загрузки мира ═══ -->
+    <div class="overlay hidden" id="overlay-loading">
+      <div class="loading-card">
+        <div class="loading-logo">🏛</div>
+        <p class="loading-title">Empire of Safavids</p>
+        <div class="loading-bar"><i id="loading-fill"></i></div>
+        <p class="loading-text" id="loading-text" data-i18n="loading.entering"></p>
+        <p class="loading-tip" id="loading-tip"></p>
       </div>
     </div>
 
@@ -432,7 +558,7 @@
         <!-- Статистика персонажа -->
         <div class="menu-stats" id="menu-stats"></div>
         
-        <p class="menu-version">v0.2.0</p>
+        <p class="menu-version" id="menu-version">v—</p>
       </div>
     </div>
     <div class="overlay hidden" id="overlay-lost">

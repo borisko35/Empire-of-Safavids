@@ -82,10 +82,23 @@ export const session = {
   username: localStorage.getItem('eos_username') ?? '',
   isAdmin: false,
   isAdminRole: 'gm',
+  /** true — вход без регистрации: аккаунт живёт в браузере, его надо предложить сохранить */
+  isGuest: localStorage.getItem('eos_guest') === '1',
   character: null as Character | null,
   skills: [] as SkillDef[],
   /** Локальные ресурсы (сервер их не стримит — поддерживаем сами, ресинк по событиям) */
   hp: 0, maxHp: 0, mana: 0, maxMana: 0, stamina: 0, maxStamina: 0,
+  /** Бонусы экипировки для воды: снимают замедление и экономят выносливость */
+  waterBonus: { waterSpeed: 0, swimStamina: 0 },
+  /**
+   * Позиция персонажа прямо сейчас, обновляется каждый кадр.
+   * character.position приходит с сервера раз в несколько секунд —
+   * для рыбалки (где важно, стоишь ли ты в воде) такая задержка означала бы
+   * промах: удочка улетела бы туда, где игрок был полминуты назад.
+   */
+  selfPos: { x: 0, z: 0 },
+  /** Активная лодка (из панели рыбалки); null — игрок на суше */
+  boat: null as null | { id: string; nameRu: string; waterSpeed: number; swimSpeed: number; fishingBonus: number; catchLimit: number },
   level: 0, experience: 0,
   /** Убийства за сессию: monsterId -> количество (для прогресса квестов) */
   kills: {} as Record<string, number>,
@@ -94,13 +107,16 @@ export const session = {
   worldTime: '' as string,
 };
 
-export function persistAuth(token: string, userId: string, username: string): void {
+export function persistAuth(token: string, userId: string, username: string, isGuest = false): void {
   session.token = token;
   session.userId = userId;
   session.username = username;
+  session.isGuest = isGuest;
   localStorage.setItem('eos_token', token);
   localStorage.setItem('eos_user_id', userId);
   localStorage.setItem('eos_username', username);
+  if (isGuest) localStorage.setItem('eos_guest', '1');
+  else localStorage.removeItem('eos_guest');
 }
 
 export function clearAuth(): void {
@@ -109,6 +125,7 @@ export function clearAuth(): void {
   session.username = '';
   session.isAdmin = false;
   session.isAdminRole = 'gm';
+  session.isGuest = localStorage.getItem('eos_guest') === '1';
   session.character = null;
   session.skills = [];
   localStorage.removeItem('eos_token');

@@ -7,6 +7,7 @@
 
 import { Region } from '../types/game.types';
 import { SpawnSystem } from './SpawnSystem';
+import { TargetPlayer } from './AISystem';
 import { KarmaSystem } from './KarmaSystem';
 import { WorldTimeSystem } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
@@ -51,6 +52,17 @@ export class GameLoop {
     return this.spawnSystem;
   }
 
+  /** Система времени и погоды — нужна админ-панели для ручной смены погоды */
+  getWorldTimeSystem(): WorldTimeSystem {
+    return this.worldTime;
+  }
+
+  /** Текущее игровое время и погода — чтобы дослать их сразу при входе,
+   *  не дожидаясь ближайшего вещания (раз в минуту) */
+  getWorldTime() {
+    return this.worldTime.getCurrentWorldTime();
+  }
+
   /** Функция объявлений мировых событий (передаётся из index.ts) */
   setWorldEventBroadcaster(fn: (payload: Record<string, unknown>) => void): void {
     this.worldEventBroadcaster = fn;
@@ -89,6 +101,14 @@ export class GameLoop {
 
   private tick(): void {
     this.tickCount++;
+
+    // Вещание погоды — в СВОЕМ try/catch. Раньше оно делило обработчик с
+    // респавном монстров: если spawnSystem.tick() падал, игроки не получали
+    // новую погоду и дождь «залипал» до перезапуска сервера.
+    if (this.tickCount % WORLD_TIME_EVERY === 0) {
+      this.worldTime.broadcastWorldTime().catch((e) => logger.error('[GameLoop] worldTime rejected:', e));
+    }
+
     try {
       // Респавн монстров
       this.spawnSystem.tick();
@@ -96,11 +116,6 @@ export class GameLoop {
       // Тик ИИ для всех активных монстров
       if (this.tickCount % AI_TICK_EVERY === 0) {
         this.tickAI().catch((e) => logger.error('[GameLoop] tickAI rejected:', e));
-      }
-
-      // Вещание игрового времени (день/ночь/погода)
-      if (this.tickCount % WORLD_TIME_EVERY === 0) {
-        this.worldTime.broadcastWorldTime().catch((e) => logger.error('[GameLoop] worldTime rejected:', e));
       }
 
       // Постепенное восстановление отрицательной кармы у онлайн-игроков
@@ -115,17 +130,17 @@ export class GameLoop {
   private async tickAI(): Promise<void> {
     try {
     // Собираем онлайн-игроков по шардам и регионам из Redis
-    const nearbyPlayers = new Map<string, { id: string; position: { x: number; y: number; z: number }; hp: number }[]>();
+    const nearbyPlayers = new Map<string, TargetPlayer[]>();
     const allIds: string[] = [];
     const shards = this.spawnSystem.getActiveShards();
     for (const shardId of shards) {
       for (const region of Object.values(Region)) {
         const ids = await this.redis.getPlayersInRegion(shardId, region).catch(() => [] as string[]);
         allIds.push(...ids);
-        const players: { id: string; position: { x: number; y: number; z: number }; hp: number }[] = [];
+        const players: TargetPlayer[] = [];
         for (const id of ids) {
           const pos = await this.redis.getPlayerPosition(id).catch(() => null) as { x: number; y: number; z: number } | null;
-          if (pos) players.push({ id, position: pos, hp: 1 });
+          if (pos) players.push({ id, position: pos, hp: 1, inBoat: false });
         }
         nearbyPlayers.set(`${shardId}:${region}`, players);
       }
@@ -148,6 +163,23 @@ export class GameLoop {
             continue;
           }
           players[i].hp = hp;
+        }
+      }
+    }
+
+    // Кто сейчас в лодке: подводные существа игнорируют таких.
+    // Один запрос на всех онлайн-игроков — по одному на игрока в тике
+    // (тик идёт раз в 200 мс) база бы не потянула.
+    if (allIds.length) {
+      const db = DatabaseService.getInstance();
+      const boatRows = await db.query<{ character_id: string }>(
+        'SELECT character_id FROM character_boats WHERE character_id = ANY($1::uuid[]) AND is_active = TRUE',
+        [allIds]
+      ).catch(() => [] as { character_id: string }[]);
+      if (boatRows.length) {
+        const inBoat = new Set(boatRows.map(r => r.character_id));
+        for (const players of nearbyPlayers.values()) {
+          for (const p of players) p.inBoat = inBoat.has(p.id);
         }
       }
     }

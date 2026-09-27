@@ -49,6 +49,18 @@ export interface MonsterDefinition {
   lootTable: MonsterLootEntry[];
   region: Region;
   respawnTime: number; // секунды
+  /**
+   * Подводное существо: живёт и охотится только в глубокой воде.
+   * Игнорирует тех, кто на суше или в лодке, и не вылезает на берег.
+   */
+  aquatic?: boolean;
+  /**
+   * Насколько тело торчит над водой (метры). Клиент рисует подводное
+   * существо на поверхности, а не под ней — иначе его не видно и не в
+   * кого бить. Задаётся здесь, а не на клиенте: список существ
+   * меняется, а список на клиенте легко забыть обновить.
+   */
+  aquaticSize?: number;
   description: string;
   modelPath: string;
 }
@@ -115,6 +127,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       // Украденное золото торговца: гарантированный дроп, иначе квест
       // side_tabriz_merchant невозможно завершить (предмет больше нигде не берётся).
       { itemId: 'qst_merchant_gold_bag', chance: 1, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_road_bandit_token', chance: 0.4, minQty: 1, maxQty: 2 },
     ],
     region: Region.TABRIZ,
     respawnTime: 90,
@@ -148,6 +161,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'con_health_potion_m', chance: 0.5, minQty: 1, maxQty: 2 },
       { itemId: 'mat_iron_ore', chance: 0.7, minQty: 3, maxQty: 8 },
       { itemId: 'wpn_qizilbash_saber', chance: 0.02, minQty: 1, maxQty: 1 },
+      { itemId: 'qst_royal_seal', chance: 1.0, minQty: 1, maxQty: 1 },
     ],
     region: Region.MESOPOTAMIA,
     respawnTime: 300,
@@ -180,6 +194,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'con_health_potion_m', chance: 0.6, minQty: 1, maxQty: 3 },
       { itemId: 'mat_silk', chance: 0.4, minQty: 2, maxQty: 6 },
       { itemId: 'acc_turquoise_ring', chance: 0.03, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_mongol_raider_banner', chance: 0.18, minQty: 1, maxQty: 1 },
     ],
     region: Region.KHORASAN,
     respawnTime: 600,
@@ -213,6 +228,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'mat_dragon_scale', chance: 0.1, minQty: 1, maxQty: 2 },
       { itemId: 'con_exp_scroll', chance: 0.3, minQty: 1, maxQty: 1 },
       { itemId: 'wpn_sufi_staff', chance: 0.01, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_fire_div_ember', chance: 0.1, minQty: 1, maxQty: 1 },
     ],
     region: Region.KHORASAN,
     respawnTime: 1800,
@@ -391,6 +407,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     lootTable: [
       { itemId: 'con_mana_potion', chance: 0.4, minQty: 1, maxQty: 2 },
       { itemId: 'mat_silk', chance: 0.2, minQty: 1, maxQty: 3 },
+      { itemId: 'trophy_rain_spirit_drop', chance: 0.7, minQty: 1, maxQty: 1 },
     ],
     region: Region.TABRIZ,
     respawnTime: 600,
@@ -423,6 +440,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'con_mana_potion', chance: 0.6, minQty: 1, maxQty: 3 },
       { itemId: 'mat_turquoise', chance: 0.15, minQty: 1, maxQty: 2 },
       { itemId: 'acc_turquoise_ring', chance: 0.02, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_storm_djinn_lamp', chance: 0.35, minQty: 1, maxQty: 1 },
     ],
     region: Region.CAUCASUS,
     respawnTime: 1800,
@@ -455,6 +473,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'con_health_potion_m', chance: 0.6, minQty: 1, maxQty: 3 },
       { itemId: 'mat_saffron', chance: 0.25, minQty: 1, maxQty: 3 },
       { itemId: 'mat_dragon_scale', chance: 0.03, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_sand_div_horn', chance: 0.15, minQty: 1, maxQty: 1 },
     ],
     region: Region.MESOPOTAMIA,
     respawnTime: 2700,
@@ -487,6 +506,8 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
       { itemId: 'con_health_potion_m', chance: 0.5, minQty: 1, maxQty: 2 },
       { itemId: 'wpn_persian_composite_bow', chance: 0.02, minQty: 1, maxQty: 1 },
       { itemId: 'acc_turquoise_ring', chance: 0.05, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_fog_assassin_scarf', chance: 0.3, minQty: 1, maxQty: 1 },
+      { itemId: 'qst_hafiz_scroll', chance: 0.6, minQty: 1, maxQty: 1 },
     ],
     region: Region.SHIRAZ,
     respawnTime: 1800,
@@ -549,6 +570,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     skills: [],
     lootTable: [
       { itemId: 'mat_iron_ore', chance: 0.3, minQty: 1, maxQty: 2 },
+      { itemId: 'trophy_scorpion_carapace', chance: 0.6, minQty: 1, maxQty: 1 },
     ],
     region: Region.TABRIZ,
     respawnTime: 30,
@@ -572,6 +594,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     lootTable: [
       { itemId: 'wpn_iron_sword', chance: 0.05, minQty: 1, maxQty: 1 },
       { itemId: 'pot_health_small', chance: 0.3, minQty: 1, maxQty: 2 },
+      { itemId: 'trophy_road_bandit_token', chance: 0.55, minQty: 1, maxQty: 1 },
     ],
     region: Region.TABRIZ,
     respawnTime: 45,
@@ -592,11 +615,127 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     skills: [],
     lootTable: [
       { itemId: 'mat_iron_ore', chance: 0.1, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_wolf_pelt', chance: 1.0, minQty: 1, maxQty: 2 },
+      { itemId: 'trophy_wolf_fang', chance: 0.25, minQty: 1, maxQty: 1 },
     ],
     region: Region.TABRIZ,
     respawnTime: 30,
     description: 'Серый волк, бродящий по горам к северу от Тебриза.',
     modelPath: 'models/mobs/wolf.fbx',
+  },
+
+  // ── ПОДВОДНЫЕ СУЩЕСТВА (озеро у Тебриза) ────────────────────
+  // Раньше озеро было мёртвой зоной: максимум — переплыть его и
+  // выйти на другой берег. Теперь там есть кто охотится, причём
+  // только на того, кто в воде. Стоящий на берегу для них невидим,
+  // а уехавший на лодке — в безопасности: лодка стала защитой,
+  // а не просто ускорением.
+  'mob_lake_piranha': {
+    id: 'mob_lake_piranha',
+    name: 'Lake Piranha',
+    nameRu: 'Пиранья Озера',
+    type: 'normal',
+    faction: 'neutral',
+    level: 10,
+    hp: 260, mana: 0,
+    strength: 16, agility: 24, intelligence: 2,
+    defense: 6, moveSpeed: 5.4, attackRange: 1.6, aggroRange: 13,
+    expReward: 110, goldReward: { min: 14, max: 38 },
+    skills: [
+      { id: 'piranha_tear', name: 'Frenzy Bite', nameRu: 'Кусательный Прозы', damage: 22, cooldown: 3, range: 1.6, aoe: false, effect: 'bleed', effectDuration: 5 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_piranha_fin', chance: 0.6, minQty: 1, maxQty: 2 },
+      { itemId: 'fish_crucian', chance: 0.35, minQty: 1, maxQty: 1 },
+    ],
+    region: Region.TABRIZ,
+    respawnTime: 40,
+    aquatic: true,
+    aquaticSize: 0.15,
+    description: 'Мелкая стая, держится у берега. Один не страшен — стая тянет на дно.',
+    modelPath: 'models/mobs/piranha.fbx',
+  },
+  'mob_lake_sturgeon_horror': {
+    id: 'mob_lake_sturgeon_horror',
+    name: 'Gulper Sturgeon',
+    nameRu: 'Сом-Громила',
+    type: 'normal',
+    faction: 'neutral',
+    level: 16,
+    hp: 620, mana: 0,
+    strength: 26, agility: 12, intelligence: 3,
+    defense: 14, moveSpeed: 3.6, attackRange: 2, aggroRange: 15,
+    expReward: 240, goldReward: { min: 30, max: 75 },
+    skills: [
+      { id: 'sturgeon_maul', name: 'Tail Slam', nameRu: 'Хвост-Удар', damage: 38, cooldown: 5, range: 2.4, aoe: true, aoeRadius: 3.5 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_sturgeon_bladder', chance: 0.55, minQty: 1, maxQty: 1 },
+      { itemId: 'fish_sturgeon', chance: 0.4, minQty: 1, maxQty: 1 },
+    ],
+    region: Region.TABRIZ,
+    respawnTime: 75,
+    aquatic: true,
+    aquaticSize: 0.55,
+    description: 'Толстый, слепой, размером с лодку. Бьёт хвостом — сбивает с ног.',
+    modelPath: 'models/mobs/wolf.fbx',
+  },
+  'mob_lake_ghost_fish': {
+    id: 'mob_lake_ghost_fish',
+    name: 'Ghost Fish of the Lake',
+    nameRu: 'Призрачная Рыба',
+    type: 'elite',
+    faction: 'mythical',
+    level: 24,
+    hp: 900, mana: 260,
+    strength: 30, agility: 30, intelligence: 18,
+    defense: 18, moveSpeed: 5.0, attackRange: 2.2, aggroRange: 18,
+    expReward: 520, goldReward: { min: 80, max: 180 },
+    skills: [
+      { id: 'ghost_chill', name: 'Chilling Glance', nameRu: 'Холодный Взгляд', damage: 34, cooldown: 6, range: 8, aoe: false, effect: 'slow', effectDuration: 5 },
+      { id: 'ghost_rush', name: 'Undertow Rush', nameRu: 'Течение Наносит Удар', damage: 46, cooldown: 8, range: 2.2, aoe: false },
+    ],
+    lootTable: [
+      { itemId: 'trophy_ghost_fish_lure', chance: 0.4, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_ghost_fish_scale', chance: 0.7, minQty: 1, maxQty: 3 },
+    ],
+    region: Region.TABRIZ,
+    respawnTime: 150,
+    aquatic: true,
+    aquaticSize: 0.45,
+    description: 'Белая, светится изнутри. Тянет за собой течение — и туда, и обратно.',
+    modelPath: 'models/mobs/ghost_fish.fbx',
+  },
+  'mob_lake_leviathan': {
+    id: 'mob_lake_leviathan',
+    name: 'Leviathan of Tabriz',
+    nameRu: 'Левиафан Тебриза',
+    type: 'boss',
+    faction: 'mythical',
+    level: 30,
+    hp: 3200, mana: 500,
+    strength: 42, agility: 26, intelligence: 24,
+    defense: 26, moveSpeed: 4.4, attackRange: 3, aggroRange: 26,
+    expReward: 3200, goldReward: { min: 400, max: 900 },
+    skills: [
+      { id: 'leviathan_maul', name: 'Rending Bite', nameRu: 'Клыкастый Укус', damage: 70, cooldown: 4, range: 3, aoe: false },
+      { id: 'leviathan_slam', name: 'Depth Slam', nameRu: 'Удар Глубины', damage: 90, cooldown: 10, range: 5, aoe: true, aoeRadius: 6 },
+      { id: 'leviathan_drown', name: 'Drowning Gaze', nameRu: 'Взгляд Топи', damage: 55, cooldown: 14, range: 12, aoe: false, effect: 'fear', effectDuration: 3 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_leviathan_horn', chance: 0.5, minQty: 1, maxQty: 1 },
+      // Жемчужина — цель квеста, а босс возрождается раз в 15 минут.
+      // При 30% квест превращался бы в лотерей, поэтому ровно с первого
+      // убийства: единственный источник, шанс лотереи тут неуместен.
+      { itemId: 'trophy_leviathan_pearl', chance: 1.0, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_ghost_fish_scale', chance: 0.8, minQty: 2, maxQty: 5 },
+    ],
+    region: Region.TABRIZ,
+    respawnTime: 900,
+    aquatic: true,
+    aquaticSize: 0.95,
+    description: 'Тот, кого рыбаки зовут «старухой озера». Дышит сорок лет, помнит ещё Кара-Хан.',
+    modelPath: 'models/mobs/leviathan.fbx',
   },
 
   // Исфахан — регион 20-40
@@ -641,6 +780,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     lootTable: [
       { itemId: 'mat_iron_ore', chance: 0.4, minQty: 2, maxQty: 5 },
       { itemId: 'mat_dragon_scale', chance: 0.02, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_sand_elemental_core', chance: 0.5, minQty: 1, maxQty: 1 },
     ],
     region: Region.ISFAHAN,
     respawnTime: 120,
@@ -667,6 +807,7 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     lootTable: [
       { itemId: 'mat_dragon_scale', chance: 0.15, minQty: 1, maxQty: 2 },
       { itemId: 'arm_silk_robe', chance: 0.05, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_undead_reliquary', chance: 0.3, minQty: 1, maxQty: 1 },
     ],
     region: Region.SHIRAZ,
     respawnTime: 180,

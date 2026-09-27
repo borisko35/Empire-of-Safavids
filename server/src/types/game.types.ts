@@ -36,6 +36,8 @@ export enum ItemType {
   CONSUMABLE = 'consumable',
   MATERIAL = 'material',
   QUEST = 'quest',
+  /** Добыча с монстров: шкуры, клыки, панцири. Идёт в квесты и крафт */
+  TROPHY = 'trophy',
 }
 
 export interface Vector3 {
@@ -90,11 +92,27 @@ export interface Item {
   rarity: ItemRarity;
   level: number;
   stats?: Partial<CharacterStats>;
+  /**
+   * Бонус для воды: доля (0.3 = +30%), на которую предмет убирает
+   * замедление в реке/озере. НЕ характеристика — поэтому живёт отдельно
+   * от stats, иначе сумма бонусов в интерфейсе показывала бы мусор.
+   */
+  waterSpeed?: number;
+  /** Расход выносливости в воде: доля экономии (0.25 = на четверть меньше) */
+  swimStamina?: number;
   description: string;
   iconPath: string;
   stackable: boolean;
   maxStack: number;
   price: number;
+}
+
+/** Специальные бонусы экипировки (вне пяти основных характеристик) */
+export interface EquipmentBonuses {
+  /** -1..1: доля снятого замедления в воде */
+  waterSpeed: number;
+  /** 0..1: экономия выносливости при плавании */
+  swimStamina: number;
 }
 
 export interface InventorySlot {

@@ -1,13 +1,94 @@
-﻿// ============================================================
+// ============================================================
 // HUD: рамки, навыки, чат, панели, тосты — Empire of Safavids
 // ============================================================
 
-import { api } from './api';
+import { api, ApiError } from './api';
+import type { ActiveBuff } from './api';
 import { t } from './i18n';
 import { icon } from '../ui/icons';
 import { session } from './state';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
+
+// ── Временные бонусы ─────────────────────────────────────────
+/**
+ * Активные бонусы с обратным отсчётом. Раньше эффекты вроде «+5% к урону
+ * на 10 минут» не существовали вовсе; теперь их надо где-то показать,
+ * иначе игрок не знает, что ел кебаб и почему бьёт сильнее.
+ *
+ * Отсчёт идёт на таймере раз в секунду: сервер отдаёт остаток при
+ * загрузке, дальше считаем локально, а раз в минуту переспрашиваем —
+ * чтобы не расходиться с сервером, если игрок стоял в AFK.
+ */
+let activeBuffs: ActiveBuff[] = [];
+let buffTimer: ReturnType<typeof setInterval> | null = null;
+
+const BUFF_ICON: Record<string, string> = { sword: '⚔️', fist: '✊', boot: '👢', shield: '🛡️', scroll: '📜' };
+
+function fmtBuffTime(sec: number): string {
+  if (sec >= 60) return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  return `${sec} с`;
+}
+
+function paintBuffs(): void {
+  const box = $('buff-bar');
+  if (!box) return;
+  box.innerHTML = '';
+  box.classList.toggle('hidden', activeBuffs.length === 0);
+  for (const b of activeBuffs) {
+    const chip = document.createElement('div');
+    // Под минуту подсвечиваем: игрок должен успеть съесть ещё
+    chip.className = 'buff-chip' + (b.remainingSec <= 60 ? ' ending' : '');
+    const ico = document.createElement('span');
+    ico.className = 'buff-icon';
+    ico.textContent = BUFF_ICON[b.icon] ?? '✦';
+    const name = document.createElement('span');
+    name.className = 'buff-name';
+    name.textContent = b.nameRu;
+    const time = document.createElement('span');
+    time.className = 'buff-time';
+    time.textContent = fmtBuffTime(b.remainingSec);
+    chip.append(ico, name, time);
+    box.append(chip);
+  }
+}
+
+function tickBuffs(): void {
+  if (!activeBuffs.length) return;
+  activeBuffs = activeBuffs
+    .map(b => ({ ...b, remainingSec: b.remainingSec - 1 }))
+    .filter(b => b.remainingSec > 0);
+  paintBuffs();
+}
+
+export async function loadBuffs(): Promise<void> {
+  const cid = session.character?.id;
+  if (!cid) return;
+  try {
+    const data = await api.buffs(cid);
+    activeBuffs = data.buffs ?? [];
+  } catch {
+    activeBuffs = [];
+  }
+  paintBuffs();
+  if (buffTimer) clearInterval(buffTimer);
+  buffTimer = setInterval(tickBuffs, 1000);
+}
+
+/** Вызвать сразу после использования предмета, чтобы бонус появился не дожидаясь опроса */
+export function onBuffGained(buff: ActiveBuff | null | undefined): void {
+  if (!buff) return;
+  const rest = activeBuffs.filter(b => b.id !== buff.id);
+  rest.push({ ...buff });
+  activeBuffs = rest;
+  paintBuffs();
+}
+
+export function clearBuffs(): void {
+  activeBuffs = [];
+  if (buffTimer) { clearInterval(buffTimer); buffTimer = null; }
+  paintBuffs();
+}
 
 // ── Тосты ────────────────────────────────────────────────────
 export function toast(message: string, kind: 'info' | 'error' | 'success' = 'info'): void {
@@ -29,6 +110,8 @@ export function refreshBars(): void {
   $('txt-mana').textContent = `${Math.ceil(s.mana)} / ${s.maxMana}`;
   ($('bar-stamina') as HTMLElement).style.width = pct(s.stamina, s.maxStamina);
   $('txt-stamina').textContent = `${Math.ceil(s.stamina)} / ${s.maxStamina}`;
+  // Краснеет, когда выносливость на исходе (плавание её быстро съедает)
+  $('bar-stamina').classList.toggle('low', s.stamina < s.maxStamina * 0.2);
   ($('bar-exp') as HTMLElement).style.width = pct(s.experience, s.level * s.level * 100);
   $('txt-exp').textContent = `${s.experience} / ${s.level * s.level * 100}`;
   $('hud-name').textContent = s.character?.name ?? '';
@@ -371,6 +454,12 @@ export async function loadInventory(): Promise<void> {
       api.equipment(cid),
     ]);
     renderEquipment(equipment);
+    // Бонусы «для воды» из надетого: сапоги/плащ снимают замедление в воде
+    // и экономят выносливость при плавании
+    session.waterBonus = {
+      waterSpeed: equipment.bonuses?.waterSpeed ?? 0,
+      swimStamina: equipment.bonuses?.swimStamina ?? 0,
+    };
     const box = $('inventory-list');
     if (!box) return;
     box.innerHTML = '';
@@ -406,7 +495,15 @@ export async function loadInventory(): Promise<void> {
           session.mana = res.resources.mana; session.maxMana = res.resources.maxMana;
           session.stamina = res.resources.stamina; session.maxStamina = res.resources.maxStamina;
           refreshBars();
-          toast(t('world.item_used'), 'success');
+          // Предмет может дать временный бонус — показываем сразу, а не
+          // после следующего опроса, иначе игрок решит, что эффекта нет
+          const buff = res.resources.buff;
+          if (buff) {
+            onBuffGained(buff);
+            toast(`${t('world.buff_gained')} ${buff.nameRu} · ${fmtBuffTime(buff.remainingSec)}`, 'success');
+          } else {
+            toast(t('world.item_used'), 'success');
+          }
           await loadInventory();
         }));
       }
@@ -880,163 +977,82 @@ export function setWorldTime(payload: Record<string, unknown>): void {
   const parts = [tod, weather].filter(Boolean);
   el.textContent = parts.join(' · ');
   el.classList.toggle('top-only', $('target-frame').classList.contains('hidden'));
-  applyWeatherEffects(weather);
+  // Всю погоду теперь рисует 3D-движок (game3d/weather.ts + sky.ts).
+  // Здесь раньше был отдельный слой «дождь на мини-карте» — он не работал
+  // никогда: ему передавали русскую подпись, а он ждал английский код.
+  // А его молния была бесконечным рекурсивным таймером, который мигал бы
+  // экраном каждые 0.1 с до бесконечности. Слой удалён.
 }
 
-// ── Система погоды ────────────────────────────────────────────
+// ============================================================
+// Гостевой аккаунт — предложение сохранить прогресс
+// ============================================================
+// Гость вошёл без регистрации: его персонаж и весь прогресс лежат
+// только в этом браузере. Если игрок очистит кэш или зайдёт с другого
+// устройства — всё пропадёт. Поэтому предлагаем сохранить аккаунт:
+// почта и пароль, user_id не меняется, прогресс остаётся.
 
-let rainParticles: Array<{ x: number; z: number; vx: number; vz: number; alive: boolean }> = [];
-let thunderTimer: number | null = null;
-let sandstormAlpha: number = 0;
-let sandstormInterval: number | null = null;
-let windParticles: Array<{ x: number; z: number; vx: number; vz: number; age: number }> = [];
-let windTimer: number | null = null;
-let minimapSize = 180;
+/** Показать кнопку «сохранить аккаунт» (только для гостя) */
+export function showGuestBanner(): void {
+  const el = $('guest-banner');
+  if (!el) return;
+  el.classList.remove('hidden');
+}
 
-function applyWeatherEffects(weather: string): void {
+/** Спрятать кнопку — аккаунт уже сохранён */
+export function hideGuestBanner(): void {
+  $('guest-banner')?.classList.add('hidden');
+}
 
-  // Очищаем старые частицы
-  rainParticles = [];
-  if (thunderTimer) {
-    clearTimeout(thunderTimer);
-    thunderTimer = null;
-  }
-  sandstormAlpha = 0;
-  sandstormInterval = null;
-  if (windTimer) {
-    clearInterval(windTimer);
-    windTimer = null;
-  }
-  windParticles = [];
-  removeSandstormOverlay();
-  removeWindTrail();
+/** Диалог сохранения аккаунта. Возвращает true, если аккаунт сохранён. */
+export async function promptClaimAccount(): Promise<boolean> {
+  const emailEl = $('claim-email') as HTMLInputElement;
+  const passEl = $('claim-password') as HTMLInputElement;
+  const errEl = $('claim-error');
+  const form = $('form-claim') as HTMLFormElement;
+  const screen = $('screen-claim');
+  if (!form) return false;
 
-  switch (weather) {
-    case 'rain':
-      // Инициализировать дождевые капли (размечаем относительно центра мини-карты)
-      for (let i = 0; i < 50; i++) {
-        rainParticles.push({
-          x: (Math.random() - 0.5) * minimapSize,
-          z: (Math.random() - 0.5) * minimapSize,
-          vx: (Math.random() - 0.5) * 0.5,
-          vz: 2 + Math.random(),
-          alive: true,
-        });
+  emailEl.value = '';
+  passEl.value = '';
+  errEl.textContent = '';
+  errEl.classList.add('hidden');
+  screen.classList.remove('hidden');
+
+  return new Promise<boolean>((resolve) => {
+    const done = (ok: boolean): void => {
+      screen.classList.add('hidden');
+      form.onsubmit = null;
+      $('btn-claim-cancel').onclick = null;
+      resolve(ok);
+    };
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if (password.length < 8) {
+        errEl.textContent = t('auth.password_hint');
+        errEl.classList.remove('hidden');
+        return;
       }
-      // Громы через 2-5 секунд
-      thunderTimer = setTimeout(() => {
-        thunderFlash();
-        // Еще один молния через случайное время
-        thunderTimer = setTimeout(thunderFlash, 200 + Math.random() * 300);
-      }, 2000 + Math.random() * 3000);
-      break;
-
-    case 'sandstorm':
-      // Плавно нарастить альфа песчаной бури
-      sandstormInterval = setInterval(() => {
-        sandstormAlpha = Math.min(1, sandstormAlpha + 0.02);
-        updateSandstormOverlay(sandstormAlpha);
-      }, 50);
-      break;
-
-    case 'wind':
-      // Ветер оставляет след частиц
-      for (let i = 0; i < 30; i++) {
-        windParticles.push({
-          x: (Math.random() - 0.5) * minimapSize,
-          z: (Math.random() - 0.5) * minimapSize,
-          vx: -0.5 + Math.random() * 0.1,
-          vz: 0,
-          age: 0,
-        });
+      try {
+        await api.claimAccount(email, password);
+        session.isGuest = false;
+        localStorage.removeItem('eos_guest');
+        hideGuestBanner();
+        toast(t('auth.claim_success'), 'success');
+        done(true);
+      } catch (err) {
+        const code = err instanceof ApiError ? err.code : undefined;
+        const loc = code ? t(`errors.${code}`) : '';
+        errEl.textContent = loc && loc !== `errors.${code}`
+          ? loc
+          : ((err as Error).message || t('common.error'));
+        errEl.classList.remove('hidden');
       }
-      windTimer = setInterval(() => {
-        windParticles = windParticles.filter(p => p.age < 200);
-        windParticles.forEach(p => {
-          p.x += p.vx;
-          p.age++;
-        });
-        updateWindTrail();
-      }, 50);
-      break;
+    };
 
-    case 'clear':
-    case 'cloudy':
-      // Снять эффекты
-      if (sandstormInterval) {
-        clearInterval(sandstormInterval);
-        sandstormInterval = null;
-        sandstormAlpha = 0;
-        removeSandstormOverlay();
-      }
-      if (windTimer) {
-        clearInterval(windTimer);
-        windTimer = null;
-        removeWindTrail();
-      }
-      break;
-}
-}
-
-function thunderFlash(): void {
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(255, 255, 255, 0.8);
-    z-index: 9999;
-    pointer-events: none;
-  `;
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 50);
-  // Последняя молния
-  thunderTimer = setTimeout(thunderFlash, 100 + Math.random() * 200);
-}
-
-function updateSandstormOverlay(alpha: number): void {
-  let overlay = $('sandstorm-overlay');
-  if (!overlay) {
-    const cvs = document.createElement('canvas');
-    cvs.id = 'sandstorm-overlay';
-    cvs.width = minimapSize;
-    cvs.height = minimapSize;
-    cvs.style.cssText = `
-      position: fixed;
-      bottom: 0; left: 50%;
-      transform: translateX(-50%);
-      pointer-events: none;
-      z-index: 8888;
-    `;
-    document.body.appendChild(cvs);
-  }
-  overlay = $('sandstorm-overlay');
-  overlay.style.background = `rgba(236, 217, 172, ${alpha * 0.7})`;
-}
-
-function removeSandstormOverlay(): void {
-  const overlay = $('sandstorm-overlay');
-  if (overlay) overlay.remove();
-}
-
-function removeWindTrail(): void {
-  const trail = $('wind-trail');
-  if (trail) trail.remove();
-}
-
-function updateWindTrail(): void {
-  const trail = document.getElementById('wind-trail') as HTMLCanvasElement | null;
-  if (!trail) return;
-  const c = trail.getContext('2d');
-  if (!c) return;
-  c.clearRect(0, 0, trail.width, trail.height);
-  if (windParticles.length === 0) return;
-  c.strokeStyle = 'rgba(150, 150, 180, 0.5)';
-  c.lineWidth = 1;
-  c.beginPath();
-  c.moveTo(windParticles[0].x + trail.width / 2, windParticles[0].z + trail.height / 2);
-  for (let i = 1; i < windParticles.length; i++) {
-    const p = windParticles[i];
-    c.lineTo(p.x + trail.width / 2, p.z + trail.height / 2);
-  }
-  c.stroke();
+    $('btn-claim-cancel').onclick = () => done(false);
+  });
 }

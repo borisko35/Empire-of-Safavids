@@ -223,23 +223,54 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   armL.add(armGeo()); armR.add(armGeo());
   torso.add(armL, armR);
 
-  // Оружие в правой руке
+  // Оружие в правой руке.
+  // Кисть держит РУКОЯТЬ, а не гарду. У меча рукоять смещена внутри
+  // группы на −0.09 по Y, гарда на 0, наконечник на −0.18. Кисть руки
+  // лежит на −0.6, поэтому гарда встаёт на −0.51: −0.51 + (−0.09) = −0.6.
+  // Раньше гарда ставилась прямо в кисть (−0.6), из-за чего наконечник
+  // уходил в предплечье, а клинок рос вдоль руки.
   let weaponRef: THREE.Group | null = null;
   if (cfg.weapon !== 'none') {
     weaponRef = buildWeapon(cfg.weapon);
-    weaponRef.position.y = -0.6;
+    weaponRef.position.set(0.04, -0.51, 0.11);
+    // Лёгкий наклон вперёд: клинок не упирается в плечо и не режет корпус
+    weaponRef.rotation.x = 0.32;
     armR.add(weaponRef);
   }
-  // Щит на левой
+  // Щит на левой: держим перед предплечьем и заметно левее середины тела.
+  // Прежний диск радиусом 0.3 стоял в кисти и доставал до правой руки —
+  // щит накладывался на меч, и оба казались приросшими к телу.
+  //
+  // Свой материал, а не MAT.wood: плоский диск стоит строго вертикально, и
+  // ночью (свет сверху, от луны и факелов) на него падает только скользящий
+  // свет — грань уходила в абсолютный ноль, и щит выглядел чёрным шаром
+  // (видно на скриншоте). Светлее + наклон + небольшое собственное свечение.
   let shieldRef: THREE.Mesh | null = null;
   let bossRef: THREE.Mesh | null = null;
   if (cfg.shield) {
-    shieldRef = cyl(0.3, 0.3, 0.05, MAT.wood, 14);
+    const shieldMat = mat(0xb08a52, 0.8, 0.05);
+    shieldMat.emissive = new THREE.Color(0x3a2a14);
+    shieldMat.emissiveIntensity = 0.55;
+    const rimMat = mat(0xb9a06a, 0.45, 0.6);
+    rimMat.emissive = new THREE.Color(0x2a2410);
+    rimMat.emissiveIntensity = 0.5;
+
+    shieldRef = cyl(0.28, 0.28, 0.045, shieldMat, 14);
+    // Наклон по Y и Z: диск перестаёт быть строго вертикальным и ловит
+    // верхний свет, поэтому ночью читается как щит, а не как чёрный круг
     shieldRef.rotation.x = Math.PI / 2;
-    shieldRef.position.set(-0.05, -0.55, 0.08);
-    bossRef = sphere(0.06, MAT.steel, 8);
-    bossRef.position.set(-0.05, -0.55, 0.12);
+    shieldRef.rotation.y = 0.32;
+    shieldRef.rotation.z = 0.12;
+    shieldRef.position.set(-0.22, -0.48, 0.15);
+
+    const rim = cyl(0.305, 0.305, 0.028, rimMat, 14);
+    rim.rotation.copy(shieldRef.rotation);
+    rim.position.set(-0.22, -0.48, 0.145);
+
+    bossRef = sphere(0.06, MAT.gold, 8);
+    bossRef.position.set(-0.22, -0.48, 0.2);
     armL.add(shieldRef);
+    armL.add(rim);
     armL.add(bossRef);
   }
 
@@ -555,6 +586,157 @@ function buildSimurgh(): Rig {
 }
 
 // ── Скорпион (пустынный, низкий, сегментированное тело, хвост-жалo, клешни)
+// ── Подводные существа ───────────────────────────────────────
+// Раньше buildMonsterRig для неизвестного id отдавал гуманоида с
+// мечом: «Левиафан Тебриза» выглядел как капюшон с саблей. Здесь
+// настоящее тело: хребет из сегментов, хвост, плавники, глаза.
+interface FishCfg {
+  /** Цвет спины */
+  body: number;
+  /** Цвет брюха */
+  belly: number;
+  /** Длина тела в условных единицах */
+  length: number;
+  /** Высота тела */
+  girth: number;
+  /** Цвет глаз */
+  eye: number;
+  /** Светится ли (призрачная рыба) */
+  glow?: number;
+  /** Ширина пасти — у Левиафана пасть с клыками */
+  jaws?: boolean;
+}
+
+function buildFish(cfg: FishCfg): Rig {
+  const group = new THREE.Group();
+  const back = mat(cfg.body, 0.55, 0.3);
+  const bellyMat = mat(cfg.belly, 0.6, 0.3);
+  const finMat = mat(cfg.body, 0.6, 0.25);
+  const body = new THREE.Group();
+  group.add(body);
+
+  // Позвоночник: сегменты от головы к хвосту. Их используем и для
+  // формы тела, и для волнистого плавания — хвост идёт волной.
+  const SEG = 7;
+  const segs: THREE.Mesh[] = [];
+  const L = cfg.length, G = cfg.girth;
+  for (let i = 0; i < SEG; i++) {
+    // Утончаемся к хвосту, самая толстая часть — у самой головы
+    const k = i / (SEG - 1);
+    const r = G * (1 - k * 0.78) * (i === 0 ? 0.85 : 1);
+    const seg = sphere(Math.max(0.05, r), i < 2 ? back : back, 10);
+    seg.scale.set(0.85, 0.95, 1.5);
+    seg.position.set(0, 0, L * (0.42 - k * 0.84));
+    body.add(seg);
+    segs.push(seg);
+  }
+
+  // Брюхо — светлее, как у настоящей рыбы
+  const under = sphere(G * 0.7, bellyMat, 8);
+  under.scale.set(0.9, 0.5, 1.4);
+  under.position.set(0, -G * 0.45, L * 0.16);
+  body.add(under);
+
+  // Голова
+  const head = sphere(G * 0.92, back, 10);
+  head.scale.set(0.9, 1.0, 1.15);
+  head.position.set(0, 0, L * 0.5);
+  body.add(head);
+
+  // Пасть и клыки
+  if (cfg.jaws) {
+    const maw = new THREE.Mesh(new THREE.ConeGeometry(G * 0.62, G * 0.9, 6), mat(0x2a1418, 0.4, 0.5));
+    maw.rotation.x = Math.PI / 2;
+    maw.position.set(0, -G * 0.18, L * 0.72);
+    body.add(maw);
+    for (const side of [-1, 1]) {
+      const fang = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.2, 5), mat(0xe8e0d0, 0.4, 0.4));
+      fang.position.set(side * G * 0.34, -G * 0.42, L * 0.66);
+      fang.rotation.x = Math.PI / 2.1;
+      body.add(fang);
+    }
+  }
+
+  // Глаза
+  for (const side of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(G * 0.17, 7, 7), mat(cfg.eye, 0.3, 0.4));
+    e.position.set(side * G * 0.55, G * 0.22, L * 0.5);
+    body.add(e);
+  }
+
+  // Хвостовой плавник
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(G * 1.1, G * 1.5, 3), finMat);
+  tail.rotation.x = -Math.PI / 2;
+  tail.rotation.z = Math.PI;
+  tail.scale.set(0.35, 1, 1);
+  tail.position.set(0, 0, -L * 0.58);
+  body.add(tail);
+
+  // Спинной и боковые плавники
+  const dorsal = new THREE.Mesh(new THREE.ConeGeometry(G * 0.5, G * 0.9, 3), finMat);
+  dorsal.position.set(0, G * 0.85, L * 0.05);
+  body.add(dorsal);
+  for (const side of [-1, 1]) {
+    const sideFin = new THREE.Mesh(new THREE.ConeGeometry(G * 0.36, G * 0.7, 3), finMat);
+    sideFin.position.set(side * G * 0.8, -G * 0.2, L * 0.02);
+    sideFin.rotation.z = side * -1.3;
+    body.add(sideFin);
+  }
+
+  let phase = Math.random() * 6;
+  let attackT = -1;
+  let deadT = 0;
+  // Светящаяся рыба: мягкое свечение вокруг тела
+  let glowLight: THREE.PointLight | null = null;
+  if (cfg.glow) {
+    glowLight = new THREE.PointLight(cfg.glow, 1.1, 6);
+    glowLight.position.set(0, 0, 0);
+    group.add(glowLight);
+  }
+
+  return {
+    group,
+    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    update(dt, p) {
+      // Рыба ползёт только когда плывёт: стоящая на месте подводная
+      // существо всё равно чуть качается, но не «бежит»
+      const speedK = p.moving ? 1 : 0.35;
+      phase += dt * (p.moving ? 4.6 : 1.7);
+      const wave = Math.sin(phase);
+      for (let i = 0; i < segs.length; i++) {
+        const k = i / (segs.length - 1);
+        // Волна идёт от головы к хвосту, у хвоста амплитуда больше
+        segs[i].position.x = Math.sin(phase - k * 1.5) * cfg.girth * 0.22 * k * speedK;
+      }
+      tail.rotation.z = Math.PI + wave * 0.4 * speedK;
+      body.rotation.z = wave * 0.05 * speedK;
+      if (attackT >= 0) {
+        attackT += dt / 0.5;
+        // Раскрытая пасть на рывке
+        body.scale.setScalar(1 + Math.max(0, 0.18 - Math.abs(attackT - 0.35)) * 1.2);
+        if (attackT > 1.3) { attackT = -1; body.scale.setScalar(1); }
+      }
+      if (glowLight) {
+        glowLight.intensity = 0.9 + Math.sin(phase * 2.3) * 0.35;
+      }
+      deadT = p.dead ? Math.min(1, deadT + dt * 2.2) : 0;
+      if (deadT > 0) {
+        // Умирает рыба — переворачивается и всплывает
+        group.rotation.x = -Math.PI / 2 * Math.min(1, deadT * 1.4);
+        body.position.y = deadT * 0.5;
+      } else {
+        group.rotation.x *= 1 - Math.min(1, dt * 8);
+        body.position.y *= 1 - Math.min(1, dt * 8);
+      }
+    },
+    equipWeapon() {},
+    equipShield() {},
+    isWeaponEquipped() { return false; },
+    isShieldEquipped() { return false; },
+    dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
+  };
+}
+
 function buildScorpion(): Rig {
   const group = new THREE.Group();
   const sand = mat(0xc4a04a, 0.9);
@@ -657,6 +839,19 @@ export function buildMonsterRig(monsterId: string): Rig {
       return buildScorpion();
     case 'mob_div_fire':
       return buildDemon();
+    // ── Озеро: подводные существа ──
+    // Цвета намеренно светлее воды: озеро тёмное, и тёмная тварь на нём
+    // не читается — игрок должен видеть, что в воде кто-то есть.
+    // Размеры под дистанцию боя (3 м): крупнее — и тварь занимает
+    // пол-экрана вместо того, чтобы быть мишенью.
+    case 'mob_lake_piranha':
+      return buildFish({ body: 0x8a9a86, belly: 0xe8d8b0, length: 0.34, girth: 0.10, eye: 0xffb03a, jaws: true });
+    case 'mob_lake_sturgeon_horror':
+      return buildFish({ body: 0x6e7a5e, belly: 0xc4bd94, length: 0.95, girth: 0.24, eye: 0xd8d24a, jaws: true });
+    case 'mob_lake_ghost_fish':
+      return buildFish({ body: 0xd6f0ff, belly: 0xffffff, length: 0.72, girth: 0.19, eye: 0x6ecf7a, glow: 0xa8e4ff });
+    case 'mob_lake_leviathan':
+      return buildFish({ body: 0x4a7a9e, belly: 0x9ec4d4, length: 1.7, girth: 0.42, eye: 0xff6a4a, glow: 0x5aa8d8, jaws: true });
     case 'world_boss_simurgh':
       return buildSimurgh();
     default:

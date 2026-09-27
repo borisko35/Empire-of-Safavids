@@ -387,7 +387,10 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 5,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_wolves', type: 'kill', description: 'Добыть шкуры волков', target: 'mob_wolf', required: 8, optional: false, spawnPoints: [{ x: -90, z: 130 }] },
+      // Раньше цель была «убить 8 волков»: игрок приносил охотнику
+      // пустые руки, а шкуры просто висели в сумке как обычный лут.
+      // Теперь их надо принести и сдать — как и обещает текст квеста.
+      { id: 'obj_collect_pelts', type: 'collect', description: 'Принести волчьи шкуры', target: 'trophy_wolf_pelt', required: 8, optional: false, spawnPoints: [{ x: -90, z: 130 }] },
     ],
     rewards: { experience: 350, gold: 120, items: [{ itemId: 'arm_leather_vest', quantity: 1 }] },
     npcGiver: 'npc_tabriz_hunter',
@@ -613,13 +616,40 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     minLevel: 12,
     prerequisites: [],
     objectives: [
-      { id: 'obj_kill_sharks', type: 'kill', description: 'Убрать акул у рифов', target: 'mob_ottoman_janissary', required: 8, optional: false, spawnPoints: [{ x: -60, z: -170 }] },
+      // Раньше целью стоял mob_ottoman_janissary: квест про акул просил
+      // убивать османских янычар, которых в игре нигде не было видно на
+      // рифе. Теперь это то, чем квест и называется.
+      { id: 'obj_kill_sharks', type: 'kill', description: 'Убрать акул у рифов', target: 'mob_lake_leviathan', required: 2, optional: false, spawnPoints: [{ x: -430, z: -190 }] },
+      { id: 'obj_kill_sharks_young', type: 'kill', description: 'Отогнать мелкую стаю', target: 'mob_lake_piranha', required: 6, optional: false, spawnPoints: [{ x: -420, z: -100 }] },
     ],
     rewards: { experience: 1000, gold: 300, items: [{ itemId: 'con_health_potion_s', quantity: 5 }] },
     npcGiver: 'npc_fisherman',
     npcGiverRegion: Region.ISFAHAN,
     repeatable: true,
     repeatCooldown: 24,
+  },
+  'side_013_lake_horror': {
+    id: 'side_013_lake_horror',
+    title: 'The Thing in the Lake',
+    titleRu: 'То, Что в Озере',
+    description: 'Рыбаки перестали ходить к северному берегу. Говорят, там что-то дышит. И охотится только на тех, кто в воде.',
+    type: 'side',
+    minLevel: 20,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_hunt_ghost_fish', type: 'kill', description: 'Убить трёх призрачных рыб', target: 'mob_lake_ghost_fish', required: 3, optional: false, spawnPoints: [{ x: -350, z: -230 }] },
+      // Плащ муссонного дождя и Сапоги Морехода — в сундуке: сначала
+      // сходишь на воду, потом получаешь то, что помогает там остаться
+      { id: 'obj_collect_pearl', type: 'collect', description: 'Принести жемчужину старухи озера', target: 'trophy_leviathan_pearl', required: 1, optional: false },
+    ],
+    rewards: {
+      experience: 2600, gold: 900,
+      items: [{ itemId: 'arm_fur_coat', quantity: 1 }],
+      title: 'Сын Озера',
+    },
+    npcGiver: 'npc_tabriz_hunter',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
   },
   'side_010_sheikh_tomb': {
     id: 'side_010_sheikh_tomb',

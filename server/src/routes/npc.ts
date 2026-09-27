@@ -10,11 +10,13 @@ import { getNpcDynamicProfile } from '../data/npcDynamicProfiles';
 import { NpcMemoryService } from '../services/NpcMemoryService';
 import { checkCondition, getEligibleLines, pickRandomLine, NpcContext } from '../services/NpcIntelligenceService';
 import { QuestService } from '../services/QuestService';
+import { StoryService } from '../services/StoryService';
 import { CharacterService } from '../services/CharacterService';
 
 export const npcRouter = Router();
 const memoryService = new NpcMemoryService();
 const questService = new QuestService();
+const storyService = new StoryService();
 const characterService = new CharacterService();
 
 /**
@@ -227,6 +229,12 @@ npcRouter.post('/:npcId/dialog', authMiddleware, async (req: Request, res: Respo
 
   // Модификация ответа при выполнении квеста
   let modifiedLine = { ...nextLine };
+  // Сюжетная сцена при принятии: отдаём сразу с диалогом, иначе диалог
+  // мелькнёт, потом догрузится сцена — получится визуальный рвак
+  let cutscene: unknown = null;
+  if (choice.action === 'quest' && choice.questId) {
+    cutscene = await storyService.takeCutscene(characterId, choice.questId, 'accept').catch(() => null);
+  }
   if (choice.action === 'quest' && choice.questId && memory.completedQuests.includes(choice.questId)) {
     const dynamicProfile = getNpcDynamicProfile(req.params.npcId);
     if (dynamicProfile?.questCompletePhrases?.length) {
@@ -237,7 +245,7 @@ npcRouter.post('/:npcId/dialog', authMiddleware, async (req: Request, res: Respo
     }
   }
 
-  res.json({ npcId: dialogue.npcId, nameRu: dialogue.nameRu, choice, nextLine: modifiedLine, memory: { chatCount, friendshipLevel: memory.friendshipLevel, tone: (memory as unknown as { tone?: string }).tone ?? 'neutral' }, questsCompleted: await questService.recordTalk(characterId, req.params.npcId).catch(() => []) });
+  res.json({ npcId: dialogue.npcId, nameRu: dialogue.nameRu, choice, nextLine: modifiedLine, memory: { chatCount, friendshipLevel: memory.friendshipLevel, tone: (memory as unknown as { tone?: string }).tone ?? 'neutral' }, questsCompleted: await questService.recordTalk(characterId, req.params.npcId).catch(() => []), cutscene });
 });
 
 npcRouter.post('/:npcId/complete-quest', authMiddleware, async (req: Request, res: Response) => {

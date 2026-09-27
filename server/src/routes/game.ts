@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { secureMiddleware } from '../middleware/auth';
 import { AuctionService } from '../services/AuctionService';
 import { CraftingService } from '../services/CraftingService';
+import { DailyTaskService } from '../services/DailyTaskService';
 import { GuildService } from '../services/GuildService';
 import { NPC_SHOPS } from '../services/AuctionService';
 import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
@@ -19,6 +20,8 @@ import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AZENS_CONVERSION_RATES, AZENS_PACKS, PREMIUM_DURATIONS, FIRST_TOPUP_MULTIPLIER, FIRST_TOPUP_MAX_BONUS, EXCHANGE_PAIRS, getExchangePair, shopCurrencyToWallet } from '../utils/economy';
 import { MOUNTS, MountSystem } from '../systems/MountSystem';
+import { BoatSystem, BOATS } from '../systems/BoatSystem';
+import { FishingSystem, FISH_TABLE } from '../systems/FishingSystem';
 import { PetService } from '../services/PetService';
 import { HousingService, HOUSE_TYPES, DECORATIONS } from '../services/HousingService';
 import { PvPService } from '../services/PvPService';
@@ -52,10 +55,13 @@ const paymentService = new PaymentService();
 const promoService = new PromoService();
 const notificationService = new NotificationService();
 const mountSystem = new MountSystem();
+const boatSystem = new BoatSystem();
+const fishing = FishingSystem.getInstance();
 const petService = new PetService();
 const housingService = new HousingService();
 const pvpService = new PvPService();
 const endgameService = new EndGameService();
+const dailyTasks = new DailyTaskService();
 
 // ============================================================
 // Защита: персонаж в запросе должен принадлежать авторизованному
@@ -222,6 +228,25 @@ gameRouter.post('/shops/:shopId/buy', secureMiddleware, requireCharacterOwnershi
       const mount = await mountSystem.addMount(value.characterId, value.itemId);
       const questsDone = await questEvaluate(value.characterId);
       return res.status(201).json({ success: true, itemId: value.itemId, quantity: value.quantity, goldSpent: walletCurrency === 'gold' ? totalCost : 0, azensSpent: walletCurrency === 'azens' ? totalCost : 0, silverSpent: walletCurrency === 'silver' ? totalCost : 0, syrianSpent: walletCurrency === 'syrian' ? totalCost : 0, gold, azens, silver, syrian, mount, questsCompleted: questsDone });
+    }
+    // Лодки — тоже не предмет сумки: у них свой каталог и своя таблица
+    if (entry.kind === 'boat' || value.itemId.startsWith('boat_')) {
+      const def = BOATS[value.itemId];
+      if (!def) return res.status(400).json({ error: 'Boat definition not found' });
+      let boat;
+      try {
+        boat = await boatSystem.purchase(value.characterId, value.itemId);
+      } catch (err) {
+        // Золото уже списано на общей ветке выше — возвращаем, иначе
+        // игрок теряет деньги на «уже куплено» и «нужен уровень»
+        await characterService.addGold(value.characterId, totalCost).catch(() => {});
+        return res.status(400).json({ error: (err as Error).message });
+      }
+      return res.status(201).json({
+        success: true, itemId: value.itemId, boat,
+        gold, azens, silver, syrian,
+        goldSpent: walletCurrency === 'gold' ? totalCost : 0,
+      });
     }
     await characterService.addItems(value.characterId, [{ itemId: value.itemId, qty: value.quantity }]);
 
@@ -692,10 +717,25 @@ gameRouter.post('/dungeons/status', secureMiddleware, requireCharacterOwnership(
 // ТОРГОВЫЕ КОНТРАКТЫ (Шёлковый путь)
 // ============================================================
 
-// GET /api/game/trade/contracts — список маршрутов
-gameRouter.get('/trade/contracts', secureMiddleware, (_req: Request, res: Response) => {
-  return res.json({ contracts: tradeService.listForClient() });
-});
+// GET /api/game/trade/contracts — список маршрутов + состояние своего каравана
+gameRouter.get('/trade/contracts', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    // Показываем караван только своего персонажа — иначе можно было бы
+    // подсмотреть чужой маршрут по id
+    const mine = characterId
+      ? await characterService.getCharacterById(characterId).catch(() => null)
+      : null;
+    const active = mine && mine.userId === req.userId
+      ? await tradeService.getActive(characterId).catch(() => null)
+      : null;
+    return res.json({
+      contracts: tradeService.listForClient(),
+      active,
+      serverTime: Date.now(),
+    });
+  })
+);
 
 // POST /api/game/trade/accept — принять контракт { characterId, contractId }
 gameRouter.post('/trade/accept', secureMiddleware, requireCharacterOwnership(),
@@ -704,7 +744,7 @@ gameRouter.post('/trade/accept', secureMiddleware, requireCharacterOwnership(),
     if (!contractId) return res.status(400).json({ error: 'Missing contractId' });
     const result = await tradeService.accept(req.body.characterId, contractId);
     if (!result.ok) return res.status(400).json({ error: result.code });
-    return res.status(201).json({ success: true, contract: result.contract });
+    return res.status(201).json({ success: true, contract: result.contract, active: result.active });
   })
 );
 
@@ -713,6 +753,8 @@ gameRouter.post('/trade/deliver', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const result = await tradeService.deliver(req.body.characterId);
     if (!result.ok) return res.status(400).json({ error: result.code });
+    // Задача дня «Торговый День». Раньше висела вечно 0/3
+    await dailyTasks.updateProgress(req.body.characterId, 'trade', 'any').catch(() => {});
     return res.json({ success: true, gold: result.gold, exp: result.exp, silver: result.silver, syrian: result.syrian });
   })
 );
@@ -763,6 +805,10 @@ gameRouter.post('/crafting/:jobId/complete', secureMiddleware,
       // Крафченые предметы могут закрыть collect-цели квестов
       const characterId = (req.body ?? {}).characterId;
       const questsCompleted = characterId ? await questEvaluate(String(characterId)) : [];
+      // Задача дня «Мастерская Мастера». Раньше висела вечно 0/5
+      if (characterId) {
+        await dailyTasks.updateProgress(String(characterId), 'craft', 'any').catch(() => {});
+      }
       return res.json({ ...result, questsCompleted });
     } catch (err) {
       return res.status(400).json({ error: (err as Error).message });
@@ -928,6 +974,109 @@ gameRouter.get('/world-bosses', (_req: Request, res: Response) => {
   return res.json({ bosses });
 });
 
+// ============================================================
+// ЛОДКИ И РЫБАЛКА
+// ============================================================
+// Лодка снимает замедление воды и открывает глубоководный улов.
+// Рыбалка: заброс → ждём поклёвку → подсекаем вовремя. Время реакции
+// считает сервер, поэтому «мгновенную» подсечку подделать нельзя.
+
+gameRouter.get('/boats', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    const mine = characterId
+      ? await characterService.getCharacterById(characterId).catch(() => null)
+      : null;
+    if (!mine || mine.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    const boats = await boatSystem.getCharacterBoats(characterId);
+    return res.json({ boats, catalog: BOATS, serverTime: Date.now() });
+  })
+);
+
+gameRouter.post('/boats/activate', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { characterId, boatId, position } = req.body;
+    if (!characterId || !boatId) return res.status(400).json({ error: 'characterId and boatId required' });
+    try {
+      const def = await boatSystem.activate(characterId, boatId, position);
+      return res.json({ success: true, boat: def });
+    } catch (err) {
+      return res.status(400).json({ error: (err as Error).message });
+    }
+  })
+);
+
+gameRouter.post('/boats/deactivate', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { characterId } = req.body;
+    if (!characterId) return res.status(400).json({ error: 'characterId required' });
+    await boatSystem.deactivate(characterId);
+    return res.json({ success: true });
+  })
+);
+
+/** Забросить удочку. Позицию берём из тела запроса и проверяем на сервере */
+gameRouter.post('/fishing/cast', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { characterId, position } = req.body;
+    if (!characterId) return res.status(400).json({ error: 'characterId required' });
+    const result = await fishing.cast(characterId, position);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.code, cast: result.cast, messageRu: result.messageRu });
+    }
+    return res.json({ success: true, cast: result.cast, serverTime: Date.now() });
+  })
+);
+
+/** Подсечь. Реакция считается по серверным часам, не по клиентским */
+gameRouter.post('/fishing/reel', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { characterId, castId } = req.body;
+    if (!characterId || !castId) return res.status(400).json({ error: 'characterId and castId required' });
+    const result = await fishing.reel(characterId, castId);
+    if (!result.ok) {
+      return res.status(400).json({ error: result.code, cast: result.cast, messageRu: result.messageRu });
+    }
+    const questsDone = await questEvaluate(characterId);
+    return res.json({
+      success: true, cast: result.cast, fish: result.fish,
+      experience: result.experience, gold: result.gold,
+      messageRu: result.messageRu, questsCompleted: questsDone, serverTime: Date.now(),
+    });
+  })
+);
+
+gameRouter.post('/fishing/cancel', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { characterId, castId } = req.body;
+    if (!characterId) return res.status(400).json({ error: 'characterId required' });
+    return res.json({ success: fishing.cancel(characterId, castId) });
+  })
+);
+
+/** Состояние рыбалки: активный заброс + каталог рыбы для панели */
+gameRouter.get('/fishing/state', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    const mine = characterId
+      ? await characterService.getCharacterById(characterId).catch(() => null)
+      : null;
+    if (!mine || mine.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    const boatRow = await boatSystem.getActiveBoat(characterId);
+    return res.json({
+      cast: fishing.getActiveCast(characterId),
+      boat: boatRow ? BOATS[boatRow.boatId] ?? null : null,
+      boatFatigue: boatRow?.fatigue ?? 0,
+      fish: FISH_TABLE,
+      serverTime: Date.now(),
+    });
+  })
+);
+
 gameRouter.post('/mounts/activate', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const { characterId, mountId } = req.body;
@@ -1042,6 +1191,8 @@ gameRouter.post('/pvp/complete', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await pvpService.completeMatch(req.body.matchId, req.body.winnerId);
+      // Задача дня «Боец Арены». Раньше висела вечно 0/3
+      await dailyTasks.updateProgress(req.body.winnerId, 'pvp_win', 'any').catch(() => {});
       return res.json(result);
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })

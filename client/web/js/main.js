@@ -58,22 +58,9 @@ function renderClasses(dict) {
   }
 }
 
-// ── Шаги установщика в секции скачивания ─────────────────────
-function renderSteps(dict) {
-  const list = document.getElementById('download-steps');
-  if (!list || !Array.isArray(dict.site?.download_steps)) return;
-  list.innerHTML = '';
-  for (const step of dict.site.download_steps) {
-    const li = document.createElement('li');
-    li.textContent = step;
-    list.append(li);
-  }
-}
-
 document.addEventListener('eos:locale', (e) => {
   renderTimeline(e.detail);
   renderClasses(e.detail);
-  renderSteps(e.detail);
 });
 
 // ── Переключатель языка ──────────────────────────────────────

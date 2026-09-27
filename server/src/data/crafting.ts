@@ -103,6 +103,42 @@ export const CRAFTING_RECIPES: Record<string, CraftingRecipe> = {
     successRate: 0.90,
     description: 'Роскошный халат для магов и дипломатов.',
   },
+  'recipe_fur_coat': {
+    id: 'recipe_fur_coat',
+    name: 'Sew Fur Coat',
+    nameRu: 'Сшить Меховую Шубу',
+    category: 'tailoring',
+    resultItemId: 'arm_fur_coat',
+    resultQuantity: 1,
+    ingredients: [
+      { itemId: 'trophy_wolf_pelt', quantity: 12 },
+      { itemId: 'trophy_wolf_fang', quantity: 2 },
+      { itemId: 'mat_silk_thread', quantity: 4 },
+    ],
+    craftingTime: 240,
+    requiredLevel: 10,
+    experienceGain: 220,
+    successRate: 0.85,
+    description: 'Тёплая шуба из волчьих шкур. Греет и не боится мокрого снега.',
+  },
+  'recipe_hunter_amulet': {
+    id: 'recipe_hunter_amulet',
+    name: 'Set Hunter Amulet',
+    nameRu: 'Собрать Амулет Охотника',
+    category: 'jewelcrafting',
+    resultItemId: 'acc_hunters_amulet',
+    resultQuantity: 1,
+    ingredients: [
+      { itemId: 'trophy_wolf_fang', quantity: 4 },
+      { itemId: 'trophy_scorpion_carapace', quantity: 3 },
+      { itemId: 'mat_turquoise', quantity: 2 },
+    ],
+    craftingTime: 200,
+    requiredLevel: 18,
+    experienceGain: 260,
+    successRate: 0.80,
+    description: 'Амулет на счастье и удачу в сече. Клыки и панцирь — в оправу.',
+  },
 
   // ── АЛХИМИЯ ─────────────────────────────────────────────────────
   'recipe_health_potion_s': {

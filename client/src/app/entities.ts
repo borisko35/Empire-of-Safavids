@@ -21,6 +21,10 @@ export interface MonsterEntity {
   monsterId: string;
   nameRu: string;
   type: string;
+  /** Подводное существо: рисуется на поверхности воды, а не под ней */
+  aquatic?: boolean;
+  /** Насколько тело поднято над водой (крупные — выше) */
+  aquaticSize?: number;
   pos: Vec3;
   target: Vec3;
   speed: number;      // скорость интерполяции (юнитов/сек)

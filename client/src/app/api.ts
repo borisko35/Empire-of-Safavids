@@ -4,10 +4,68 @@
 
 import { Character, RegionInfo, QuestDef, SkillDef } from './state';
 
+/** Привязанный способ входа в том виде, как его отдаёт сервер */
+export interface LinkedAccountInfo {
+  method: 'password' | 'google' | 'facebook';
+  label: string;
+  email?: string | undefined;
+  /** Можно ли отвязать. Сервер запрещает отвязать последний способ */
+  canDetach: boolean;
+  lockedReason?: string | undefined;
+}
+
+/** Шаг туториала в том виде, как его отдаёт сервер */
+export interface TutorialStepApi {
+  id: number;
+  title: string;
+  titleRu: string;
+  description: string;
+  descriptionRu: string;
+  action: string;
+  /** Идентификатор цели: NPC, предмет или монстр */
+  target?: string;
+  /** Сколько раз нужно повторить действие */
+  count?: number;
+  hint: string;
+  hintRu: string;
+}
+
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) {
     super(message);
   }
+}
+
+/** Реплика NPC с вариантами ответа */
+export interface NpcLine {
+  id: string;
+  textRu: string;
+  choices?: NpcChoice[];
+}
+
+export interface NpcChoice {
+  labelRu: string;
+  nextId: string;
+  action?: string;
+  questId?: string;
+  itemId?: string;
+}
+
+export interface CompletedQuest {
+  questId: string;
+  titleRu: string;
+  experience: number;
+  gold: number;
+}
+
+/** Сюжетная сцена. Приходит вместе с ответом диалога, если квест сработал */
+export interface StoryCutscene {
+  id: string;
+  title: string;
+  titleRu: string;
+  chapterId: string;
+  backdrop: string;
+  lines: { speaker: string; speakerName: string; text: string; textRu: string; delay?: number }[];
 }
 
 async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -33,15 +91,28 @@ export interface AuthData {
   username: string;
 }
 
+export interface ActiveBuff {
+  id: string;
+  nameRu: string;
+  icon: string;
+  stat: string;
+  magnitude: number;
+  remainingSec: number;
+}
+
 export interface ResourcesState {
   hp: number; maxHp: number;
   mana: number; maxMana: number;
   stamina: number; maxStamina: number;
+  /** Временный бонус, если предмет его даёт (кебаб, свиток учёного) */
+  buff?: ActiveBuff | null;
 }
 
 export interface EquipmentState {
   items: { slot: string; itemId: string; nameRu: string; rarity: string; enhancement: number }[];
   stats: Record<string, number>;
+  /** Специальные бонусы вне характеристик: вода (сапоги/плащ) */
+  bonuses?: { waterSpeed: number; swimStamina: number };
 }
 
 export const api = {
@@ -55,8 +126,37 @@ export const api = {
 
   logout: () => req<unknown>('/api/auth/logout', { method: 'POST' }),
 
+  /** Вход без регистрации: создаёт гостевой аккаунт и сразу выдаёт сессию */
+  guestLogin: () =>
+    req<{ data: AuthData }>('/api/auth/guest', { method: 'POST' }),
+
+  /** Какие внешние входы настроены на сервере (только публичные client_id) */
+  oauthConfig: () =>
+    req<{ success: boolean; data: { providers: { provider: string; clientId: string | null; authorizeUrl: string }[] } }>('/api/auth/oauth/config'),
+
+  /** Начать внешний вход: сервер выдаёт одноразовый state и адрес перехода */
+  oauthStart: (provider: string) =>
+    req<{ data: { provider: string; state: string; authorizeUrl: string } }>('/api/auth/oauth/start', {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
+    }),
+
+  /** Завершить внешний вход: код от провайдера меняется на сессию */
+  oauthCallback: (provider: string, code: string, state: string) =>
+    req<{ data: AuthData & { linked?: boolean; isNew?: boolean } }>('/api/auth/oauth/callback', {
+      method: 'POST',
+      body: JSON.stringify({ provider, code, state }),
+    }),
+
+  /** Присвоение гостевого аккаунта: задаёт почту и пароль, прогресс сохраняется */
+  claimAccount: (email: string, password: string) =>
+    req<{ success: boolean; message: string }>('/api/auth/claim', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
   authMe: () =>
-    req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string } }>('/api/auth/me'),
+    req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string; isGuest?: boolean } }>('/api/auth/me'),
 
   changePassword: (oldPass: string, newPass: string) =>
     req<{ success: boolean; message: string }>('/api/auth/change-password', {
@@ -118,6 +218,11 @@ export const api = {
       method: 'POST', body: JSON.stringify({ characterId, position, region }),
     }),
 
+  adminWeather: (kind: string) =>
+    req<{ success: boolean; weather: string }>('/api/admin/weather', {
+      method: 'POST', body: JSON.stringify({ kind }),
+    }),
+
   adminGiveGold: (characterId: string, amount: number) =>
     req<{ success: boolean }>('/api/admin/give-gold', {
       method: 'POST', body: JSON.stringify({ characterId, amount }),
@@ -152,11 +257,32 @@ export const api = {
 
   characters: () => req<{ characters: Character[] }>('/api/characters'),
 
-  createCharacter: (name: string, characterClass: string, serverId: string) =>
+  createCharacter: (name: string, characterClass: string, serverId: string, referralCode?: string) =>
     req<{ character: Character }>('/api/characters', {
       method: 'POST',
-      body: JSON.stringify({ name, class: characterClass, serverId }),
+      body: JSON.stringify({
+        name, class: characterClass, serverId,
+        // Код приглашения необязателен: без него сервер просто ничего не начислит
+        ...(referralCode ? { referralCode } : {}),
+      }),
     }),
+
+  // Мой код приглашения, ссылка для друга и сколько я пригласил
+  referralInfo: () =>
+    req<{ code: string; invited: number; earnedGold: number; link: string }>('/api/characters/referral'),
+
+  // ── Привязка аккаунта ──────────────────────────────────────
+  accountIdentities: () =>
+    req<{ accounts: LinkedAccountInfo[]; total: number }>('/api/auth/identities'),
+
+  accountAddEmail: (email: string, password: string) =>
+    req<{ success: boolean }>('/api/auth/identities/email', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  accountUnlink: (provider: string) =>
+    req<{ success: boolean }>(`/api/auth/identities/${provider}/unlink`, { method: 'POST' }),
 
   deleteCharacter: (characterId: string) =>
     req<{ success: boolean }>(`/api/characters/${characterId}`, { method: 'DELETE' }),
@@ -189,6 +315,12 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ itemId }),
     }),
+
+  /** Активные временные бонусы с остатком времени */
+  buffs: (characterId: string) =>
+    req<{ buffs: ActiveBuff[]; damageMultiplier: number; expMultiplier: number }>(
+      `/api/characters/${characterId}/buffs`
+    ),
 
   enhance: (characterId: string, itemId: string) =>
     req<{ result: string; newEnhancement: number; message: string; messageRu: string }>(
@@ -230,10 +362,13 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
-  tradeContracts: () =>
-    req<{ contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number }[] }>(
-      '/api/game/trade/contracts',
-    ),
+  tradeContracts: (characterId: string) =>    req<{
+      contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];
+      /** Свой караван: null если контракта нет */
+      active: { contractId: string; startedAt: number; arrivesAt: number; status: 'transit' | 'arrived'; cargoReturned: boolean; cargoItemId: string; cargoQty: number } | null;
+      /** Серверное время — по нему считаем таймер, а не по часам игрока */
+      serverTime: number;
+    }>(`/api/game/trade/contracts?characterId=${encodeURIComponent(characterId)}`),
 
   tradeAccept: (characterId: string, contractId: string) =>
     req<{ success: boolean }>('/api/game/trade/accept', {
@@ -329,6 +464,57 @@ export const api = {
     req<{ success: boolean }>('/api/game/trade/cancel', {
       method: 'POST',
       body: JSON.stringify({ characterId }),
+    }),
+
+  // ── Лодки и рыбалка ─────────────────────────────────────────
+  boats: (characterId: string) =>
+    req<{
+      boats: { boatId: string; isActive: boolean; totalCatches: number; fatigue: number }[];
+      catalog: Record<string, {
+        id: string; name: string; nameRu: string; waterSpeed: number; swimSpeed: number;
+        fishingBonus: number; catchLimit: number; price: number; minLevel: number;
+        rarity: string; descriptionRu: string;
+      }>;
+      serverTime: number;
+    }>(`/api/game/boats?characterId=${encodeURIComponent(characterId)}`),
+
+  boatActivate: (characterId: string, boatId: string, position: { x: number; z: number }) =>
+    req<{ success: boolean; boat: { nameRu: string } }>('/api/game/boats/activate', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, boatId, position }),
+    }),
+
+  boatDeactivate: (characterId: string) =>
+    req<{ success: boolean }>('/api/game/boats/deactivate', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
+  fishingState: (characterId: string) =>
+    req<{
+      cast: { castId: string; phase: string; biteAt: number; waitTotalMs: number; deep: boolean; luck: number } | null;
+      boat: { nameRu: string; catchLimit: number; fishingBonus: number } | null;
+      boatFatigue: number;
+      fish: { id: string; nameRu: string; rarity: string; weightKg: number; deepOnly?: boolean; minLevel: number }[];
+      serverTime: number;
+    }>(`/api/game/fishing/state?characterId=${encodeURIComponent(characterId)}`),
+
+  fishingCast: (characterId: string, position: { x: number; z: number }) =>
+    req<{ success: boolean; cast: { castId: string; biteAt: number; waitTotalMs: number }; serverTime: number }>(
+      '/api/game/fishing/cast', { method: 'POST', body: JSON.stringify({ characterId, position }) }),
+
+  fishingReel: (characterId: string, castId: string) =>
+    req<{
+      success: boolean;
+      fish?: { itemId: string; nameRu: string; quantity: number; weightKg: number; rarity: string };
+      experience?: number; gold?: number; messageRu?: string;
+      cast?: { phase: string; fishNameRu?: string; weightKg?: number };
+      serverTime: number;
+    }>('/api/game/fishing/reel', { method: 'POST', body: JSON.stringify({ characterId, castId }) }),
+
+  fishingCancel: (characterId: string, castId: string) =>
+    req<{ success: boolean }>('/api/game/fishing/cancel', {
+      method: 'POST', body: JSON.stringify({ characterId, castId }),
     }),
 
   craftingRecipes: () =>
@@ -437,14 +623,16 @@ export const api = {
     req<{ rank: { rank: number; value: number } | null }>(`/api/leaderboard/${type}/me?characterId=${characterId}`),
 
   // ── Туториал ──────────────────────────────────────────────
+  // target/count обязательны в типе: без них клиент молча получал шаг
+  // без цели и без счётчика, и такой шаг было невозможно закрыть
   tutorialSteps: () =>
-    req<{ steps: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string }[] }>('/api/tutorial/steps'),
+    req<{ steps: TutorialStepApi[]; totalSteps: number }>('/api/tutorial/steps'),
 
   tutorialProgress: (characterId: string) =>
-    req<{ progress: { step: number; completed: boolean }; currentStep: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string } | null }>(`/api/tutorial/${characterId}`),
+    req<{ progress: { step: number; completed: boolean }; currentStep: TutorialStepApi | null; totalSteps: number }>(`/api/tutorial/${characterId}`),
 
   tutorialAdvance: (characterId: string) =>
-    req<{ step: number; completed: boolean; tutorialStep: { id: number; title: string; titleRu: string; description: string; descriptionRu: string; action: string; hint: string; hintRu: string } }>(`/api/tutorial/${characterId}/advance`, { method: 'POST' }),
+    req<{ step: number; completed: boolean; tutorialStep: TutorialStepApi; totalSteps: number }>(`/api/tutorial/${characterId}/advance`, { method: 'POST' }),
 
   tutorialSkip: (characterId: string) =>
     req<{ success: boolean }>(`/api/tutorial/${characterId}/skip`, { method: 'POST' }),
@@ -491,13 +679,48 @@ export const api = {
     req<{ success: boolean }>('/api/poetry/quit', { method: 'POST', body: JSON.stringify({ gameId }) }),
 
   // ── Хроники Сефевидов ─────────────────────────────────────
+  // ── Сюжет: главы и кат-сцены ──────────────────────────────
+  storyState: (characterId: string) =>
+    req<{
+      chapters: {
+        chapter: { id: string; order: number; title: string; titleRu: string; description: string; descriptionRu: string; region: string; minLevel: number };
+        quests: { id: string; titleRu: string; status: 'completed' | 'active' | 'locked' }[];
+        done: number; total: number; percent: number; unlocked: boolean; started: boolean;
+        cutscenes: { id: string; titleRu: string; watched: boolean }[];
+      }[];
+      currentChapterId: string | null;
+      totalDone: number;
+      totalQuests: number;
+      cutscenesTotal: number;
+    }>(`/api/story/state?characterId=${encodeURIComponent(characterId)}`),
+
+  storyTakeCutscene: (characterId: string, questId: string, trigger: 'accept' | 'complete') =>
+    req<{ cutscene: unknown | null }>('/api/story/cutscene/take', {
+      method: 'POST', body: JSON.stringify({ characterId, questId, trigger }),
+    }),
+
+  storyCutsceneSkipped: (characterId: string, cutsceneId: string) =>
+    req<{ success: boolean }>('/api/story/cutscene/skipped', {
+      method: 'POST', body: JSON.stringify({ characterId, cutsceneId }),
+    }),
+
   chronicles: () =>
-    req<{ entries: { id: string; category: string; title: string; titleRu: string; content: string; contentRu: string }[] }>(
+    req<{
+      entries: {
+        id: string; category: string; title: string; titleRu: string;
+        content: string; contentRu: string; unlocked: boolean; unlockHintRu: string | null;
+      }[];
+      unlocked: number;
+      total: number;
+    }>(
       '/api/chronicles',
     ),
 
   chroniclesByCategory: (cat: string) =>
-    req<{ entries: { id: string; category: string; title: string; titleRu: string; content: string; contentRu: string }[] }>(
+    req<{ entries: {
+      id: string; category: string; title: string; titleRu: string;
+      content: string; contentRu: string; unlocked: boolean; unlockHintRu: string | null;
+    }[] }>(
       `/api/chronicles/category/${cat}`,
     ),
 
@@ -526,8 +749,11 @@ export const api = {
 
   // ── Достижения / Задачи / Репутация ─────────────────────
   achievements: () => req<{ achievements: any[]; total: number; unlockedCount: number }>('/api/progression/achievements'),
-  tasks: () => req<{ tasks: any[]; completedCount: number }>('/api/progression/tasks'),
-  tasksProgress: () => req<{ completedCount: number }>('/api/progression/tasks/progress'),
+  // characterId обязателен: сервер ищет прогресс по персонажу, а не по аккаунту
+  tasks: (characterId: string) =>
+    req<{ tasks: any[]; completedCount: number }>(`/api/progression/tasks?characterId=${characterId}`),
+  tasksProgress: (characterId: string) =>
+    req<{ completedCount: number }>(`/api/progression/tasks/progress?characterId=${characterId}`),
   reputation: () => req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>('/api/progression/reputation'),
   factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
 
@@ -596,13 +822,13 @@ export const api = {
     if (lineId) q.set('line', lineId);
     if (characterId) q.set('characterId', characterId);
     const qs = q.toString();
-    return req<{ npcId: string; nameRu: string; role: string; region: string; line: { id: string; textRu: string; choices?: { labelRu: string; nextId: string; action?: string; questId?: string; itemId?: string }[] }; questsCompleted?: { questId: string; titleRu: string; experience: number; gold: number }[] }>(
+    return req<{ npcId: string; nameRu: string; role: string; region: string; line: NpcLine; questsCompleted?: CompletedQuest[]; cutscene?: StoryCutscene | null }>(
       `/api/npc/${encodeURIComponent(npcId)}/dialog${qs ? `?${qs}` : ''}`,
     );
   },
 
   npcReply: (npcId: string, lineId: string, choiceIndex: number, characterId?: string) =>
-    req<{ npcId: string; nameRu: string; choice: { labelRu: string; nextId: string; action?: string; questId?: string }; nextLine: { id: string; textRu: string; choices?: { labelRu: string; nextId: string; action?: string; questId?: string }[] }; questsCompleted?: { questId: string; titleRu: string; experience: number; gold: number }[] }>(
+    req<{ npcId: string; nameRu: string; choice: NpcChoice; nextLine: NpcLine; questsCompleted?: CompletedQuest[]; cutscene?: StoryCutscene | null }>(
       `/api/npc/${encodeURIComponent(npcId)}/dialog`,
       { method: 'POST', body: JSON.stringify({ lineId, choiceIndex, characterId }) },
     ),

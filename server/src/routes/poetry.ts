@@ -26,7 +26,10 @@ router.get('/challenges', authMiddleware, (_req, res) => {
 // Начать игру
 router.post('/start', authMiddleware, (req: any, res) => {
   try {
-    const state = poetry.startGame(req.userId, req.body.difficulty);
+    // challengeId — чтобы игрок начинал именно то стихотворение, которое
+    // выбрал в списке. Раньше выбор строки в списке ни на что не влиял:
+    // сервер брал случайное стихотворение той же сложности.
+    const state = poetry.startGame(req.userId, req.body.difficulty, req.body.challengeId);
     if (!state) { res.status(400).json({ error: 'No challenge available' }); return; }
     const data = poetry.getChallenge(state.gameId);
     if (!data) { res.status(500).json({ error: 'Challenge not found' }); return; }

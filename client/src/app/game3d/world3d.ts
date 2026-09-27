@@ -11,16 +11,17 @@ import { World, PlayerEntity } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
-  waterMask, bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
+  bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { createSky, SkyHandle } from './sky';
+import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
 import { createCivilians, CiviliansHandle } from './civilians';
-import { createWeather, WeatherHandle } from './weather';
+import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { audio } from '../audio';
+import { getSettings, graphicsProfile, type GraphicsLevel } from '../settings';
 import { chatVisible } from '../hud';
 
 export interface World3DCallbacks {
@@ -41,9 +42,26 @@ const CROUCH_SPEED = 2.2;
 const PLAYER_R = 1.0;   // радиус персонажа для столкновений
 const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
 
+// ── Вода ──
+// Глубина считается от НАСТОЯЩЕГО дна (ландшафт) до поверхности воды,
+// а не по маске waterMask: маска лишь говорит «здесь вода», но не насколько.
+// Именно глубина решает, бродит персонаж или плывёт.
+const WADE_MIN_DEPTH = 0.15;  // от этой глубины ноги уже в воде
+const SWIM_MIN_DEPTH = 1.2;   // глубже — плавание, мельче — брод по дну
+const SWIM_FEET = 1.2;        // во время плавания ноги на столько ниже поверхности
+const SWIM_SPEED = 2.0;       // обычное плавание (быстрее идти, чем бродить)
+const SWIM_SPRINT = 3.2;      // плавание с усилием
+const WADE_MULT = 0.75;       // замедление в броду по воде
+
 interface BoundRig {
   rig: Rig;
   kind: 'player' | 'monster';
+  /** Монстр оказался в глубокой воде и плывёт (поза и анимация) */
+  monsterSwim?: boolean;
+  /** Подводное существо: рисуется на поверхности, а не под ней */
+  aquatic?: boolean;
+  /** Насколько тело поднято над водой (спина торчит) */
+  aquaticLift?: number;
 }
 
 export class World3D {
@@ -87,8 +105,34 @@ export class World3D {
   /** Высота ног локального игрока с предыдущего кадра (физика, а не ландшафт) */
   private feetY = Number.NaN;
   private keys = new Set<string>();
+  /** Хватает ли стамины на бег/усиленное плавание — решает world.ts по полоске */
+  private sprintAllowed = true;
+  /** Скорость в воде и экономия стамины — из экипировки (сапоги, плащ) */
+  private waterSpeedBonus = 0;
+  private swimStaminaSave = 0;
+  /** Лодка: id активной и её бонусы к воде */
+  private boatId: string | null = null;
+  private boatWaterSpeed = 0;
+  private boatStaminaSave = 0;
+  /** Скорость в воде на лодке, м/с */
+  private boatSwimSpeed = 0;
+  /** Сколько секунд осталось показывать «выдохся» после конца стамины */
+  private exhaustedFlash = 0;
   private stepTimer = 0;
   private attackCd = 0;
+  /**
+   * Крючок «игрок замахнулся». Ставится слоем приложения (см. world.ts) —
+   * туториалу нужно знать о замахе, а заводить зависимость от интерфейса
+   * внутрь 3D-слоя нельзя.
+   */
+  private onAttack: (() => void) | null = null;
+  /**
+   * Крючок «игрок осмотрелся». Камеру крутит движение мыши при захвате
+   * указателя, а не правая кнопка (она — блок), поэтому шаг туториала
+   * засчитываем именно здесь. Иначе игрок крутил бы мышью и не видел бы
+   * реакции, а текст шага обещал правую кнопку, которая тут ни при чём.
+   */
+  private onCamera: (() => void) | null = null;
 
   // Служебное
   private raf = 0;
@@ -102,8 +146,57 @@ export class World3D {
   private wasInWater = false;
   private splashMesh!: THREE.Mesh;
   private bubbleTimer = 0;
+  /** Следит за размером контейнера: полный экран и режим «с рамкой»
+   *  меняют размер без события resize окна */
+  private ro: ResizeObserver | null = null;
 
   get isLocked() { return this.locked; }
+
+  /** Плывёт ли игрок — расход выносливости и звуки воды зависят от этого */
+  get isSwimming() { return this.swimming; }
+
+  /** На чём игрок: null — на берегу, иначе id активной лодки */
+  get activeBoatId(): string | null { return this.boatId; }
+
+  /**
+   * Лодка: снимает замедление воды, добавляет скорость и экономит
+   * выносливость. Заменяет сапоги, пока игрок в лодке, — берётся лучший
+   * из двух бонусов, а не сумма (иначе лодка дала бы больше единицы).
+   */
+  setBoat(boatId: string | null, waterSpeed: number, staminaSave: number, swimSpeed = 0): void {
+    this.boatId = boatId;
+    this.boatWaterSpeed = boatId ? Math.max(0, Math.min(1, waterSpeed)) : 0;
+    this.boatStaminaSave = boatId ? Math.max(0, Math.min(0.9, staminaSave)) : 0;
+    this.boatSwimSpeed = boatId ? Math.max(0, swimSpeed) : 0;
+  }
+
+  /** Хватает ли выносливости на бег (и на усиленное плавание) */
+  setSprintAllowed(v: boolean): void {
+    // Момент, когда силы кончились, — один раз подсказываем игроку
+    if (this.sprintAllowed && !v) this.exhaustedFlash = 0.4;
+    this.sprintAllowed = v;
+  }
+
+  /** Экономия выносливости при плавании: сапоги/плащ или лодка */
+  get waterStaminaSave(): number {
+    return Math.max(this.swimStaminaSave, this.boatStaminaSave);
+  }
+
+  /** True один раз, только что выносливость закончилась */
+  get exhaustedNow(): boolean {
+    if (this.exhaustedFlash <= 0) return false;
+    this.exhaustedFlash = 0;
+    return true;
+  }
+
+  /**
+   * Бонусы «для воды» из экипировки (сапоги/плащ): 0 — вода тормозит как
+   * обычно, 1 — вода не мешает вовсе; stamina — экономия расхода.
+   */
+  setWaterBonus(waterSpeed: number, staminaSave: number): void {
+    this.waterSpeedBonus = Math.max(0, Math.min(1, waterSpeed));
+    this.swimStaminaSave = Math.max(0, Math.min(0.75, staminaSave));
+  }
 
   /** Последнее направление движения в мировых координатах (для пакетов player:move) */
   get moveDir() { return this.lastDir; }
@@ -145,7 +238,7 @@ export class World3D {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.domElement.className = 'gl-canvas';
     container.appendChild(this.renderer.domElement);
 
@@ -253,6 +346,59 @@ export class World3D {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
+    // Размер контейнера меняется и без resize окна: полный экран и
+    // экранный режим «с рамкой» уменьшают игровую область по-своему.
+    this.ro = new ResizeObserver(() => this.onResize());
+    this.ro.observe(container);
+
+    // Качество графики — из сохранённых настроек
+    this.setGraphics(getSettings().graphics);
+  }
+
+  /**
+   * Применить уровень графики: разрешение кадра, тени, дальность
+   * прорисовки, плотность частиц погоды. Вызывается при входе в мир
+   * и на лету из панели настроек.
+   */
+  setGraphics(level: GraphicsLevel, fogOn = getSettings().fog): void {
+    if (!this.renderer || !this.scene || !this.sun || !this.camera) return;
+    const p = graphicsProfile(level);
+
+    // Разрешение кадра: <1 — сжатый кадр (быстро), >1 — суперсэмплинг (красиво)
+    this.renderer.setPixelRatio(Math.max(0.5, Math.min(2.5, p.pixelScale * (devicePixelRatio || 1))));
+
+    // Тени: смена режима требует пересборки материалов
+    const shadowsChanged = this.renderer.shadowMap.enabled !== p.shadows;
+    this.renderer.shadowMap.enabled = p.shadows;
+    this.sun.castShadow = p.shadows;
+    if (shadowsChanged) {
+      this.scene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+        if (Array.isArray(mat)) mat.forEach((m) => { m.needsUpdate = true; });
+        else if (mat) mat.needsUpdate = true;
+      });
+    }
+    if (this.sun.shadow.mapSize.x !== p.shadowMapSize) {
+      this.sun.shadow.mapSize.set(p.shadowMapSize, p.shadowMapSize);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+    }
+
+    // Дальность прорисовки. Туманом ведает погода и хранит своё «домашнее»
+    // значение far — меняем его же, иначе смена погоды всё откатит.
+    const fog = this.scene.fog as THREE.Fog | null;
+    const fogFar = fogOn ? p.fogFar : p.fogFar * 4; // туман выключен — просто очень далеко
+    if (fog) fog.far = fogFar;
+    // Небо — сфера радиусом SKY_RADIUS вокруг игрока. Дальняя плоскость
+    // камеры всегда должна быть больше неё, иначе часть неба отсекается
+    // и на том месте видно чёрный купол (background у сцены пустой).
+    this.camera.far = Math.max(SKY_RADIUS * 1.15, fogFar + 750);
+    this.camera.updateProjectionMatrix();
+    this.weather?.setQuality(fogFar, p.weather);
+
+    this.onResize();
   }
 
   /** Привязать сетевые сущности и своего игрока */
@@ -292,6 +438,16 @@ export class World3D {
     this.tryAttack();
   }
 
+  /** Подписка на замах — вызывается из слоя приложения */
+  setOnAttack(cb: (() => void) | null): void {
+    this.onAttack = cb;
+  }
+
+  /** Подписка на поворот камеры — вызывается из слоя приложения */
+  setOnCamera(cb: (() => void) | null): void {
+    this.onCamera = cb;
+  }
+
   // ── События ввода ────────────────────────────────────────────
   private onResize = () => {
     if (!this.container) return;
@@ -320,6 +476,8 @@ export class World3D {
 
   private onMouseMove = (e: MouseEvent) => {
     if (!this.locked) return;
+    // Шаг туториала «камера»: настоящий поворот камеры, а не дрожание мыши
+    if (Math.abs(e.movementX) > 3 || Math.abs(e.movementY) > 3) this.onCamera?.();
     this.yaw -= e.movementX * 0.0026;
     this.pitch = Math.min(1.25, Math.max(-0.5, this.pitch + e.movementY * 0.0022));
   };
@@ -401,6 +559,12 @@ export class World3D {
   private tryAttack(): void {
     if (this.attackCd > 0) return;
     this.attackCd = 0.45;
+
+    // Крючок для слоя приложения (туториал засчитывает замах).
+    // Вызывается ДО проверки цели: игрок замахнулся — шаг засчитан, даже если
+    // рядом никого не было. Прямая зависимость от tutorial.ts здесь была бы
+    // нарушением слоёв: 3D-слой ничего не должен знать про интерфейс.
+    this.onAttack?.();
 
     // Клик по NPC открывает связанную панель (приоритет над боем)
     // Сначала клик по NPC открывает панель, затем — дверь здания.
@@ -504,6 +668,9 @@ export class World3D {
   /** Погода от сервера (world:time): дождь, гроза, песчаная буря. */
   setWeather(w: string): void {
     this.weather?.setWeather(w);
+    // Тучи тоже должны знать о погоде: раньше небо вообще не получало
+    // код погоды, поэтому в дождь и бурю облака оставались белыми
+    this.sky?.setWeather((w || 'clear') as WeatherKind);
   }
 
   isInsideBuilding(): boolean {
@@ -565,7 +732,28 @@ export class World3D {
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
       }
-      const y = groundHeight(m.pos.x, m.pos.z);
+      // Подводное ли? Флаг и высоту над водой шлёт сервер при спавне —
+      // список существ меняется, клиенту о нём знать не нужно.
+      if (m.aquatic) {
+        b.aquatic = true;
+        b.aquaticLift = m.aquaticSize ?? 0.25;
+      }
+      // Живой монстр не уходит под воду: раньше тело ставилось прямо на дно
+      // (у озера оно на 3.2 м ниже поверхности) и разбойник «тонул», оставаясь
+      // под водой. Теперь на глубине он держится у поверхности и плывёт,
+      // на мелководье идёт по дну — так же, как уже сделано для фауны.
+      const gy = groundHeight(m.pos.x, m.pos.z);
+      const surf = waterSurfaceY(m.pos.x, m.pos.z);
+      const mDepth = !m.deadAt && surf !== null ? surf - gy : 0;
+      const swimM = mDepth > SWIM_MIN_DEPTH;
+      b.monsterSwim = swimM;
+      // Подводное существо торчит из воды, а не висит под ней: игрок должен
+      // видеть, что в озере что-то есть, и подплывать к нему на осознанном
+      // риске. Спина над водой — как у настоящей рыбы.
+      const aquaticM = b.aquatic === true;
+      const y = swimM && surf !== null
+        ? (aquaticM ? surf + (b.aquaticLift ?? 0) : surf - SWIM_FEET)
+        : gy;
       b.rig.group.position.set(m.pos.x, y, m.pos.z);
       // Поворот к направлению движения
       const dx = m.target.x - m.pos.x, dz = m.target.z - m.pos.z;
@@ -715,6 +903,8 @@ export class World3D {
     }
     const me = this.me;
 
+    if (this.exhaustedFlash > 0) this.exhaustedFlash -= dt;
+
     // ── Ввод движения (относительно камеры) ──
     let ix = 0, iz = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) iz += 1;
@@ -726,17 +916,34 @@ export class World3D {
     this.crouch = this.keys.has('KeyC') || this.keys.has('ControlLeft');
 
     const len = Math.hypot(ix, iz);
-    const waterDepth = waterMask(me.pos.x, me.pos.z);
     const onBridge = bridgeAt(me.pos.x, me.pos.z);
     const surfaceY = waterSurfaceY(me.pos.x, me.pos.z);
-    // Плавание: вода глубокая И нет моста под ногами
-    this.swimming = waterDepth > 0.3 && onBridge === null;
-    // На мелководье — брод: медленнее и только у поверхности, глубже — плавание.
-    const wading = surfaceY !== null && onBridge === null && waterDepth <= 0.3;
+    // Реальная глубина = поверхность воды − дно под ногами.
+    // Раньше здесь стояла маска waterMask > 0.3, из-за чего во всей мягкой
+    // прибрежной зоне включался «брод» с невидимым полом у поверхности —
+    // персонаж ходил ПО воде. Теперь: мелко — идём по настоящему дну
+    // (вода по пояс), глубоко — плывём, тело погружено, голова над водой.
+    const bedY = this.interiors.isInside() ? Number.NaN : groundHeight(me.pos.x, me.pos.z);
+    const depth = (surfaceY !== null && onBridge === null && !Number.isNaN(bedY))
+      ? Math.max(0, surfaceY - bedY)
+      : 0;
+    this.swimming = depth > SWIM_MIN_DEPTH;
+    const wading = depth > WADE_MIN_DEPTH && !this.swimming;
+    // Усиленный бег/плытьё — только если хватает выносливости
+    const shifting = (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight')) && this.sprintAllowed;
+    // Снаряжение для воды снимает замедление: сапоги/плащ уменьшают
+    // множитель брода и прибавляют скорость плавания. Лодка даёт свой
+    // бонус — берётся лучший из двух, а не сумма (иначе лодка дала бы
+    // больше 1 и вода перестала бы тормозить совсем при любом снаряжении)
+    const waterBonus = Math.max(this.waterSpeedBonus, this.boatWaterSpeed);
+    const wadeMult = WADE_MULT + (1 - WADE_MULT) * waterBonus;
+    const swimSpeed = SWIM_SPEED + (WALK_SPEED - SWIM_SPEED) * waterBonus;
+    const swimSprint = SWIM_SPRINT + (RUN_SPEED - SWIM_SPRINT) * waterBonus;
+    const boatSpeed = this.boatId ? this.boatSwimSpeed : 0;
     const speed = (this.swimming
-      ? (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? 3.2 : 2.0)
-      : this.crouch ? CROUCH_SPEED : this.keys.has('ShiftLeft') || this.keys.has('ShiftRight') ? RUN_SPEED : WALK_SPEED)
-      * (wading ? 0.75 : 1);
+      ? (shifting ? Math.max(swimSprint, boatSpeed * 1.25) : Math.max(swimSpeed, boatSpeed))
+      : this.crouch ? CROUCH_SPEED : shifting ? RUN_SPEED : WALK_SPEED)
+      * (wading ? wadeMult : 1);
     // Направление камеры в мире (нужно и для поворота рига ниже)
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     if (len > 0) {
@@ -766,22 +973,26 @@ export class World3D {
       ? this.interiors.floorY()
       : pocketY ?? groundHeight(me.pos.x, me.pos.z);
     const bridgeY = bridgeAt(me.pos.x, me.pos.z);
-    // Дно под водой — не пол: ступни не опускаются ниже поверхности минус полметра.
-    const wadeFloor = surfaceY !== null && bridgeY === null ? surfaceY - 0.5 : -Infinity;
-    const effectiveGroundY = bridgeY !== null ? bridgeY : Math.max(groundY, wadeFloor);
+    // Невидимый пол у поверхности (wadeFloor) убран: в мелкой воде ступни
+    // стоят на НАСТОЯЩЕМ дне, и игрок реально идёт по пояс в воде, а не
+    // «гуляет» по поверхности.
+    const effectiveGroundY = bridgeY !== null ? bridgeY : groundY;
     if (this.swimming) {
       // ... поверхность локального водоёма, а не всегда озера
       const swimLevel = surfaceY ?? LAKE.level;
-      const surfaceTop = swimLevel + 0.3;
-      // В воде: плавно держим игрока на поверхности
-      me.pos.y += (surfaceTop - me.pos.y) * Math.min(1, dt * 4);
+      // Тело погружено: ноги под водой, голова над поверхностью.
+      const floatY = swimLevel - SWIM_FEET;
+      me.pos.y += (floatY - me.pos.y) * Math.min(1, dt * 4);
       this.vy *= 0.85; // гашение вертикальной скорости
       // Прыжок в воде = всплытие вверх
-      if (this.keys.has('Space') && me.pos.y > swimLevel - 1) {
+      if (this.keys.has('Space')) {
         this.vy = 3.5;
       }
       me.pos.y += this.vy * dt;
-      me.pos.y = Math.max(swimLevel - 1.5, Math.min(swimLevel + 2, me.pos.y));
+      // Не выше поверхности (иначе снова «ходим по воде») и не ниже дна:
+      const lo = Math.max(effectiveGroundY + 0.2, swimLevel - 1.9);
+      const hi = swimLevel - 0.7;
+      me.pos.y = Math.min(Math.max(me.pos.y, lo), hi);
       this.grounded = false;
     } else if (!this.grounded) {
       this.vy -= GRAVITY * dt;
@@ -794,12 +1005,13 @@ export class World3D {
       }
     } else {
       me.pos.y = effectiveGroundY;
-      // Шаги
+      // Шаги: по мелкой воде — журчание, по земле — обычный шаг
       if (len > 0) {
         this.stepTimer -= dt;
         if (this.stepTimer <= 0) {
           this.stepTimer = speed > 6 ? 0.26 : 0.38;
-          audio.footstep(speed > 6);
+          if (wading) audio.waterStep();
+          else audio.footstep(speed > 6);
         }
       }
     }
@@ -808,12 +1020,14 @@ export class World3D {
     this.feetY = me.pos.y;
 
     // ── Водные эффекты: всплеск + пузырьки ──
-    if (this.swimming && !this.wasInWater) {
-      // Вошли в воду — всплеск
+    const inWater = wading || this.swimming;
+    if (inWater && !this.wasInWater) {
+      // Вошли в воду — всплеск на поверхности того водоёма, где стоим
       this.splashMesh.visible = true;
-      this.splashMesh.position.set(me.pos.x, LAKE.level + 0.1, me.pos.z);
+      this.splashMesh.position.set(me.pos.x, (surfaceY ?? LAKE.level) + 0.1, me.pos.z);
       (this.splashMesh.material as THREE.MeshBasicMaterial).opacity = 0.7;
       this.splashMesh.scale.set(1, 1, 1);
+      audio.splash();
     } else if (this.swimming) {
       // Пузырьки: каждые 0.4с при движении
       if (me.moving) {
@@ -832,7 +1046,7 @@ export class World3D {
       this.splashMesh.scale.z += dt * 3;
       if (mat.opacity <= 0) { this.splashMesh.visible = false; }
     }
-    this.wasInWater = this.swimming;
+    this.wasInWater = inWater;
 
     // ── Риги ──
     this.syncRigs();
@@ -849,7 +1063,14 @@ export class World3D {
         spd = moving ? 3.4 : 0;
         dead = m.deadAt > 0;
         if (this.targetRingTarget === id && !dead) {
-          this.targetRing.position.set(m.pos.x, groundHeight(m.pos.x, m.pos.z) + 0.06, m.pos.z);
+          // Кольцо цели — над поверхностью воды, если монстр в воде,
+          // иначе прямо под ногами (иначе кольцо уйдёт на дно вместе с ним)
+          const rs = waterSurfaceY(m.pos.x, m.pos.z);
+          this.targetRing.position.set(
+            m.pos.x,
+            rs !== null ? rs + 0.06 : b.rig.group.position.y + 0.06,
+            m.pos.z,
+          );
           this.targetRing.rotation.z = now / 900;
         }
       }
@@ -861,7 +1082,16 @@ export class World3D {
       } else if (!isMe) {
         // поворот монстров задан выше
       }
-      b.rig.update(dt, { moving, speed: spd, grounded: b.kind === 'monster' ? true : this.grounded, crouch: isMe && this.crouch, block: isMe && this.block, dead, swimming: isMe && this.swimming });
+      const mSwim = b.kind === 'monster' && (b.monsterSwim === true);
+      b.rig.update(dt, {
+        moving,
+        speed: spd,
+        grounded: b.kind === 'monster' ? !mSwim : this.grounded,
+        crouch: isMe && this.crouch,
+        block: isMe && this.block,
+        dead,
+        swimming: b.kind === 'monster' ? mSwim : (isMe && this.swimming),
+      });
       if (b.kind === 'player' && isMe && this.attackAnim) b.rig.triggerAttack();
     }
     this.attackAnim = false;
@@ -878,10 +1108,10 @@ export class World3D {
     }
 
     // ── Камера ──
-    const swimCamOffset = this.swimming ? 0.6 : 0;
+    const swimCamOffset = this.swimming ? 0.4 : 0;
     const swimLevel = waterSurfaceY(me.pos.x, me.pos.z) ?? LAKE.level;
     const targetY = this.swimming
-      ? swimLevel + 0.5
+      ? me.pos.y + 1.15                       // взгляд — на торс пловца, не над головой
       : me.pos.y + 1.55 + (this.crouch ? -0.4 : 0);
     const camY = me.pos.y + 1.55 + swimCamOffset + Math.sin(this.pitch) * this.dist;
     const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist;
@@ -892,9 +1122,13 @@ export class World3D {
     const camGround = this.interiors.isInside()
       ? this.interiors.floorY()
       : pocketGroundY(cam.x, cam.z) ?? groundHeight(cam.x, cam.z);
-    const minY = this.swimming
-      ? swimLevel + 0.5
-      : camGround + 0.5;
+    // Камера не ныряет: держим её над поверхностью воды в точке её стояния
+    const camSurface = waterSurfaceY(cam.x, cam.z);
+    const minY = Math.max(
+      camGround + 0.5,
+      camSurface !== null ? camSurface + 0.45 : -Infinity,
+      this.swimming ? swimLevel + 0.6 : -Infinity,
+    );
     this.camera.position.set(cam.x, Math.max(camY, minY), cam.z);
     this.camera.lookAt(me.pos.x, targetY, me.pos.z);
 
@@ -903,16 +1137,23 @@ export class World3D {
     this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
     this.fauna.update(dt, now);
     this.npcs.update(dt, now);
-    this.civilians.update(dt, now);
+    // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
+    this.civilians.update(dt, now, me.pos.x, me.pos.z);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
-    // Солнце/луна по дуге: источник света следует за светилом
+    // Солнце/луна по дуге: источник света следует за светилом.
+    // Тучи гасят свет: в грозу мир не должен светиться как в полдень.
     const sunDir = this.sky.sunDirection;
     const useMoon = sunDir.y < 0.05;
     const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
-    this.sun.intensity = useMoon ? 0.32 : 0.25 + dayI * 1.35;
-    this.hemi.intensity = 0.28 + dayI * 0.55;
+    const dim = 1 - this.sky.overcast * 0.45;
+    this.sun.intensity = (useMoon ? 0.32 : 0.25 + dayI * 1.35) * dim;
+    this.hemi.intensity = (0.28 + dayI * 0.55) * (1 - this.sky.overcast * 0.3);
     this.sun.color.setHex(useMoon ? 0x9db4e8 : night > 0.4 ? 0xffc98a : 0xffe8c0);
+    if (this.sky.overcast > 0.3) {
+      // В дождь и бурю свет холоднее — тучи отражают серое небо
+      this.sun.color.lerp(new THREE.Color(0xb8c4d2), (this.sky.overcast - 0.3) / 0.7 * 0.5);
+    }
     this.sun.position.set(
       me.pos.x + lightDir.x * 120,
       Math.max(24, lightDir.y * 120),
@@ -961,6 +1202,8 @@ export class World3D {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+    this.ro?.disconnect();
+    this.ro = null;
     if (document.pointerLockElement) document.exitPointerLock();
     for (const [, b] of this.rigs) b.rig.dispose();
     this.rigs.clear();

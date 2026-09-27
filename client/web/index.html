@@ -60,7 +60,6 @@
       <a href="#faq" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="site.faq_title"></span></a>
       <a href="/forum.html" class="topnav-link"><span data-icon="shield" data-icon-size="16"></span><span data-i18n="forum.title"></span></a>
       <a href="/feedback.html" class="topnav-link"><span data-icon="scroll" data-icon-size="16"></span><span data-i18n="feedback.title"></span></a>
-      <a href="#download" class="topnav-link"><span data-icon="download" data-icon-size="16"></span><span data-i18n="site.download_title"></span></a>
     </nav>
     <div class="topbar-right">
       <div class="lang-switch" role="group" aria-label="Language">
@@ -90,10 +89,6 @@
           <span data-icon="play" data-icon-size="20"></span>
           <span data-i18n="menu.play"></span>
         </a>
-        <a class="btn btn-ghost" href="/download/installer" download>
-          <span data-icon="download" data-icon-size="20"></span>
-          <span data-i18n="menu.download"></span>
-        </a>
         <a class="btn btn-ghost" href="#history">
           <span data-icon="scroll" data-icon-size="20"></span>
           <span data-i18n="menu.history"></span>
@@ -113,18 +108,24 @@
       </div>
     </section>
 
-    <!-- Скачивание и установка -->
-    <section class="section" id="download">
+    <!-- Игра без установки. Раньше здесь был блок «Скачать игру» с кнопкой
+         загрузки .cmd-установщика. Его не существует: сервер отдавал 404
+         (файл монтировался в /app/server/site/install, а искался в
+         /app/site/install). Кнопка нажималась и ничего не происходило, а
+         текст обещал ярлыки, «Программы и компоненты» и Node.js 18+.
+         Загрузка .cmd пугает игроков предупреждениями браузера и
+         антивируса, а игра браузерная: установка не даёт ничего, кроме
+         ярлыка. Поэтому блока нет — есть прямой путь в игру. -->
+    <section class="section" id="play-free">
       <div class="panel panel-download">
-        <h2 class="panel-title"><span class="panel-title-icon" data-icon="gear" data-icon-size="22"></span><span data-i18n="site.download_title"></span></h2>
-        <p class="panel-desc" data-i18n="site.download_desc"></p>
-        <ul class="steps" id="download-steps"></ul>
+        <h2 class="panel-title"><span class="panel-title-icon" data-icon="play" data-icon-size="22"></span><span data-i18n="site.play_free_title"></span></h2>
+        <p class="panel-desc" data-i18n="site.play_free_desc"></p>
         <div class="download-row">
-          <a class="btn btn-gold btn-big" href="/download/installer" download>
-            <span data-icon="download" data-icon-size="22"></span>
-            <span data-i18n="menu.download"></span>
+          <a class="btn btn-gold btn-big" href="/game/">
+            <span data-icon="play" data-icon-size="22"></span>
+            <span data-i18n="menu.play"></span>
           </a>
-          <span class="requirements" data-i18n="site.requirements"></span>
+          <span class="requirements" data-i18n="site.play_free_note"></span>
         </div>
       </div>
     </section>
