@@ -134,6 +134,20 @@ export interface MediaFile {
   height: number | null;
   createdAt: string;
   uploadedBy: string | null;
+  /**
+   * Показывается ли файл в галерее на сайте.
+   *
+   * ТУТ БЫЛА ДЫРА В ЗАМЫСЛЕ. Панель загрузки позволяла залить файл и
+   * получить ссылку, но не давала выбрать, попадёт ли он на сайт: страницы
+   * сайта собираются в образ и не меняются без пересборки. То есть
+   * сотрудник заливал снимок — и он просто нигде не появлялся, а по
+   * инструкции надо было ещё звать разработчика.
+   */
+  isPublic: boolean;
+  /** Подпись под файлом в галерее. Пишет сотрудник */
+  caption: string | null;
+  /** Когда включили публикацию. null — файл так и не опубликован */
+  publishedAt: string | null;
 }
 
 export class MediaService {
@@ -204,6 +218,11 @@ export class MediaService {
       height: size?.height ?? null,
       createdAt: new Date().toISOString(),
       uploadedBy: uploadedBy ?? null,
+      // Новый файл всегда черновик: публикация — отдельное решение
+      // сотрудника, а не побочный эффект загрузки
+      isPublic: false,
+      caption: null,
+      publishedAt: null,
     };
   }
 
@@ -213,9 +232,11 @@ export class MediaService {
       id: string; storage_name: string; original_name: string; kind: MediaKind;
       mime: string; size_bytes: string; width: number | null; height: number | null;
       created_at: Date; uploaded_by: string | null;
+      is_public: boolean; caption: string | null; published_at: Date | null;
     }>(
       `SELECT id, storage_name, original_name, kind, mime, size_bytes,
-              width, height, created_at, uploaded_by
+              width, height, created_at, uploaded_by,
+              is_public, caption, published_at
          FROM media_files
         ORDER BY created_at DESC
         LIMIT $1`, [limit],
@@ -231,7 +252,106 @@ export class MediaService {
       height: r.height,
       createdAt: new Date(r.created_at).toISOString(),
       uploadedBy: r.uploaded_by,
+      isPublic: r.is_public,
+      caption: r.caption,
+      publishedAt: r.published_at ? new Date(r.published_at).toISOString() : null,
     }));
+  }
+
+  /**
+   * Галерея сайта: только опубликованные файлы.
+   *
+   * Отдельный метод, а не list() с фильтром, потому что у галереи три
+   * отличия от панели, и все три важны:
+   *   1. Без авторизации. Галерею смотрит любой посетитель сайта, в том
+   *      числе гость и поисковый робот.
+   *   2. Только опубликованные. Черновик не должен протекать на главную.
+   *   3. Сортировка по дате публикации, а не загрузки: сотрудник мог
+   *      залить снимок месяц назад и опубликовать вчера — наверху должен
+   *      оказаться вчерашний, а не тот, который в базе старше.
+   */
+  async gallery(limit = 12): Promise<MediaFile[]> {
+    const rows = await this.db.query<{
+      id: string; storage_name: string; original_name: string; kind: MediaKind;
+      mime: string; size_bytes: string; width: number | null; height: number | null;
+      created_at: Date; uploaded_by: string | null;
+      is_public: boolean; caption: string | null; published_at: Date | null;
+    }>(
+      `SELECT id, storage_name, original_name, kind, mime, size_bytes,
+              width, height, created_at, uploaded_by,
+              is_public, caption, published_at
+         FROM media_files
+        WHERE is_public
+        ORDER BY published_at DESC
+        LIMIT $1`, [limit],
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      // Относительный адрес: галерею смотрят и на сайте, и внутри игры
+      url: `/media/${r.storage_name}`,
+      originalName: r.original_name,
+      kind: r.kind,
+      mime: r.mime,
+      sizeBytes: Number(r.size_bytes),
+      width: r.width,
+      height: r.height,
+      createdAt: new Date(r.created_at).toISOString(),
+      uploadedBy: r.uploaded_by,
+      isPublic: true,
+      caption: r.caption,
+      publishedAt: r.published_at ? new Date(r.published_at).toISOString() : null,
+    }));
+  }
+
+  /**
+   * Включить или выключить показ файла на сайте, заодно сменив подпись.
+   *
+   * published_at ставится только при включении и сбрасывается при
+   * выключении. Иначе после «опубликовать → снять → опубликовать снова»
+   * файл возвращался бы наверх с датой первой публикации, и сотрудник не
+   * смог бы изменить порядок выкладки, просто переключив галочку.
+   */
+  async setPublished(
+    id: string,
+    isPublic: boolean,
+    caption: string | null,
+  ): Promise<MediaFile | null> {
+    // Подпись режем до 200 символов — ровно столько объявлено в схеме.
+    // Без этого длинная подпись молча обрезалась бы Postgres, и панель
+    // показывала бы не то, что сотрудник посчитал отправленным.
+    const clean = (caption ?? '').trim().slice(0, 200) || null;
+    const row = await this.db.queryOne<{
+      id: string; storage_name: string; original_name: string; kind: MediaKind;
+      mime: string; size_bytes: string; width: number | null; height: number | null;
+      created_at: Date; uploaded_by: string | null;
+      is_public: boolean; caption: string | null; published_at: Date | null;
+    }>(
+      `UPDATE media_files
+          SET is_public = $2,
+              caption = $3,
+              published_at = CASE WHEN $2 THEN NOW() ELSE NULL END
+        WHERE id = $1
+        RETURNING id, storage_name, original_name, kind, mime, size_bytes,
+                  width, height, created_at, uploaded_by,
+                  is_public, caption, published_at`,
+      [id, isPublic, clean],
+    );
+    if (!row) return null;
+    return {
+      id: row.id,
+      url: `/media/${row.storage_name}`,
+      originalName: row.original_name,
+      kind: row.kind,
+      mime: row.mime,
+      sizeBytes: Number(row.size_bytes),
+      width: row.width,
+      height: row.height,
+      createdAt: new Date(row.created_at).toISOString(),
+      uploadedBy: row.uploaded_by,
+      isPublic: row.is_public,
+      caption: row.caption,
+      publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
+    };
   }
 
   /** Удалить: и запись, и файл. Порядок именно такой — см. removeFile */

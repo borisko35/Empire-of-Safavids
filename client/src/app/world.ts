@@ -714,6 +714,24 @@ function wireSocket(): void {
     onPvpMyHpChanged(r.hp);
   });
 
+  // ТУТ БЫЛА ДЫРА В ОТЗЫВЕ. Сервер после успешного блока или уклонения
+  // подтверждает это событием combat:defense, но клиент его не слушал
+  // вовсе. Итог: игрок нажимал блок или уклонение, сервер их принимал и
+  // применял множитель, а на экране не появлялось НИЧЕГО. Непонятно, сработало
+  // или нет — при том что механика работала, просто молча. Соседние ветки
+  // боя такого не страдали: combat:result и combat:hit слушаются.
+  socket.on('combat:defense', (d: { actionType: string; characterId: string }) => {
+    // Подтверждение приходит тому, кто защищался. Чужое игнорируем: зачем
+    // показывать «Блок» над чужим персонажем — у него своя картинка.
+    if (!me || d.characterId !== me.id) return;
+    if (!world) return;
+    if (d.actionType === 'dodge') {
+      world.addFloater(me.pos.x, me.pos.z - 1, t('world.dodge'), '#cfe3f0');
+    } else {
+      world.addFloater(me.pos.x, me.pos.z - 1, t('world.block'), '#9fd4ff');
+    }
+  });
+
   // Периодический синк ресурсов с сервера (регенерация, золото, уровень)
   socket.on('player:resources', (r: {
     hp: number; maxHp: number; mana: number; maxMana: number;

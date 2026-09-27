@@ -32,7 +32,7 @@ import guildsRouter from '../routes/guilds';
 import progressionRouter from '../routes/progression';
 import { npcRouter } from '../routes/npc';
 import { siteRouter } from '../routes/site';
-import { mediaRouter } from '../routes/media';
+import { mediaRouter, galleryRouter } from '../routes/media';
 import { mediaDir } from '../services/MediaService';
 import { forumRouter } from '../routes/forum';
 import { feedbackRouter } from '../routes/feedback';
@@ -106,6 +106,9 @@ app.use('/api/npc', npcRouter);
 app.use('/api/site', siteRouter);
 // Загрузка фото и видео силами сотрудников
 app.use('/api/admin/media', mediaRouter);
+// Галерея сайта: опубликованные файлы, без авторизации — её смотрит
+// любой посетитель главной страницы
+app.use('/api/media/gallery', galleryRouter);
 // Форум (чтение открыто, запись — авторизованным) и обратная связь
 app.use('/api/forum', forumRouter);
 app.use('/api/feedback', feedbackRouter);

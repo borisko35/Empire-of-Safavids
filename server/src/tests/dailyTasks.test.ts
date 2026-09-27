@@ -16,11 +16,14 @@
 // весь этот раздел не приносит ничего.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripComments } from './helpers/stripCode';
 
 const repoRoot = join(__dirname, '..', '..', '..');
 const read = (p: string): string => readFileSync(join(repoRoot, p), 'utf-8');
 
-const service = read('server/src/services/DailyTaskService.ts');
+const service = stripComments(read('server/src/services/DailyTaskService.ts'));
+// Тот же баг с несуществующей таблицей был и в награде за этаж башни
+const endGame = stripComments(read('server/src/services/EndGameService.ts'));
 const routes = read('server/src/routes/progression.ts');
 const socket = read('server/src/socket/GameSocketHandler.ts');
 const game = read('server/src/routes/game.ts');
@@ -138,7 +141,42 @@ describe('Задачи дня: награда видна игроку', () => {
   it('награда начисляется сервером, а не клиентом', () => {
     // Клиент не должен ничего «начислять сам» — только показать
     expect(service).toMatch(/UPDATE characters SET gold = gold \+ \$1 WHERE id = \$2/);
-    expect(service).toMatch(/character_inventory/);
+    expect(service).toMatch(/character_items/);
+  });
+
+  it('предмет кладётся в таблицу, которой на самом деле существует', () => {
+    // ТЕСТ РАНЬШЕ ЗАКРЕПЛЯЛ БАГ: он требовал строки character_inventory —
+    // таблицы, которой в базе НЕТ. Проверено: в миграциях встречается
+    // только файл 006_character_inventory.sql, а создаёт он character_items.
+    // Ошибка роняла метод уже после начисления золота и опыта, из-за чего
+    // не доходил return и игрок не получал событие daily:task.
+    expect(service).not.toMatch(/character_inventory/);
+  });
+
+  it('цель конфликта совпадает с настоящим уникальным индексом', () => {
+    // Уникальный индекс — (character_id, item_id, enhancement), трёхколоночный.
+    // С двумя колонками Postgres не нашёл бы индекс и упал бы с новой ошибкой,
+    // то есть починка одной ошибки породила бы другую
+    expect(service).toMatch(/ON CONFLICT \(character_id, item_id, enhancement\)/);
+    expect(service).toMatch(/INSERT INTO character_items \(character_id, item_id, quantity, enhancement\)/);
+    expect(service).toMatch(/DO UPDATE SET quantity = character_items\.quantity \+ EXCLUDED\.quantity/);
+  });
+
+  it('событие о выполнении доходит до игрока даже при выдаче предмета', () => {
+    // Строка return обязана стоять ПОСЛЕ выдачи награды, иначе игрок не
+    // увидит уведомление о выполнении задачи
+    const itemAt = service.indexOf('INSERT INTO character_items');
+    const returnAt = service.lastIndexOf('taskCompleted: true');
+    expect({ itemBeforeReturn: itemAt > -1 && returnAt > itemAt })
+      .toEqual({ itemBeforeReturn: true });
+  });
+
+  it('в башне награда кладётся в ту же настоящую таблицу', () => {
+    // Тот же баг был во втором месте: первый предмет этажа ронял весь
+    // метод, и игрок проходил этаж без награды
+    expect(endGame).toMatch(/INSERT INTO character_items/);
+    expect(endGame).not.toMatch(/character_inventory/);
+    expect(endGame).toMatch(/ON CONFLICT \(character_id, item_id, enhancement\)/);
   });
 });
 

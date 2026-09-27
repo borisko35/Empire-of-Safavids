@@ -1283,6 +1283,26 @@ input, select { font: inherit; }
   border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 5px;
 }
 .media-actions { display: flex; gap: 6px; }
+/* Блок публикации: переключатель «показывать на сайте» + подпись.
+   Отдельная рамка, чтобы его нельзя было спутать с кнопками копирования
+   и удаления — это другой смысл, и вставка на сайт — не то же самое,
+   что копирование ссылки. */
+.media-publish {
+  display: flex; flex-direction: column; gap: 4px; margin-top: 6px;
+  padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.media-publish-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--cream-dim); cursor: pointer;
+}
+.media-publish-label input { cursor: pointer; accent-color: var(--gold); }
+.media-caption {
+  font: inherit; font-size: 11px; padding: 3px 6px;
+  background: rgba(0, 0, 0, 0.3); color: var(--cream);
+  border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 5px;
+}
+.media-caption:focus { outline: none; border-color: var(--gold); }
+.media-publish-state { font-size: 10px; color: var(--cream-dim); opacity: 0.75; }
 .media-copy, .media-del {
   font: inherit; font-size: 10px; padding: 2px 8px;
   border-radius: 5px; cursor: pointer; background: transparent;

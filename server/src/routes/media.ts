@@ -26,6 +26,20 @@ const media = new MediaService();
 const db = DatabaseService.getInstance();
 
 /**
+ * Галерея сайта — БЕЗ авторизации.
+ *
+ * Это отдельный маршрут, а не способ обойти staffOnly: главную страницу
+ * видят все, включая гостя и роботов поисковика, и у них нет ни токена,
+ * ни прав. Такие файлы попадают в разметку страницы, поэтому специального
+ * ограничения отдачи тут не нужно — ограничение в друго�� стороне: в
+ * галерею попадают только опубликованные (см. MediaService.gallery).
+ *
+ * Отдельный Router нужен ещё и потому, что mediaRouter целиком висит под
+ * /api/admin/media, и его middleware staffOnly проглатывал бы и этот путь.
+ */
+export const galleryRouter = Router();
+
+/**
  * Пропускает только сотрудников сайта.
  *
  * adminCheck проверяет флаг is_admin, но в базе роль хранится строкой
@@ -86,6 +100,45 @@ mediaRouter.post(
 mediaRouter.get('/', staffOnly, asyncHandler(async (_req: Request, res: Response) => {
   const [files, usage] = await Promise.all([media.list(), media.usage()]);
   return res.json({ files, usage });
+}));
+
+// ── Галерея сайта (публичная) ───────────────────────────────
+/**
+ * Отдаём опубликованные файлы.
+ *
+ * limit приходит от строки запроса, поэтому берём только число и только
+ * в разумных границах. Без проверки «limit=100000» посетитель главной
+ * страницы вытянул бы всю таблицу одним запросом, а «limit=abc» уронил бы
+ * Postgres ошибкой типа — то есть публичная страница могла бы ронять базу.
+ */
+galleryRouter.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const raw = Number.parseInt(String(req.query.limit ?? ''), 10);
+  const limit = Number.isFinite(raw) ? Math.min(Math.max(raw, 1), 48) : 12;
+  const files = await media.gallery(limit);
+  return res.json({ files });
+}));
+
+// ── Публикация на сайте ─────────────────────────────────────
+/**
+ * Показать файл в галерее на сайте или убрать оттуда.
+ *
+ * PATCH, а не POST: меняются поля существующей записи, сам файл не
+ * загружается заново. Тело маленькое и в JSON, поэтому обычный
+ * express.json достаточно — сырое тело нужно только для загрузки.
+ */
+mediaRouter.patch('/:id', staffOnly, asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return res.status(400).json({ error: 'Некорректный идентификатор', code: 'bad_id' });
+  }
+  // isPublic приводим к true/false строго. Если сюда попадёт строка
+  // "false", то в JS она была бы истинной, и файл опубликовался бы
+  // при попытке его СНЯТЬ с публикации
+  const isPublic = req.body?.isPublic === true || req.body?.isPublic === 'true';
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : null;
+  const updated = await media.setPublished(id, isPublic, caption);
+  if (!updated) return res.status(404).json({ error: 'Файл не найден', code: 'not_found' });
+  return res.json({ file: updated });
 }));
 
 // ── Удаление ────────────────────────────────────────────────

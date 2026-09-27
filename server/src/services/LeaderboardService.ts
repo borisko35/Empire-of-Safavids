@@ -19,7 +19,16 @@ export interface LeaderboardEntry {
 export class LeaderboardService {
   private db = DatabaseService.getInstance();
 
-  /** Обновить статистику персонажа в рейтинге */
+  /**
+   * Обновить статистику персонажа в рейтинге.
+   *
+   * ТУТ БЫЛА ОШИБКА, КОТОРУЮ НЕ ВИДНО. Колонки для INSERT брались из
+   * Object.keys(stats) целиком, а значения — только те, что не undefined.
+   * При частичном вызове (например передан уровень, но не опыт) списки
+   * разъезжались: VALUES содержал плейсхолдеры по всем ключам, а параметров
+   * было меньше, и значения ложились не в те колонки. Сейчас колонки и
+   * значения собираются одним проходом, поэтому разъехаться не могут.
+   */
   async updateStats(characterId: string, stats: {
     level?: number;
     experience?: number;
@@ -30,31 +39,28 @@ export class LeaderboardService {
     questsCompleted?: number;
     playtimeSeconds?: number;
   }): Promise<void> {
-    const fields: string[] = [];
+    const cols: string[] = [];
     const values: unknown[] = [];
-    let idx = 1;
+    const fields: string[] = [];
 
     for (const [key, val] of Object.entries(stats)) {
       if (val === undefined) continue;
       const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-      if (col === 'pvp_rating') fields.push(`pvp_rating = $${idx}`);
-      else if (col === 'pvp_wins') fields.push(`pvp_wins = $${idx}`);
-      else if (col === 'pvp_losses') fields.push(`pvp_losses = $${idx}`);
-      else if (col === 'monsters_killed') fields.push(`monsters_killed = $${idx}`);
-      else if (col === 'quests_completed') fields.push(`quests_completed = $${idx}`);
-      else if (col === 'playtime_seconds') fields.push(`playtime_seconds = $${idx}`);
-      else fields.push(`${col} = $${idx}`);
       values.push(val);
-      idx++;
+      // Плейсхолдер в VALUES идёт по номеру своего значения, а в DO UPDATE
+      // — по тому же номеру. Оба считаются из values.length, поэтому всегда
+      // совпадают
+      const ph = `$${values.length}`;
+      cols.push(col);
+      fields.push(`${col} = ${ph}`);
     }
 
-    if (fields.length === 0) return;
-    fields.push(`updated_at = NOW()`);
+    if (cols.length === 0) return;
 
     await this.db.query(
-      `INSERT INTO leaderboard (character_id, ${Object.keys(stats).map(k => k.replace(/([A-Z])/g, '_$1').toLowerCase()).join(', ')}, updated_at)
-       VALUES ($${idx}, ${Object.keys(stats).map((_, i) => `$${i + 1}`).join(', ')}, NOW())
-       ON CONFLICT (character_id) DO UPDATE SET ${fields.join(', ')}`,
+      `INSERT INTO leaderboard (character_id, ${cols.join(', ')}, updated_at)
+       VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}, NOW())
+       ON CONFLICT (character_id) DO UPDATE SET ${fields.join(', ')}, updated_at = NOW()`,
       [characterId, ...values]
     );
   }

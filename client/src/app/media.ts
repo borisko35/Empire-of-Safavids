@@ -29,6 +29,12 @@ export interface MediaFile {
   height: number | null;
   createdAt: string;
   uploadedBy: string | null;
+  /** Показывается ли файл в галерее на сайте. Новый файл — всегда черновик */
+  isPublic: boolean;
+  /** Подпись под файлом в галерее */
+  caption: string | null;
+  /** Когда включили публикацию */
+  publishedAt: string | null;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
@@ -273,7 +279,71 @@ function buildRows(files: MediaFile[], box: HTMLElement): HTMLElement[] {
     actions.className = 'media-actions';
     actions.append(copy, del);
 
-    info.append(name, meta, link, actions);
+    // ── Публикация на сайте ──────────────────────────────────
+    // Без этого панель была мёртвой деталью: залитый снимок никуда не
+    // попадал, а страницы сайта собираются в образ и без пересборки не
+    // меняются. Теперь сотрудник сам решает, показывать ли файл.
+    const pub = document.createElement('div');
+    pub.className = 'media-publish';
+
+    const pubLabel = document.createElement('label');
+    pubLabel.className = 'media-publish-label';
+    const pubBox = document.createElement('input');
+    pubBox.type = 'checkbox';
+    pubBox.checked = f.isPublic;
+    const pubText = document.createElement('span');
+    pubText.textContent = t('media.publish');
+    pubLabel.append(pubBox, pubText);
+
+    const cap = document.createElement('input');
+    cap.className = 'media-caption';
+    cap.type = 'text';
+    cap.maxLength = 200;
+    cap.placeholder = t('media.caption_ph');
+    cap.value = f.caption ?? '';
+
+    const pubState = document.createElement('div');
+    pubState.className = 'media-publish-state';
+    pubState.textContent = f.isPublic ? t('media.published') : t('media.draft');
+
+    // Одна отправка на оба поля: сотрудник пишет подпись и жмёт галочку,
+    // а не галочку и потом отдельно кнопку «сохранить подпись»
+    const send = async (): Promise<void> => {
+      pubBox.disabled = true;
+      cap.disabled = true;
+      try {
+        const r = await fetch(apiUrl(`/api/admin/media/${f.id}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
+          body: JSON.stringify({ isPublic: pubBox.checked, caption: cap.value }),
+        });
+        if (!r.ok) {
+          toast(t('media.publish_failed'), 'error');
+          // Возвращаем галочку на место: иначе панель врала бы о состоянии
+          pubBox.checked = f.isPublic;
+          return;
+        }
+        f.isPublic = pubBox.checked;
+        f.caption = cap.value.trim() || null;
+        pubState.textContent = f.isPublic ? t('media.published') : t('media.draft');
+        toast(t('media.publish_ok'), 'success');
+      } catch {
+        toast(t('media.publish_failed'), 'error');
+        pubBox.checked = f.isPublic;
+      } finally {
+        pubBox.disabled = false;
+        cap.disabled = false;
+      }
+    };
+    pubBox.addEventListener('change', () => { void send(); });
+    // Enter в подписи отправляет сразу — не заставляем искать галочку
+    cap.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') { e.preventDefault(); void send(); }
+    });
+
+    pub.append(pubLabel, cap, pubState);
+
+    info.append(name, meta, link, actions, pub);
     row.append(thumb, info);
     out.push(row);
   }

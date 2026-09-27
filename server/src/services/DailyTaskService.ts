@@ -144,9 +144,27 @@ export class DailyTaskService {
           await this.db.query('UPDATE characters SET experience = experience + $1 WHERE id = $2', [task.reward_experience, charId]);
         }
         if (task.reward_item_id) {
+          // ТУТ БЫЛО ПРИЧИНОЙ, ПОЧЕМУ ПРЕДМЕТ НИКОГДА НЕ ВЫДАВАЛСЯ.
+          // Таблицы character_inventory в базе НЕТ: файл миграции называется
+          // 006_character_inventory.sql, но внутри он создаёт character_items.
+          // Ошибка не бросалась наружу — вызывающий код глотал её через
+          // .catch(() => {}), — но обрывала метод ПОСЛЕ того, как задача уже
+          // помечена выполненной и уже начислены золото и опыт. Из-за этого
+          // не доходил return, и игрок не получал событие daily:task:
+          // задача засчитывалась молча, предмет не выдавался, уведомления
+          // не было. Проверено: character_inventory не встречается ни в одной
+          // миграции, а весь остальной код (CharacterService, CraftingService,
+          // AuctionService) работает через character_items.
+          //
+          // Настоящий уникальный индекс — ТРЁХколоночный:
+          // UNIQUE (character_id, item_id, enhancement). Отсюда enhancement
+          // в списке колонок и в цели конфликта: с двумя колонками Postgres
+          // не нашёл бы индекс и упал бы с новой ошибкой.
           await this.db.query(
-            `INSERT INTO character_inventory (character_id, item_id, quantity) VALUES ($1, $2, $3)
-             ON CONFLICT (character_id, item_id) DO UPDATE SET quantity = character_inventory.quantity + $3`,
+            `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+             VALUES ($1, $2, $3, 0)
+             ON CONFLICT (character_id, item_id, enhancement)
+             DO UPDATE SET quantity = character_items.quantity + EXCLUDED.quantity`,
             [charId, task.reward_item_id, task.reward_item_qty]
           );
         }

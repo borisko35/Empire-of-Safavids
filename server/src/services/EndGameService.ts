@@ -56,9 +56,17 @@ export class EndGameService {
       await this.db.query('UPDATE characters SET experience = experience + $1 WHERE id = $2', [floorData.reward.experience, charId]);
     }
     for (const itemId of floorData.reward.items) {
+      // Та же ошибка, что была в DailyTaskService: таблицы
+      // character_inventory не существует, есть character_items, а её
+      // уникальный индекс трёхколоночный — (character_id, item_id,
+      // enhancement). Здесь ошибка стояла В ЦИКЛЕ: первый предмет ронял
+      // весь метод, и золото с опытом этажа уже начислены оставались без
+      // записи о прохождении — игрок проходил этаж и не получал награду.
       await this.db.query(
-        `INSERT INTO character_inventory (character_id, item_id, quantity) VALUES ($1, $2, 1)
-         ON CONFLICT (character_id, item_id) DO UPDATE SET quantity = character_inventory.quantity + 1`,
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, 1, 0)
+         ON CONFLICT (character_id, item_id, enhancement)
+         DO UPDATE SET quantity = character_items.quantity + 1`,
         [charId, itemId]
       );
     }

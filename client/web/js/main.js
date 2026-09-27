@@ -234,6 +234,75 @@ document.addEventListener('eos:locale', () => {
 
 renderSiteContent().catch(console.error);
 
+// ── Галерея: снимки и ролики, залитые сотрудниками ───────────
+// Файлы кладёт сотрудник через панель «Фото и видео» в игре и
+// отмечает галочкой «Показывать на сайте». Здесь они просто выводятся.
+//
+// СЕКЦИЯ ПРЯЧЕТСЯ, ЕСЛИ ПУСТО. Иначе на главной висел бы заголовок
+// «Галерея» и пустота — когда сотрудник ещё ничего не выложил, это
+// выглядит как поломка сайта. То же самое при ошибке запроса: галерея
+// не должна быть причиной, по которой главная страница выглядит сломанной.
+async function renderGallery() {
+  const section = document.getElementById('gallery');
+  const grid = document.getElementById('gallery-grid');
+  if (!section || !grid) return;
+  let files;
+  try {
+    const res = await fetch('/api/media/gallery?limit=12', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    ({ files } = await res.json());
+  } catch {
+    section.classList.add('hidden');
+    return;
+  }
+  if (!Array.isArray(files) || !files.length) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const f of files) {
+    const card = document.createElement('a');
+    card.className = 'gallery-card';
+    card.href = f.url;
+    card.target = '_blank';
+    // Видео и картинки показываем по-разному, но ссылка одна и та же:
+    // щёлчок открывает файл целиком в новой вкладке
+    if (f.kind === 'video') {
+      const v = document.createElement('video');
+      v.src = f.url;
+      v.muted = true;
+      v.preload = 'metadata';
+      v.playsInline = true;
+      // На превью ролик не играет сам: на главной это плётка из
+      // получаса трафика без спроса. Играет при наведении.
+      card.addEventListener('mouseenter', () => { v.play().catch(() => {}); });
+      card.addEventListener('mouseleave', () => { v.pause(); v.currentTime = 0; });
+      card.append(v);
+      card.classList.add('is-video');
+    } else {
+      const img = document.createElement('img');
+      img.src = f.url;
+      img.alt = f.caption || f.originalName || '';
+      img.loading = 'lazy';
+      card.append(img);
+    }
+    if (f.caption) {
+      const cap = document.createElement('span');
+      cap.className = 'gallery-caption';
+      cap.textContent = f.caption;
+      card.append(cap);
+    }
+    frag.append(card);
+  }
+  grid.replaceChildren(frag);
+  section.classList.remove('hidden');
+}
+
+document.addEventListener('eos:locale', () => {
+  renderGallery().catch(console.error);
+});
+
 // ── Ссылка «Управление сайтом» — только для персонала ──────
 async function revealAdminLink() {
   const link = document.getElementById('admin-link');
@@ -251,6 +320,7 @@ async function revealAdminLink() {
 
 renderStatus().catch(console.error);
 renderRating().catch(console.error);
+renderGallery().catch(console.error);
 revealAdminLink();
 setInterval(() => { renderStatus().catch(console.error); }, 60000);
 const versionNum = document.getElementById('version-num');

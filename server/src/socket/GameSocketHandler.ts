@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
+import { LeaderboardService } from '../services/LeaderboardService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
@@ -48,6 +49,14 @@ export class GameSocketHandler {
   private io: SocketIOServer;
   private redis = RedisService.getInstance();
   private characterService = new CharacterService();
+  /**
+   * Рейтинг игроков.
+   *
+   * Нужен ради одной строки в regenTick: без неё таблица leaderboard
+   * оставалась пустой, и «Топ-10 игроков» на главной странице сайта всегда
+   * показывал «пока нет данных».
+   */
+  private leaderboardService = new LeaderboardService();
   private combatService = new CombatService();
   private antiCheat = new AntiCheatSystem();
   private karmaSystem = new KarmaSystem();
@@ -202,6 +211,29 @@ export class GameSocketHandler {
         const inWater = !!pos && isDeepWater(pos.x, pos.z);
         const res = await this.characterService.regenResources(socket.characterId, inWater);
         if (res) socket.emit(SERVER_EVENTS.RESOURCES, res);
+        // ТУТ БЫЛА ПУСТАЯ ТАБЛИЦА РЕЙТИНГА. LeaderboardService.updateStats
+        // не вызывался НИ ОТКУДА: единственный INSERT INTO leaderboard во
+        // всём сервере так и не выполнялся. При этом таблица создана, индексы
+        // на неё есть, маршрут /api/leaderboard/:type работает, и на главной
+        // странице сайта висел «Топ-10 игроков», который всегда показывал «пока
+        // нет данных». Игрок заходил, качался — и попадать в рейтинг было
+        // некуда.
+        //
+        // Здесь самое честное место для вызова: тик идёт раз в 5 секунд по
+        // каждому онлайн-игроку и уже возвращает уровень и опыт. Синхронизация
+        // получается инкрементальной и самовосстанавливающейся: новый игрок
+        // появляется в рейтинге через несколько секунд после входа, без
+        // отдельного задания и без обхода всей таблицы.
+        //
+        // Передаём ТОЛЬКО то, что известно и совпадает со схемой leaderboard.
+        // Убийства, квесты и PvP считаются в других местах и сюда не
+        // подставляются: иначе затирали бы настоящие значения нулями.
+        if (res) {
+          await this.leaderboardService.updateStats(socket.characterId, {
+            level: res.level,
+            experience: res.experience,
+          }).catch((error) => logger.debug('Leaderboard sync skipped:', error));
+        }
       } catch (error) {
         logger.debug('Regen tick skipped:', error);
       }
