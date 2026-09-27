@@ -230,6 +230,19 @@ export class CharacterService {
   // ============================================================
 
   /** Нанести урон. Возвращает оставшееся HP и признак смерти. */
+  /**
+   * Вернуть полное здоровье. Используется после боя на арене: урон был
+   * честным, но следов о нём остаться не должно, иначе проигравший вышел
+   * бы из города с 1 HP.
+   */
+  async restoreHp(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ hp: number }>(
+      'UPDATE characters SET hp = max_hp, updated_at = NOW() WHERE id = $1 RETURNING hp',
+      [characterId],
+    );
+    return row?.hp ?? 0;
+  }
+
   async applyDamage(characterId: string, damage: number): Promise<{ hp: number; maxHp: number; died: boolean }> {
     const row = await this.db.queryOne<{ hp: number; max_hp: number }>(
       'UPDATE characters SET hp = GREATEST(0, hp - $1), updated_at = NOW() WHERE id = $2 RETURNING hp, max_hp',

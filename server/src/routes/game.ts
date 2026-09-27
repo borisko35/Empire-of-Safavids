@@ -3,6 +3,8 @@ import { secureMiddleware } from '../middleware/auth';
 import { AuctionService } from '../services/AuctionService';
 import { CraftingService } from '../services/CraftingService';
 import { DailyTaskService } from '../services/DailyTaskService';
+import { startPvpArena } from '../systems/PvpArenaFlow';
+import { pvpArena } from '../systems/PvpArenaService';
 import { GuildService } from '../services/GuildService';
 import { NPC_SHOPS } from '../services/AuctionService';
 import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
@@ -1178,11 +1180,28 @@ gameRouter.post('/house/decorate', secureMiddleware, requireCharacterOwnership()
 );
 
 // ── PvP Арена ────────────────────────────────────────────
+// ТУТ БЫЛА ОШИБКА: findMatch ждёт character_id, а передавали user_id.
+// Матчмейкинг не мог найти соперника и падал на внешнем ключе — PvP был
+// мёртв с момента написания, а кнопка «Найти бой» молча ничего не делала.
 gameRouter.post('/pvp/find-match', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = req.body.characterId;
     try {
-      const match = await pvpService.findMatch(req.userId!);
-      return res.json({ match });
+      const match = await pvpService.findMatch(characterId);
+      if (!match) {
+        return res.json({ match: null, searching: true, message: 'Ищем соперника' });
+      }
+      // Соперник найден — сервер поднимает арену и будит обоих.
+      // Раньше второй игрок не узнавал о матче вообще: он лежал в таблице
+      // и ждал, пока кто-нибудь посмотрит.
+      startPvpArena(match.id, characterId);
+      const arena = pvpArena.arenaOf(characterId);
+      return res.json({
+        match,
+        searching: false,
+        // Соперник ещё не подтвердил готовность — клиент ждёт pvp:match_found
+        arena: arena ? { endsAt: arena.endsAt, opponent: pvpArena.opponentOf(characterId) } : null,
+      });
     } catch (err) { return res.status(500).json({ error: (err as Error).message }); }
   })
 );

@@ -30,6 +30,7 @@ import {
 } from './hud';
 import { initTutorial, onTutorialAction, tickTutorial } from './tutorial';
 import { loadAccountLinks } from './accountLinks';
+import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
 import { icon, type IconName } from '../ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -646,6 +647,22 @@ function wireSocket(): void {
     refreshBars();
   });
 
+  // PvP-арена: сервер нашёл соперника и поднял бой
+  socket.on('pvp:match_found', (data: {
+    matchId: number; endsAt: number;
+    you: { id: string; name: string; hp: number; maxHp: number };
+    opponent: { id: string; name: string; charClass: string; level: number } | null;
+  }) => {
+    void onPvpMatchFound(data);
+  });
+
+  // Бой закончился: нокаут или вышло время
+  socket.on('pvp:ended', (data: {
+    matchId: number; winnerId: string | null; youWon: boolean; reason?: string;
+  }) => {
+    void onPvpArenaEnd(data);
+  });
+
   // Задача дня закрыта: сервер уже начислил золото, опыт и предмет.
   // Без этого сообщения игрок узнал бы о награде только по цифре в кошельке.
   socket.on('daily:task', ({ gold, experience, item }: {
@@ -693,6 +710,8 @@ function wireSocket(): void {
     }
     audio.hit();
     refreshBars();
+    // Полоса здоровья на экране арены
+    onPvpMyHpChanged(r.hp);
   });
 
   // Периодический синк ресурсов с сервера (регенерация, золото, уровень)

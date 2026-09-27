@@ -95,6 +95,27 @@ export class PvPService {
     return match;
   }
 
+  /** Матч по номеру — нужен, чтобы поднять арену и разослать приглашение */
+  async getMatch(matchId: number): Promise<PvPMatch | null> {
+    return this.db.queryOne<PvPMatch>('SELECT * FROM pvp_arena WHERE id = $1', [matchId]);
+  }
+
+  /**
+   * Данные бойца для арены.
+   *
+   * Раньше карточки соперника не было нигде: игрок нажимал «Найти бой»,
+   * получал тост и не знал даже, кто соперник. PvPService знает только
+   * рейтинг, а имя и класс лежат в characters.
+   */
+  async fighter(characterId: string): Promise<{
+    id: string; name: string; class: string; level: number; hp: number; maxHp: number;
+  } | null> {
+    return this.db.queryOne(
+      'SELECT id, name, class, level, hp, max_hp AS "maxHp" FROM characters WHERE id = $1',
+      [characterId],
+    );
+  }
+
   /**
    * Игрок объявляет исход боя. Исход засчитывается, только когда
    * подтвердили оба — либо оба назвали одного, либо один не ответил

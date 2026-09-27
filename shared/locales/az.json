@@ -56,6 +56,15 @@
     "claim_note": "E-poçt və şifrə seçin. Personaj, əşyalar və irəliləyiş yerində qalacaq.",
     "claim_submit": "Saxla"
   },
+  "pvp": {
+    "searching": "Rəqib axtarılır…",
+    "not_found": "Rəqib tapılmadı",
+    "fight_hint": "Rəqibə hücum et. Kim daha çox sağlamlıq saxlayır, o qalibdir.",
+    "you_won": "Qazandın! Reytinq rəqib təsdiqlədikdən sonra yenilənir.",
+    "you_lost": "Prolostun. Reytinq rəqib təsdiqlədikdən sonra yenilənir.",
+    "draw": "Heç-heçə — reytinq dəyişmir.",
+    "wait_opponent": "Rəqibin təsdiqini gözləyirik"
+  },
   "link": {
     "title": "Bağlı hesablar",
     "hint": "Bu hesaba giriş üsulları. Personajını itməmək üçün ən azı ikisini saxla.",

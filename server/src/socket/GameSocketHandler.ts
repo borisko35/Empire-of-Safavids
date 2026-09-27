@@ -10,6 +10,9 @@ import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
 import { DailyTaskService } from '../services/DailyTaskService';
+import { PvPService } from '../services/PvPService';
+import { pvpArena } from '../systems/PvpArenaService';
+import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
@@ -59,6 +62,13 @@ export class GameSocketHandler {
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
+  /** Таймер арены: следит за временем боя */
+  private arenaTimer?: NodeJS.Timeout;
+
+  /** Остановить таймер при остановке сервера */
+  stopArenaTimer(): void {
+    if (this.arenaTimer) clearInterval(this.arenaTimer);
+  }
   // Кулдауны навыков: characterId -> (skillId -> готовность с epoch ms)
   private skillCooldowns = new Map<string, Map<string, number>>();
   // Троттлинг записи позиции в PostgreSQL: characterId -> последняя запись
@@ -77,6 +87,21 @@ export class GameSocketHandler {
   constructor(io: SocketIOServer) {
     this.io = io;
     GameSocketHandler.instance = this;
+    // PvP-арена поднимается из REST-маршрута find-match, а сокет игрока
+    // есть только здесь. Поэтому отдаём наружу способ отправить событие
+    // конкретному игроку, а сам сокет об арене не знает.
+    initPvpArena(
+      (characterId, event, payload) => {
+        this.activePlayers.get(characterId)?.emit(event, payload);
+      },
+      new PvPService(),
+    );
+    // Таймер боя: без него бой длился бы, пока соперник не выйдет,
+    // и «победа по времени» (у кого больше HP) никогда не срабатывала бы
+    this.arenaTimer = setInterval(() => {
+      const ended = pvpArena.checkTimeout();
+      if (ended) announceArenaEnd(ended.matchId, ended.winnerId, 'time');
+    }, 1000);
   }
 
   /** Доступ из REST-роутов (например, travel): текущий обработчик сокетов */
@@ -647,6 +672,18 @@ export class GameSocketHandler {
     });
 
     if (applied.died) {
+      // Если бой идёт на арене — это нокаут, а не смерть в мире.
+      // Иначе проигравший остался бы лежать и не мог бы выйти из города.
+      const arena = pvpArena.arenaOf(target.id);
+      if (arena && !arena.ended) {
+        pvpArena.knockout(target.id);
+        announceArenaEnd(arena.matchId, arena.winnerId, 'hp');
+        // Здоровье возвращаем: следов боя не остаётся
+        await this.characterService
+          .restoreHp(target.id)
+          .catch((e: unknown) => { logger.debug('restoreHp failed:', e); });
+        return;
+      }
       await this.handlePlayerDeath(target, attacker);
     }
   }

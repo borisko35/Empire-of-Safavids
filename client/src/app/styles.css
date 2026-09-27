@@ -1229,6 +1229,46 @@ input, select { font: inherit; }
 .friend-name { flex: 1; color: var(--cream); }
 .friend-info { color: var(--cream-dim); font-size: 11px; }
 
+/* ── PvP-арена ───────────────────────────────────────────────
+   Экран боя: таймер, две полосы здоровья, имя соперника. Панель в
+   углу, чтобы не закрывать обзор — бой идёт в мире, а не в отдельной
+   сцене, и двигаться надо. */
+.pvp-arena {
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 90px;
+}
+.pvp-arena.hidden { display: none; }
+.pvp-box {
+  pointer-events: all; width: 380px; text-align: center;
+  background: rgba(13, 27, 42, 0.82); border: 1px solid var(--gold);
+  border-radius: 12px; padding: 14px 18px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+.pvp-timer {
+  font-size: 22px; font-weight: 700; color: var(--cream);
+  letter-spacing: 1px; margin-bottom: 8px;
+}
+.pvp-timer--low { color: #ff8d7e; }
+.pvp-fighter { margin-bottom: 8px; }
+.pvp-name { font-size: 12px; color: var(--cream); margin-bottom: 4px; }
+.pvp-hp {
+  height: 10px; border-radius: 5px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+.pvp-hp-fill {
+  height: 100%; width: 100%; border-radius: 5px;
+  background: linear-gradient(90deg, #6ecf7a, #4aa86a);
+  transition: width 0.25s ease;
+}
+.pvp-fighter:not(.pvp-fighter--me) .pvp-hp-fill {
+  background: linear-gradient(90deg, #e07a4a, #b5543a);
+}
+.pvp-vs {
+  font-size: 11px; color: var(--cream-dim); letter-spacing: 2px; margin: 2px 0 8px;
+}
+.pvp-hint { font-size: 12px; color: var(--gold-light); margin-top: 10px; line-height: 1.4; }
+
 /* ── Панель «Пригласить друга» ───────────────────────────────
    Ссылка показана крупно и моноширинно: игрок должен разглядеть её
    и сравнить с тем, что скопировал в мессенджер. */

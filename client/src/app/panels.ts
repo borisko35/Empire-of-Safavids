@@ -10,6 +10,7 @@ import { t } from './i18n';
 import { session, Character } from './state';
 import { toast, refreshBars, loadInventory } from './hud';
 import { onTutorialAction } from './tutorial';
+import { onSearching as onPvpSearching, onPvpHide } from './pvp';
 import { RARITY_COLORS } from '../ui/icons';
 
 // Простая словарь имен предметов для магазина (itemId -> русское название)
@@ -2059,9 +2060,18 @@ async function loadPvP(): Promise<void> {
     findBtn.textContent = 'Найти бой';
     findBtn.style.margin = '8px 0';
     findBtn.addEventListener('click', async () => {
-      toast('Поиск противника...', 'info');
-      try { const m = await api.pvpFindMatch(cid()); if (m.match) toast('Противник найден!', 'success'); }
-      catch (err) { toast((err as Error).message, 'error'); }
+      findBtn.disabled = true;
+      onPvpSearching();
+      try {
+        // Соперника может не оказаться: тогда сервер позовёт позже через
+        // pvp:match_found, а сейчас просто ждём
+        await api.pvpFindMatch(cid());
+      } catch (err) {
+        onPvpHide();
+        toast((err as Error).message, 'error');
+      } finally {
+        findBtn.disabled = false;
+      }
     });
     box.append(findBtn);
     // Топ-10

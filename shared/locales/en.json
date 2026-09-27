@@ -56,6 +56,15 @@
     "claim_note": "Pick an email and a password. Your character, items and progress will stay as they are.",
     "claim_submit": "Save"
   },
+  "pvp": {
+    "searching": "Looking for an opponent…",
+    "not_found": "No opponent found",
+    "fight_hint": "Attack your opponent. Whoever keeps more health wins.",
+    "you_won": "You won! Your rating updates once your opponent confirms.",
+    "you_lost": "You lost. Your rating updates once your opponent confirms.",
+    "draw": "Draw — no rating change.",
+    "wait_opponent": "Waiting for your opponent to confirm"
+  },
   "link": {
     "title": "Linked accounts",
     "hint": "Ways to sign in to this account. Keep at least two so you never lose your character.",
