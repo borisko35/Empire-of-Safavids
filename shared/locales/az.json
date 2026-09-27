@@ -126,6 +126,9 @@
     "stats": "Dəvət olunan: {n} · Qazanılan: {gold} qızıl",
     "reward": "Dostun qoşulduqda 1000 qızıl alır, sən hər biri üçün 500 qızıl.",
     "invited_toast": "Dəvət ilə gəlmisan. Personaj yarad — 1000 qızıl al.",
+    "share_title": "Dostuna bildir",
+    "share_text": "Səfəvi İranında brauzer MMORPG oynuram — quraşdırma yoxdur, dərhal oynanır. Əgər maraqlıdırsa gir: {link}",
+    "share_copy": "Linkli mətni kopyala",
     "unavailable": "Dəvət müvəqqəti işləmir"
   },
   "tutorial": {

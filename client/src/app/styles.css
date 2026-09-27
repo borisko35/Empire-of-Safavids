@@ -1397,6 +1397,22 @@ input, select { font: inherit; }
   border: 1px solid rgba(201, 168, 76, 0.5);
 }
 .ref-copy:hover { background: rgba(201, 168, 76, 0.32); }
+
+/* Рассказать другу. Раньше в панели была только ссылка и кнопка
+   «копировать»: игрок оставался с голым адресом и готовым текстом
+   придумывать сам. Кнопки площадок закрывают этот последний шаг. */
+.ref-share { margin-top: 12px; }
+.ref-share-title { font-size: 12px; color: var(--cream); margin-bottom: 6px; }
+.ref-share-btn {
+  display: inline-block; margin: 0 6px 6px 0; padding: 7px 12px;
+  font-size: 12px; text-decoration: none; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06); color: var(--cream);
+  border: 1px solid var(--panel-border); cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.ref-share-btn:hover { background: rgba(201, 168, 76, 0.22); border-color: var(--gold); }
+.ref-share .ref-copy { margin-top: 6px; }
+
 .ref-stats {
   margin-top: 12px; font-size: 13px; color: var(--cream);
   padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.04);

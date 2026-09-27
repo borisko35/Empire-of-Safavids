@@ -126,6 +126,9 @@
     "stats": "Invited: {n} · Earned: {gold} gold",
     "reward": "Your friend gets 1000 gold for joining, you get 500 gold for each one.",
     "invited_toast": "You came by invitation. Create a character to get 1000 gold.",
+    "share_title": "Tell a friend",
+    "share_text": "I am playing a browser MMORPG set in Safavid Iran — no download, instant play. Come join if you like it: {link}",
+    "share_copy": "Copy the text with the link",
     "unavailable": "Invitations are temporarily unavailable"
   },
   "tutorial": {

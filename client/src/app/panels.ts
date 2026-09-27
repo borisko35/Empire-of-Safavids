@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Панели: данжи, магазин, крафт, аукцион, группа, караваны
 // ============================================================
 // Рендеры следуют стилю loadInventory (hud.ts): строки-карточки с
@@ -1154,6 +1154,52 @@ async function loadReferral(): Promise<void> {
     reward.className = 'ref-reward';
     reward.textContent = t('referral.reward');
     box.append(reward);
+
+    // ── Поделиться ────────────────────────────────────────────
+    // Ссылка и кнопка копирования уже были, но игроку оставалось самому
+    // придумывать текст, открывать соцсеть и вставлять адрес руками.
+    //
+    // Так почти никто и не делится: копировать голую ссылку без причины
+    // не найдётся желающих. Теперь есть готовый текст и кнопки под каждую
+    // площадку — остаётся нажать одну, и сообщение уходит со ссылкой, по
+    // которой другу начислится награда.
+    const shareText = t('referral.share_text').replace('{link}', info.link);
+    const shareBlock = document.createElement('div');
+    shareBlock.className = 'ref-share';
+    const shareTitle = document.createElement('div');
+    shareTitle.className = 'ref-share-title';
+    shareTitle.textContent = t('referral.share_title');
+    shareBlock.append(shareTitle);
+
+    const buttons: { id: string; label: string; href: (u: string, s: string) => string }[] = [
+      { id: 'vk',   label: 'VK',        href: (u, s) => `https://vk.com/share.php?url=${u}&title=${s}` },
+      { id: 'tg',   label: 'Telegram',  href: (u, s) => `https://t.me/share/url?url=${u}&text=${s}` },
+      { id: 'wa',   label: 'WhatsApp',  href: (u, s) => `https://wa.me/?text=${s}%20${u}` },
+      { id: 'x',    label: 'X',         href: (u, s) => `https://twitter.com/intent/tweet?url=${u}&text=${s}` },
+    ];
+    const enc = encodeURIComponent;
+    for (const b of buttons) {
+      const link = document.createElement('a');
+      link.className = `ref-share-btn ref-share-${b.id}`;
+      link.textContent = b.label;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.href = b.href(enc(info.link), enc(shareText));
+      shareBlock.append(link);
+    }
+    box.append(shareBlock);
+
+    // Тот же текст копируется целиком — со ссылкой и описанием, а не голая
+    const shareCopy = document.createElement('button');
+    shareCopy.className = 'ref-copy';
+    shareCopy.type = 'button';
+    shareCopy.textContent = t('referral.share_copy');
+    shareCopy.addEventListener('click', async () => {
+      const ok = await copyText(shareText);
+      shareCopy.textContent = ok ? t('referral.copied') : t('referral.copy_failed');
+      setTimeout(() => { shareCopy.textContent = t('referral.share_copy'); }, 2500);
+    });
+    box.append(shareCopy);
   } catch {
     const empty = document.createElement('div');
     empty.className = 'lb-empty';
