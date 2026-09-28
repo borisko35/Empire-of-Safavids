@@ -164,10 +164,13 @@ describe('Башня: этаж можно пройти', () => {
   });
 
   it('панель башни переведена', () => {
+    // 14 ключей были при первой вычитке, ещё 2 добавились, когда в
+    // panels.ts убрали хардкод: строка этажа «⚔ N · ур.M» и заглушка
+    // «Башня недоступна».
     for (const lang of LOCALES) {
       const d = locale(lang) as { tower?: Record<string, string> };
       expect({ lang, ключей: Object.keys(d.tower ?? {}).length })
-        .toEqual({ lang, ключей: 14 });
+        .toEqual({ lang, ключей: 16 });
     }
   });
 });

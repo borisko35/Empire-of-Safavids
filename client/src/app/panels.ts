@@ -17,30 +17,34 @@ import { loadMediaPanel } from './media';
 import { loadGuild } from './guild';
 import { RARITY_COLORS } from '../ui/icons';
 
-// Простая словарь имен предметов для магазина (itemId -> русское название)
+// Простой словарь имен предметов для магазина (itemId -> ключ перевода)
 const SHOP_ITEM_NAMES: Record<string, string> = {
-  'con_health_potion_s': 'Зелье здоровья (мал)',
-  'con_stamina_food': 'Стяжающаяся еда',
-  'mat_iron_ore': 'Железная руда',
-  'wpn_iron_sword': 'Железный сабль',
-  'arm_leather_vest': 'Кожаный жилет',
-  'con_health_potion_m': 'Зелье здоровья (смол)',
-  'con_mana_potion': 'Зелье маны',
-  'mat_silk': 'Шёлк',
-  'mat_saffron': 'Сафран',
-  'con_exp_scroll': 'Свиток опыта',
-  'wpn_qizilbash_saber': 'Сабль кызылбаша',
-  'arm_silk_robe': 'Шёлковый халат исфахана',
-  'mat_turquoise': 'Тофи',
-  'mat_dragon_scale': 'Шампур дракона',
-  'acc_silk_road_amulet': 'Амулет шёлкового пути',
-  'mount_arabian_horse': 'Арабский скакун',
-  'mount_bactrian_camel': 'Двугорбый верблюд',
-  'mount_qizilbash_warhorse': 'Боевой конь Кызылбаша',
-  'acc_boots_silk': 'Сапоги Шёлкового Пути',
-  'acc_boots_seafarer': 'Сапоги Морехода',
-  'acc_cloim_rain': 'Плащ Муссонного Дождя',
+  'con_health_potion_s': 'items.con_health_potion_s',
+  'con_stamina_food': 'items.con_stamina_food',
+  'mat_iron_ore': 'items.mat_iron_ore',
+  'wpn_iron_sword': 'items.wpn_iron_sword',
+  'arm_leather_vest': 'items.arm_leather_vest',
+  'con_health_potion_m': 'items.con_health_potion_m',
+  'con_mana_potion': 'items.con_mana_potion',
+  'mat_silk': 'items.mat_silk',
+  'mat_saffron': 'items.mat_saffron',
+  'con_exp_scroll': 'items.con_exp_scroll',
+  'wpn_qizilbash_saber': 'items.wpn_qizilbash_saber',
+  'arm_silk_robe': 'items.arm_silk_robe',
+  'mat_turquoise': 'items.mat_turquoise',
+  'mat_dragon_scale': 'items.mat_dragon_scale',
+  'acc_silk_road_amulet': 'items.acc_silk_road_amulet',
+  'mount_arabian_horse': 'items.mount_arabian_horse',
+  'mount_bactrian_camel': 'items.mount_bactrian_camel',
+  'mount_qizilbash_warhorse': 'items.mount_qizilbash_warhorse',
+  'acc_boots_silk': 'items.acc_boots_silk_road',
+  'acc_boots_seafarer': 'items.acc_boots_seafarer',
+  'acc_cloim_rain': 'items.acc_cloak_monsoon',
 };
+
+function itemName(itemId: string): string {
+  return t(SHOP_ITEM_NAMES[itemId] ?? itemId);
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -158,14 +162,14 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     const w = rowEl('inv-item dungeon-status');
     const wLabel = document.createElement('span');
     wLabel.className = 'inv-name';
-    wLabel.textContent = `AZENS: ${wallet.azens} · Золото: ${wallet.gold} · Серебро Исфахана: ${wallet.isfahanSilver} · Золото Сирии: ${wallet.syrianGold}`;
+    wLabel.textContent = t('wallet.balance_row').replace('{azens}', String(wallet.azens)).replace('{gold}', String(wallet.gold)).replace('{silver}', String(wallet.isfahanSilver)).replace('{syrian}', String(wallet.syrianGold));
     w.append(wLabel);
     box.append(w);
     if (!wallet.hasToppedUp) {
       const fb = rowEl('inv-item dungeon-status');
       const fbLabel = document.createElement('span');
       fbLabel.className = 'inv-name';
-      fbLabel.textContent = `Первая покупка: x${firstBonus?.multiplier ?? 2} AZENS (бонус до ${firstBonus?.maxBonus ?? 0})!`;
+      fbLabel.textContent = t('wallet.first_purchase_bonus').replace('{mult}', String(firstBonus?.multiplier ?? 2)).replace('{max}', String(firstBonus?.maxBonus ?? 0));
       fb.append(fbLabel);
       box.append(fb);
     }
@@ -173,7 +177,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     const statusRow = rowEl('inv-item dungeon-status');
     const statusLabel = document.createElement('span');
     statusLabel.className = 'inv-name';
-    statusLabel.textContent = 'Пополнение: платёж не создан';
+    statusLabel.textContent = t('wallet.pay_not_created');
     statusRow.append(statusLabel);
     box.append(statusRow);
 
@@ -193,19 +197,19 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
             }
           } catch { /* баланс обновится позже */ }
           refreshBars();
-          const bonusTxt = st.bonus > 0 ? ` (бонус +${st.bonus})` : '';
-          statusLabel.textContent = `Оплата подтверждена${bonusTxt}`;
+          const bonusTxt = st.bonus > 0 ? t('wallet.bonus_suffix').replace('{n}', String(st.bonus)) : '';
+          statusLabel.textContent = t('wallet.pay_confirmed') + bonusTxt;
           toast(`+${expected} AZENS${bonusTxt}`, 'success');
           await loadShop();
           return;
         }
         if (st.status === 'failed') {
-          statusLabel.textContent = 'Платёж отклонён провайдером';
-          toast('Платёж отклонён', 'error');
+          statusLabel.textContent = t('wallet.pay_rejected_provider');
+          toast(t('wallet.pay_rejected'), 'error');
           return;
         }
       }
-      statusLabel.textContent = 'Ожидание затянулось — проверьте позже';
+      statusLabel.textContent = t('wallet.pay_timeout');
     }
 
     const top = rowEl('inv-item');
@@ -223,25 +227,25 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     const amt = document.createElement('input');
     amt.type = 'number';
     amt.min = '1';
-    amt.placeholder = 'Сумма';
+    amt.placeholder = t('common.amount');
     amt.style.width = '80px';
     top.append(cur, amt);
-    top.append(actionButton('Пополнить AZENS', async () => {
+    top.append(actionButton(t('wallet.topup_btn'), async () => {
       const sum = Number(amt.value);
-      if (!sum || sum <= 0) { toast('Введите сумму', 'error'); return; }
+      if (!sum || sum <= 0) { toast(t('wallet.enter_amount'), 'error'); return; }
       const created = await api.paymentTopup(cid(), { realCurrency: cur.value, amount: sum });
-      statusLabel.textContent = `Платёж ${created.paymentId.slice(0, 8)}: ${created.azensExpected} AZENS — ожидание оплаты`;
+      statusLabel.textContent = t('wallet.payment_pending').replace('{id}', created.paymentId.slice(0, 8)).replace('{azens}', String(created.azensExpected));
       if (simulatorOn) {
-        statusRow.append(actionButton('Симулировать оплату', async () => {
+        statusRow.append(actionButton(t('wallet.simulate'), async () => {
           const done = await api.paymentSimulate(cid(), created.paymentId);
           if (session.character && typeof done.azens === 'number') session.character.azens = done.azens;
           refreshBars();
-          statusLabel.textContent = 'Оплата подтверждена (симулятор)';
+          statusLabel.textContent = t('wallet.pay_confirmed_sim');
           toast(`+${created.azensExpected} AZENS`, 'success');
           await loadShop();
         }));
       }
-      toast('Платёж создан, дождитесь подтверждения', 'info');
+      toast(t('wallet.pay_created'), 'info');
       await pollPayment(created.paymentId, created.azensExpected);
     }));
     box.append(top);
@@ -253,21 +257,21 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
       label.className = 'inv-name';
       label.textContent = `${pack.realAmount} ${pack.realCurrency.toUpperCase()} → ${pack.azens} AZENS${pack.bonusPct ? ` (+${pack.bonusPct}%)` : ''}${pack.tagRu ? ` [${pack.tagRu}]` : ''}`;
       row.append(label);
-      row.append(actionButton('Купить', async () => {
+      row.append(actionButton(t('panels.buy'), async () => {
         const created = await api.paymentTopup(cid(), { packId: pack.id });
-        statusLabel.textContent = `Пакет ${pack.id}: ${created.azensExpected} AZENS — ожидание оплаты`;
+        statusLabel.textContent = t('wallet.pack_pending').replace('{id}', String(pack.id)).replace('{azens}', String(created.azensExpected));
         if (simulatorOn) {
-          statusRow.append(actionButton('Симулировать оплату', async () => {
+          statusRow.append(actionButton(t('wallet.simulate'), async () => {
             const done = await api.paymentSimulate(cid(), created.paymentId);
             if (session.character && typeof done.azens === 'number') session.character.azens = done.azens;
             refreshBars();
-            const b = typeof done.bonus === 'number' && done.bonus > 0 ? ` (бонус +${done.bonus})` : '';
-            statusLabel.textContent = `Оплата подтверждена (симулятор)${b}`;
+            const b = typeof done.bonus === 'number' && done.bonus > 0 ? t('wallet.bonus_suffix').replace('{n}', String(done.bonus)) : '';
+            statusLabel.textContent = t('wallet.pay_confirmed_sim_bonus').replace('{bonus}', b);
             toast(`+${created.azensExpected} AZENS${b}`, 'success');
             await loadShop();
           }));
         }
-        toast('Платёж создан, дождитесь подтверждения', 'info');
+        toast(t('wallet.pay_created'), 'info');
         await pollPayment(created.paymentId, created.azensExpected);
       }));
       box.append(row);
@@ -278,20 +282,20 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
       const prem = await api.premiumStatus(cid());
       const ph = document.createElement('div');
       ph.className = 'panel-subhead';
-      ph.textContent = prem.active ? 'Премиум-аккаунт: активен' : 'Премиум-аккаунт';
+      ph.textContent = prem.active ? t('wallet.premium_active') : t('wallet.premium_title');
       box.append(ph);
       if (!prem.active) {
         for (const d of prem.durations) {
           const row = rowEl('inv-item');
           const label = document.createElement('span');
           label.className = 'inv-name';
-          label.textContent = `${d.days} дней: ${d.priceAzens} AZENS`;
+          label.textContent = t('wallet.premium_days').replace('{days}', String(d.days)).replace('{azens}', String(d.priceAzens));
           row.append(label);
-          row.append(actionButton('Купить', async () => {
+          row.append(actionButton(t('panels.buy'), async () => {
             const res = await api.premiumPurchase(cid(), d.days);
             if (session.character) session.character.azens = res.azens;
             refreshBars();
-            toast('Премиум активирован', 'success');
+            toast(t('wallet.premium_activated'), 'success');
             await loadShop();
           }));
           box.append(row);
@@ -302,12 +306,12 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     // Промокод
     const promoRow = rowEl('inv-item');
     const promoInput = document.createElement('input');
-    promoInput.placeholder = 'Промокод';
+    promoInput.placeholder = t('wallet.promo_title');
     promoInput.style.width = '140px';
     promoRow.append(promoInput);
-    promoRow.append(actionButton('Активировать', async () => {
+    promoRow.append(actionButton(t('wallet.promo_activate'), async () => {
       const code = promoInput.value.trim();
-      if (!code) { toast('Введите промокод', 'error'); return; }
+      if (!code) { toast(t('wallet.promo_enter'), 'error'); return; }
       const res = await api.promoRedeem(cid(), code);
       if (session.character) {
         session.character.azens = res.wallet.azens;
@@ -317,9 +321,9 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
       refreshBars();
       const parts: string[] = [];
       if (res.reward.azens) parts.push(`${res.reward.azens} AZENS`);
-      if (res.reward.silver) parts.push(`${res.reward.silver} серебра`);
-      if (res.reward.syrian) parts.push(`${res.reward.syrian} сир. золота`);
-      toast(`Промокод: +${parts.join(', ')}`, 'success');
+      if (res.reward.silver) parts.push(t('wallet.reward_silver').replace('{n}', String(res.reward.silver)));
+      if (res.reward.syrian) parts.push(t('wallet.reward_syrian').replace('{n}', String(res.reward.syrian)));
+      toast(t('wallet.promo_reward').replace('{parts}', parts.join(', ')), 'success');
       await loadShop();
     }));
     box.append(promoRow);
@@ -330,7 +334,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
       if (pairs.length) {
         const exHead = document.createElement('div');
         exHead.className = 'panel-subhead';
-        exHead.textContent = 'Обменник';
+        exHead.textContent = t('wallet.exchange_title');
         box.append(exHead);
         const exRow = rowEl('inv-item');
         const pairSel = document.createElement('select');
@@ -348,7 +352,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
         timesInput.value = '1';
         timesInput.style.width = '60px';
         exRow.append(pairSel, timesInput);
-        exRow.append(actionButton('Обменять', async () => {
+        exRow.append(actionButton(t('wallet.exchange_btn'), async () => {
           const times = Math.max(1, Math.min(100, Number(timesInput.value) || 1));
           const res = await api.exchange(cid(), pairSel.value, times);
           if (session.character) {
@@ -357,7 +361,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
             session.character.syrianGold = res.wallet.syrian;
           }
           refreshBars();
-          toast('Обмен выполнен', 'success');
+          toast(t('wallet.exchange_done'), 'success');
           await loadShop();
         }));
         box.append(exRow);
@@ -366,7 +370,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
 
     const consent = document.createElement('div');
     consent.className = 'dungeon-status';
-    consent.textContent = 'Нажимая «Пополнить», вы соглашаетесь с офертой: AZENS — виртуальная валюта без денежной стоимости, обмену обратно на деньги не подлежит. Возвраты — по политике возвратов.';
+    consent.textContent = t('wallet.consent');
     box.append(consent);
   } catch { /* кошелёк недоступен */ }
 }
@@ -379,13 +383,13 @@ async function loadPaymentHistory(box: HTMLElement): Promise<void> {
   if (!history.payments.length) return;
   const head = document.createElement('div');
   head.className = 'panel-subhead';
-  head.textContent = 'Мои покупки';
+  head.textContent = t('wallet.my_purchases');
   box.append(head);
   for (const p of history.payments.slice(0, 10)) {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    const what = p.packId ? `пакет ${p.packId}` : `${p.realAmount} ${p.realCurrency.toUpperCase()}`;
+    const what = p.packId ? t('wallet.pack_word').replace('{id}', String(p.packId)) : `${p.realAmount} ${p.realCurrency.toUpperCase()}`;
     label.textContent = `${what} → ${p.azensExpected} AZENS — ${p.status}`;
     row.append(label);
     box.append(row);
@@ -399,7 +403,7 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
   } catch { return; }
   const head = document.createElement('div');
   head.className = 'panel-subhead';
-  head.textContent = `Батл-пасс: ${status.season.nameRu}`;
+  head.textContent = t('wallet.battlepass_season').replace('{name}', status.season.nameRu);
   box.append(head);
   const claimed: number[] = Array.isArray(status.progress?.claimed_tiers)
     ? (status.progress.claimed_tiers as number[])
@@ -409,13 +413,13 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    label.textContent = `Премиум-доступ: ${status.season.premiumPrice} AZENS`;
+    label.textContent = t('wallet.premium_price').replace('{n}', String(status.season.premiumPrice));
     row.append(label);
-    row.append(actionButton('Купить', async () => {
+    row.append(actionButton(t('panels.buy'), async () => {
       const res = await api.battlepassPurchase(cid());
       if (session.character) session.character.azens = res.azens;
       refreshBars();
-      toast('Премиум батл-пасс активирован', 'success');
+      toast(t('wallet.battlepass_premium_on'), 'success');
       await loadShop();
     }));
     box.append(row);
@@ -426,18 +430,18 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    label.textContent = `Тир ${tier.tier}: ${tier.freeReward.nameRu} / премиум: ${tier.premiumReward.nameRu}`;
+    label.textContent = t('wallet.battlepass_tier').replace('{tier}', String(tier.tier)).replace('{free}', tier.freeReward.nameRu).replace('{premium}', tier.premiumReward.nameRu);
     row.append(label);
     if (unlocked && !got) {
-      row.append(actionButton('Забрать', async () => {
+      row.append(actionButton(t('panels.collect'), async () => {
         await api.battlepassClaim(cid(), tier.tier, false);
-        toast('Награда получена', 'success');
+        toast(t('mail.claimed'), 'success');
         await loadShop();
       }));
       if (status.progress?.is_premium) {
-        row.append(actionButton('Премиум', async () => {
+        row.append(actionButton(t('wallet.premium'), async () => {
           await api.battlepassClaim(cid(), tier.tier, true);
-          toast('Премиум-награда получена', 'success');
+          toast(t('wallet.premium_reward_claimed'), 'success');
           await loadShop();
         }));
       }
@@ -464,7 +468,7 @@ export async function loadShop(): Promise<void> {
         const row = rowEl('inv-item');
         const label = document.createElement('span');
         label.className = 'inv-name';
-        label.textContent = item.nameRu ?? SHOP_ITEM_NAMES[item.itemId] ?? item.itemId;
+        label.textContent = item.nameRu ?? itemName(item.itemId);
         const price = document.createElement('span');
         price.className = 'inv-qty';
         price.textContent = cur2 === 'azens' ? `AZENS ${item.price}` : cur2 === 'silver' ? `SILVER ${item.price}` : cur2 === 'syrian' ? `SYRIAN ${item.price}` : `gold ${item.price}`;
@@ -593,7 +597,7 @@ export async function loadAuction(): Promise<void> {
     if (!listings.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Нет активных лотов';
+      empty.textContent = t('auction.empty');
       box.append(empty);
     }
     for (const l of listings) {
@@ -675,7 +679,7 @@ export async function loadAuction(): Promise<void> {
       if (!items.length) {
         const note = document.createElement('div');
         note.className = 'lb-empty';
-        note.textContent = 'Сумка пуста — нечего выставлять';
+        note.textContent = t('auction.bag_empty');
         box.append(note);
       } else {
         const form = document.createElement('div');
@@ -689,13 +693,13 @@ export async function loadAuction(): Promise<void> {
         }
         const qtyInput = document.createElement('input');
         qtyInput.type = 'number'; qtyInput.min = '1'; qtyInput.value = '1';
-        qtyInput.placeholder = 'Кол-во';
+        qtyInput.placeholder = t('auction.qty');
         const priceInput = document.createElement('input');
         priceInput.type = 'number'; priceInput.min = '1'; priceInput.value = '100';
-        priceInput.placeholder = 'Цена (золото)';
+        priceInput.placeholder = t('auction.price');
         const submitBtn = document.createElement('button');
         submitBtn.className = 'quest-accept';
-        submitBtn.textContent = 'Выставить';
+        submitBtn.textContent = t('auction.list');
         submitBtn.addEventListener('click', async () => {
           try {
             await api.auctionList({
@@ -704,7 +708,7 @@ export async function loadAuction(): Promise<void> {
               quantity: Math.max(1, Number(qtyInput.value) || 1),
               price: Math.max(1, Number(priceInput.value) || 1),
             });
-            toast('Лот размещён!', 'success');
+            toast(t('auction.listed'), 'success');
             await loadAuction();
           } catch (err) { toast((err as Error).message, 'error'); }
         });
@@ -714,7 +718,7 @@ export async function loadAuction(): Promise<void> {
     } catch { /* форма недоступна без инвентаря */ }
   } catch (err) {
     const box = $('auction-list');
-    if (box) box.innerHTML = `<div class="lb-empty">Ошибка загрузки: ${(err as Error).message}</div>`;
+    if (box) box.innerHTML = `<div class="lb-empty">${t('panels.load_error_msg').replace('{msg}', (err as Error).message)}</div>`;
   }
 }
 
@@ -958,8 +962,8 @@ export async function loadTrade(): Promise<void> {
       label.className = 'inv-name';
       label.textContent = `${c.nameRu} · ${c.cargoNameRu} ×${c.cargoQty} → ◉ ${c.rewardGold}`;
       row.append(label);
-      if (c.rewardSilver) label.textContent += ` + ${c.rewardSilver} серебра`;
-      if (c.rewardSyrian) label.textContent += ` + ${c.rewardSyrian} сир. золота`;
+      if (c.rewardSilver) label.textContent += t('panels.reward_silver_add').replace('{n}', String(c.rewardSilver));
+      if (c.rewardSyrian) label.textContent += t('panels.reward_syrian_add').replace('{n}', String(c.rewardSyrian));
       label.title = `${t('panels.trade_travel')}: ${c.travelMinutes} ${t('panels.trade_min')}`;
       row.append(actionButton(t('panels.trade_accept'), async () => {
         try {
@@ -1021,13 +1025,13 @@ export async function loadTrade(): Promise<void> {
     // Подарки другим игрокам
     const giftHead = document.createElement('div');
     giftHead.className = 'panel-subhead';
-    giftHead.textContent = 'Подарок игроку';
+    giftHead.textContent = t('panels.gift_title');
     box.append(giftHead);
     try {
       const { items } = await api.inventory(cid());
       const giftRow = rowEl('inv-item');
       const targetInput = document.createElement('input');
-      targetInput.placeholder = 'Имя получателя';
+      targetInput.placeholder = t('panels.gift_recipient');
       targetInput.style.width = '130px';
       const itemSel = document.createElement('select');
       itemSel.className = 'inv-action';
@@ -1043,11 +1047,11 @@ export async function loadTrade(): Promise<void> {
       qtyInput.value = '1';
       qtyInput.style.width = '50px';
       giftRow.append(targetInput, itemSel, qtyInput);
-      giftRow.append(actionButton('Подарить', async () => {
+      giftRow.append(actionButton(t('panels.gift_send'), async () => {
         const target = targetInput.value.trim();
-        if (!target) { toast('Укажите получателя', 'error'); return; }
+        if (!target) { toast(t('panels.gift_need_recipient'), 'error'); return; }
         await api.giftSend(cid(), target, itemSel.value, Math.max(1, Number(qtyInput.value) || 1));
-        toast('Подарок отправлен', 'success');
+        toast(t('panels.gift_sent'), 'success');
         await loadTrade();
       }));
       box.append(giftRow);
@@ -1095,7 +1099,7 @@ export async function loadActiveMount(): Promise<void> {
 }
 
 const RARITY_RU: Record<string, string> = {
-  common: 'Обычный', rare: 'Редкий', epic: 'Эпик', legendary: 'Легендарный', mythical: 'Мифический',
+  common: t('badges.rarity.common'), rare: t('badges.rarity.rare'), epic: t('badges.rarity.epic'), legendary: t('badges.rarity.legendary'), mythical: t('badges.rarity.mythic'),
 };
 
 export async function loadMounts(): Promise<void> {
@@ -1116,7 +1120,7 @@ export async function loadMounts(): Promise<void> {
     // было нечем, а «Верхом» без скорости ничего не давал.
     const mine = document.createElement('div');
     mine.className = 'panel-subhead';
-    mine.textContent = owned.length ? `Ваши скакуны (${owned.length})` : 'Скакунов пока нет';
+    mine.textContent = owned.length ? t('mounts.yours').replace('{n}', String(owned.length)) : t('mounts.none');
     box.append(mine);
 
     for (const m of owned) {
@@ -1128,19 +1132,19 @@ export async function loadMounts(): Promise<void> {
       speed.className = 'inv-qty';
       // Текущая скорость, а не диапазон: игроку важно, насколько быстро он
       // поедет сейчас, а не на каком он уровне
-      speed.textContent = `⚡ ${m.speed} м/с`;
+      speed.textContent = t('mounts.speed').replace('{n}', String(m.speed));
       row.append(name, speed);
       const info = document.createElement('span');
       info.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
       info.textContent =
-        `уровень ${m.level} · ${m.base_speed}–${m.max_speed} м/с` +
-        (m.carry_bonus ? ` · груз +${m.carry_bonus}` : '') +
+        t('mounts.level_speed').replace('{lvl}', String(m.level)).replace('{min}', String(m.base_speed)).replace('{max}', String(m.max_speed)) +
+        (m.carry_bonus ? t('mounts.carry').replace('{n}', String(m.carry_bonus)) : '') +
         (m.rarity in RARITY_RU ? ` · ${RARITY_RU[m.rarity]}` : '');
       row.append(info);
-      const actBtn = actionButton(m.is_active ? '✔ Верхом' : 'Верхом', async () => {
+      const actBtn = actionButton(m.is_active ? t('mounts.riding_on') : t('mounts.riding'), async () => {
         await api.mountActivate(cid(), m.mount_id);
         await loadMounts();
-        toast(m.is_active ? `${m.name_ru} отпущен` : `${m.name_ru} призываем`, 'success');
+        toast(m.is_active ? t('mounts.released').replace('{name}', m.name_ru) : t('mounts.summoning').replace('{name}', m.name_ru), 'success');
       });
       if (m.is_active) actBtn.style.opacity = '0.7';
       row.append(actBtn);
@@ -1154,7 +1158,7 @@ export async function loadMounts(): Promise<void> {
 
     const title = document.createElement('div');
     title.className = 'panel-subhead';
-    title.textContent = 'Доступные скакуны';
+    title.textContent = t('mounts.available');
     box.append(title);
 
     for (const item of stableShop.items) {
@@ -1162,7 +1166,7 @@ export async function loadMounts(): Promise<void> {
       const row = rowEl('inv-item');
       const name = document.createElement('span');
       name.className = 'inv-name';
-      name.textContent = SHOP_ITEM_NAMES[item.itemId] ?? item.itemId;
+      name.textContent = itemName(item.itemId);
       const price = document.createElement('span');
       price.className = 'inv-qty';
       price.textContent = `${cur2 === 'azens' ? 'AZENS' : 'gold'} ${item.price}`;
@@ -1171,18 +1175,18 @@ export async function loadMounts(): Promise<void> {
         // Уже есть: покупать второй раз смысла нет, кнопка в списке сверху
         const has = document.createElement('span');
         has.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
-        has.textContent = 'уже есть в вашей конюшне';
+        has.textContent = t('mounts.already');
         row.append(has);
         box.append(row);
         continue;
       }
-      const buyBtn = actionButton('Купить', async () => {
+      const buyBtn = actionButton(t('panels.buy'), async () => {
         const res = await api.mountsBuy('shop_isfahan_stable', cid(), item.itemId);
         if (res.success && session.character) {
           if (typeof res.gold === 'number') session.character.gold = res.gold;
           if (typeof res.azens === 'number') session.character.azens = res.azens;
           refreshBars();
-          toast(`${name.textContent} куплен!`, 'success');
+          toast(t('mounts.bought').replace('{name}', name.textContent ?? ''), 'success');
           await loadMounts();
         } else if (res && 'error' in res) {
           toast(String(res.error), 'error');
@@ -1203,10 +1207,10 @@ async function loadLeaderboard(): Promise<void> {
   box.innerHTML = '';
 
   const types = [
-    { id: 'level', label: 'Уровень' },
+    { id: 'level', label: t('panels.lb_level') },
     { id: 'pvp', label: 'PvP' },
-    { id: 'kills', label: 'Убийства' },
-    { id: 'quests', label: 'Квесты' },
+    { id: 'kills', label: t('panels.lb_kills') },
+    { id: 'quests', label: t('panels.lb_quests') },
   ];
 
   // Табы
@@ -1240,7 +1244,7 @@ async function renderLeaderboard(container: HTMLElement, type: string): Promise<
     const data = await api.leaderboard(type);
     const entries = data.entries ?? [];
     if (!entries.length) {
-      listEl.innerHTML = '<div class="lb-empty">Пока нет данных</div>';
+      listEl.innerHTML = `<div class="lb-empty">${t('panels.lb_empty')}</div>`;
       return;
     }
     // Ваша позиция
@@ -1251,7 +1255,7 @@ async function renderLeaderboard(container: HTMLElement, type: string): Promise<
         myRow.className = 'lb-entry';
         myRow.style.cssText = 'background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);';
         myRow.innerHTML = `<span class="lb-rank">👤 ${meData.rank.rank}</span>` +
-          `<span class="lb-name">${session.character?.name ?? 'Вы'}</span>` +
+          `<span class="lb-name">${session.character?.name ?? t('panels.you')}</span>` +
           `<span class="lb-value">${meData.rank.value}</span>`;
         listEl.append(myRow);
       }
@@ -1263,13 +1267,13 @@ async function renderLeaderboard(container: HTMLElement, type: string): Promise<
       row.innerHTML =
         `<span class="lb-rank">${medal} ${e.rank}</span>` +
         `<span class="lb-name">${e.characterName}</span>` +
-        `<span class="lb-class">Ур.${e.level}</span>` +
+        `<span class="lb-class">${t('badges.level')}${e.level}</span>` +
         (e.guild ? `<span class="lb-guild">[${e.guild}]</span>` : '') +
         `<span class="lb-value">${e.value.toLocaleString()}</span>`;
       listEl.append(row);
     }
   } catch {
-    listEl.innerHTML = '<div class="lb-empty">Ошибка загрузки</div>';
+    listEl.innerHTML = `<div class="lb-empty">${t('panels.load_error')}</div>`;
   }
 }
 
@@ -1412,20 +1416,20 @@ async function loadFriends(): Promise<void> {
     if (data.pending.length) {
       const pendingLabel = document.createElement('div');
       pendingLabel.className = 'pending-label';
-      pendingLabel.textContent = `Входящие запросы (${data.pending.length})`;
+      pendingLabel.textContent = t('panels.pending_requests_n').replace('{n}', String(data.pending.length));
       box.append(pendingLabel);
       for (const p of data.pending) {
         const row = document.createElement('div');
         row.className = 'pending-entry';
         row.innerHTML =
           `<span class="friend-name">${p.friendName}</span>` +
-          `<span class="friend-info">Ур.${p.level}</span>`;
+          `<span class="friend-info">${t('badges.level')}${p.level}</span>`;
         const acceptBtn = document.createElement('button');
         acceptBtn.className = 'friend-btn friend-btn--accept';
-        acceptBtn.textContent = 'Принять';
+        acceptBtn.textContent = t('panels.friend_accept');
         acceptBtn.addEventListener('click', async () => {
           await api.friendAccept(p.userId);
-          toast('Запрос принят!', 'success');
+          toast(t('panels.friend_accepted'), 'success');
           void loadFriends();
         });
         row.append(acceptBtn);
@@ -1441,16 +1445,16 @@ async function loadFriends(): Promise<void> {
         row.innerHTML =
           `<span class="${f.online ? 'friend-online' : 'friend-offline'}"></span>` +
           `<span class="friend-name">${f.friendName}</span>` +
-          `<span class="friend-info">Ур.${f.level} · ${REGION_NAMES[f.region] ?? f.region}</span>`;
+          `<span class="friend-info">${t('badges.level')}${f.level} · ${regionName(f.region)}</span>`;
         const actionsEl = document.createElement('span');
         actionsEl.className = 'friend-actions';
         const removeBtn = document.createElement('button');
         removeBtn.className = 'friend-btn friend-btn--danger';
         removeBtn.textContent = '×';
-        removeBtn.title = 'Удалить из друзей';
+        removeBtn.title = t('panels.friend_delete');
         removeBtn.addEventListener('click', async () => {
           await api.friendRemove(f.friendId);
-          toast('Друг удалён', 'info');
+          toast(t('panels.friend_removed'), 'info');
           void loadFriends();
         });
         actionsEl.append(removeBtn);
@@ -1460,7 +1464,7 @@ async function loadFriends(): Promise<void> {
     } else if (!data.pending.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Пока нет друзей.';
+      empty.textContent = t('panels.no_friends');
       box.append(empty);
     }
 
@@ -1469,7 +1473,7 @@ async function loadFriends(): Promise<void> {
     searchRow.style.cssText = 'display:flex;gap:6px;margin-top:12px';
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
-    searchInput.placeholder = 'Имя друга или ID…';
+    searchInput.placeholder = t('panels.friend_search_ph');
     searchInput.style.cssText = 'flex:1;background:#1a1410;color:#f5f0e8;border:1px solid #5a4a30;padding:6px 8px;border-radius:4px;font-size:12px;';
     searchInput.addEventListener('keydown', async (e) => {
       if (e.key !== 'Enter') return;
@@ -1477,7 +1481,7 @@ async function loadFriends(): Promise<void> {
       if (!val) return;
       try {
         await api.friendRequest(val);
-        toast(`Запрос отправлен: ${val}`, 'success');
+        toast(t('panels.friend_sent').replace('{name}', val), 'success');
         searchInput.value = '';
         void loadFriends();
       } catch (err) {
@@ -1486,7 +1490,7 @@ async function loadFriends(): Promise<void> {
     });
     const addBtn = document.createElement('button');
     addBtn.className = 'quest-accept';
-    addBtn.textContent = 'Добавить';
+    addBtn.textContent = t('panels.friend_add');
     addBtn.addEventListener('click', () => {
       const ev = new KeyboardEvent('keydown', { key: 'Enter' });
       searchInput.dispatchEvent(ev);
@@ -1494,7 +1498,7 @@ async function loadFriends(): Promise<void> {
     searchRow.append(searchInput, addBtn);
     box.append(searchRow);
   } catch {
-    box.innerHTML = '<div class="lb-empty">Друзья недоступны</div>';
+    box.innerHTML = `<div class="lb-empty">${t('panels.friends_unavailable')}</div>`;
   }
 }
 
@@ -1507,7 +1511,7 @@ async function loadChess(): Promise<void> {
 
   const betRow = document.createElement('div');
   betRow.className = 'chess-bet-row';
-  betRow.innerHTML = '<span style="color:var(--cream-dim);font-size:12px;">Ставка:</span>';
+  betRow.innerHTML = `<span style="color:var(--cream-dim);font-size:12px;">${t('chess.bet_label')}</span>`;
   const betInput = document.createElement('input');
   betInput.className = 'chess-bet-input';
   betInput.type = 'number';
@@ -1517,7 +1521,7 @@ async function loadChess(): Promise<void> {
   betRow.append(betInput);
   const startBtn = document.createElement('button');
   startBtn.className = 'quest-accept';
-  startBtn.textContent = 'Начать партию';
+  startBtn.textContent = t('site.chess_start');
   startBtn.addEventListener('click', async () => {
     const bet = Number(betInput.value) || 50;
     try {
@@ -1530,7 +1534,7 @@ async function loadChess(): Promise<void> {
 
   const statusEl = document.createElement('div');
   statusEl.className = 'chess-status';
-  statusEl.textContent = 'Сделайте ставку и начните партию';
+  statusEl.textContent = t('chess.need_bet');
   box.append(statusEl);
 }
 
@@ -1572,7 +1576,7 @@ function renderChessBoard(container: HTMLElement, game: { gameId: string; board:
             }
             renderChessBoard(container, game);
           } catch {
-            toast('Невозможный ход', 'error');
+            toast(t('chess.illegal'), 'error');
             selectedCell = null;
             boardEl.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
           }
@@ -1587,21 +1591,21 @@ function renderChessBoard(container: HTMLElement, game: { gameId: string; board:
   const statusEl = document.createElement('div');
   statusEl.className = 'chess-status';
   if (game.status === 'checkmate') {
-    statusEl.textContent = 'Шах-мат!';
+    statusEl.textContent = t('chess.checkmate');
   } else if (game.status === 'stalemate') {
-    statusEl.textContent = 'Пат!';
+    statusEl.textContent = t('chess.stalemate');
   } else {
-    statusEl.textContent = `Ход: ${game.turn === 'white' ? 'Вы' : 'Мастер'} · Ставка: ◉ ${game.betGold}`;
+    statusEl.textContent = t('chess.turn').replace('{who}', game.turn === 'white' ? t('panels.you') : t('chess.master')).replace('{bet}', String(game.betGold));
   }
   container.append(statusEl);
 
   const resignBtn = document.createElement('button');
   resignBtn.className = 'quest-accept';
-  resignBtn.textContent = 'Сдаться';
+  resignBtn.textContent = t('chess.resign');
   resignBtn.style.marginTop = '8px';
   resignBtn.addEventListener('click', async () => {
     await api.chessResign(game.gameId);
-    toast('Вы сдались', 'info');
+    toast(t('chess.resigned'), 'info');
     void loadChess();
   });
   container.append(resignBtn);
@@ -1619,13 +1623,13 @@ async function loadPoetry(): Promise<void> {
   try { challenges = (await api.poetryChallenges()).challenges; } catch {}
 
   if (!challenges.length) {
-    box.innerHTML = '<div class="lb-empty">Стихотворения временно недоступны</div>';
+    box.innerHTML = `<div class="lb-empty">${t('poetry.unavailable')}</div>`;
     return;
   }
 
   const info = document.createElement('div');
   info.style.cssText = 'color:var(--cream-dim);font-size:12px;margin-bottom:8px';
-  info.textContent = 'Выберите стихотворение для сборки:';
+  info.textContent = t('poetry.choose');
   box.append(info);
 
   const listEl = document.createElement('div');
@@ -1639,7 +1643,7 @@ async function loadPoetry(): Promise<void> {
     row.style.borderRadius = '6px';
     row.style.border = '1px solid rgba(201,168,76,0.15)';
     row.innerHTML = `<span class="friend-name">${ch.titleRu}</span>` +
-      `<span class="friend-info">${ch.difficulty} · ${ch.lineCount} строк</span>` +
+      `<span class="friend-info">${ch.difficulty} · ${t('poetry.lines').replace('{n}', String(ch.lineCount))}</span>` +
       `<span class="lb-value">◉${ch.reward.gold} ⚡${ch.reward.experience}</span>`;
     row.addEventListener('click', () => startPoetryGame(ch));
     listEl.append(row);
@@ -1659,7 +1663,7 @@ async function loadPoetry(): Promise<void> {
 
       const hintEl = document.createElement('p');
       hintEl.style.cssText = 'color:var(--cream-dim);font-size:12px;margin:0 0 10px;';
-      hintEl.textContent = `Сложность: ${data.challenge.difficulty} · Строк: ${data.challenge.lineCount}`;
+      hintEl.textContent = t('poetry.hint').replace('{diff}', data.challenge.difficulty).replace('{n}', String(data.challenge.lineCount));
       box.append(hintEl);
 
       const resultEl = document.createElement('div');
@@ -1685,11 +1689,11 @@ async function loadPoetry(): Promise<void> {
               if (res.isComplete) {
                 if (res.isCorrect) {
                   resultEl.className = 'poetry-result correct';
-                  resultEl.textContent = 'Правильно! Стихотворение собрано! ◉' + challenge.reward.gold + ' золото';
+                  resultEl.textContent = t('poetry.correct') + challenge.reward.gold + ' ' + t('common.gold');
                   optionsEl.querySelectorAll('.poetry-line').forEach(l => l.classList.add('correct'));
                 } else {
                   resultEl.className = 'poetry-result wrong';
-                  resultEl.textContent = 'Неправильный порядок строк';
+                  resultEl.textContent = t('site.poetry_wrong');
                   optionsEl.querySelectorAll('.poetry-line').forEach(l => l.classList.add('wrong'));
                 }
               }
@@ -1704,7 +1708,7 @@ async function loadPoetry(): Promise<void> {
 
       const undoBtn = document.createElement('button');
       undoBtn.className = 'quest-accept';
-      undoBtn.textContent = 'Отменить';
+      undoBtn.textContent = t('common.cancel');
       undoBtn.style.marginTop = '8px';
       undoBtn.addEventListener('click', async () => {
         if (selectedIndices.length === 0) return;
@@ -1718,12 +1722,12 @@ async function loadPoetry(): Promise<void> {
 
       const backBtn = document.createElement('button');
       backBtn.style.cssText = 'background:none;border:1px solid #5a4a30;color:var(--cream-dim);padding:4px 10px;border-radius:4px;margin-top:6px;font-size:11px;cursor:pointer;';
-      backBtn.textContent = '← Назад к списку';
+      backBtn.textContent = t('common.back_list');
       backBtn.addEventListener('click', () => void loadPoetry());
       box.append(backBtn);
 
     } catch {
-      box.innerHTML = '<div class="lb-empty">Ошибка начала игры</div>';
+      box.innerHTML = `<div class="lb-empty">${t('chess.start_error')}</div>`;
     }
   }
 }
@@ -1829,11 +1833,11 @@ async function loadChronicles(): Promise<void> {
   try {
     const data = await api.chronicles();
     const categories = [
-      { id: 'history', label: '📜 История' },
-      { id: 'culture', label: '🎭 Культура' },
-      { id: 'geography', label: '🗺️ География' },
-      { id: 'biography', label: '👤 Биографии' },
-      { id: 'mythology', label: '🐉 Мифология' },
+      { id: 'history', label: t('chronicles.cat_history') },
+      { id: 'culture', label: t('chronicles.cat_culture') },
+      { id: 'geography', label: t('chronicles.cat_geography') },
+      { id: 'biography', label: t('chronicles.cat_biographies') },
+      { id: 'mythology', label: t('chronicles.cat_mythology') },
     ];
 
     const tabsEl = document.createElement('div');
@@ -1861,13 +1865,13 @@ async function loadChronicles(): Promise<void> {
     if (typeof data.unlocked === 'number' && data.total > 0) {
       const prog = document.createElement('div');
       prog.className = 'chronicles-progress';
-      prog.textContent = `Открыто ${data.unlocked} из ${data.total} записей`;
+      prog.textContent = t('chronicles.unlocked').replace('{unlocked}', String(data.unlocked)).replace('{total}', String(data.total));
       box.append(prog);
     }
 
     renderChronicles(listEl, data.entries, '');
   } catch {
-    box.innerHTML = '<div class="lb-empty">Хроники недоступны</div>';
+    box.innerHTML = `<div class="lb-empty">${t('chronicles.unavailable')}</div>`;
   }
 }
 
@@ -1882,7 +1886,7 @@ function renderChronicles(container: HTMLElement, entries: ChronicleView[], cate
   const filtered = category ? entries.filter(e => e.category === category) : entries;
 
   if (!filtered.length) {
-    container.innerHTML = '<div class="lb-empty">Нет записей</div>';
+    container.innerHTML = `<div class="lb-empty">${t('chronicles.none')}</div>`;
     return;
   }
 
@@ -1901,8 +1905,8 @@ function renderChronicles(container: HTMLElement, entries: ChronicleView[], cate
         `<span class="chronicle-cat">${entry.category}</span>` +
         `<h4>???</h4>` +
         (entry.unlockHintRu
-          ? `<p class="chronicle-hint">Откроется после: ${entry.unlockHintRu}</p>`
-          : '<p class="chronicle-hint">Откроется позже</p>');
+          ? `<p class="chronicle-hint">${t('chronicles.unlock_after').replace('{hint}', entry.unlockHintRu ?? '')}</p>`
+          : `<p class="chronicle-hint">${t('chronicles.unlock_later')}</p>`);
     } else {
       card.innerHTML =
         `<span class="chronicle-cat">${entry.category}</span>` +
@@ -1918,7 +1922,7 @@ function renderChronicles(container: HTMLElement, entries: ChronicleView[], cate
         <div class="death-content" style="max-width:560px;text-align:left;">
           <h3 style="color:var(--cream);margin:0 0 8px;">${entry.titleRu}</h3>
           <p style="color:var(--cream-dim);font-size:13px;line-height:1.6;margin:0;">${entry.contentRu}</p>
-          <button class="death-btn death-btn--free" style="margin-top:16px;" onclick="this.closest('.death-overlay').remove()">Закрыть</button>
+          <button class="death-btn death-btn--free" style="margin-top:16px;" onclick="this.closest('.death-overlay').remove()">${t('common.close')}</button>
         </div>
       `;
       document.body.append(modal);
@@ -1928,9 +1932,14 @@ function renderChronicles(container: HTMLElement, entries: ChronicleView[], cate
 }
 
 const REGION_NAMES: Record<string, string> = {
-  tabriz: 'Тебриз', isfahan: 'Исфахан', shiraz: 'Шираз', caucasus: 'Кавказ',
-  mesopotamia: 'Месопотамия', khorasan: 'Хорасан', persian_gulf: 'Персидский залив',
+  tabriz: 'regions.tabriz', isfahan: 'regions.isfahan', shiraz: 'regions.shiraz', caucasus: 'regions.caucasus',
+  mesopotamia: 'regions.mesopotamia', khorasan: 'regions.khorasan', persian_gulf: 'regions.persian_gulf',
 };
+
+function regionName(region: string): string {
+  const key = REGION_NAMES[region];
+  return key ? t(key) : region;
+}
 
 // ── Гильдии ────────────────────────────────────────────────
 
@@ -1946,12 +1955,12 @@ async function loadAchievements(): Promise<void> {
     const data = await api.achievements(charId);
     const stats = document.createElement('div');
     stats.className = 'lb-my-rank';
-    stats.textContent = `Разблокировано: ${data.unlockedCount} / ${data.total}`;
+    stats.textContent = t('achievements.stats').replace('{done}', String(data.unlockedCount)).replace('{total}', String(data.total));
     box.append(stats);
     if (!data.achievements.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Достижения скоро появятся';
+      empty.textContent = t('achievements.coming');
       box.append(empty);
       return;
     }
@@ -1973,7 +1982,7 @@ async function loadAchievements(): Promise<void> {
         (a.reward_gold ? `<span class="lb-value">◉${a.reward_gold}</span>` : '');
       box.append(row);
     }
-  } catch { box.innerHTML = '<div class="lb-empty">Достижения недоступны</div>'; }
+  } catch { box.innerHTML = `<div class="lb-empty">${t('achievements.unavailable')}</div>`; }
 }
 
 // ── Ежедневные задачи ──────────────────────────────────────
@@ -2014,7 +2023,7 @@ async function loadTasks(): Promise<void> {
       if (task.completed) row.style.borderLeft = '2px solid #4AA86A';
       box.append(row);
     }
-  } catch { box.innerHTML = '<div class="lb-empty">Задачи недоступны</div>'; }
+  } catch { box.innerHTML = `<div class="lb-empty">${t('tasks.unavailable')}</div>`; }
 }
 
 // ── Питомцы ────────────────────────────────────────────────
@@ -2028,12 +2037,12 @@ async function loadPets(): Promise<void> {
     if (!data.pets.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'У вас нет питомцев';
+      empty.textContent = t('site.pets_none');
       box.append(empty);
       
       const shopBtn = document.createElement('button');
       shopBtn.className = 'quest-accept';
-      shopBtn.textContent = 'Купить питомца';
+      shopBtn.textContent = t('site.pets_buy');
       shopBtn.style.marginTop = '8px';
       shopBtn.addEventListener('click', () => {
         // Магазин питомцев: явные кнопки покупки
@@ -2052,9 +2061,9 @@ async function loadPets(): Promise<void> {
           info.textContent = `${p.type ?? ''} · ${p.rarity ?? ''}`;
           const buyBtn = document.createElement('button');
           buyBtn.className = 'friend-btn';
-          buyBtn.textContent = 'Купить';
+          buyBtn.textContent = t('panels.buy');
           buyBtn.addEventListener('click', async () => {
-            try { await api.petAcquire(cid(), p.id); toast('Питомец получен!', 'success'); void loadPets(); }
+            try { await api.petAcquire(cid(), p.id); toast(t('pets.received'), 'success'); void loadPets(); }
             catch (err) { toast((err as Error).message, 'error'); }
           });
           row.append(label, info, buyBtn);
@@ -2074,12 +2083,12 @@ async function loadPets(): Promise<void> {
       nameEl.textContent = p.nickname ?? def?.name_ru ?? p.pet_id;
       const infoEl = document.createElement('span');
       infoEl.className = 'friend-info';
-      infoEl.textContent = `Ур.${p.level} · ${def?.type ?? ''}`;
+      infoEl.textContent = `${t('badges.level')}${p.level} · ${def?.type ?? ''}`;
       row.append(nameEl, infoEl);
       if (!p.is_active) {
         const actBtn = document.createElement('button');
         actBtn.className = 'friend-btn';
-        actBtn.textContent = 'Выбрать';
+        actBtn.textContent = t('site.pets_select');
         actBtn.addEventListener('click', async () => { await api.petActivate(cid(), p.id); void loadPets(); });
         row.append(actBtn);
       }
@@ -2092,9 +2101,9 @@ async function loadPets(): Promise<void> {
       // меняло чужую строку — то есть молчало.
       const renameBtn = document.createElement('button');
       renameBtn.className = 'friend-btn';
-      renameBtn.textContent = 'Переименовать';
+      renameBtn.textContent = t('pets.rename_btn');
       renameBtn.addEventListener('click', async () => {
-        const nickname = prompt('Новое имя питомца', p.nickname ?? def?.name_ru ?? '');
+        const nickname = prompt(t('pets.new_name'), p.nickname ?? def?.name_ru ?? '');
         if (!nickname || !nickname.trim()) return;
         try {
           await api.petRename(cid(), p.id, nickname.trim());
@@ -2106,7 +2115,7 @@ async function loadPets(): Promise<void> {
 
       const releaseBtn = document.createElement('button');
       releaseBtn.className = 'friend-btn friend-btn--danger';
-      releaseBtn.textContent = 'Отпустить';
+      releaseBtn.textContent = t('pets.release');
       releaseBtn.addEventListener('click', async () => {
         // Отпустить питомца необратимо, поэтому спрашиваем. Раньше кнопки не
         // было, и игрок не мог понять, что она вообще нужна
@@ -2122,7 +2131,7 @@ async function loadPets(): Promise<void> {
       box.append(row);
     }
   } catch (err) {
-    box.innerHTML = `<div class="lb-empty">Ошибка: ${(err as Error).message}</div>`;
+    box.innerHTML = `<div class="lb-empty">${t('panels.error_msg').replace('{msg}', (err as Error).message)}</div>`;
   }
 }
 
@@ -2350,22 +2359,22 @@ async function loadNotifications(): Promise<void> {
 
 // ── Дом ────────────────────────────────────────────────────
 
-const HOUSE_DEFS: Record<string, { nameRu: string; price: number; slots: number; craftBonus: string }> = {
-  cottage:    { nameRu: 'Хижина',         price: 2000,  slots: 20, craftBonus: '0%' },
-  house:      { nameRu: 'Дом',            price: 5000,  slots: 40, craftBonus: '+5%' },
-  villa:      { nameRu: 'Вилла',          price: 15000, slots: 60, craftBonus: '+10%' },
-  mansion:    { nameRu: 'Особняк',        price: 40000, slots: 80, craftBonus: '+15%' },
-  palace:     { nameRu: 'Дворец',         price: 100000,slots: 100,craftBonus: '+20%' },
+const HOUSE_DEFS: Record<string, { nameKey: string; price: number; slots: number; craftBonus: string }> = {
+  cottage:    { nameKey: 'house.t_cottage',   price: 2000,  slots: 20, craftBonus: '0%' },
+  house:      { nameKey: 'house.t_house',     price: 5000,  slots: 40, craftBonus: '+5%' },
+  villa:      { nameKey: 'house.t_villa',     price: 15000, slots: 60, craftBonus: '+10%' },
+  mansion:    { nameKey: 'house.t_mansion',   price: 40000, slots: 80, craftBonus: '+15%' },
+  palace:     { nameKey: 'house.t_palace',    price: 100000,slots: 100,craftBonus: '+20%' },
 };
 
 const HOUSE_REGIONS = [
-  { id: 'tabriz',    nameRu: 'Тебриз' },
-  { id: 'isfahan',   nameRu: 'Исфахан' },
-  { id: 'shiraz',    nameRu: 'Шираз' },
-  { id: 'caucasus',  nameRu: 'Кавказ' },
-  { id: 'khorasan',  nameRu: 'Хорасан' },
-  { id: 'mesopotamia', nameRu: 'Месопотамия' },
-  { id: 'persian_gulf', nameRu: 'Персидский залив' },
+  { id: 'tabriz',    nameKey: 'regions.tabriz' },
+  { id: 'isfahan',   nameKey: 'regions.isfahan' },
+  { id: 'shiraz',    nameKey: 'regions.shiraz' },
+  { id: 'caucasus',  nameKey: 'regions.caucasus' },
+  { id: 'khorasan',  nameKey: 'regions.khorasan' },
+  { id: 'mesopotamia', nameKey: 'regions.mesopotamia' },
+  { id: 'persian_gulf', nameKey: 'regions.persian_gulf' },
 ];
 
 async function loadHouse(): Promise<void> {
@@ -2378,12 +2387,12 @@ async function loadHouse(): Promise<void> {
       // Нет дома — показываем выбор
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'У вас нет дома';
+      empty.textContent = t('site.house_none');
       box.append(empty);
 
       const info = document.createElement('div');
       info.style.cssText = 'color:#bfae8a;font-size:11px;margin:6px 0 10px;line-height:1.5';
-      info.innerHTML = 'Дом даёт хранилище и бонус к крафту.<br>Выберите тип и регион:';
+      info.innerHTML = t('house.intro');
       box.append(info);
 
       // Выбор типа
@@ -2391,14 +2400,14 @@ async function loadHouse(): Promise<void> {
       typeRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px';
       const typeLabel = document.createElement('span');
       typeLabel.style.cssText = 'color:#d9c27a;font-size:12px;width:80px';
-      typeLabel.textContent = 'Тип дома:';
+      typeLabel.textContent = t('house.type_label');
       typeRow.append(typeLabel);
       const typeSel = document.createElement('select');
       typeSel.style.cssText = 'background:#1a1410;color:#f5f0e8;border:1px solid #5a4a30;padding:4px 8px;border-radius:4px';
       for (const [key, def] of Object.entries(HOUSE_DEFS)) {
         const opt = document.createElement('option');
         opt.value = key;
-        opt.textContent = `${def.nameRu} · ${def.price.toLocaleString()}g · 📦${def.slots} · ⚒${def.craftBonus}`;
+        opt.textContent = `${t(def.nameKey)} · ${def.price.toLocaleString()}g · 📦${def.slots} · ⚒${def.craftBonus}`;
         typeSel.append(opt);
       }
       typeRow.append(typeSel);
@@ -2409,14 +2418,14 @@ async function loadHouse(): Promise<void> {
       regRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:12px';
       const regLabel = document.createElement('span');
       regLabel.style.cssText = 'color:#d9c27a;font-size:12px;width:80px';
-      regLabel.textContent = 'Регион:';
+      regLabel.textContent = t('house.region_label');
       regRow.append(regLabel);
       const regSel = document.createElement('select');
       regSel.style.cssText = 'background:#1a1410;color:#f5f0e8;border:1px solid #5a4a30;padding:4px 8px;border-radius:4px';
       for (const r of HOUSE_REGIONS) {
         const opt = document.createElement('option');
         opt.value = r.id;
-        opt.textContent = r.nameRu;
+        opt.textContent = t(r.nameKey);
         regSel.append(opt);
       }
       regRow.append(regSel);
@@ -2424,14 +2433,14 @@ async function loadHouse(): Promise<void> {
 
       const buyBtn = document.createElement('button');
       buyBtn.className = 'quest-accept';
-      buyBtn.textContent = 'Купить';
+      buyBtn.textContent = t('panels.buy');
       buyBtn.style.marginTop = '8px';
       buyBtn.addEventListener('click', async () => {
         const type = typeSel.value;
         const region = regSel.value;
         try {
           await api.houseBuy(cid(), region, type);
-          toast('Дом куплен!', 'success');
+          toast(t('house.bought'), 'success');
           void loadHouse();
         } catch (err) {
           toast((err as Error).message, 'error');
@@ -2442,34 +2451,34 @@ async function loadHouse(): Promise<void> {
     }
 
     const h = data.house;
-    const def = HOUSE_DEFS[h.house_type] ?? { nameRu: h.house_type, price: 0, slots: 0, craftBonus: '0%' };
+    const def = HOUSE_DEFS[h.house_type] ?? { nameKey: h.house_type, price: 0, slots: 0, craftBonus: '0%' };
     const nextTypeIdx = Object.keys(HOUSE_DEFS).indexOf(h.house_type) + 1;
     const nextType = Object.keys(HOUSE_DEFS)[nextTypeIdx];
     const nextDef = nextType ? HOUSE_DEFS[nextType] : null;
 
     const title = document.createElement('h3');
     title.style.cssText = 'color:var(--cream);margin:0 0 4px';
-    title.textContent = `🏠 ${def.nameRu} · Ур.${h.level}`;
+    title.textContent = `🏠 ${t(def.nameKey)} · ${t('badges.level')}${h.level}`;
     box.append(title);
 
     const info2 = document.createElement('p');
     info2.style.cssText = 'color:var(--cream-dim);font-size:12px;margin:0 0 4px';
-    info2.textContent = `Регион: ${h.region} · Хранилище: ${h.storage_slots} · Бонус крафта: ${def.craftBonus}`;
+    info2.textContent = t('house.info').replace('{region}', h.region).replace('{slots}', String(h.storage_slots)).replace('{bonus}', def.craftBonus);
     box.append(info2);
 
     if (nextDef) {
       const upBtn = document.createElement('button');
       upBtn.className = 'quest-accept';
-      upBtn.textContent = `Улучшить → ${nextDef.nameRu} (${nextDef.price.toLocaleString()}g)`;
+      upBtn.textContent = t('house.upgrade_to').replace('{name}', t(nextDef.nameKey)).replace('{price}', nextDef.price.toLocaleString());
       upBtn.addEventListener('click', async () => {
-        try { await api.houseUpgrade(cid()); toast('Дом улучшен!', 'success'); void loadHouse(); }
+        try { await api.houseUpgrade(cid()); toast(t('house.upgraded'), 'success'); void loadHouse(); }
         catch (err) { toast((err as Error).message, 'error'); }
       });
       box.append(upBtn);
     } else {
       const maxLabel = document.createElement('div');
       maxLabel.style.cssText = 'color:#5a4; font-size:12px; margin-top:8px';
-      maxLabel.textContent = '✓ Максимальный уровень';
+      maxLabel.textContent = t('house.max_level');
       box.append(maxLabel);
     }
 
@@ -2523,7 +2532,7 @@ async function loadHouse(): Promise<void> {
       box.append(mine);
     }
   } catch {
-    box.innerHTML = '<div class="lb-empty">Ошибка загрузки</div>';
+    box.innerHTML = `<div class="lb-empty">${t('panels.load_error')}</div>`;
   }
 }
 
@@ -2542,17 +2551,17 @@ async function loadPvP(): Promise<void> {
       const tierIcons: Record<string, string> = { bronze: '🥉', silver: '🥈', gold: '🥇', diamond: '💎', legendary: '👑' };
       const rankEl = document.createElement('div');
       rankEl.className = 'lb-my-rank';
-      rankEl.textContent = `${tierIcons[myRank.tier] ?? ''} ${myRank.tier.toUpperCase()} · Рейтинг: ${myRank.rating} · W:${myRank.wins} L:${myRank.losses} · Стрик: ${myRank.streak}`;
+      rankEl.textContent = t('pvp.rank_row').replace('{icon}', tierIcons[myRank.tier] ?? '').replace('{tier}', myRank.tier.toUpperCase()).replace('{rating}', String(myRank.rating)).replace('{wins}', String(myRank.wins)).replace('{losses}', String(myRank.losses)).replace('{streak}', String(myRank.streak));
       box.append(rankEl);
     } else {
       const info = document.createElement('div');
       info.style.cssText = 'color:var(--cream-dim);font-size:12px;margin-bottom:8px';
-      info.textContent = 'Вы ещё не участвовали в PvP-боях';
+      info.textContent = t('pvp.no_fights');
       box.append(info);
     }
     const findBtn = document.createElement('button');
     findBtn.className = 'quest-accept';
-    findBtn.textContent = 'Найти бой';
+    findBtn.textContent = t('site.pvp_find');
     findBtn.style.margin = '8px 0';
     // Соперника может не оказаться: тогда сервер позовёт позже через
     // pvp:match_found, а сейчас просто ждём. Отменить ожидание было нечем —
@@ -2598,13 +2607,13 @@ async function loadPvP(): Promise<void> {
     // Топ-10
     const title = document.createElement('div');
     title.className = 'panel-subhead';
-    title.textContent = 'Топ PvP';
+    title.textContent = t('pvp.top');
     box.append(title);
     const rankings = rankRes.rankings ?? [];
     if (!rankings.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Пока нет участников';
+      empty.textContent = t('pvp.no_participants');
       box.append(empty);
     } else {
       for (const r of rankings.slice(0, 10)) {
@@ -2616,7 +2625,7 @@ async function loadPvP(): Promise<void> {
         box.append(row);
       }
     }
-  } catch { box.innerHTML = '<div class="lb-empty">Арена недоступна</div>'; }
+  } catch { box.innerHTML = `<div class="lb-empty">${t('pvp.unavailable')}</div>`; }
 }
 
 // ── Бесконечная Башня ──────────────────────────────────────
@@ -2663,7 +2672,7 @@ async function loadTower(): Promise<void> {
       head.textContent = `${t('tower.floor')} ${floor.floor}`;
       const info2 = document.createElement('span');
       info2.className = 'inv-qty';
-      info2.textContent = `⚔ ${floor.monsterCount} · ур.${floor.monsterLevel}`;
+      info2.textContent = t('tower.floor_info').replace('{count}', String(floor.monsterCount)).replace('{lvl}', String(floor.monsterLevel));
       d.append(head, info2);
       const reward = document.createElement('span');
       reward.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
@@ -2741,7 +2750,7 @@ async function loadTower(): Promise<void> {
       empty.textContent = t('tower.empty');
       box.append(empty);
     }
-  } catch { box.innerHTML = '<div class="lb-empty">Башня недоступна</div>'; }
+  } catch { box.innerHTML = `<div class="lb-empty">${t('tower.unavailable')}</div>`; }
 }
 
 // ── Репутация ──────────────────────────────────────────────
@@ -2855,34 +2864,34 @@ export async function loadAdmin(): Promise<void> {
   if (!box) return;
   box.innerHTML = '';
   if (!session.isAdmin) {
-    box.innerHTML = '<div class="inv-empty">Нет доступа</div>';
+    box.innerHTML = `<div class="inv-empty">${t('admin.no_access')}</div>`;
     return;
   }
 
   // ── Поиск игрока ──
-  adminSub(box, `Игроки (роль: ${session.isAdminRole})`);
+  adminSub(box, t('admin.players_sub').replace('{role}', String(session.isAdminRole)));
   const searchRow = rowEl('inv-item');
-  const q = adminInput('Имя или email', '150px');
+  const q = adminInput(t('admin.search_field'), '150px');
   const results = document.createElement('div');
   results.style.width = '100%';
   searchRow.append(q);
-  searchRow.append(actionButton('Найти', async () => {
+  searchRow.append(actionButton(t('admin.search_btn'), async () => {
     const { results: list } = await api.adminSearch(q.value.trim());
     results.innerHTML = '';
     if (!list.length) {
-      results.textContent = 'Ничего не найдено';
+      results.textContent = t('admin.nothing_found');
       return;
     }
     for (const p of list) {
       const row = rowEl('inv-item');
       const label = document.createElement('span');
       label.className = 'inv-name';
-      label.textContent = `${p.name} (ур. ${p.level}, ${p.region})${p.is_banned ? ' [БАН]' : ''}`;
+      label.textContent = t('admin.player_row').replace('{name}', p.name).replace('{lvl}', String(p.level)).replace('{region}', p.region).replace('{ban}', p.is_banned ? ' [BAN]' : '');
       row.append(label);
-      row.append(actionButton('Выбрать', async () => {
+      row.append(actionButton(t('site.pets_select'), async () => {
         (document.getElementById('admin-target-char') as HTMLInputElement).value = p.id;
         (document.getElementById('admin-target-user') as HTMLInputElement).value = p.user_id;
-        (document.getElementById('admin-target-name') as HTMLElement).textContent = `Цель: ${p.name}`;
+        (document.getElementById('admin-target-name') as HTMLElement).textContent = t('admin.target_is').replace('{name}', p.name);
       }));
       results.append(row);
     }
@@ -2890,11 +2899,11 @@ export async function loadAdmin(): Promise<void> {
   box.append(searchRow, results);
 
   // ── Цель и наказания ──
-  adminSub(box, 'Наказания');
+  adminSub(box, t('admin.punishments'));
   const targetName = document.createElement('div');
   targetName.id = 'admin-target-name';
   targetName.className = 'inv-name';
-  targetName.textContent = 'Цель: не выбрана';
+  targetName.textContent = t('admin.target_none');
   box.append(targetName);
   const charIdInput = adminInput('characterId', '150px');
   charIdInput.id = 'admin-target-char';
@@ -2903,61 +2912,61 @@ export async function loadAdmin(): Promise<void> {
   box.append(charIdInput, userIdInput);
 
   const muteRow = rowEl('inv-item');
-  const muteMin = adminInput('Минуты', '70px', 'number');
+  const muteMin = adminInput(t('admin.minutes'), '70px', 'number');
   muteMin.value = '30';
-  const muteReason = adminInput('Причина мута', '150px');
+  const muteReason = adminInput(t('admin.mute_reason'), '150px');
   muteRow.append(muteMin, muteReason);
-  muteRow.append(actionButton('Мут', async () => {
+  muteRow.append(actionButton(t('admin.act_mute'), async () => {
     const cid2 = (document.getElementById('admin-target-char') as HTMLInputElement).value.trim();
-    if (!cid2 || !muteReason.value.trim()) { toast('Выберите цель и укажите причину', 'error'); return; }
+    if (!cid2 || !muteReason.value.trim()) { toast(t('admin.need_target_reason'), 'error'); return; }
     await api.adminMute(cid2, Number(muteMin.value) || 30, muteReason.value.trim());
-    toast('Мут выдан', 'success');
+    toast(t('admin.mute_done'), 'success');
   }));
   box.append(muteRow);
 
   const banRow = rowEl('inv-item');
-  const banReason = adminInput('Причина бана', '150px');
-  const banDays = adminInput('Дни', '60px', 'number');
+  const banReason = adminInput(t('admin.ban_reason'), '150px');
+  const banDays = adminInput(t('admin.days'), '60px', 'number');
   banDays.value = '7';
   banRow.append(banReason, banDays);
-  banRow.append(actionButton('Бан', async () => {
+  banRow.append(actionButton(t('admin.act_ban'), async () => {
     const uid = (document.getElementById('admin-target-user') as HTMLInputElement).value.trim();
-    if (!uid || !banReason.value.trim()) { toast('Выберите цель и укажите причину', 'error'); return; }
+    if (!uid || !banReason.value.trim()) { toast(t('admin.need_target_reason'), 'error'); return; }
     await api.adminBan(uid, banReason.value.trim(), Number(banDays.value) || 7);
-    toast('Бан выдан', 'success');
+    toast(t('admin.ban_done'), 'success');
   }));
-  banRow.append(actionButton('Разбан', async () => {
+  banRow.append(actionButton(t('admin.unban'), async () => {
     const uid = (document.getElementById('admin-target-user') as HTMLInputElement).value.trim();
-    if (!uid) { toast('Выберите цель', 'error'); return; }
+    if (!uid) { toast(t('admin.need_target'), 'error'); return; }
     await api.adminUnban(uid);
-    toast('Разбанен', 'success');
+    toast(t('admin.unbanned'), 'success');
   }));
   box.append(banRow);
 
   // ── Телепорт и золото ──
-  adminSub(box, 'Телепорт / золото');
+  adminSub(box, t('admin.tp_gold'));
   const tpRow = rowEl('inv-item');
   const tpX = adminInput('X', '60px', 'number');
   const tpZ = adminInput('Z', '60px', 'number');
-  const tpRegion = adminInput('Регион', '90px');
+  const tpRegion = adminInput(t('chars.region'), '90px');
   tpRegion.value = 'tabriz';
   tpRow.append(tpX, tpZ, tpRegion);
-  tpRow.append(actionButton('Телепорт', async () => {
+  tpRow.append(actionButton(t('admin.teleport'), async () => {
     const cid2 = (document.getElementById('admin-target-char') as HTMLInputElement).value.trim();
-    if (!cid2) { toast('Выберите цель', 'error'); return; }
+    if (!cid2) { toast(t('admin.need_target'), 'error'); return; }
     await api.adminTeleport(cid2, { x: Number(tpX.value) || 0, y: 0, z: Number(tpZ.value) || 0 }, tpRegion.value.trim() || 'tabriz');
-    toast('Телепортирован', 'success');
+    toast(t('admin.teleported'), 'success');
   }));
   box.append(tpRow);
 
   const goldRow = rowEl('inv-item');
-  const goldAmt = adminInput('Сумма', '90px', 'number');
+  const goldAmt = adminInput(t('common.amount'), '90px', 'number');
   goldRow.append(goldAmt);
-  goldRow.append(actionButton('Выдать золото', async () => {
+  goldRow.append(actionButton(t('admin.give_gold'), async () => {
     const cid2 = (document.getElementById('admin-target-char') as HTMLInputElement).value.trim();
-    if (!cid2 || !Number(goldAmt.value)) { toast('Выберите цель и сумму', 'error'); return; }
+    if (!cid2 || !Number(goldAmt.value)) { toast(t('admin.need_target_amount'), 'error'); return; }
     await api.adminGiveGold(cid2, Number(goldAmt.value));
-    toast('Золото выдано', 'success');
+    toast(t('admin.gold_given'), 'success');
   }));
   box.append(goldRow);
 
@@ -2982,7 +2991,7 @@ export async function loadAdmin(): Promise<void> {
   if (!isSenior()) return;
 
   // ── Деньги (senior+) ──
-  adminSub(box, 'Валюта (senior+)');
+  adminSub(box, t('admin.currency'));
   const grantRow = rowEl('inv-item');
   const curSel = document.createElement('select');
   curSel.className = 'inv-action';
@@ -2992,45 +3001,45 @@ export async function loadAdmin(): Promise<void> {
     o.textContent = cur;
     curSel.append(o);
   }
-  const grantAmt = adminInput('Сумма', '80px', 'number');
-  const grantReason = adminInput('Причина (обязательно)', '170px');
+  const grantAmt = adminInput(t('common.amount'), '80px', 'number');
+  const grantReason = adminInput(t('admin.reason_required'), '170px');
   grantRow.append(curSel, grantAmt, grantReason);
-  grantRow.append(actionButton('Начислить', async () => {
+  grantRow.append(actionButton(t('admin.grant_btn'), async () => {
     const cid2 = (document.getElementById('admin-target-char') as HTMLInputElement).value.trim();
     if (!cid2 || !Number(grantAmt.value) || grantReason.value.trim().length < 5) {
-      toast('Цель, сумма и причина (мин. 5 символов)', 'error');
+      toast(t('admin.grant_hint'), 'error');
       return;
     }
     const res = await api.adminGrantCurrency(cid2, curSel.value, Number(grantAmt.value), grantReason.value.trim());
-    toast(`Начислено, баланс: ${res.balance}`, 'success');
+    toast(t('admin.granted').replace('{balance}', String(res.balance)), 'success');
   }));
   box.append(grantRow);
 
   const refundRow = rowEl('inv-item');
   const refundPay = adminInput('paymentId', '170px');
-  const refundReason = adminInput('Причина (обязательно)', '170px');
+  const refundReason = adminInput(t('admin.reason_required'), '170px');
   refundRow.append(refundPay, refundReason);
-  refundRow.append(actionButton('Рефанд', async () => {
+  refundRow.append(actionButton(t('admin.refund'), async () => {
     if (!refundPay.value.trim() || refundReason.value.trim().length < 5) {
-      toast('paymentId и причина (мин. 5 символов)', 'error');
+      toast(t('admin.refund_hint'), 'error');
       return;
     }
     await api.adminRefund(refundPay.value.trim(), refundReason.value.trim());
-    toast('Возврат выполнен', 'success');
+    toast(t('admin.refund_done'), 'success');
   }));
   box.append(refundRow);
 
   const finRow = rowEl('inv-item');
   const finOut = document.createElement('div');
   finOut.style.width = '100%';
-  finRow.append(actionButton('Сводка финансов', async () => {
+  finRow.append(actionButton(t('admin.finance_summary'), async () => {
     const s = await api.adminFinance();
     const lines = [
-      `Обращение: AZENS ${s.circulating.azens}, золото ${s.circulating.gold}, серебро ${s.circulating.silver}, сир. золото ${s.circulating.syrian}, должников: ${s.circulating.debtors}`,
-      ...s.byStatus.map(b => `Платежи ${b.status}: ${b.count} шт, выпущено ${b.minted} + бонус ${b.bonus}`),
-      `Промо выдано: AZENS ${s.promoGranted.azens} (${s.promoGranted.redemptions} погашений)`,
-      ...s.grants.map(g => `Гранты ${g.currency}: ${g.count} шт на ${g.total}`),
-      s.velocity.length ? `Подозрительно активны: ${s.velocity.map(v => `${v.user_id.slice(0, 8)} (${v.completed_24h})`).join(', ')}` : 'Подозрительной активности нет',
+      t('admin.finance_circulating').replace('{azens}', String(s.circulating.azens)).replace('{gold}', String(s.circulating.gold)).replace('{silver}', String(s.circulating.silver)).replace('{syrian}', String(s.circulating.syrian)).replace('{debtors}', String(s.circulating.debtors)),
+      ...s.byStatus.map(b => t('admin.finance_payments').replace('{status}', b.status).replace('{count}', String(b.count)).replace('{minted}', String(b.minted)).replace('{bonus}', String(b.bonus))),
+      t('admin.finance_promo').replace('{azens}', String(s.promoGranted.azens)).replace('{redemptions}', String(s.promoGranted.redemptions)),
+      ...s.grants.map(g => t('admin.finance_grants').replace('{currency}', g.currency).replace('{count}', String(g.count)).replace('{total}', String(g.total))),
+      s.velocity.length ? t('admin.velocity_active').replace('{list}', s.velocity.map(v => `${v.user_id.slice(0, 8)} (${v.completed_24h})`).join(', ')) : t('admin.velocity_none'),
     ];
     finOut.innerHTML = lines.map(l => `<div class="quest-j-desc">• ${l}</div>`).join('');
   }));
@@ -3038,23 +3047,23 @@ export async function loadAdmin(): Promise<void> {
   box.append(finRow);
 
   // ── Промокоды (senior+) ──
-  adminSub(box, 'Промокоды (senior+)');
+  adminSub(box, t('admin.promo_title'));
   const promoRow = rowEl('inv-item');
-  const promoCode = adminInput('Код', '90px');
+  const promoCode = adminInput(t('admin.code'), '90px');
   const promoAzens = adminInput('AZENS', '60px', 'number');
-  const promoSilver = adminInput('Серебро', '70px', 'number');
-  const promoMax = adminInput('Лимит', '60px', 'number');
+  const promoSilver = adminInput(t('admin.silver'), '70px', 'number');
+  const promoMax = adminInput(t('admin.limit'), '60px', 'number');
   promoMax.value = '100';
   promoRow.append(promoCode, promoAzens, promoSilver, promoMax);
-  promoRow.append(actionButton('Создать', async () => {
-    if (!promoCode.value.trim()) { toast('Укажите код', 'error'); return; }
+  promoRow.append(actionButton(t('admin.create'), async () => {
+    if (!promoCode.value.trim()) { toast(t('admin.enter_code'), 'error'); return; }
     await api.adminPromoCreate({
       code: promoCode.value.trim(),
       azens: Number(promoAzens.value) || 0,
       silver: Number(promoSilver.value) || 0,
       maxUses: Number(promoMax.value) || 100,
     });
-    toast('Промокод создан', 'success');
+    toast(t('admin.promo_created'), 'success');
     await loadAdmin();
   }));
   box.append(promoRow);
@@ -3062,11 +3071,11 @@ export async function loadAdmin(): Promise<void> {
   const promoListRow = rowEl('inv-item');
   const promoOut = document.createElement('div');
   promoOut.style.width = '100%';
-  promoListRow.append(actionButton('Список промо', async () => {
+  promoListRow.append(actionButton(t('admin.promo_list'), async () => {
     const { promos } = await api.adminPromos();
     promoOut.innerHTML = promos.length
-      ? promos.slice(0, 20).map(p => `<div class="quest-j-desc">• ${p.code}: AZENS ${p.azens}, использовано ${p.usedCount}/${p.maxUses}</div>`).join('')
-      : '<div class="quest-j-desc">Нет промокодов</div>';
+      ? promos.slice(0, 20).map(p => `<div class="quest-j-desc">${t('admin.promo_row').replace('{code}', p.code).replace('{azens}', String(p.azens)).replace('{used}', String(p.usedCount)).replace('{max}', String(p.maxUses))}</div>`).join('')
+      : `<div class="quest-j-desc">${t('admin.promo_none')}</div>`;
   }));
   promoListRow.append(promoOut);
   box.append(promoListRow);
@@ -3434,7 +3443,7 @@ export async function loadFishing(): Promise<void> {
       const row = rowEl('inv-item');
       const name = document.createElement('span');
       name.className = `inv-name fish-${f.rarity}`;
-      name.textContent = `${f.nameRu} · ${f.weightKg < 1 ? Math.round(f.weightKg * 1000) + ' г' : f.weightKg + ' кг'}`;
+      name.textContent = `${f.nameRu} · ${f.weightKg < 1 ? Math.round(f.weightKg * 1000) + t('common.grams') : f.weightKg + t('common.kg')}`;
       if (f.deepOnly) {
         const tag = document.createElement('small');
         tag.className = 'fish-tag';
@@ -3513,18 +3522,18 @@ export async function loadSkills(): Promise<void> {
   try {
     const { profession } = await api.getProfession(charId);
     profBox.innerHTML = profession
-      ? `<div class="inv-item"><b>${profession.nameRu}</b> — ур. ${profession.level} (${profession.xp} XP)</div>`
-      : `<div class="inv-item" style="color:var(--cream-dim)">Профессия не выбрана</div>
+      ? `<div class="inv-item"><b>${profession.nameRu}</b> — ${t('badges.level')}${profession.level} (${profession.xp} XP)</div>`
+      : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.prof_none')}</div>
          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
            ${['warrior','archer','merchant','herbalist','blacksmith','explorer'].map(id => `
-             <button class="inv-action" data-prof="${id}">📜 ${id === 'warrior' ? 'Воин' : id === 'archer' ? 'Лучник' : id === 'merchant' ? 'Торговец' : id === 'herbalist' ? 'Травник' : id === 'blacksmith' ? 'Кузнец' : 'Исследователь'} — бесплатно</button>
+             <button class="inv-action" data-prof="${id}">📜 ${t('prof.' + id)} — ${t('skills.free')}</button>
            `).join('')}
          </div>`;
     profBox.querySelectorAll('[data-prof]').forEach(btn => {
       btn.addEventListener('click', async () => {
         try {
           const res = await api.unlockProfession(charId, (btn as HTMLButtonElement).dataset.prof!);
-          toast(`Профессия ${res.profession.nameRu} разблокирована!`, 'success');
+          toast(t('skills.prof_unlocked').replace('{name}', res.profession.nameRu), 'success');
           void loadSkills();
         } catch (e) { toast((e as Error).message, 'error'); }
       });
@@ -3536,20 +3545,20 @@ export async function loadSkills(): Promise<void> {
     const { skills } = await api.getSkills(charId);
     const profId = skills[0]?.professionId;
     skillsBox.innerHTML = skills.length
-      ? skills.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ур.${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}</div>`).join('')
-      : '<div class="inv-item" style="color:var(--cream-dim)">Нет изученных навыков</div>';
+      ? skills.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}</div>`).join('')
+      : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
     if (profId) {
       const { skills: avail } = await api.getProfessionSkills(profId);
       const known = new Set(skills.map(s => s.id));
       const available = avail.filter(s => !known.has(s.id) && s.level <= 30);
       availBox.innerHTML = available.length
-        ? available.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — лвл.${s.level} <button class="inv-action" data-skill="${s.id}">Изучить</button></div>`).join('')
+        ? available.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
         : '';
       availBox.querySelectorAll('[data-skill]').forEach(btn => {
         btn.addEventListener('click', async () => {
           try {
             await api.learnSkill(charId, (btn as HTMLButtonElement).dataset.skill!);
-            toast('Навык изучен!', 'success');
+            toast(t('skills.learned'), 'success');
             void loadSkills();
           } catch (e) { toast((e as Error).message, 'error'); }
         });
@@ -3570,11 +3579,11 @@ export async function loadSettings(): Promise<void> {
   // это привычно игроку. Без preventDefault страница перезагрузилась бы.
   const doChangePass = async (): Promise<void> => {
     if (!oldPass.value || !newPass.value || newPass.value !== newPass2.value) {
-      toast('Неверно заполнены поля пароля', 'error'); return;
+      toast(t('settings.pwd_bad_fields'), 'error'); return;
     }
     try {
       await api.changePassword(oldPass.value, newPass.value);
-      toast('Пароль изменён!', 'success');
+      toast(t('settings.pwd_changed'), 'success');
       oldPass.value = ''; newPass.value = ''; newPass2.value = '';
     } catch (e) { toast((e as Error).message, 'error'); }
   };
@@ -3590,16 +3599,16 @@ export async function loadSettings(): Promise<void> {
 
   $('btn-rename')?.addEventListener('click', async () => {
     if (!newName.value || newName.value.length < 2) {
-      toast('Имя должно быть от 2 до 24 символов', 'error'); return;
+      toast(t('chars.name_len'), 'error'); return;
     }
     try {
       const res = await api.renameCharacter(session.character!.id, newName.value);
-      toast(`Ник изменён на "${res.character.name}"!`, 'success');
+      toast(t('chars.nick_changed').replace('{name}', res.character.name), 'success');
       newName.value = ''; statusEl.textContent = '';
       void refreshBars();
     } catch (e: any) {
-      if (e.code === 'azens_debt' || e.message?.includes('АЗЕН')) {
-        statusEl.textContent = `Нужно 500 АЗЭН (у вас: ${session.character?.azens ?? 0})`;
+      if (e.code === 'azens_debt' || e.message?.includes(t('common.azens_word'))) {
+        statusEl.textContent = t('chars.need_azens').replace('{n}', String(session.character?.azens ?? 0));
         statusEl.style.color = '#e08080';
       } else {
         toast(e.message, 'error');
