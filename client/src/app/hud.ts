@@ -117,7 +117,9 @@ export function refreshBars(): void {
   $('hud-name').textContent = s.character?.name ?? '';
   $('hud-level').textContent = `${t('badges.level')} ${s.level}`;
   $('hud-gold').textContent = `◉ ${s.character?.gold ?? 0}`;
-  $('hud-region').textContent = REGION_NAMES[s.character?.region ?? ''] ?? s.character?.region ?? '';
+  const regionName = REGION_NAMES[s.character?.region ?? ''] ?? s.character?.region ?? '';
+  const zoneName = s.character?.zone ? ZONE_NAMES[s.character.zone] ?? s.character.zone : '';
+  $('hud-region').textContent = zoneName ? `${regionName} — ${zoneName}` : regionName;
   const azEl = document.getElementById('hud-azens');
   if (azEl) azEl.textContent = `AZENS ${s.character?.azens ?? 0}`;
 }
@@ -125,6 +127,16 @@ export function refreshBars(): void {
 const REGION_NAMES: Record<string, string> = {
   tabriz: 'Тебриз', isfahan: 'Исфахан', shiraz: 'Шираз', caucasus: 'Кавказ',
   mesopotamia: 'Месопотамия', khorasan: 'Хорасан', persian_gulf: 'Персидский залив',
+};
+
+const ZONE_NAMES: Record<string, string> = {
+  tabriz_center: 'Центр', tabriz_outskirts: 'Окраины', tabriz_north: 'Север',
+  isfahan_bazaar: 'Базар', isfahan_gates: 'Ворота', isfahan_south: 'Юг',
+  shiraz_gardens: 'Сады', shiraz_walls: 'Стены', shiraz_east: 'Восток',
+  caucasus_pass: 'Перевал', caucasus_fortress: 'Крепость', caucasus_peaks: 'Пики',
+  mesopotamia_river: 'Река', mesopotamia_ruins: 'Руины', mesopotamia_frontier: 'Граница',
+  khorasan_oasis: 'Оазис', khorasan_caravanserai: 'Караван-сарай', khorasan_east: 'Восток',
+  persian_gulf_harbor: 'Гавань', persian_gulf_waters: 'Воды', persian_gulf_islands: 'Острова',
 };
 
 // ── Рамка цели ───────────────────────────────────────────────

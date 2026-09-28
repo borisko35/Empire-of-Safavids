@@ -70,6 +70,8 @@ export interface Character {
   maxStamina: number;
   position: Vector3;
   region: Region;
+  /** Текущая зона внутри региона (например, "tabriz_center") */
+  zone?: string;
   /** Игровой сервер (шард), на котором живёт персонаж */
   serverId: string;
   guildId?: string;

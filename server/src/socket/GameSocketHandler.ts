@@ -44,6 +44,8 @@ interface AuthenticatedSocket extends Socket {
   senderRole?: 'owner' | 'admin' | 'moderator' | null;
   /** Игровой сервер (шард) персонажа */
   shardId?: string;
+  /** Кэш текущей зоны персонажа (для проверки смены зоны при движении) */
+  zoneCache?: Map<string, string | null>;
 }
 
 type ChatChannel = 'world' | 'region' | 'guild' | 'party';
@@ -448,6 +450,7 @@ export class GameSocketHandler {
       socket.userId = userId;
       socket.characterId = character.id;
       socket.region = character.region;
+      socket.zoneCache = new Map();
       socket.senderName = character.name;
       // Роль для бейджа в чате: один запрос при входе, дальше из кэша сокета.
       try {
@@ -613,6 +616,16 @@ export class GameSocketHandler {
       await this.refreshMountSpeed(characterId);
       // Опыт скакуну за пройденный путь
       await this.grantMountExperience(characterId, data.position);
+
+      // Проверка зоны: если игрок пересёк границу зоны, обновляем и уведомляем
+      const { getZoneAt } = await import('../../../shared/constants');
+      const newZone = getZoneAt(data.position.x, data.position.z);
+      const currentZone = socket.zoneCache?.get(characterId) ?? null;
+      if (newZone?.id !== currentZone) {
+        socket.zoneCache?.set(characterId, newZone?.id ?? null);
+        await this.characterService.updateZone(characterId, newZone?.id ?? null).catch(() => {});
+        socket.emit(SERVER_EVENTS.ZONE_CHANGED, { zone: newZone ?? null });
+      }
     }
 
     // Транслировать другим игрокам в регионе

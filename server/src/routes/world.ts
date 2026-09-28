@@ -38,6 +38,23 @@ worldRouter.get('/regions', asyncHandler(async (_req: Request, res: Response) =>
   return res.json({ regions });
 }));
 
+// GET /api/world/zones — все зоны с границами
+worldRouter.get('/zones', asyncHandler(async (_req: Request, res: Response) => {
+  const { ZONES } = await import('../../../shared/constants');
+  return res.json({ zones: ZONES });
+}));
+
+// POST /api/world/zone/check — в какой зоне находится точка
+worldRouter.post('/zone/check', asyncHandler(async (req: Request, res: Response) => {
+  const { x, z } = req.body as { x: number; z: number };
+  if (typeof x !== 'number' || typeof z !== 'number') {
+    return res.status(400).json({ error: 'invalid_coordinates' });
+  }
+  const { getZoneAt } = await import('../../../shared/constants');
+  const zone = getZoneAt(x, z);
+  return res.json({ zone });
+}));
+
 // GET /api/world/regions/:id
 worldRouter.get('/regions/:id', asyncHandler(async (req: Request, res: Response) => {
   const region = req.params.id as Region;

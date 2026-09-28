@@ -975,6 +975,12 @@ function wireSocket(): void {
     renderUnreadBadge();
   });
 
+  socket.on('zone:changed', (payload: { zone: { id: string; nameRu: string; dangerLevel: number } | null }) => {
+    if (payload.zone) {
+      toast(`${payload.zone.nameRu}`, 'info');
+    }
+  });
+
   socket.on('world:time', (payload: Record<string, unknown>) => {
     setWorldTime(payload);
     const tod = String(payload.timeOfDay ?? '');

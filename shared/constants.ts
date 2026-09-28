@@ -83,6 +83,7 @@ export const SOCKET_EVENTS = {
   // Player
   PLAYER_MOVE: 'player:move',
   PLAYER_MOVED: 'player:moved',
+  ZONE_CHANGED: 'zone:changed',
   PLAYER_JOINED: 'player:joined',
   PLAYER_LEFT: 'player:left',
   PLAYER_DIED: 'player:died',
@@ -114,6 +115,7 @@ export const SOCKET_EVENTS = {
 // События, отправляемые только сервером (REST/фоновые системы → клиент)
 export const SERVER_EVENTS = {
   NOTIFICATION: 'notification',
+  ZONE_CHANGED: 'zone:changed',
   FORCE_DISCONNECT: 'force:disconnect',
   WORLD_TIME: 'world:time',
   MONSTER_SPAWNED: 'monster:spawned',
@@ -228,6 +230,68 @@ export const REGION_SPAWNS: Record<string, { x: number; z: number }> = {
 
 export function getRegionSpawn(region: string): { x: number; z: number } {
   return REGION_SPAWNS[region] ?? { ...SPAWN_PLAZA };
+}
+
+// ============================================================
+// Зоны внутри регионов
+// ============================================================
+// Каждый регион разделён на зоны с прямоугольными границами.
+// Зона — это подразделение региона с собственным названием, уровнем
+// опасности и набором объектов. Границы зоны — прямоугольник в
+// мировых координатах (x1, z1, x2, z2).
+//
+// Зоны нужны для:
+// - Навигации: игрок видит, в какой зоне находится
+// - Спавна монстров: разные зоны — разные монстры
+// - Квестов: квесты привязаны к зонам
+// - Уровня опасности: зона определяет уровень монстров
+
+export interface Zone {
+  id: string;
+  region: string;
+  name: string;
+  nameRu: string;
+  minLevel: number;
+  dangerLevel: 1 | 2 | 3 | 4 | 5;
+  bounds: { x1: number; z1: number; x2: number; z2: number };
+  description: string;
+}
+
+export const ZONES: Zone[] = [
+  { id: 'tabriz_center', region: 'tabriz', name: 'Tabriz Center', nameRu: 'Центр Тебриза', minLevel: 1, dangerLevel: 1, bounds: { x1: -1170, z1: -50, x2: 1170, z2: 33 }, description: 'Столица империи. Безопасная зона для новичков.' },
+  { id: 'tabriz_outskirts', region: 'tabriz', name: 'Tabriz Outskirts', nameRu: 'Окраины Тебриза', minLevel: 5, dangerLevel: 2, bounds: { x1: -1170, z1: 33, x2: 1170, z2: 117 }, description: 'Пригороды и фермы. Встречаются волки и бандиты.' },
+  { id: 'tabriz_north', region: 'tabriz', name: 'Northern Tabriz', nameRu: 'Северный Тебриз', minLevel: 10, dangerLevel: 3, bounds: { x1: -1170, z1: 117, x2: 1170, z2: 200 }, description: 'Холмы и руины. Опасные монстры.' },
+  { id: 'isfahan_bazaar', region: 'isfahan', name: 'Isfahan Bazaar', nameRu: 'Базар Исфахана', minLevel: 20, dangerLevel: 1, bounds: { x1: -1170, z1: -350, x2: 1170, z2: -283 }, description: 'Главный базар. Безопасно, много торговцев.' },
+  { id: 'isfahan_gates', region: 'isfahan', name: 'Isfahan Gates', nameRu: 'Ворота Исфахана', minLevel: 20, dangerLevel: 2, bounds: { x1: -1170, z1: -283, x2: 1170, z2: -217 }, description: 'Ворота и стены города.' },
+  { id: 'isfahan_south', region: 'isfahan', name: 'Southern Isfahan', nameRu: 'Южный Исфахан', minLevel: 25, dangerLevel: 3, bounds: { x1: -1170, z1: -217, x2: 1170, z2: -150 }, description: 'Южные дороги. Караваны и разбойники.' },
+  { id: 'shiraz_gardens', region: 'shiraz', name: 'Shiraz Gardens', nameRu: 'Сады Шираза', minLevel: 40, dangerLevel: 1, bounds: { x1: -1170, z1: 350, x2: 1170, z2: 400 }, description: 'Сады и дворцы. Безопасно.' },
+  { id: 'shiraz_walls', region: 'shiraz', name: 'Shiraz Walls', nameRu: 'Стены Шираза', minLevel: 40, dangerLevel: 2, bounds: { x1: -1170, z1: 400, x2: 1170, z2: 450 }, description: 'Городские стены и окрестности.' },
+  { id: 'shiraz_east', region: 'shiraz', name: 'Eastern Shiraz', nameRu: 'Восточный Шираз', minLevel: 45, dangerLevel: 3, bounds: { x1: -1170, z1: 450, x2: 1170, z2: 500 }, description: 'Восточные пустыни. Опасные монстры.' },
+  { id: 'caucasus_pass', region: 'caucasus', name: 'Caucasus Pass', nameRu: 'Кавказский перевал', minLevel: 50, dangerLevel: 3, bounds: { x1: -1170, z1: 500, x2: 1170, z2: 567 }, description: 'Горный перевал. Опасно.' },
+  { id: 'caucasus_fortress', region: 'caucasus', name: 'Caucasus Fortress', nameRu: 'Кавказская крепость', minLevel: 55, dangerLevel: 4, bounds: { x1: -1170, z1: 567, x2: 1170, z2: 633 }, description: 'Крепость и окрестности.' },
+  { id: 'caucasus_peaks', region: 'caucasus', name: 'Caucasus Peaks', nameRu: 'Кавказские пики', minLevel: 60, dangerLevel: 5, bounds: { x1: -1170, z1: 633, x2: 1170, z2: 700 }, description: 'Высокие горы. Самые опасные монстры.' },
+  { id: 'mesopotamia_river', region: 'mesopotamia', name: 'Mesopotamia River', nameRu: 'Месопотамская река', minLevel: 60, dangerLevel: 3, bounds: { x1: -1170, z1: -550, x2: 1170, z2: -483 }, description: 'Речные долины. Караваны.' },
+  { id: 'mesopotamia_ruins', region: 'mesopotamia', name: 'Mesopotamia Ruins', nameRu: 'Месопотамские руины', minLevel: 65, dangerLevel: 4, bounds: { x1: -1170, z1: -483, x2: 1170, z2: -417 }, description: 'Древние руины. Опасно.' },
+  { id: 'mesopotamia_frontier', region: 'mesopotamia', name: 'Mesopotamia Frontier', nameRu: 'Месопотамская граница', minLevel: 70, dangerLevel: 5, bounds: { x1: -1170, z1: -417, x2: 1170, z2: -350 }, description: 'Граница с Османами. Постоянные бои.' },
+  { id: 'khorasan_oasis', region: 'khorasan', name: 'Khorasan Oasis', nameRu: 'Хорасанский оазис', minLevel: 70, dangerLevel: 3, bounds: { x1: -1170, z1: 700, x2: 1170, z2: 817 }, description: 'Оазис в пустыне.' },
+  { id: 'khorasan_caravanserai', region: 'khorasan', name: 'Khorasan Caravanserai', nameRu: 'Хорасанский караван-сарай', minLevel: 75, dangerLevel: 4, bounds: { x1: -1170, z1: 817, x2: 1170, z2: 933 }, description: 'Караван-сарай и дороги.' },
+  { id: 'khorasan_east', region: 'khorasan', name: 'Eastern Khorasan', nameRu: 'Восточный Хорасан', minLevel: 80, dangerLevel: 5, bounds: { x1: -1170, z1: 933, x2: 1170, z2: 1050 }, description: 'Дальний восток. Самые опасные монстры.' },
+  { id: 'persian_gulf_harbor', region: 'persian_gulf', name: 'Persian Gulf Harbor', nameRu: 'Персидский залив — гавань', minLevel: 80, dangerLevel: 2, bounds: { x1: -1170, z1: -1100, x2: 1170, z2: -917 }, description: 'Гавань и порт.' },
+  { id: 'persian_gulf_waters', region: 'persian_gulf', name: 'Persian Gulf Waters', nameRu: 'Персидский залив — воды', minLevel: 85, dangerLevel: 4, bounds: { x1: -1170, z1: -917, x2: 1170, z2: -733 }, description: 'Открытые воды. Пираты и морские чудовища.' },
+  { id: 'persian_gulf_islands', region: 'persian_gulf', name: 'Persian Gulf Islands', nameRu: 'Персидский залив — острова', minLevel: 90, dangerLevel: 5, bounds: { x1: -1170, z1: -733, x2: 1170, z2: -550 }, description: 'Острова. Самые опасные монстры.' },
+];
+
+export function getZoneAt(x: number, z: number): Zone | null {
+  for (const zone of ZONES) {
+    if (x >= zone.bounds.x1 && x <= zone.bounds.x2 && z >= zone.bounds.z1 && z <= zone.bounds.z2) {
+      return zone;
+    }
+  }
+  return null;
+}
+
+export function getZonesByRegion(region: string): Zone[] {
+  return ZONES.filter(z => z.region === region);
 }
 
 export const REDIS_CHANNELS = {

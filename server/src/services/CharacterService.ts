@@ -511,6 +511,14 @@ export class CharacterService {
     return this.getCharacterById(characterId);
   }
 
+  /** Сменить зону персонажа (при пересечении границы зоны). */
+  async updateZone(characterId: string, zone: string | null): Promise<void> {
+    await this.db.query(
+      'UPDATE characters SET zone = $2, updated_at = NOW() WHERE id = $1',
+      [characterId, zone]
+    );
+  }
+
   // ============================================================
   // Инвентарь (стеки: персонаж + предмет + уровень заточки)
   // ============================================================
