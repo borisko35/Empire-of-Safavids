@@ -119,7 +119,7 @@ export class DailyTaskService {
            reward_experience = EXCLUDED.reward_experience,
            reward_item_id = EXCLUDED.reward_item_id, reward_item_qty = EXCLUDED.reward_item_qty,
            min_level = EXCLUDED.min_level, region = EXCLUDED.region,
-           reset_hours = EXCLUDED.reset_hours`
+           reset_hours = EXCLUDED.reset_hours`,
         [task.id, task.title, task.title_ru, task.description, task.description_ru,
          task.task_type, task.target, task.required_count, task.reward_gold,
          task.reward_experience, task.reward_item_id ?? null, task.reward_item_qty,
