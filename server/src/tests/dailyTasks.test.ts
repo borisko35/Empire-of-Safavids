@@ -31,6 +31,9 @@ const fishing = read('server/src/systems/FishingSystem.ts');
 const clientPanels = read('client/src/app/panels.ts');
 const clientApi = read('client/src/app/api.ts');
 const clientWorld = read('client/src/app/world.ts');
+const clientHud = read('client/src/app/hud.ts');
+const clientHub = read('client/src/app/hub.ts');
+const clientHtml = read('client/src/app/index.html');
 const constants = read('shared/constants.ts');
 
 /** Все task_type, объявленные в задачах */
@@ -127,7 +130,9 @@ describe('Задачи дня: награда видна игроку', () => {
     // Иначе игрок узнает о награде только по цифре в кошельке
     expect(constants).toMatch(/DAILY_TASK_COMPLETED: 'daily:task'/);
     expect(socket).toMatch(/SERVER_EVENTS\.DAILY_TASK_COMPLETED/);
-    expect(clientWorld).toMatch(/socket\.on\('daily:task'/);
+    // Клиент слушает то же имя события из общего протокола, а не строку,
+    // зашитую руками: имена из shared/constants.ts живут в одном месте
+    expect(clientWorld).toMatch(/socket\.on\(SERVER_EVENTS\.DAILY_TASK_COMPLETED/);
   });
 
   it('сообщение переводится на язык игрока', () => {
@@ -201,5 +206,56 @@ describe('Задачи дня: содержимое', () => {
   it('выполненная задача не начисляется дважды', () => {
     // Иначе можно было бы держать зажатый kill и собрать награду 100 раз
     expect(service).toMatch(/if \(!row \|\| row\.completed\) continue/);
+  });
+});
+
+describe('Задачи дня: видно с первого экрана', () => {
+  it('кнопка стоит в ряду иконок, а не только внутри хаба', () => {
+    // Новичок находил задачи через «Панели» → «Задания», то есть вторым
+    // заходом и неизвестно где. Задача дня — это то, что возвращает игрока
+    // завтра, поэтому она стоит рядом с квестами.
+    const row = clientHtml.slice(clientHtml.indexOf('class="hud panel-toggles"'));
+    expect(row).toMatch(/data-panel="panel-tasks"[^>]*data-icon="flag"/);
+    // Хаб остаётся вторым входом — его запись не убираем
+    expect(clientHub).toMatch(/\{ id: 'panel-tasks', titleKey: 'hub\.tasks'/);
+  });
+
+  it('на кнопке есть место под красную цифру', () => {
+    const button = clientHtml.slice(clientHtml.indexOf('data-panel="panel-tasks"'));
+    const untilClose = button.slice(0, button.indexOf('</button>'));
+    expect(untilClose).toMatch(/id="tasks-badge"/);
+    expect(untilClose).toMatch(/unread-badge/);
+    expect(untilClose).toMatch(/has-badge/);
+  });
+
+  it('бейджи переживают отрисовку иконок', () => {
+    // ТУТ БЫЛА ПОЛОМКА: innerHTML в цикле по [data-icon] стирал детей
+    // кнопки, поэтому красная цифра непрочитанных уведомлений гибла при
+    // входе в мир и больше не появлялась никогда.
+    expect(clientWorld).toMatch(/const badge = el\.querySelector\('\.unread-badge'\)/);
+    expect(clientWorld).toMatch(/if \(badge\) el\.append\(badge\)/);
+  });
+
+  it('счётчик спрашивается у сервера, а не берётся из головы', () => {
+    expect(clientHud).toMatch(/export async function refreshDailyTasksBadge\(\)/);
+    expect(clientHud).toMatch(/export function setDailyTasksOpen\(count: number\)/);
+    expect(clientHud).toMatch(/api\.tasks\(session\.character\.id\)/);
+    // Два места: вход в мир и закрытие задачи
+    expect((clientWorld.match(/void refreshDailyTasksBadge\(\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    // Панель синхронизирует цифру, когда игрок её открыл
+    expect(clientPanels).toMatch(/setDailyTasksOpen\(/);
+  });
+
+  it('награда-предмет показывается названием, а не идентификатором', () => {
+    // Сервер шлёт mat_dragon_scale — игрок должен прочитать «Чешуя дракона»
+    expect(clientWorld).toMatch(/const key = `items\.\$\{item\}`/);
+    expect(clientWorld).not.toMatch(/if \(item\) parts\.push\(item\)/);
+  });
+
+  it('подпись кнопки есть во всех трёх языках', () => {
+    for (const lang of ['ru', 'en', 'az']) {
+      const json = JSON.parse(read(`shared/locales/${lang}.json`)) as Record<string, Record<string, string>>;
+      expect({ lang, task: json.hub?.tasks ?? '' }).toEqual({ lang, task: expect.stringMatching(/\S/) });
+    }
   });
 });

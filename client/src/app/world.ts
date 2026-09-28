@@ -14,7 +14,7 @@ import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene'
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
 import { GATE, groundHeight, waterSurfaceY } from './game3d/terrain';
-import { STAMINA, GAME_VERSION, SOCKET_EVENTS } from '../../../shared/constants';
+import { STAMINA, GAME_VERSION, SOCKET_EVENTS, SERVER_EVENTS } from '../../../shared/constants';
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
@@ -24,6 +24,7 @@ import {
 } from './settings';
 import {
   chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap, renderUnreadBadge,
+  refreshDailyTasksBadge,
   drawWorldMap,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
   tickCooldowns, toast, loadBuffs, clearBuffs,
@@ -549,7 +550,12 @@ export async function enterWorld(character: Character): Promise<void> {
   audio.ensureLoading();
   await nextPaint();
   document.querySelectorAll<HTMLElement>('[data-icon]').forEach((el) => {
+    // innerHTML стирает детей элемента, а в кнопках с бейджами они есть:
+    // без этой строки красная цифра непрочитанных уведомлений гибла при
+    // входе в мир и больше не появлялась никогда.
+    const badge = el.querySelector('.unread-badge');
     el.innerHTML = icon(el.dataset.icon as IconName, 18);
+    if (badge) el.append(badge);
   });
   refreshBars();
   void loadSkillbar();
@@ -626,6 +632,9 @@ export async function enterWorld(character: Character): Promise<void> {
   // Туториал новичка. Раньше не вызывался НИ РАЗУ, хотя был написан целиком:
   // игрок попадал в город с двадцатью кнопками без единой подсказки.
   void initTutorial(me.id);
+  // Счётчик задач дня на кнопке в ряду: цифра живёт в памяти клиента,
+  // поэтому её надо переспросить при каждом входе в мир
+  void refreshDailyTasksBadge();
   // Шаг «атакуй мечом» засчитывается на замахе (3D-слой сообщает через крючок)
   world3d?.setOnAttack(() => onTutorialAction('attack'));
   // Шаг «осмотритесь» засчитывается на реальном повороте камеры мышью
@@ -877,15 +886,25 @@ function wireSocket(): void {
 
   // Задача дня закрыта: сервер уже начислил золото, опыт и предмет.
   // Без этого сообщения игрок узнал бы о награде только по цифре в кошельке.
-  socket.on('daily:task', ({ gold, experience, item }: {
+  socket.on(SERVER_EVENTS.DAILY_TASK_COMPLETED, ({ gold, experience, item }: {
     taskId: string; gold?: number; experience?: number; item?: string;
   }) => {
     const parts: string[] = [];
     if (gold) parts.push(`+${gold} ${t('world.gold')}`);
     if (experience) parts.push(`+${experience} ${t('world.exp')}`);
-    if (item) parts.push(item);
+    if (item) {
+      // Сервер присылает идентификатор вида mat_dragon_scale. Раньше он
+      // уходил в тост как есть — игрок читал «+mat_dragon_scale» вместо
+      // названия. Как и с зонами: ключ при отсутствии — не показываем путь.
+      const key = `items.${item}`;
+      const label = t(key);
+      parts.push(label === key ? item : label);
+    }
     audio.levelUp();
-    toast(`${t('site.tasks_done_toast')}: ${parts.join(' · ')}`, 'success');
+    const reward = parts.length ? `: ${parts.join(' · ')}` : '';
+    toast(`${t('site.tasks_done_toast')}${reward}`, 'success');
+    // Цифра на кнопке в ряду отстаёт ровно на одну задачу — обновляем
+    void refreshDailyTasksBadge();
   });
 
   // ── Бой ──

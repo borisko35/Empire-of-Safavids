@@ -1119,3 +1119,45 @@ export function renderUnreadBadge(): void {
   el.textContent = n > 99 ? '99+' : String(n);
   el.classList.toggle('hidden', n <= 0);
 }
+
+// ============================================================
+// Бейдж задач дня
+// ============================================================
+//
+// Тот же приём, что у непрочитанных уведомлений, — красная цифра на кнопке
+// в ряду. Без неё единственным признаком того, что задачи обновились, была
+// сама панель, которую надо открыть специально.
+//
+// Счётчик живёт в памяти модуля, а не в session: это состояние одной кнопки,
+// а не данные персонажа, и в session его кто-нибудь не туда запишет.
+let dailyOpen = 0;
+
+/** Показать цифру: сколько задач дня осталось. Ноль — цифру погасить. */
+export function renderTasksBadge(): void {
+  const el = document.getElementById('tasks-badge');
+  if (!el) return;
+  el.textContent = dailyOpen > 99 ? '99+' : String(dailyOpen);
+  el.classList.toggle('hidden', dailyOpen <= 0);
+}
+
+/** Запомнить число невыполненных задач и перерисовать цифру. */
+export function setDailyTasksOpen(count: number): void {
+  dailyOpen = Math.max(0, count);
+  renderTasksBadge();
+}
+
+/**
+ * Спросить сервер, сколько задач осталось.
+ *
+ * Зовётся при входе в мир: цифра не переживает переподключение, поэтому без
+ * этого запроса на кнопке всегда стоял бы ноль — даже когда задачи ждут.
+ */
+export async function refreshDailyTasksBadge(): Promise<void> {
+  if (!session.character) return;
+  try {
+    const data = await api.tasks(session.character.id);
+    setDailyTasksOpen(data.tasks.filter((task: { completed?: boolean }) => !task.completed).length);
+  } catch {
+    /* Бейдж — приятное дополнение: панель работает и без него */
+  }
+}

@@ -368,8 +368,8 @@
     <!-- Ряд кнопок панелей.
          Раньше здесь висело 33 кнопки в один ряд (1218 пикселей) — искать
          нужную было нечем, подписи видны только при наведении. Теперь ряд
-         состоит из кнопки хаба и трёх кнопок, нужных по многу чаще всего:
-         сумка, квесты и карта.
+         состоит из кнопки хаба и четырёх кнопок, нужных по многу чаще всего:
+         сумка, квесты, задачи дня и карта.
          Остальные панели живут внутри хаба (client/src/app/hub.ts) и
          открываются оттуда. Панели не «потеряны»: хаб — второй вход в те
          же самые панели, а не замена им. -->
@@ -377,6 +377,13 @@
       <button data-panel="panel-hub" data-icon="grid" title="Панели" data-i18n-title="site.panels_title" type="button"></button>
       <button data-panel="panel-inventory" data-icon="chest" title="Сумка" data-i18n-title="hub.inventory" type="button"></button>
       <button data-panel="panel-quests" data-icon="scroll" title="Квесты" data-i18n-title="hub.quests" type="button"></button>
+      <!-- Задачи дня. Жили только внутри хаба — новичок находил их через
+           «Панели» → «Задания», то есть вторым заходом. Задача дня — это то,
+           что возвращает игрока завтра, поэтому она стоит в ряду наравне
+           с квестами, а красная цифра показывает, сколько осталось. -->
+      <button data-panel="panel-tasks" data-icon="flag" title="Задания" data-i18n-title="hub.tasks" type="button" class="has-badge">
+        <span class="unread-badge hidden" id="tasks-badge">0</span>
+      </button>
       <button data-panel="panel-regions" data-icon="map" title="Регионы" data-i18n-title="hub.regions" type="button"></button>
       <!-- Уведомления. Живут в ряду, а не в хабе: игрок должен видеть
            непрочитанные, не заходя в меню. Цифра ставится из world.ts -->

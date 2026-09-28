@@ -8,7 +8,7 @@
 import { api, EquipmentState } from './api';
 import { t } from './i18n';
 import { session, Character } from './state';
-import { toast, refreshBars, loadInventory, renderUnreadBadge } from './hud';
+import { toast, refreshBars, loadInventory, renderUnreadBadge, setDailyTasksOpen } from './hud';
 import { onTutorialAction } from './tutorial';
 import { onSearching as onPvpSearching, onPvpHide } from './pvp';
 import { loadMediaPanel } from './media';
@@ -1997,6 +1997,8 @@ async function loadTasks(): Promise<void> {
     const charId = session.character?.id;
     if (!charId) return;
     const data = await api.tasks(charId);
+    // Панель открылась — значит, цифра на кнопке в ряду могла устареть
+    setDailyTasksOpen(data.tasks.filter((task: { completed?: boolean }) => !task.completed).length);
     const stats = document.createElement('div');
     stats.className = 'lb-my-rank';
     stats.textContent = `${t('site.tasks_done')}: ${data.completedCount}`;
