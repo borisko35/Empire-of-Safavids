@@ -92,6 +92,102 @@ export const DAILY_TASKS: DailyTaskDef[] = [
 export class DailyTaskService {
   private db = DatabaseService.getInstance();
 
+/**
+ * Записать каталог из кода в таблицу daily_tasks.
+ *
+ * UPSERT по id: повторный посев на каждом старте безопасен и не плодит
+ * дублей. НО: он затирает правки, внесённые в базу вручную. Это сделано
+ * намеренно — иначе через месяц никто не вспомнит, какие задачи вообще
+ * должны быть, и каталог в коде перестанет быть правдой. Если понадобится
+ * править награды без релиза, здесь должна появиться явная отметка
+   «зафиксировано в базе», и посев её пропускает.
+ */
+  async seedCatalog(): Promise<number> {
+    let written = 0;
+    for (const task of await this.catalog()) {
+      await this.db.query(
+        `INSERT INTO daily_tasks
+           (id, title, title_ru, description, description_ru, task_type, target,
+            required_count, reward_gold, reward_experience, reward_item_id,
+            reward_item_qty, min_level, region, reset_hours)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         ON CONFLICT (id) DO UPDATE SET
+           title = EXCLUDED.title, title_ru = EXCLUDED.title_ru,
+           description = EXCLUDED.description, description_ru = EXCLUDED.description_ru,
+           task_type = EXCLUDED.task_type, target = EXCLUDED.target,
+           required_count = EXCLUDED.required_count, reward_gold = EXCLUDED.reward_gold,
+           reward_experience = EXCLUDED.reward_experience,
+           reward_item_id = EXCLUDED.reward_item_id, reward_item_qty = EXCLUDED.reward_item_qty,
+           min_level = EXCLUDED.min_level, region = EXCLUDED.region,
+           reset_hours = EXCLUDED.reset_hours`
+        [task.id, task.title, task.title_ru, task.description, task.description_ru,
+         task.task_type, task.target, task.required_count, task.reward_gold,
+         task.reward_experience, task.reward_item_id ?? null, task.reward_item_qty,
+         task.min_level, task.region ?? null, task.reset_hours]
+      );
+      written++;
+    }
+    return written;
+  }
+
+  /**
+   * Прочитать каталог из базы, с откатом на код.
+   *
+   * Откат тут не перестраховка, а требование: панель задач показывает
+   * «задач нет» без всякой ошибки, и игрок решит, что его обманули. Пустой
+   * список из-за сбоя базы хуже, чем список из кода, — он ещё и тихий.
+   */
+  async loadCatalog(): Promise<DailyTaskDef[]> {
+    const rows = await this.db.query<Record<string, unknown>>(
+      `SELECT * FROM daily_tasks`
+    ).catch((e) => {
+      logger.warn('[DailyTask] каталог не прочитан, берём из кода:', e);
+      return [];
+    });
+    if (!rows.length) return DAILY_TASKS;
+
+    return rows.map((r) => ({
+      id: String(r.id),
+      title: String(r.title),
+      title_ru: String(r.title_ru),
+      description: String(r.description),
+      description_ru: String(r.description_ru),
+      task_type: String(r.task_type),
+      target: String(r.target),
+      required_count: Number(r.required_count) || 1,
+      reward_gold: Number(r.reward_gold) || 0,
+      reward_experience: Number(r.reward_experience) || 0,
+      reward_item_id: (r.reward_item_id as string | null) ?? undefined,
+      reward_item_qty: Number(r.reward_item_qty) || 0,
+      min_level: Number(r.min_level) || 1,
+      region: (r.region as string | null) ?? undefined,
+      reset_hours: Number(r.reset_hours) || 24,
+    }));
+  }
+
+  /**
+   * Актуальный каталог: из базы, но при сбое — из кода.
+   *
+   * Вызывается на каждый чих: getAvailable дёргается на каждый показ панели,
+   * и updateProgress — на каждое событие боя. Поэтому результат кэшируем и
+   * перечитываем раз в пять минут: править награды в базе без релиза нужно,
+   * но не чаще раза в пять минут, а ходить в базу на каждый убитый монстр —
+   * расточительно.
+   */
+  private catalogCache: DailyTaskDef[] | null = null;
+  private catalogLoadedAt = 0;
+
+  private static readonly CATALOG_TTL_MS = 5 * 60 * 1000;
+
+  async catalog(): Promise<DailyTaskDef[]> {
+    if (this.catalogCache && Date.now() - this.catalogLoadedAt < DailyTaskService.CATALOG_TTL_MS) {
+      return this.catalogCache;
+    }
+    this.catalogCache = await this.loadCatalog();
+    this.catalogLoadedAt = Date.now();
+    return this.catalogCache;
+  }
+
   async getAvailable(charId: string, playerLevel: number): Promise<(DailyTaskDef & { current: number; completed: boolean })[]> {
     const now = new Date();
     const tasks: (DailyTaskDef & { current: number; completed: boolean })[] = [];
@@ -129,7 +225,7 @@ export class DailyTaskService {
   }
 
   async updateProgress(charId: string, taskType: string, target: string, amount = 1): Promise<{ taskCompleted: boolean; taskId?: string; gold?: number; experience?: number; item?: string }> {
-    const matchingTasks = DAILY_TASKS.filter(t => t.task_type === taskType && (t.target === 'any' || t.target === target));
+    const matchingTasks = (await this.catalog()).filter(t => t.task_type === taskType && (t.target === 'any' || t.target === target));
 
     // ТУТ БЫЛА ПРОБЛЕМА: очки боевого пропуска не начислялись НИГДЕ.
     // PremiumSystem.addSeasonPoints был написан целиком, но не вызывался ни

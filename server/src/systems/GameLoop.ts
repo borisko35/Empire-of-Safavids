@@ -14,6 +14,7 @@ import { DefenseStates } from './DefenseStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
 import { MailService } from '../services/MailService';
+import { DailyTaskService } from '../services/DailyTaskService';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
@@ -43,6 +44,7 @@ export class GameLoop {
   private equipment = EquipmentCache.getInstance();
   private auction = new AuctionService();
   private worldEventBroadcaster: ((payload: Record<string, unknown>) => void) | null = null;
+  private dailyTaskService = new DailyTaskService();
 
   private timer: NodeJS.Timeout | null = null;
   private tickCount = 0;
@@ -102,6 +104,12 @@ export class GameLoop {
       .catch((e) => logger.error('[GameLoop] чтение расписания боссов не удалось:', e));
     // Убрать просроченные письма. expires_at в схеме есть, но про него
     // никто не помнил: письма копились бы вечно вместе с наградой внутри
+    // Посев каталога ежедневных задач в таблицу daily_tasks.
+    // Правка награды в базе переживает релиз. Откат на код внутри
+    // сервиса: если посев не удался, задачи всё равно останутся
+    void this.dailyTaskService.seedCatalog()
+      .then((n: number) => logger.info(`[DailyTask] каталог записан в базу: ${n}`))
+      .catch((e: unknown) => logger.error('[GameLoop] посев каталога задач не удался:', e));
     void MailService.getInstance().purgeExpired()
       .catch((e) => logger.error('[GameLoop] уборка писем не удалась:', e));
 
