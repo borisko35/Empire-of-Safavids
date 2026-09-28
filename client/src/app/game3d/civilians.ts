@@ -429,6 +429,31 @@ function freeSpot(
   return { x: cx, z: cz };
 }
 
+/**
+ * Вернуть горожанина в строй, если его координаты стали нечисловыми.
+ *
+ * NaN НЕ ЛЕЧИТСЯ САМ. Один битый кадр — и позиция уже никогда не конечна:
+ * resolveStatic и pushOutOfStatics возвращают вход как есть, а hypot с NaN
+ * даёт NaN. Матрица мира горожанина становится NaN, GPU выбрасывает каждый
+ * такой меш, и при этом горожанин по-прежнему в сцене и visible: он есть,
+ * но его не видно. Город выглядит мёртвым до перезагрузки — ровно то, что
+ * описал игрок: «граждан в игре не видны».
+ *
+ * Вызывается в начале каждого кадра, поэтому порча прошлого кадра снимается
+ * в следующем: максимум один кадр невидимости вместо всей сессии.
+ */
+function revive(c: Civilian, now: number): void {
+  if (Number.isFinite(c.group.position.x) && Number.isFinite(c.group.position.z)) return;
+  c.group.position.set(c.homeX, groundHeight(c.homeX, c.homeZ), c.homeZ);
+  c.target = { x: c.homeX, z: c.homeZ };
+  c.state = 'idle';
+  c.stateUntil = now + 1000;
+  c.stuckFor = 0;
+  c.lastDist = 0;
+  c.frameStartX = c.homeX;
+  c.frameStartZ = c.homeZ;
+}
+
 export function createCivilians(scene: THREE.Scene): CiviliansHandle {
   const all = new THREE.Group();
   scene.add(all);
@@ -573,6 +598,14 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
   }
 
   function update(dt: number, now: number, playerX?: number, playerZ?: number): void {
+    // SAFETY: one non-finite frame must not blind the crowd for a whole
+    // session. NaN never recovers here — every citizen stayed in the scene
+    // and visible, but their world matrices went NaN and the GPU dropped
+    // every one of them, so the city looked dead until a reload.
+    if (!Number.isFinite(dt)) dt = 1 / 60;
+    if (!Number.isFinite(now)) now = performance.now();
+    if (playerX !== undefined && !Number.isFinite(playerX)) playerX = undefined;
+    if (playerZ !== undefined && !Number.isFinite(playerZ)) playerZ = undefined;
     CIV_COLLIDERS.length = 0;
 
     // Разговоры. Раньше требовалось, чтобы ОБА стояли без дела и ждали не
@@ -627,6 +660,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     }
 
     for (const c of civs) {
+      revive(c, now);
       CIV_COLLIDERS.push({ x: c.group.position.x, z: c.group.position.z, r: 0.5 });
       c.frameStartX = c.group.position.x;
       c.frameStartZ = c.group.position.z;
@@ -894,6 +928,9 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     scene.remove(all);
     CIV_COLLIDERS.length = 0;
   }
+
+  // Debug hook: live citizens from the browser console (`window.__civ`).
+  (window as unknown as { __civ?: unknown }).__civ = civs;
 
   return { update, dispose };
 }
