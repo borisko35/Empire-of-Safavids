@@ -73,20 +73,39 @@ function renderClasses(dict) {
  */
 // Иконки берутся из web/js/icons.js. Имена проверены по нему же: там нет
 // `home`, который используется в игровом интерфейсе, — пришлось взять `chest`.
+//
+// Описания — новые ключи site.feat_*. Прежние site.* — это подписи кнопок и
+// пустые состояния («Нет данных о репутации», «У вас нет дома»), и в карточке
+// они читались бы как извинение за неработающую фичу.
 const FEATURES = [
-  { icon: 'user', titleKey: 'site.guild_title', descKey: 'site.guild_create' },
-  { icon: 'swords', titleKey: 'site.pvp_title', descKey: 'site.pvp_find' },
-  { icon: 'star8', titleKey: 'site.tower_title', descKey: 'site.tower_start' },
-  { icon: 'flag', titleKey: 'site.reputation_title', descKey: 'site.reputation_none' },
-  { icon: 'chest', titleKey: 'site.house_title', descKey: 'site.house_none' },
-  { icon: 'crown', titleKey: 'site.achievements_title', descKey: 'site.tasks_title' },
+  { icon: 'user', titleKey: 'site.guild_title', descKey: 'site.feat_guild' },
+  { icon: 'swords', titleKey: 'site.pvp_title', descKey: 'site.feat_pvp' },
+  { icon: 'star8', titleKey: 'site.tower_title', descKey: 'site.feat_tower' },
+  { icon: 'flag', titleKey: 'site.reputation_title', descKey: 'site.feat_reputation' },
+  { icon: 'chest', titleKey: 'site.house_title', descKey: 'site.feat_house' },
+  { icon: 'crown', titleKey: 'site.achievements_title', descKey: 'site.feat_achievements' },
 ];
+
+/**
+ * Ключ словаря по полному пути: 'site.feat_guild' -> dict.site.feat_guild.
+ *
+ * Зачем отдельная функция, а не dict.site[key]: в FEATURES лежат ПОЛНЫЕ пути
+ * с префиксом группы. Обращение вида dict.site['site.feat_guild'] ищет ключ
+ * с точкой внутри site и всегда даёт undefined — секция молча оставалась
+ * пустой, хотя код выглядел правильно. Собственный разбор пути это исключает.
+ */
+function pick(dict, path) {
+  return path.split('.').reduce((node, key) => (node == null ? undefined : node[key]), dict);
+}
 
 function renderFeatures(dict) {
   const grid = document.getElementById('features-grid');
-  if (!grid || !dict.site) return;
+  if (!grid) return;
   // Карточка без перевода бесполезна: пустая подпись хуже, чем её отсутствие
-  const usable = FEATURES.filter(f => dict.site[f.titleKey]);
+  const usable = FEATURES.filter(f => {
+    const title = pick(dict, f.titleKey);
+    return typeof title === 'string' && title.length > 0;
+  });
   if (!usable.length) return;
   const frag = document.createDocumentFragment();
   for (const f of usable) {
@@ -97,11 +116,10 @@ function renderFeatures(dict) {
     fig.innerHTML = icon(f.icon, 24);
     const name = document.createElement('div');
     name.className = 'feature-name';
-    name.textContent = dict.site[f.titleKey];
+    name.textContent = pick(dict, f.titleKey);
     card.append(fig, name);
-    // Описание необязательно: не у всех фич есть своё
-    const desc = dict.site[f.descKey];
-    if (desc) {
+    const desc = pick(dict, f.descKey);
+    if (typeof desc === 'string' && desc.length > 0) {
       const p = document.createElement('p');
       p.className = 'feature-desc';
       p.textContent = desc;
