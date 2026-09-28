@@ -95,6 +95,10 @@ export class GameLoop {
       },
     );
     WorldEventSystem.getInstance().start();
+    // Прочитать расписание мировых боссов: напечатать настоящую историю
+    // убийств. Не ждём — чтение из базы не должно задерживать старт
+    void WorldEventSystem.getInstance().loadSchedule()
+      .catch((e) => logger.error('[GameLoop] чтение расписания боссов не удалось:', e));
 
     this.timer = setInterval(() => this.tick(), TICK_INTERVAL_MS);
     // Сразу шлём время/погоду, иначе клиент ждёт первый тик до 60 секунд
