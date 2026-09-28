@@ -122,14 +122,19 @@ export class WorldEventSystem {
    * гильдией убил мирового босса» — это то, что потом показывают в интерфейсе
    * зала славы. top_damage заполняется одним победителем: собирать расклад
    * по урону за бой сервер не умеет, а выдумывать его нельзя.
+   *
+   * character_id пишется отдельно и дублирует top_damage: зал славы считает
+   * победы по колонке, а не по JSONB (миграция 041). Если персонажа уже нет —
+   * колонка остаётся NULL, и строка не пропадает, но в JOIN не попадает.
    */
   private async recordKill(bossId: string, killerId: string): Promise<void> {
     const killer = await this.characters.getCharacterById(killerId).catch(() => null);
     const guildId = killer?.guildId ?? null;
+    const characterId = killer ? killerId : null;
     await this.db.query(
-      `INSERT INTO world_boss_kills (boss_id, guild_id, top_damage)
-       VALUES ($1, $2, $3::jsonb)`,
-      [bossId, guildId, JSON.stringify([{ characterId: killerId }])]
+      `INSERT INTO world_boss_kills (boss_id, guild_id, top_damage, character_id)
+       VALUES ($1, $2, $3::jsonb, $4)`,
+      [bossId, guildId, JSON.stringify([{ characterId: killerId }]), characterId]
     );
     await this.db.query(
       `UPDATE world_boss_schedule

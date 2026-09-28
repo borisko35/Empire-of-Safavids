@@ -90,6 +90,138 @@ export function extractFunction(source: string, name: string): string {
   );
 }
 
+/**
+ * Найти парный закрывающий символ для блока, открытого на позиции i.
+ * Считает только свой символ — скобки строк и шаблонов приходится игнорировать,
+ * но тела функций проекта от них не зависят (иначе не работал бы и extractFunction).
+ */
+function matchBlock(source: string, i: number, open: string, close: string): number {
+  let depth = 0;
+  for (; i < source.length; i++) {
+    if (source[i] === open) depth++;
+    else if (source[i] === close && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Вырезать стрелочную функцию, присвоенную константе:
+ * `const NAME = async (args): Type => { body }`.
+ *
+ * Так написаны express-middleware в routes/game.ts, и у них нет объявления
+ * `function NAME(`, поэтому extractFunction их не находит.
+ */
+export function extractConstArrow(source: string, name: string): string {
+  const decl = new RegExp(`(?:const|let|var)\\s+${name}\\s*=`);
+  const m = decl.exec(source);
+  if (!m) throw new Error(`нет константы ${name}`);
+  let i = m.index + m[0].length;
+  while (i < source.length && /\s/.test(source[i])) i++;
+  if (/^async\b/.test(source.slice(i))) {
+    i += 'async'.length;
+    while (i < source.length && /\s/.test(source[i])) i++;
+  }
+  const start = i;
+  if (source[i] !== '(') throw new Error(`${name}: ожидались параметры в скобках`);
+  const paramsEnd = matchBlock(source, i, '(', ')');
+  if (paramsEnd < 0) throw new Error(`${name}: параметры не закрыты`);
+
+  // Стрелка может быть вложенной: `(field) => async (req, res, next) => { ... }`
+  // — именно так написана проверка принадлежности в routes/game.ts
+  let cursor = paramsEnd + 1;
+  let bodyStart = -1;
+  for (let guard = 0; guard < 10 && bodyStart < 0; guard++) {
+    const arrow = source.indexOf('=>', cursor);
+    if (arrow < 0) throw new Error(`${name}: нет =>`);
+    let candidate = arrow + 2;
+    while (candidate < source.length && /\s/.test(source[candidate])) candidate++;
+    if (source[candidate] === '{') bodyStart = candidate;
+    else cursor = arrow + 2;
+  }
+  if (bodyStart < 0) throw new Error(`${name}: тело не в фигурных скобках`);
+
+  const bodyEnd = matchBlock(source, bodyStart, '{', '}');
+  if (bodyEnd < 0) throw new Error(`${name}: тело не закрыто`);
+  return source.slice(start, bodyEnd + 1);
+}
+
+/**
+ * Вырезать метод класса: `async name(args): Type { body }`.
+ *
+ * Возвращаемые модификаторы (private/async) остаются в срезе — transpileModule
+ * их переваривает, а вызывающая сторона кладёт результат в литерал объекта.
+ */
+export function extractMethod(source: string, name: string): string {
+  const decl = new RegExp(
+    `(?:^|\\n)[ \\t]*(?:(?:public|private|protected|static|readonly|async|override)\\s+)*${name}\\s*\\(`,
+  );
+  const m = decl.exec(source);
+  if (!m) throw new Error(`нет метода ${name}`);
+  const start = m.index + (m[0].startsWith('\n') ? 1 : 0);
+  const open = source.indexOf('(', m.index);
+  const paramsEnd = matchBlock(source, open, '(', ')');
+  if (paramsEnd < 0) throw new Error(`${name}: параметры не закрыты`);
+
+  let j = paramsEnd + 1;
+  while (j < source.length && /\s/.test(source[j])) j++;
+  if (source[j] === ':') {
+    j++;
+    while (j < source.length && /\s/.test(source[j])) j++;
+    if (source[j] === '{') {
+      // Возвращаемый тип-объект: пропускаем его, тело — следующая скобка
+      j = matchBlock(source, j, '{', '}');
+      if (j < 0) throw new Error(`${name}: возвращаемый тип не закрыт`);
+      j++;
+    } else {
+      while (j < source.length && source[j] !== '{') j++;
+    }
+  }
+  while (j < source.length && /\s/.test(source[j])) j++;
+  if (source[j] !== '{') throw new Error(`${name}: тело не найдено`);
+  const bodyEnd = matchBlock(source, j, '{', '}');
+  if (bodyEnd < 0) throw new Error(`${name}: тело не закрыто`);
+  return source.slice(start, bodyEnd + 1).trim();
+}
+
+/** Собрать исполняемую стрелочную функцию из настоящего исходника константы. */
+export function buildConstRunner(
+  source: string,
+  name: string,
+  deps: Record<string, unknown>,
+): (...args: never[]) => unknown {
+  // transpileModule доставляет `;` в конец — внутри `return (...)` это
+  // ошибка синтаксиса, поэтому хвост снимается
+  const arrow = toJs(extractConstArrow(source, name)).trim().replace(/;+$/, '');
+  const keys = Object.keys(deps);
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(...keys, `return (${arrow});`);
+  return (factory as (...a: unknown[]) => (...args: never[]) => unknown)(
+    ...keys.map((k) => deps[k]),
+  );
+}
+
+/**
+ * Собрать исполняемый метод из настоящего исходника класса (зовётся через .call).
+ *
+ * Метод транспилируется только внутри литерала объекта: на верхнем уровне
+ * `async name(): T { ... }` — не выражение, и компилятор выдаёт мусор
+ * вида `async; name(); Promise < number > {`.
+ */
+export function buildMethodRunner(
+  source: string,
+  name: string,
+  deps: Record<string, unknown>,
+): (this: unknown, ...args: never[]) => unknown {
+  // transpileModule доставляет `;` и в конец литерала объекта
+  const objectLiteral = toJs(`({ ${extractMethod(source, name)} })`).trim().replace(/;+$/, '');
+  const keys = Object.keys(deps);
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(...keys, `return (${objectLiteral})[${JSON.stringify(name)}];`);
+  return (factory as (...a: unknown[]) => (this: unknown, ...args: never[]) => unknown)(
+    ...keys.map((k) => deps[k]),
+  );
+}
+
 /** Снять типы: получить из TypeScript настоящий JavaScript. */
 function toJs(tsSource: string): string {
   return ts.transpileModule(tsSource, {
