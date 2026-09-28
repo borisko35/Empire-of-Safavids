@@ -58,9 +58,64 @@ function renderClasses(dict) {
   }
 }
 
+/**
+ * Секция «Особенности».
+ *
+ * ЧТО БЫЛО. Заголовок переводился во всех трёх языках, а под ним стоял пустой
+ * div#features-grid: ни в этом файле, ни в CSS на него никто не обращался.
+ * Игрок видел подпись «Что делает нас особенными» и пустоту.
+ *
+ * Карточки собираются из ключей site.*, которые уже были написаны и переведены
+ * (guild_*, pvp_*, tower_*, house_* и прочие) — они лежали в словарях
+ * без единого использования. Никакого нового маршрута: /api/features, на
+ * который ссылался мёртвый api.features() в игровом клиенте, на сервере не
+ * существует вовсе.
+ */
+// Иконки берутся из web/js/icons.js. Имена проверены по нему же: там нет
+// `home`, который используется в игровом интерфейсе, — пришлось взять `chest`.
+const FEATURES = [
+  { icon: 'user', titleKey: 'site.guild_title', descKey: 'site.guild_create' },
+  { icon: 'swords', titleKey: 'site.pvp_title', descKey: 'site.pvp_find' },
+  { icon: 'star8', titleKey: 'site.tower_title', descKey: 'site.tower_start' },
+  { icon: 'flag', titleKey: 'site.reputation_title', descKey: 'site.reputation_none' },
+  { icon: 'chest', titleKey: 'site.house_title', descKey: 'site.house_none' },
+  { icon: 'crown', titleKey: 'site.achievements_title', descKey: 'site.tasks_title' },
+];
+
+function renderFeatures(dict) {
+  const grid = document.getElementById('features-grid');
+  if (!grid || !dict.site) return;
+  // Карточка без перевода бесполезна: пустая подпись хуже, чем её отсутствие
+  const usable = FEATURES.filter(f => dict.site[f.titleKey]);
+  if (!usable.length) return;
+  const frag = document.createDocumentFragment();
+  for (const f of usable) {
+    const card = document.createElement('article');
+    card.className = 'feature-card';
+    const fig = document.createElement('div');
+    fig.className = 'feature-icon';
+    fig.innerHTML = icon(f.icon, 24);
+    const name = document.createElement('div');
+    name.className = 'feature-name';
+    name.textContent = dict.site[f.titleKey];
+    card.append(fig, name);
+    // Описание необязательно: не у всех фич есть своё
+    const desc = dict.site[f.descKey];
+    if (desc) {
+      const p = document.createElement('p');
+      p.className = 'feature-desc';
+      p.textContent = desc;
+      card.append(p);
+    }
+    frag.append(card);
+  }
+  grid.replaceChildren(frag);
+}
+
 document.addEventListener('eos:locale', (e) => {
   renderTimeline(e.detail);
   renderClasses(e.detail);
+  renderFeatures(e.detail);
 });
 
 // ── Переключатель языка ──────────────────────────────────────

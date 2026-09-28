@@ -19,6 +19,8 @@ export interface AuctionListing {
   enhancement: number;
   price: number;
   buyoutPrice?: number;
+  /** null — лот ещё не продан. Раньше поля не было, и «продано» нечем было отличить */
+  soldAt: Date | null;
   expiresAt: Date;
   createdAt: Date;
 }
@@ -152,6 +154,7 @@ export class AuctionService {
       enhancement,
       price,
       buyoutPrice,
+      soldAt: null,
       expiresAt: new Date(Date.now() + durationHours * 3600 * 1000),
       createdAt: new Date(),
     };
@@ -295,10 +298,69 @@ export class AuctionService {
     });
   }
 
+  /**
+   * Вернуть просроченные лоты продавцам.
+   *
+   * ЧТО БЫЛО. createListing ИЗЫМАЕТ предмет из инвентаря (эскроу) и сразу
+   * списывает серебро за выставление. Лот живёт 24 часа. Ни таймера, ни
+   * крона, ни задачи игрового цикла на возврат не было НИГДЕ: все обращения
+   * к auction_listings — это создание, поиск, покупка, отмена и удаление
+   * персонажа. То есть по истечении суток предмет просто исчезал, а
+   * продавец получал «покупка не найдена» вместо вещей обратно.
+   *
+   * Частичный индекс idx_auction_expires ON (expires_at) WHERE sold_at IS
+   * NULL был создан ровно под такой запрос — и не использовался.
+   *
+   * Серебро за выставление не возвращаем: это плата за место в лоте, а не за
+   * продажу. Возврат сделал бы бессмысленным «выставил и снял».
+   */
+  async returnExpiredListings(limit = 200): Promise<number> {
+    return this.db.transaction(async (client) => {
+      // Забираем пачкой и сразу под FOR UPDATE: два тика подряд не должны
+      // вернуть один и тот же предмет дважды
+      const expired = await client.query(
+        `SELECT id, seller_id, item_id, quantity, enhancement
+         FROM auction_listings
+         WHERE sold_at IS NULL AND expires_at <= NOW()
+         ORDER BY expires_at
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED`,
+        [limit]
+      );
+      if (expired.rows.length === 0) return 0;
+
+      for (const row of expired.rows as {
+        id: string; seller_id: string; item_id: string;
+        quantity: number; enhancement: number;
+      }[]) {
+        // Сначала возвращаем предмет, потом убираем лот. Обратный порядок
+        // при падении строки потерял бы вещь продавца
+        await client.query(
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + $3`,
+          [row.seller_id, row.item_id, row.quantity, row.enhancement]
+        );
+        await client.query('DELETE FROM auction_listings WHERE id = $1', [row.id]);
+      }
+
+      logger.info(`[Auction] returned ${expired.rows.length} expired listing(s) to sellers`);
+      return expired.rows.length;
+    });
+  }
+
+  /**
+   * Мои лоты — живые и просроченные.
+   *
+   * Раньше getSellerListings существовал и не вызывался ни разу: игрок не
+   * мог увидеть, что выставил, и не мог снять.
+   */
   async getSellerListings(sellerId: string): Promise<AuctionListing[]> {
     return camelizeRows<AuctionListing>(
       await this.db.query(
-        'SELECT * FROM auction_listings WHERE seller_id = $1 ORDER BY created_at DESC',
+        `SELECT * FROM auction_listings WHERE seller_id = $1
+         ORDER BY created_at DESC LIMIT 50`,
         [sellerId]
       )
     );

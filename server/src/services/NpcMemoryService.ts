@@ -45,6 +45,9 @@ const DEFAULT_MEMORY: NpcMemory = {
   tone: 'neutral',
 };
 
+/** Потолок дружбы. Дальше NPC не становится «дружественнее», только тише. */
+const MAX_FRIENDSHIP = 5;
+
 export class NpcMemoryService {
   private redis = RedisService.getInstance();
 
@@ -87,13 +90,42 @@ export class NpcMemoryService {
     }
   }
 
+  /**
+   * Отметить квест выполненным. Дружбу НЕ трогает.
+   *
+   * Раньше дружба росла здесь, и маршрут complete-quest прибавлял ещё единицу
+   * поверх — выходило по два за квест. Теперь единственное место, где
+   * растёт дружба, это growFriendship.
+   */
   async addCompletedQuest(npcId: string, characterId: string, questId: string): Promise<void> {
     const memory = await this.getMemory(npcId, characterId);
     if (!memory.completedQuests.includes(questId)) {
       memory.completedQuests.push(questId);
+      await this.saveMemory(npcId, characterId, memory);
     }
-    memory.friendshipLevel = Math.min(5, memory.friendshipLevel + 1);
+  }
+
+  /**
+   * Поднять дружбу на `by` пунктов. Единственное место, где она растёт.
+   *
+   * Отдельный метод, а не прибавка в addCompletedQuest, по двум причинам.
+   * Первая: раньше дружба росла в двух местах, и по одному выполненному
+   * квесту начислялось сразу два очка. Вторая: вызывающий должен уметь
+   * спросить, вырос ли уровень, — иначе игроку не сообщают, что он
+   * подружился, и радость от роста остаётся незамеченной.
+   *
+   * Потолок — 5, как и был.
+   */
+  async growFriendship(npcId: string, characterId: string, by = 1): Promise<{ level: number; leveledUp: boolean }> {
+    const memory = await this.getMemory(npcId, characterId);
+    const before = memory.friendshipLevel;
+    const after = Math.min(MAX_FRIENDSHIP, before + Math.max(0, by));
+    memory.friendshipLevel = after;
+    // Пересчитываем тон сразу: реплики NPC выбираются по нему, и без
+    // пересчёта следующая фраза была бы старой
+    memory.tone = toneByFriendship(after, memory.playerNotes);
     await this.saveMemory(npcId, characterId, memory);
+    return { level: after, leveledUp: after > before };
   }
 
   async setTone(npcId: string, characterId: string, tone: NpcMemory['tone']): Promise<void> {

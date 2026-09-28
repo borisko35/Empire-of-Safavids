@@ -9,6 +9,7 @@ import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
 import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount } from './panels';
+import { setHubStaff } from './hub';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
@@ -435,13 +436,25 @@ function enterOrExitBuilding(action: string, buildingId: string, nameRu: string)
   );
 }
 
-/** Открыть панель по имени — как кнопка-переключатель, но без двойного клика */
-function openPanelById(panel: string): void {
+/**
+ * Открыть панель по имени.
+ *
+ * Единственное место в игре, которое умеет открывать панель правильно:
+ * показать её, подсветить кнопку в ряду и загрузить всё, что этой панели нужно
+ * для отрисовки. Кнопка в ряду, хаб и NPC-клик пользуются именно ей — иначе
+ * одна из точек входа забыла бы про доп. загрузку, и панель открылась бы пустой.
+ */
+export function openPanelById(panel: string): void {
   const el = document.getElementById(panel);
   if (!el) return;
   el.classList.remove('hidden');
   document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`)
     ?.classList.add('active');
+  // Инвентарь, квесты и карта тянут за собой то, что им нужно для отрисовки
+  if (panel === 'panel-inventory') void loadInventory();
+  if (panel === 'panel-quests') void loadQuests();
+  if (panel === 'panel-quests-j') void refreshQuestPanelJ();
+  if (panel === 'panel-regions') void loadRegions();
   loadPanelContent(panel);
 }
 
@@ -1159,6 +1172,9 @@ async function loadAdminRights(): Promise<void> {
   const STAFF_ROLES = ['owner', 'administrator', 'admin', 'moderator', 'developer', 'dev', 'gm'];
   const isStaff = session.isAdmin || STAFF_ROLES.includes(session.isAdminRole ?? '');
   $('btn-panel-media')?.classList.toggle('hidden', !isStaff);
+  // Панели сотрудников уехали в хаб, и права надо сообщить ему: он решает,
+  // показывать их в списке или нет
+  setHubStaff(isStaff);
 }
 
 function wireSettings(): void {

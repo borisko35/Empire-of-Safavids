@@ -15,7 +15,17 @@
 import { api } from './api';
 import { t } from './i18n';
 import { session } from './state';
-import { toast } from './hud';
+import { toast, loadInventory } from './hud';
+
+/**
+ * Что можно положить на склад.
+ *
+ * Список взят из правил экипировки на сервере (CharacterService.SLOT_BY_TYPE):
+ * ровно эти типы сервер вообще умеет надевать. Кладутся и снимаются они
+ * одинаково, так что ограничение осмысленное — складывать бесполезную мелочь
+ * незачем.
+ */
+const GUILD_BANK_TYPES = new Set(['weapon', 'armor', 'accessory']);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -44,12 +54,26 @@ const ERRORS: Record<string, string> = {
   GOLD_NOT_ENOUGH: 'guild.err_no_gold',
   GOLD_AMOUNT_INVALID: 'guild.err_bad_amount',
   ITEM_NOT_ENOUGH: 'guild.err_no_item',
+  BANK_NOT_ENOUGH: 'guild.err_bank_empty',
+  BANK_ROW_NOT_FOUND: 'guild.err_bank_empty',
+  NOT_A_MEMBER: 'guild.err_not_in',
   RANK_INVALID: 'guild.err_bad_rank',
   RANK_SELF: 'guild.err_rank_self',
   RANK_TRANSFER_UNSUPPORTED: 'guild.err_rank_transfer',
   MEMBER_NOT_FOUND: 'guild.err_no_member',
   ALREADY_IN_GUILD: 'guild.err_already_in',
 };
+
+/**
+ * Идентификатор своего персонажа.
+ *
+ * Сервер ищет по guild_members.character_id, а не по аккаунту: раньше
+ * персонаж не передавался, и панель показывала «вы не в гильдии» игроку,
+ * который в гильдии состоял.
+ */
+function cid(): string {
+  return session.character?.id ?? '';
+}
 
 function fail(err: unknown): void {
   const raw = (err as Error)?.message ?? '';
@@ -118,7 +142,7 @@ function renderNoGuild(box: HTMLElement): void {
     if (!name.value.trim() || !tag.value.trim()) { toast(t('guild.err_need_name'), 'error'); return; }
     createBtn.disabled = true;
     try {
-      await api.guildCreate(name.value.trim(), tag.value.trim(), desc.value.trim());
+      await api.guildCreate(cid(), name.value.trim(), tag.value.trim(), desc.value.trim());
       toast(t('guild.created'), 'success');
       await loadGuild();
     } catch (err) {
@@ -160,7 +184,7 @@ function renderGuildList(list: HTMLElement, guilds: { id: string; name: string; 
     join.addEventListener('click', async () => {
       join.disabled = true;
       try {
-        await api.guildJoin(g.id);
+        await api.guildJoin(cid(), g.id);
         toast(t('guild.joined'), 'success');
         await loadGuild();
       } catch (err) {
@@ -198,7 +222,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
   membersBlock.append(membersTitle);
 
   try {
-    const { members } = await api.guildMembers();
+    const { members } = await api.guildMembers(cid());
     const list = block('guild-list');
     for (const m of members ?? []) {
       const row = document.createElement('div');
@@ -235,7 +259,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
         select.addEventListener('change', async () => {
           select.disabled = true;
           try {
-            await api.guildRank(m.character_id, select.value);
+            await api.guildRank(cid(), m.character_id, select.value);
             toast(t('guild.rank_set'), 'success');
             await loadGuild();
           } catch (err) {
@@ -252,7 +276,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
           if (!confirm(t('guild.kick_confirm'))) return;
           kick.disabled = true;
           try {
-            await api.guildKick(m.character_id);
+            await api.guildKick(cid(), m.character_id);
             toast(t('guild.kicked'), 'success');
             await loadGuild();
           } catch (err) {
@@ -282,7 +306,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
   bankBlock.append(bankTitle);
 
   try {
-    const { items } = await api.guildBank();
+    const { items } = await api.guildBank(cid());
     const list = block('guild-list');
     if (!items?.length) {
       const none = document.createElement('div');
@@ -295,15 +319,71 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
         row.className = 'guild-row';
         const n = document.createElement('div');
         n.className = 'guild-row-title';
-        n.textContent = it.item_id;
+        // Раньше здесь был it.item_id — игрок видел «mat_dragon_scale»
+        // вместо названия предмета. Сервер теперь отдаёт nameRu
+        n.textContent = it.name_ru ?? it.nameRu ?? it.item_id;
         const q = document.createElement('div');
         q.className = 'guild-row-desc';
         q.textContent = `×${it.quantity}`;
-        row.append(n, q);
+        // Забрать можно: склад без выдачи был бы ловушкой — положил и потерял
+        const take = document.createElement('button');
+        take.type = 'button';
+        take.className = 'guild-btn';
+        take.textContent = t('guild.withdraw');
+        take.addEventListener('click', async () => {
+          take.disabled = true;
+          try {
+            await api.guildWithdrawItem(cid(), it.id, 1);
+            toast(t('guild.withdrawn'), 'success');
+            await loadGuild();
+            void loadInventory();
+          } catch (err) { fail(err); take.disabled = false; }
+        });
+        row.append(n, q, take);
         list.append(row);
       }
     }
     bankBlock.append(list);
+  } catch (err) {
+    fail(err);
+  }
+
+  // ── Вклад предметов ──────────────────────────────────────
+  // Раньше этой кнопки не было: GuildService.depositItem был единственным
+  // писателем в таблицу guild_bank и не вызывался нигде, так что склад
+  // не мог наполниться ничем, кроме золота.
+  try {
+    const { items: inv } = await api.inventory(cid());
+    const usable = (inv ?? []).filter((i: { type: string }) => GUILD_BANK_TYPES.has(i.type));
+    const pick = document.createElement('select');
+    pick.className = 'guild-field';
+    if (!usable.length) {
+      const none = document.createElement('div');
+      none.className = 'lb-empty';
+      none.textContent = t('guild.bank_nothing_to_deposit');
+      bankBlock.append(none);
+    } else {
+      for (const i of usable) {
+        const opt = document.createElement('option');
+        opt.value = i.itemId;
+        opt.textContent = `${i.enhancement > 0 ? `${i.nameRu} +${i.enhancement}` : i.nameRu} ×${i.quantity}`;
+        pick.append(opt);
+      }
+      const put = document.createElement('button');
+      put.type = 'button';
+      put.className = 'guild-btn';
+      put.textContent = t('guild.deposit_item');
+      put.addEventListener('click', async () => {
+        put.disabled = true;
+        try {
+          await api.guildDepositItem(cid(), pick.value, 1);
+          toast(t('guild.item_deposited'), 'success');
+          await loadGuild();
+          void loadInventory();
+        } catch (err) { fail(err); put.disabled = false; }
+      });
+      bankBlock.append(pick, put);
+    }
   } catch (err) {
     fail(err);
   }
@@ -321,7 +401,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
     if (!value || value <= 0) { toast(t('guild.err_bad_amount'), 'error'); return; }
     deposit.disabled = true;
     try {
-      await api.guildDepositGold(value);
+      await api.guildDepositGold(cid(), value);
       toast(t('guild.deposited'), 'success');
       await loadGuild();
     } catch (err) {
@@ -341,7 +421,7 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
     if (!confirm(t('guild.leave_confirm'))) return;
     leave.disabled = true;
     try {
-      await api.guildLeave();
+      await api.guildLeave(cid());
       toast(t('guild.left'), 'success');
       await loadGuild();
     } catch (err) {
@@ -359,7 +439,7 @@ export async function loadGuild(): Promise<void> {
   if (!box) return;
   box.innerHTML = '';
   try {
-    const data = await api.guildMy();
+    const data = await api.guildMy(cid());
     if (!data?.guild) {
       renderNoGuild(box);
       return;

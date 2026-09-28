@@ -97,7 +97,40 @@ describe('Гильдию можно покинуть и вести ею', () => 
     // Раньше в сервис передавались только двое, и «офицер назначил себя
     // главным» было неотличимо от «назначил офицером»
     expect(service).toMatch(/setRank\(guildId: string, actorId: string, charId: string, rank: string\)/);
-    expect(routes).toMatch(/setRank\(data\.guild\.id, req\.userId, req\.body\.characterId, req\.body\.rank\)/);
+    // Кто просит — characterId, кого меняют — targetId. Раньше здесь стояло
+    // req.userId, то есть идентификатор АККАУНТА, и сервис искал
+    // «кто этот офицер» по номеру аккаунта, а не персонажа
+    expect(routes).toMatch(/setRank\(data\.guild\.id, actorId, req\.body\.targetId, req\.body\.rank\)/);
+  });
+
+  it('ни один маршрут гильдий не работает по идентификатору аккаунта', () => {
+    // ЧЕТВЁРТОЕ повторение одной и той же поломки: маршруты отдавали сервису
+    // req.userId, а GuildService ищет по character_id. Панель показывала
+    // «вы не в гильдии» игроку, который в гильдии состоял
+    //
+    // Проверяем именно на req.userId: removeMember(data.guild.id, targetId)
+    // автора не принимает по устройству метода, и требовать его там нельзя
+    const calls = [...routes.matchAll(/await guilds\.(\w+)\(([^)]*)\)/g)]
+      .filter(m => m[2].includes('req.userId'))
+      .map(m => `${m[1]}(${m[2]})`);
+    expect({ вызовы_по_аккаунту: calls }).toEqual({ вызовы_по_аккаунту: [] });
+  });
+
+  it('поиск своей гильдии идёт по персонажу', () => {
+    // Отдельная проверка: getGuildByCharacter не вызывается через await,
+    // поэтому в проверку выше не попадает — а именно он и ломал панель
+    const lookups = [...routes.matchAll(/getGuildByCharacter\(([^)]*)\)/g)].map(m => m[1]);
+    // actorId в маршруте смены ранга — тоже идентификатор персонажа,
+    // просто назван иначе, потому что там ещё и targetId
+    expect({
+      поисков: lookups.length,
+      все_по_персонажу: lookups.every(a => a === 'characterId' || a === 'actorId'),
+    }).toEqual({ поисков: expect.any(Number), все_по_персонажу: true });
+  });
+
+  it('персонаж запрашивается явно и проверяется на принадлежность', () => {
+    expect(routes).toMatch(/req\.body\?\.characterId \?\? req\.query\?\.characterId/);
+    expect(routes).toMatch(/character\.userId === req\.userId/);
   });
 
   it('кто-то проверяет, что участник вообще есть', () => {
@@ -143,7 +176,37 @@ describe('Склад гильдии берёт, а не печатает', () =>
   });
 
   it('маршрут выхода зовёт leaveGuild, а не removeMember', () => {
-    expect(routes).toMatch(/await guilds\.leaveGuild\(data\.guild\.id, req\.userId\)/);
+    // Персонаж, а не аккаунт: см. тест выше про идентификаторы
+    expect(routes).toMatch(/await guilds\.leaveGuild\(data\.guild\.id, characterId\)/);
+  });
+
+  it('склад гильдии наполняется и опустошается', () => {
+    // depositItem был единственным писателем в guild_bank и не вызывался
+    // нигде: маршрут звал depositGold, у которого похожее имя
+    expect(routes).toMatch(/guilds\.depositItem\(data\.guild\.id, characterId, req\.body\.itemId/);
+    // И выдача тоже: склад «положить, но не забрать» — ловушка
+    expect(routes).toMatch(/guilds\.withdrawItem\(data\.guild\.id, characterId, bankId/);
+    expect(guildPanel).toMatch(/api\.guildDepositItem\(/);
+    expect(guildPanel).toMatch(/api\.guildWithdrawItem\(/);
+  });
+
+  it('вклад предметов проверяет членство', () => {
+    // Раньше не проверялось вовсе: любой персонаж мог складывать вещи в
+    // чужой склад
+    expect(service).toMatch(/private async requireMember\(guildId: string, charId: string\)/);
+    const body = service.slice(service.indexOf('async depositItem'), service.indexOf('async withdrawItem'));
+    expect(body).toMatch(/await this\.requireMember\(guildId, charId\)/);
+  });
+
+  it('списание и пополнение склада — одна транзакция', () => {
+    // Иначе есть окно «предмет забрали из сумки, а на склад не попал»
+    expect(service).toMatch(/async depositItem[\s\S]{0,400}this\.db\.transaction/);
+    expect(service).toMatch(/async withdrawItem[\s\S]{0,400}this\.db\.transaction/);
+  });
+
+  it('на складе видно название предмета, а не внутренний ключ', () => {
+    // Раньше панель показывала «mat_dragon_scale»
+    expect(service).toMatch(/nameRu: ITEMS_DATABASE\[r\.item_id\]\?\.nameRu/);
   });
 });
 

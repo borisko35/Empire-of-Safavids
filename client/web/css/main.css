@@ -422,6 +422,54 @@ body {
 .class-name { font-family: var(--font-head); font-size: 16.5px; color: var(--cream); }
 .class-desc { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--cream-dim); }
 
+/* ── Секция «Особенности» ───────────────────────────────────────
+   Сетка и карточки повторяют классы: тот же фон, та же рамка, тот же
+   отклик на наведение. Отдельный дизайн здесь был бы враньём — рядом стоят
+   карточки классов, и разные стили читались бы как два разных сайта. */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.feature-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 18px 16px;
+  text-align: center;
+  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--gold);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--gold);
+  background:
+    radial-gradient(circle at 34% 30%, rgba(255, 255, 255, 0.14), transparent 60%),
+    rgba(7, 15, 27, 0.85);
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 16px rgba(201, 168, 76, 0.45);
+}
+
+.feature-name { font-family: var(--font-head); font-size: 15.5px; color: var(--cream); }
+.feature-desc { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--cream-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-card { transition: none; }
+}
+
 /* ── Подвал ─────────────────────────────────────────────────── */
 
 .footer {

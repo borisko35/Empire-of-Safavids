@@ -552,8 +552,12 @@ export const api = {
       body: JSON.stringify({ characterId }),
     }),
 
+  auctionMine: (characterId: string) =>
+    req<{ listings: { id: string; itemId: string; nameRu: string; quantity: number; price: number; sold: boolean; canCancel: boolean; expiresAt: string; createdAt: string }[] }>(
+      `/api/game/auction/mine?characterId=${characterId}`),
+
   auctionCancel: (listingId: string, characterId: string) =>
-    req<boolean>(`/api/game/auction/${listingId}`, {
+    req<{ success: boolean }>(`/api/game/auction/${listingId}`, {
       method: 'DELETE',
       body: JSON.stringify({ characterId }),
     }),
@@ -731,21 +735,29 @@ export const api = {
     ),
 
   // ── Гильдии ──────────────────────────────────────────────
-  guildMy: () => req<{ guild: any; rank: string } | null>('/api/guilds'),
+  // Персонаж обязателен в каждом маршруте: сервер ищет по guild_members
+  // .character_id, а не по аккаунту. Раньше он не передавался, и панель
+  // показывала «вы не в гильдии» игроку, который в гильдии состоял.
+  guildMy: (characterId: string) => req<{ guild: any; rank: string } | null>(`/api/guilds?characterId=${characterId}`),
   guildSearch: (q: string) => req<{ guilds: any[] }>(`/api/guilds/search?q=${encodeURIComponent(q)}`),
-  guildCreate: (name: string, tag: string, description: string) =>
-    req<{ success: boolean; guild: any }>('/api/guilds/create', { method: 'POST', body: JSON.stringify({ name, tag, description }) }),
-  guildJoin: (guildId: string) =>
-    req<{ success: boolean }>('/api/guilds/join', { method: 'POST', body: JSON.stringify({ guildId }) }),
-  guildLeave: () => req<{ success: boolean }>('/api/guilds/leave', { method: 'POST' }),
-  guildMembers: () => req<{ members: any[] }>('/api/guilds/members'),
-  guildRank: (characterId: string, rank: string) =>
-    req<{ success: boolean }>('/api/guilds/rank', { method: 'POST', body: JSON.stringify({ characterId, rank }) }),
-  guildDepositGold: (amount: number) =>
-    req<{ success: boolean }>('/api/guilds/deposit-gold', { method: 'POST', body: JSON.stringify({ amount }) }),
-  guildBank: () => req<{ items: any[] }>('/api/guilds/bank'),
-  guildKick: (characterId: string) =>
-    req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  guildCreate: (characterId: string, name: string, tag: string, description: string) =>
+    req<{ success: boolean; guild: any }>('/api/guilds/create', { method: 'POST', body: JSON.stringify({ characterId, name, tag, description }) }),
+  guildJoin: (characterId: string, guildId: string) =>
+    req<{ success: boolean }>('/api/guilds/join', { method: 'POST', body: JSON.stringify({ characterId, guildId }) }),
+  guildLeave: (characterId: string) =>
+    req<{ success: boolean }>('/api/guilds/leave', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  guildMembers: (characterId: string) => req<{ members: any[] }>(`/api/guilds/members?characterId=${characterId}`),
+  guildRank: (actorId: string, targetId: string, rank: string) =>
+    req<{ success: boolean }>('/api/guilds/rank', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId, rank }) }),
+  guildDepositGold: (characterId: string, amount: number) =>
+    req<{ success: boolean }>('/api/guilds/deposit-gold', { method: 'POST', body: JSON.stringify({ characterId, amount }) }),
+  guildDepositItem: (characterId: string, itemId: string, qty = 1) =>
+    req<{ success: boolean }>('/api/guilds/deposit-item', { method: 'POST', body: JSON.stringify({ characterId, itemId, qty }) }),
+  guildWithdrawItem: (characterId: string, bankId: number, qty = 1) =>
+    req<{ success: boolean }>('/api/guilds/withdraw-item', { method: 'POST', body: JSON.stringify({ characterId, bankId, qty }) }),
+  guildBank: (characterId: string) => req<{ items: any[] }>(`/api/guilds/bank?characterId=${characterId}`),
+  guildKick: (actorId: string, targetId: string) =>
+    req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 
   // ── Достижения / Задачи / Репутация ─────────────────────
   achievements: () => req<{ achievements: any[]; total: number; unlockedCount: number }>('/api/progression/achievements'),
@@ -820,8 +832,12 @@ export const api = {
   pvpHistory: () => req<{ history: any[] }>('/api/game/pvp/history'),
 
   // ── Бесконечная Башня ───────────────────────────────────
-  towerProgress: () => req<{ progress: any }>('/api/game/tower/progress'),
-  towerStart: () => req<{ progress: any; floor: any }>('/api/game/tower/start', { method: 'POST' }),
+  // Персонаж обязателен: сервер ищет по endless_tower.character_id, а не по
+  // аккаунту. Раньше он не передавался, и прогресс башни был всегда нулевым
+  towerProgress: (characterId: string) =>
+    req<{ progress: any; floor: any }>(`/api/game/tower/progress?characterId=${characterId}`),
+  towerStart: (characterId: string) =>
+    req<{ progress: any; floor: any }>('/api/game/tower/start', { method: 'POST', body: JSON.stringify({ characterId }) }),
   towerCompleteFloor: (characterId: string, floor: number, timeSeconds: number) =>
     req<{ reward: any; newMax: boolean; nextFloor: any }>(
       '/api/game/tower/complete-floor', { method: 'POST', body: JSON.stringify({ characterId, floor, timeSeconds }) }),
@@ -842,7 +858,7 @@ export const api = {
   },
 
   npcReply: (npcId: string, lineId: string, choiceIndex: number, characterId?: string) =>
-    req<{ npcId: string; nameRu: string; choice: NpcChoice; nextLine: NpcLine; questsCompleted?: CompletedQuest[]; cutscene?: StoryCutscene | null }>(
+    req<{ npcId: string; nameRu: string; choice: NpcChoice; nextLine: NpcLine; memory?: { chatCount: number; friendshipLevel: number; tone?: string }; friendshipUp?: boolean; questsCompleted?: CompletedQuest[]; cutscene?: StoryCutscene | null }>(
       `/api/npc/${encodeURIComponent(npcId)}/dialog`,
       { method: 'POST', body: JSON.stringify({ lineId, choiceIndex, characterId }) },
     ),

@@ -4,6 +4,7 @@
 
 import { DatabaseService } from './DatabaseService';
 import { RedisService } from './RedisService';
+import { ITEMS_DATABASE } from '../data/items';
 import { logger } from '../utils/logger';
 
 export interface Guild {
@@ -15,6 +16,12 @@ export interface Guild {
 export interface GuildMember {
   character_id: string; character_name: string; rank: string;
   contribution_points: number; joined_at: string; level: number; online: boolean;
+}
+
+/** Строка склада гильдии вместе с названием предмета */
+export interface GuildBankItem {
+  id: number; item_id: string; quantity: number;
+  deposited_by: string; deposited_at: string; nameRu: string;
 }
 
 export class GuildService {
@@ -272,6 +279,12 @@ export class GuildService {
   async depositItem(guildId: string, charId: string, itemId: string, qty: number): Promise<void> {
     const count = Math.max(1, Math.floor(qty));
 
+    // Членство проверяется ДО транзакции. Раньше не проверялось вовсе:
+    // depositItem был единственным писателем в guild_bank и не вызывался
+    // никем, так что дыра была незаметна — но как только кнопка появилась,
+    // любой персонаж мог складывать предметы в чужой склад
+    await this.requireMember(guildId, charId);
+
     await this.db.transaction(async (client) => {
       const took = await client.query(
         `UPDATE character_items SET quantity = quantity - $1
@@ -284,6 +297,13 @@ export class GuildService {
         [count, charId, itemId]
       );
       if (took.rowCount === 0) throw new Error('ITEM_NOT_ENOUGH');
+      // Строка с quantity <= 0 удаляется, как и в аукционе: иначе в инвентаре
+      // остаются пустые предметы, и они занимают место в выпадающих списках
+      await client.query(
+        `DELETE FROM character_items
+         WHERE character_id = $1 AND item_id = $2 AND quantity <= 0`,
+        [charId, itemId]
+      );
       await client.query(
         'INSERT INTO guild_bank (guild_id, item_id, quantity, deposited_by) VALUES ($1, $2, $3, $4)',
         [guildId, itemId, count, charId]
@@ -295,11 +315,77 @@ export class GuildService {
     });
   }
 
-  async getBankItems(guildId: string): Promise<{ id: number; item_id: string; quantity: number; deposited_by: string; deposited_at: string }[]> {
-    return this.db.query(
+  /**
+   * Забрать предмет со склада гильдии.
+   *
+   * Без этого склад был бы ловушкой: положить можно, забрать нельзя, и
+   * игрок потерял бы вещи навсегда. Точка отказа та же, что и у вклада:
+   * склад общий, но списание идёт по строкам под FOR UPDATE, поэтому два
+   * игрока не могут забрать один и тот же предмет дважды.
+   */
+  async withdrawItem(guildId: string, charId: string, bankId: number, qty: number): Promise<void> {
+    const count = Math.max(1, Math.floor(qty));
+    await this.requireMember(guildId, charId);
+
+    await this.db.transaction(async (client) => {
+      const row = await client.query(
+        `SELECT item_id, quantity FROM guild_bank
+         WHERE id = $1 AND guild_id = $2 FOR UPDATE`,
+        [bankId, guildId]
+      );
+      const item = row.rows[0] as { item_id: string; quantity: number } | undefined;
+      if (!item) throw new Error('BANK_ROW_NOT_FOUND');
+      if (item.quantity < count) throw new Error('BANK_NOT_ENOUGH');
+
+      const took = await client.query(
+        `UPDATE guild_bank SET quantity = quantity - $1 WHERE id = $2 AND quantity >= $1`,
+        [count, bankId]
+      );
+      if (took.rowCount === 0) throw new Error('BANK_NOT_ENOUGH');
+      if (item.quantity - count <= 0) {
+        await client.query('DELETE FROM guild_bank WHERE id = $1', [bankId]);
+      }
+      await client.query(
+        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+         VALUES ($1, $2, $3, 0)
+         ON CONFLICT (character_id, item_id, enhancement)
+         DO UPDATE SET quantity = character_items.quantity + $3`,
+        [charId, item.item_id, count]
+      );
+      // Вклад давал вклад за штуку — возврат её отнимает. Иначе можно было
+      // бы бесконечно класть и забирать, набивая очки вклада
+      await client.query(
+        `UPDATE guild_members SET contribution_points = GREATEST(0, contribution_points - $1)
+         WHERE guild_id = $2 AND character_id = $3`,
+        [count * 5, guildId, charId]
+      );
+    });
+  }
+
+  /** Проверка членства: не в гильдии — ошибка, а не пустой склад */
+  private async requireMember(guildId: string, charId: string): Promise<void> {
+    const row = await this.db.queryOne<{ character_id: string }>(
+      'SELECT character_id FROM guild_members WHERE guild_id = $1 AND character_id = $2',
+      [guildId, charId]
+    );
+    if (!row) throw new Error('NOT_A_MEMBER');
+  }
+
+  /**
+   * Содержимое склада с названиями предметов.
+   *
+   * Раньше отдавались сырые item_id, и клиенту нечего было показать, кроме
+   * внутренних ключей вида mat_dragon_scale.
+   */
+  async getBankItems(guildId: string): Promise<GuildBankItem[]> {
+    const rows = await this.db.query<{ id: number; item_id: string; quantity: number; deposited_by: string; deposited_at: string }>(
       'SELECT * FROM guild_bank WHERE guild_id = $1 ORDER BY deposited_at DESC',
       [guildId]
     );
+    return rows.map(r => ({
+      ...r,
+      nameRu: ITEMS_DATABASE[r.item_id]?.nameRu ?? r.item_id,
+    }));
   }
 
   async searchGuilds(query: string, limit = 20): Promise<Guild[]> {

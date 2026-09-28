@@ -154,6 +154,38 @@ gameRouter.delete('/auction/:listingId', secureMiddleware, requireCharacterOwner
   })
 );
 
+// Мои лоты.
+//
+// Раньше маршрута не было, а AuctionService.getSellerListings был написан и
+// не вызывался: игрок не видел, что именно он выставил, и не мог снять лот.
+// api.auctionCancel на клиенте тоже существовал и не звался — кнопки «Снять
+// лот» в панели не было.
+gameRouter.get('/auction/mine', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+    const character = await characterService.getCharacterById(characterId);
+    if (!character || character.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    const listings = await auctionService.getSellerListings(characterId);
+    return res.json({
+      listings: listings.map(l => ({
+        id: l.id,
+        itemId: l.itemId,
+        nameRu: ITEMS_DATABASE[l.itemId]?.nameRu ?? l.itemId,
+        quantity: l.quantity,
+        price: l.price,
+        sold: !!l.soldAt,
+        // Просроченный лот ещё можно снять — предмет вернётся в сумку
+        canCancel: !l.soldAt,
+        expiresAt: l.expiresAt,
+        createdAt: l.createdAt,
+      })),
+    });
+  })
+);
+
 // ============================================================
 // МАГАЗИНЫ
 // ============================================================
@@ -890,6 +922,47 @@ gameRouter.post('/guilds/:guildId/deposit', secureMiddleware, requireCharacterOw
   })
 );
 
+// Предметы на склад гильдии.
+//
+// ЧТО БЫЛО. GuildService.depositItem был единственным писателем в таблицу
+// guild_bank во всём репозитории — и не вызывался нигде. Маршрут /deposit
+// вызывал depositGold, у которого похожее имя, и это легко принять за
+// рабочую связку. Панель склада показывала пустоту, а работала только кнопка
+// вклада золота.
+gameRouter.post('/guilds/:guildId/deposit-item', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { itemId, qty } = req.body as { itemId?: string; qty?: number };
+    if (!itemId) return res.status(400).json({ error: 'itemId is required' });
+    try {
+      await guildService.depositItem(req.params.guildId, req.body.characterId, itemId, Number(qty ?? 1));
+      return res.json({ success: true });
+    } catch (err) {
+      const code = (err as Error).message;
+      if (code === 'ITEM_NOT_ENOUGH') return res.status(400).json({ error: 'ITEM_NOT_ENOUGH' });
+      if (code === 'NOT_A_MEMBER') return res.status(403).json({ error: 'NOT_A_MEMBER' });
+      throw err;
+    }
+  })
+);
+
+gameRouter.post('/guilds/:guildId/withdraw-item', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const bankId = Number(req.body.bankId);
+    if (!Number.isInteger(bankId) || bankId <= 0) return res.status(400).json({ error: 'bankId is required' });
+    try {
+      await guildService.withdrawItem(req.params.guildId, req.body.characterId, bankId, Number(req.body.qty ?? 1));
+      return res.json({ success: true });
+    } catch (err) {
+      const code = (err as Error).message;
+      if (code === 'BANK_NOT_ENOUGH' || code === 'BANK_ROW_NOT_FOUND') {
+        return res.status(400).json({ error: code });
+      }
+      if (code === 'NOT_A_MEMBER') return res.status(403).json({ error: 'NOT_A_MEMBER' });
+      throw err;
+    }
+  })
+);
+
 // ============================================================
 // ПАРТИИ
 // ============================================================
@@ -1275,16 +1348,44 @@ gameRouter.post('/pvp/cancel', secureMiddleware, requireCharacterOwnership(),
 );
 
 // ── Бесконечная Башня ────────────────────────────────────
+// ТУТ БЫЛА ТА ЖЕ ОШИБКА, ЧТО И В РЕПУТАЦИИ, ЗАДАЧАХ ДНЯ И КОНЮШНЕ.
+// Маршруты отдавали сервису req.userId — идентификатор АККАУНТА, а таблица
+// endless_tower keyed по character_id. Это разные числа, поэтому прогресс
+// башни не читался никогда: getProgress всегда возвращала пустую заглушку
+// (max_floor: 0), а completeFloor писала строку под идентификатором аккаунта
+// — в рейтинге башни такой персонаж не появлялся никогда.
+//
+// Плюс кнопка «Пройти этаж» в клиенте отсутствовала: api.towerCompleteFloor и
+// api.towerFloor были написаны и не вызывались ни разу, поэтому пройти этаж
+// было нечем, а max_floor оставался нулём навсегда.
+const towerCharacterId = async (req: Request, res: Response): Promise<string | null> => {
+  const characterId = String((req.body as Record<string, unknown>)?.characterId ?? req.query.characterId ?? '');
+  if (!characterId) {
+    res.status(400).json({ error: 'characterId is required' });
+    return null;
+  }
+  const character = await characterService.getCharacterById(characterId);
+  if (!character || character.userId !== req.userId) {
+    res.status(403).json({ error: 'Character does not belong to you' });
+    return null;
+  }
+  return characterId;
+};
+
 gameRouter.get('/tower/progress', secureMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const progress = await endgameService.getProgress(req.userId!);
-    return res.json({ progress });
+    const characterId = await towerCharacterId(req, res);
+    if (!characterId) return;
+    const progress = await endgameService.getProgress(characterId);
+    return res.json({ progress, floor: endgameService.getFloor(progress.current_floor) });
   })
 );
 
 gameRouter.post('/tower/start', secureMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const progress = await endgameService.startRun(req.userId!);
+    const characterId = await towerCharacterId(req, res);
+    if (!characterId) return;
+    const progress = await endgameService.startRun(characterId);
     const floor = endgameService.getFloor(1);
     return res.json({ progress, floor });
   })
@@ -1292,9 +1393,14 @@ gameRouter.post('/tower/start', secureMiddleware,
 
 gameRouter.post('/tower/complete-floor', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.body.characterId);
+    const floor = Number(req.body.floor);
+    const timeSeconds = Number(req.body.timeSeconds);
+    if (!Number.isInteger(floor) || floor < 1) return res.status(400).json({ error: 'floor must be a positive integer' });
+    if (!Number.isFinite(timeSeconds) || timeSeconds <= 0) return res.status(400).json({ error: 'timeSeconds must be positive' });
     try {
-      const result = await endgameService.completeFloor(req.userId!, req.body.floor, req.body.timeSeconds);
-      const nextFloor = endgameService.getFloor(req.body.floor + 1);
+      const result = await endgameService.completeFloor(characterId, floor, timeSeconds);
+      const nextFloor = endgameService.getFloor(floor + 1);
       return res.json({ ...result, nextFloor });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })

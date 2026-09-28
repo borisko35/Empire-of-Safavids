@@ -17,13 +17,20 @@ interface DialogLine {
   choices?: { labelRu: string; nextId: string; action?: string; questId?: string }[];
 }
 
+/** Память NPC: сколько раз говорили и насколько подружились */
+interface NpcMemory {
+  chatCount: number;
+  friendshipLevel: number;
+  tone?: 'neutral' | 'friendly' | 'hostile';
+}
+
 interface NpcInfo {
   npcId: string;
   nameRu: string;
   role: string;
   region: string;
   line: DialogLine;
-  memory?: { chatCount: number; friendshipLevel: number; tone?: 'neutral' | 'friendly' | 'hostile' };
+  memory?: NpcMemory;
   questsCompleted?: { questId: string; titleRu: string; experience: number; gold: number }[];
 }
 
@@ -146,6 +153,16 @@ async function handleChoice(choiceIndex: number): Promise<void> {
       role: '',
       region: '',
       line: data.nextLine,
+      // Раньше memory здесь не переносилась: заголовок «Lv.N» показывался
+      // до первого клика по реплике, а после — снова «Lv.0». Игрок решил бы,
+      // что дружба обнуляется при каждом ответе
+      memory: data.memory
+        ? {
+            chatCount: data.memory.chatCount,
+            friendshipLevel: data.memory.friendshipLevel,
+            tone: data.memory.tone as NpcMemory['tone'],
+          }
+        : undefined,
     };
     currentLineId = data.nextLine.id;
     renderDialogue(currentNpc);
@@ -159,6 +176,11 @@ async function handleChoice(choiceIndex: number): Promise<void> {
     // Сюжетная сцена на принятии квеста: сервер прислал её с этим ответом
     if (data.cutscene) {
       playCutscene(data.cutscene as CutsceneData);
+    }
+    // Дружба выросла. Раньше она не росла нигде, игрок не знал бы, что NPC
+    // к нему привязывается, и заголовок диалога всегда показывал Lv.0
+    if (data.friendshipUp) {
+      toast(t('dialogue.friendship_up'), 'success');
     }
     window.dispatchEvent(new CustomEvent('quest:accepted'));
   } catch (err) {

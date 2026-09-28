@@ -23,6 +23,28 @@ const LOCKOUT_MINUTES    = 15;
 const MAX_GUESTS_PER_IP  = 5;
 const GUEST_WINDOW_SEC   = 24 * 3600;
 
+/**
+ * Поле формы регистрации -> код ошибки для клиента.
+ *
+ * validateRegister проверяет девять вещей, а отдавать можно было один код на
+ * все случаи. Клиент показывает текст по коду (screens/auth.ts ищет
+ * errors.<code>), поэтому без этой таблицы половина сообщений была бы
+ * непроизносимой, а игрок получал бы «пароль слишком простой» вместо
+ * «вы несовершеннолетний».
+ *
+ * agreeToPrivacy отдаётся как terms_not_accepted: отдельного ключа нет, а
+ * текст «примите правила» верен для обоих чекбоксов.
+ */
+const REGISTER_ERROR_CODES: Record<string, AuthError> = {
+  username: 'username_invalid',
+  email: 'email_invalid',
+  password: 'weak_password',
+  confirmPassword: 'password_mismatch',
+  birthYear: 'underage',
+  agreeToTerms: 'terms_not_accepted',
+  agreeToPrivacy: 'terms_not_accepted',
+};
+
 export class AuthService {
   private db           = DatabaseService.getInstance();
   private redis        = RedisService.getInstance();
@@ -32,10 +54,16 @@ export class AuthService {
   // ============================================================
   async register(data: RegisterRequest): Promise<AuthResponse> {
     // Валидация
+    //
+    // ЧТО БЫЛО. Карта ошибок сворачивалась в один код weak_password, и игрок
+    // получал «Пароль слишком простой (мин 8 символов)» на ЛЮБУЮ проблему:
+    // на занятый ник, на неверный email, на несовершеннолетие, на
+    // непроставленную галочку. Коды underage и terms_not_accepted были
+    // написаны во всех трёх переводах и не отдавались сервером никогда.
     const { valid, errors } = validateRegister(data);
     if (!valid) {
-      const firstError = Object.values(errors)[0];
-      throw this.authError('weak_password', firstError ?? 'Ошибка валидации');
+      const [field] = Object.keys(errors);
+      throw this.authError(REGISTER_ERROR_CODES[field] ?? 'weak_password', errors[field]);
     }
 
     // Проверка уникальности

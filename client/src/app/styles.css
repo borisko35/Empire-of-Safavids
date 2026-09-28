@@ -1252,6 +1252,46 @@ input, select { font: inherit; }
 }
 
 /* ============================================================
+   Панели: хаб
+   ============================================================ */
+/* Ряд кнопок панели теперь короткий (хаб, сумка, квесты, карта), поэтому
+   перенос ему больше не нужен. max-width оставлен на случай, если кнопки
+   вернутся: 46vw не давали ряду наехать на надпись по центру. */
+.hub-title {
+  margin: 0 0 10px; font-size: 15px; font-weight: 700;
+  color: var(--gold-light);
+}
+.hub-tabs {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;
+}
+.hub-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 9px; font-size: 12px;
+  background: var(--panel); color: var(--cream-dim);
+  border: 1px solid var(--panel-border); border-radius: 7px;
+}
+.hub-tab:hover { color: var(--cream); border-color: rgba(201, 168, 76, 0.4); }
+.hub-tab.active {
+  background: rgba(201, 168, 76, 0.2);
+  color: var(--gold-light);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+.hub-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px;
+}
+.hub-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; text-align: left; font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.04); color: var(--cream);
+  border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px;
+}
+.hub-item:hover {
+  background: rgba(201, 168, 76, 0.12);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+.hub-item-icon { display: flex; color: var(--gold-light); flex: none; }
+
+/* ============================================================
    Reputation Panel
    ============================================================ */
 .rep-row {

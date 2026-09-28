@@ -35,6 +35,8 @@ export const ICONS = {
   globe: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18-3-4-3-14.5 0-18z" fill="none" stroke="currentColor" stroke-width="1.5"/>',
   gear: '<path d="M12 8.5A3.5 3.5 0 1 0 12 15.5 3.5 3.5 0 0 0 12 8.5zm9 3.5l-2.2-.6-.6-1.4 1.1-2-1.8-1.8-2 1.1-1.4-.6L13.5 2h-3l-.6 2.2-1.4.6-2-1.1L4.7 5.5l1.1 2-.6 1.4L3 9.5v3l2.2.6.6 1.4-1.1 2 1.8 1.8 2-1.1 1.4.6.6 2.2h3l.6-2.2 1.4-.6 2 1.1 1.8-1.8-1.1-2 .6-1.4 2.2-.6z"/>',
   chat: '<path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4V6a2 2 0 0 1 2-2z"/>',
+  // Панели: сетка 2×2. Иконка кнопки-хаба, где собираются все панели игры
+  grid: '<path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z" fill="none" stroke="currentColor" stroke-width="2"/>',
   swords: '<path d="M3 3l8 8-2 2-8-8zm18 0l-8 8 2 2 8-8zM6.5 15.5l2 2L5 21l-2-2zm11 0l2 2-3.5 3.5-2-2z"/>',
   clock: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6l4 2" fill="none" stroke="currentColor" stroke-width="2"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5z"/>',

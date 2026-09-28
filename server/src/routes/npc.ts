@@ -9,7 +9,7 @@ import { getNpcDialogue, NPC_DIALOGUES } from '../data/npcDialogues';
 import { getNpcDynamicProfile } from '../data/npcDynamicProfiles';
 import { NpcMemoryService } from '../services/NpcMemoryService';
 import { checkCondition, getEligibleLines, pickRandomLine, NpcContext } from '../services/NpcIntelligenceService';
-import { QuestService } from '../services/QuestService';
+import { QuestService, CompletedQuestInfo } from '../services/QuestService';
 import { StoryService } from '../services/StoryService';
 import { CharacterService } from '../services/CharacterService';
 
@@ -245,9 +245,65 @@ npcRouter.post('/:npcId/dialog', authMiddleware, async (req: Request, res: Respo
     }
   }
 
-  res.json({ npcId: dialogue.npcId, nameRu: dialogue.nameRu, choice, nextLine: modifiedLine, memory: { chatCount, friendshipLevel: memory.friendshipLevel, tone: (memory as unknown as { tone?: string }).tone ?? 'neutral' }, questsCompleted: await questService.recordTalk(characterId, req.params.npcId).catch(() => []), cutscene });
+  const questsCompleted = await questService.recordTalk(characterId, req.params.npcId).catch(() => [] as CompletedQuestInfo[]);
+
+  // Дружба растёт, когда NPC реально сдал квест.
+  //
+  // ЧТО БЫЛО. friendshipLevel писался в одном месте — POST /:npcId/complete-quest
+  // — и этот маршрут не вызывал никто: ни клиента, ни сервера. Дружба
+  // оставалась на нуле всю игру, тон реплик (toneByFriendship требует
+  // level >= 2) не менялся, а заголовок диалога показывал «Lv.0».
+  //
+  // Расти тут, а не звать свой маршрут с клиента: сервер и так знает, какие
+  // квесты закрылись в этом разговоре, и лишний запрос с клиента можно было
+  // бы и потерять — дружба тогда не начислилась бы вовсе.
+  let friendship = memory.friendshipLevel;
+  let friendshipUp = false;
+  if (questsCompleted.length) {
+    const grown = await memoryService.growFriendship(req.params.npcId, characterId, questsCompleted.length)
+      .catch(() => null);
+    if (grown) {
+      friendship = grown.level;
+      friendshipUp = grown.level > memory.friendshipLevel;
+      if (grown.leveledUp) {
+        for (const q of questsCompleted) {
+          await memoryService.addCompletedQuest(req.params.npcId, characterId, q.questId).catch(() => {});
+        }
+        await memoryService.addNote(req.params.npcId, characterId, FRIENDSHIP_UP_NOTES[Math.floor(Math.random() * FRIENDSHIP_UP_NOTES.length)])
+          .catch(() => {});
+      }
+    }
+  }
+
+  res.json({
+    npcId: dialogue.npcId,
+    nameRu: dialogue.nameRu,
+    choice,
+    nextLine: modifiedLine,
+    memory: {
+      chatCount,
+      friendshipLevel: friendship,
+      tone: (memory as unknown as { tone?: string }).tone ?? (friendship >= 2 ? 'friendly' : 'neutral'),
+    },
+    friendshipUp,
+    questsCompleted,
+    cutscene,
+  });
 });
 
+/** Что NPC говорит, когда подружился на новый уровень */
+const FRIENDSHIP_UP_NOTES = [
+  'Рад, что ты не прошёл мимо.',
+  'Ты из тех, на кого можно положиться.',
+  'Империя помнит тех, кто не отступил.',
+  'Между нами теперь есть уговор.',
+];
+
+// Клиент этот маршрут не вызывает: дружба растёт в POST /dialog, где сервер
+// и так знает, какие квесты закрылись. Маршрут оставлен как запасной вход и
+// теперь ведёт себя так же — через единственный growFriendship, а не своей
+// прибавкой поверх addCompletedQuest (раньше за квест начислялось сразу два
+// очка дружбы: одно здесь, второе внутри addCompletedQuest).
 npcRouter.post('/:npcId/complete-quest', authMiddleware, async (req: Request, res: Response) => {
   const { questId } = req.body as { questId?: string };
   if (!questId) return res.status(400).json({ error: 'questId is required' });
@@ -257,14 +313,14 @@ npcRouter.post('/:npcId/complete-quest', authMiddleware, async (req: Request, re
   const characterId = character.id;
   await memoryService.addCompletedQuest(req.params.npcId, characterId, questId);
 
-  const memory = await memoryService.getMemory(req.params.npcId, characterId);
-  memory.friendshipLevel = Math.min(5, memory.friendshipLevel + 1);
-  await memoryService.saveMemory(req.params.npcId, characterId, memory);
+  const { level, leveledUp } = await memoryService.growFriendship(req.params.npcId, characterId, 1);
 
-  const phrases = ['Ты действительно помог!', 'Благодарю за помощь!', 'Империя будет помнить твое дело.', 'Ты настоящий герой!'];
-  await memoryService.addNote(req.params.npcId, characterId, phrases[Math.floor(Math.random() * phrases.length)]);
+  if (leveledUp) {
+    const phrases = ['Ты действительно помог!', 'Благодарю за помощь!', 'Империя будет помнить твое дело.', 'Ты настоящий герой!'];
+    await memoryService.addNote(req.params.npcId, characterId, phrases[Math.floor(Math.random() * phrases.length)]);
+  }
 
-  res.json({ success: true, friendshipLevel: memory.friendshipLevel });
+  res.json({ success: true, friendshipLevel: level, friendshipUp: leveledUp });
 });
 
 npcRouter.get('/:npcId/memory', authMiddleware, async (req: Request, res: Response) => {

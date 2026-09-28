@@ -577,12 +577,63 @@ export async function loadAuction(): Promise<void> {
       box.append(row);
     }
 
+    // ── Мои лоты ────────────────────────────────────────────
+    // Раздела не было: игрок не видел, что выставил, и не мог снять лот.
+    // api.auctionCancel и AuctionService.getSellerListings были написаны и
+    // не вызывались ни разу
+    try {
+      const { listings: mine } = await api.auctionMine(cid());
+      const mineTitle = document.createElement('div');
+      mineTitle.className = 'panel-subhead';
+      mineTitle.textContent = t('auction.mine');
+      box.append(mineTitle);
+      if (!mine?.length) {
+        const none = document.createElement('div');
+        none.className = 'lb-empty';
+        none.textContent = t('auction.mine_empty');
+        box.append(none);
+      }
+      for (const l of mine) {
+        const row = rowEl('inv-item');
+        const name = document.createElement('span');
+        name.className = 'inv-name';
+        name.textContent = `${l.nameRu} ×${l.quantity}`;
+        const price = document.createElement('span');
+        price.className = 'inv-qty';
+        // Срок горит жёлтым, когда лот уже просрочен: предмет вернётся сам,
+        // но пока уборка не прошла, игрок может снять его кнопкой
+        const left = new Date(l.expiresAt).getTime() - Date.now();
+        const expired = !l.sold && left <= 0;
+        price.textContent = l.sold
+          ? t('auction.sold')
+          : expired ? t('auction.expired') : `${t('auction.left')}: ${Math.max(1, Math.round(left / 3600000))} ${t('auction.hours')}`;
+        if (expired) price.style.color = '#e8a84a';
+        row.append(name, price);
+        if (l.canCancel) {
+          row.append(actionButton(t('auction.cancel'), async () => {
+            try {
+              const res = await api.auctionCancel(l.id, cid());
+              toast(res.success ? t('auction.cancelled') : t('auction.cancel_failed'), res.success ? 'success' : 'error');
+              await loadAuction();
+              await loadInventory();
+            } catch (err) { toast((err as Error).message, 'error'); }
+          }));
+        }
+        box.append(row);
+      }
+    } catch (err) {
+      const failRow = document.createElement('div');
+      failRow.className = 'lb-empty';
+      failRow.textContent = (err as Error).message;
+      box.append(failRow);
+    }
+
     // ── Форма размещения лота: предмет из сумки + цена ──
     try {
       const { items } = await api.inventory(cid());
       const formTitle = document.createElement('div');
       formTitle.className = 'panel-subhead';
-      formTitle.textContent = 'Разместить лот';
+      formTitle.textContent = t('auction.place');
       box.append(formTitle);
       if (!items.length) {
         const note = document.createElement('div');
@@ -2155,30 +2206,103 @@ async function loadPvP(): Promise<void> {
 
 // ── Бесконечная Башня ──────────────────────────────────────
 
+/** Этаж башни в том виде, как его отдаёт сервер */
+interface TowerFloor {
+  floor: number; monsterCount: number; monsterLevel: number;
+  reward: { gold: number; experience: number; items: string[] };
+}
+
+/**
+ * С какого момента игрок бежит этаж. По этому времени считается «лучшее
+ * время» в рейтинге башни: сервер берёт число из тела запроса и проверить
+ * его не может, поэтому честная оценка — единственное, что у нас есть.
+ * Пол ключа — номер этажа.
+ */
+const towerRunStartedAt = new Map<number, number>();
+/** Ниже этого сервер не примет: меньше десяти секунд на этаж не бывает */
+const MIN_FLOOR_SECONDS = 10;
+
 async function loadTower(): Promise<void> {
   const box = $('panel-tower');
   if (!box) return;
   box.innerHTML = '';
   try {
-    let progData: { progress?: any } = {};
-    try { progData = await api.towerProgress(); } catch {}
-    const p = progData.progress ?? { max_floor: 0, current_floor: 0, runs_total: 0 };
+    // Персонаж обязателен: сервер ищет по endless_tower.character_id, а не по
+    // аккаунту. Раньше он не передавался, и прогресс башни был всегда нулевым
+    let progData: { progress?: { max_floor: number; current_floor: number; runs_total: number; best_time_seconds: number }; floor?: TowerFloor } = {};
+    try { progData = await api.towerProgress(cid()); } catch {}
+    const p = progData.progress ?? { max_floor: 0, current_floor: 0, runs_total: 0, best_time_seconds: 0 };
     const info = document.createElement('div');
     info.className = 'lb-my-rank';
-    info.textContent = `🏰 Башня · Макс. этаж: ${p.max_floor} · Текущий: ${p.current_floor} · Забегов: ${p.runs_total}`;
+    info.textContent = `🏰 ${t('tower.title')} · ${t('tower.max_floor')}: ${p.max_floor} · ${t('tower.current')}: ${p.current_floor} · ${t('tower.runs')}: ${p.runs_total}`;
     box.append(info);
+
+    // Описание текущего этажа: сколько монстров, какой уровень, что за награда
+    const floor = progData.floor;
+    if (floor) {
+      if (!towerRunStartedAt.has(floor.floor)) towerRunStartedAt.set(floor.floor, Date.now());
+      const d = document.createElement('div');
+      d.className = 'inv-item';
+      const head = document.createElement('span');
+      head.className = 'inv-name';
+      head.textContent = `${t('tower.floor')} ${floor.floor}`;
+      const info2 = document.createElement('span');
+      info2.className = 'inv-qty';
+      info2.textContent = `⚔ ${floor.monsterCount} · ур.${floor.monsterLevel}`;
+      d.append(head, info2);
+      const reward = document.createElement('span');
+      reward.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
+      reward.textContent =
+        `${t('tower.reward')}: ${floor.reward.gold} ${t('world.gold')}, ${floor.reward.experience} ${t('world.exp')}` +
+        (floor.reward.items.length ? `, ${floor.reward.items.length}× ${t('tower.items')}` : '');
+      d.append(reward);
+      box.append(d);
+    }
+
     const startBtn = document.createElement('button');
     startBtn.className = 'quest-accept';
-    startBtn.textContent = 'Начать забег';
+    startBtn.textContent = t('tower.start');
     startBtn.style.margin = '8px 0';
     startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
       try {
-        const res = await api.towerStart();
-        toast(`Этаж 1: ${res.floor.monsterCount} монстров, ур.${res.floor.monsterLevel}`, 'info');
+        const res = await api.towerStart(cid());
+        // Забег начат — отсчёт этажа 1 с этого момента
+        towerRunStartedAt.set(1, Date.now());
+        toast(`${t('tower.floor')} 1: ${res.floor.monsterCount} ${t('tower.monsters')}, ${t('panels.char_level')} ${res.floor.monsterLevel}`, 'info');
         void loadTower();
       } catch (err) { toast((err as Error).message, 'error'); }
+      finally { startBtn.disabled = false; }
     });
     box.append(startBtn);
+
+    // Кнопки «Пройти этаж» не было НИКОГДА. api.towerCompleteFloor и
+    // api.towerFloor были написаны и не вызывались ни разу, поэтому пройти
+    // этаж было нечем: кнопка «Начать забег» показывала состав врагов и
+    // перерисовывала панель в то же состояние, а max_floor оставался нулём.
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'quest-accept';
+    clearBtn.style.margin = '8px 0';
+    clearBtn.textContent = `${t('tower.clear')} ${p.current_floor}`;
+    clearBtn.addEventListener('click', async () => {
+      clearBtn.disabled = true;
+      try {
+        // Время идёт с момента, когда этаж был показан игроку, а не с
+        // момента нажатия: иначе кнопка всегда отправляла бы «1 секунда» и
+        // рейтинг «лучшее время» врал бы каждому. Отсчёт на клиенте —
+        // честная оценка; сервер отсекает заведомо неправдоподобное время
+        // (см. MIN_FLOOR_SECONDS в EndGameService).
+        const started = towerRunStartedAt.get(p.current_floor) ?? Date.now();
+        const seconds = Math.max(MIN_FLOOR_SECONDS, Math.round((Date.now() - started) / 1000));
+        const res = await api.towerCompleteFloor(cid(), p.current_floor, seconds);
+        const items = res.reward.items.length ? ` + ${res.reward.items.length}× ${t('tower.items')}` : '';
+        toast(`${t('tower.cleared')} ${p.current_floor}: +${res.reward.gold} ${t('world.gold')}, +${res.reward.experience} ${t('world.exp')}${items}`, 'success');
+        if (res.newMax) toast(t('tower.new_record'), 'success');
+        void loadTower();
+      } catch (err) { toast((err as Error).message, 'error'); }
+      finally { clearBtn.disabled = false; }
+    });
+    box.append(clearBtn);
     // Лидерборд
     let lbData: { leaderboard?: any[] } = {};
     try { lbData = await api.towerLeaderboard(); } catch {}
@@ -2186,7 +2310,7 @@ async function loadTower(): Promise<void> {
     if (rankings.length) {
       const lbTitle = document.createElement('div');
       lbTitle.className = 'panel-subhead';
-      lbTitle.textContent = 'Топ Башни';
+      lbTitle.textContent = t('tower.leaderboard');
       box.append(lbTitle);
       for (const e of rankings.slice(0, 10)) {
         const row = document.createElement('div');
@@ -2199,7 +2323,7 @@ async function loadTower(): Promise<void> {
     } else {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
-      empty.textContent = 'Пока никто не покорил башню';
+      empty.textContent = t('tower.empty');
       box.append(empty);
     }
   } catch { box.innerHTML = '<div class="lb-empty">Башня недоступна</div>'; }
@@ -2913,6 +3037,9 @@ export async function loadFishing(): Promise<void> {
 }
 
 const LOADERS: Record<string, () => Promise<void>> = {
+  // Хаб панелей. Содержимое он собирает сам, но id должен быть в диспетчере:
+  // иначе панель откроется пустой
+  'panel-hub': async () => { const { loadHub } = await import('./hub'); loadHub(); },
   'panel-character': loadCharacterPanel,
   'panel-dungeons': loadDungeons,
   'panel-shop': loadShop,

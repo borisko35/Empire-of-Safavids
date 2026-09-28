@@ -15,6 +15,13 @@ export interface TowerFloor {
   monsterType: string; bossFloor: boolean; reward: { gold: number; experience: number; items: string[] };
 }
 
+/**
+ * Меньше десяти секунд этаж не занимает. Время приходит от клиента, и без
+ * нижней границы «лучшее время» в рейтинге башни было бы равно одной секунде
+ * у всех, кто захотел бы в него попасть.
+ */
+const MIN_FLOOR_SECONDS = 10;
+
 export class EndGameService {
   private db = DatabaseService.getInstance();
 
@@ -43,10 +50,36 @@ export class EndGameService {
     return row ?? { character_id: charId, max_floor: 0, current_floor: 1, best_time_seconds: 0, runs_total: 0 };
   }
 
-  /** Завершить этаж */
+  /**
+   * Завершить этаж.
+   *
+   * Проверяем, что этаж действительно тот, который игрок бежал. Без проверки
+   * можно было отправить floor: 999 и получить награду за любой этаж разом —
+   * единственный способ набить бесконечное золото через башню. Правило
+   * простое: пройти можно ровно текущий этаж, а вперёд — только на один.
+   */
   async completeFloor(charId: string, floor: number, timeSeconds: number): Promise<{ reward: { gold: number; experience: number; items: string[] }; newMax: boolean }> {
-    const floorData = this.getFloor(floor);
     const progress = await this.getProgress(charId);
+
+    // current_floor в свежей записи равен 1, пока забег не начат. Первый
+    // этаж можно закрыть без startRun — он и есть текущий
+    const current = progress.runs_total > 0 ? progress.current_floor : 1;
+    if (floor > current + 1) {
+      throw new Error(`Floor ${floor} is locked: current is ${current}, you may clear at most ${current + 1}`);
+    }
+    if (floor < current) {
+      // Повторное прохождение уже взятого этажа: награду не выдаём второй раз
+      throw new Error(`Floor ${floor} was already cleared (current is ${current})`);
+    }
+
+    const floorData = this.getFloor(floor);
+
+    // Время приходит из тела запроса, проверить его нечем. Но и пропустить
+    // его нельзя: иначе «лучшее время» в рейтинге башни равнялось бы одной
+    // секунде у каждого, кто захотел бы туда попасть. Ниже физического
+    // минимума не принимаем, иначе в рейтинге будет ноль секунд.
+    const time = Math.max(MIN_FLOOR_SECONDS, Math.round(timeSeconds));
+
 
     // Выдать награды
     if (floorData.reward.gold > 0) {
@@ -72,8 +105,11 @@ export class EndGameService {
     }
 
     const newMax = floor > progress.max_floor;
-    const bestTime = (progress.best_time_seconds === 0 || timeSeconds < progress.best_time_seconds) && newMax
-      ? timeSeconds : progress.best_time_seconds;
+    // Рекорд ставится на `time`, а не на присланное время: иначе наша же
+    // проверка минимума обнуляла бы рекорд у честного игрока, который пробежал
+    // этаж быстрее десяти секунд (такое возможно на первом этаже)
+    const bestTime = (progress.best_time_seconds === 0 || time < progress.best_time_seconds) && newMax
+      ? time : progress.best_time_seconds;
 
     if (progress.runs_total > 0) {
       await this.db.query(
@@ -91,7 +127,7 @@ export class EndGameService {
       );
     }
 
-    logger.info(`[Tower] ${charId} cleared floor ${floor} in ${timeSeconds}s`);
+    logger.info(`[Tower] ${charId} cleared floor ${floor} in ${time}s`);
     return { reward: floorData.reward, newMax };
   }
 

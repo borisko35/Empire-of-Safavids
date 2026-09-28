@@ -17,6 +17,7 @@ import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { EquipmentCache } from '../services/EquipmentCache';
+import { AuctionService } from '../services/AuctionService';
 import { REDIS_CHANNELS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
@@ -24,6 +25,10 @@ const TICK_INTERVAL_MS = 1000;
 const AI_TICK_EVERY = 2;        // тик ИИ раз в 2 секунды
 const WORLD_TIME_EVERY = 60;    // вещание игрового времени раз в минуту
 const KARMA_DECAY_EVERY = 3600; // распад кармы раз в час
+// Уборка просроченных лотов аукциона. Раз в 5 минут: лот живёт сутки, так
+// что погрешность в пять минут на возврат вещи никто не заметит, а запрос
+// будет один на сервер вместо тысячи
+const AUCTION_SWEEP_EVERY = 300;
 
 export class GameLoop {
   private static instance: GameLoop;
@@ -35,6 +40,7 @@ export class GameLoop {
   private redis = RedisService.getInstance();
   private defenseStates = DefenseStates.getInstance();
   private equipment = EquipmentCache.getInstance();
+  private auction = new AuctionService();
   private worldEventBroadcaster: ((payload: Record<string, unknown>) => void) | null = null;
 
   private timer: NodeJS.Timeout | null = null;
@@ -122,13 +128,30 @@ export class GameLoop {
       if (this.tickCount % KARMA_DECAY_EVERY === 0) {
         this.decayKarmaOnline().catch((e) => logger.error('[GameLoop] decayKarma rejected:', e));
       }
+
+      // Возврат просроченных лотов аукциона. Без этого предмет, выставленный
+      // на сутки, просто исчезал: эскроу забирал его сразу, а возврата не
+      // существовало нигде
+      if (this.tickCount % AUCTION_SWEEP_EVERY === 0) {
+        this.auctionSweep().catch((e) => logger.error('[GameLoop] auctionSweep rejected:', e));
+      }
     } catch (error) {
       logger.error('[GameLoop] Tick error:', error);
     }
   }
 
-  private async tickAI(): Promise<void> {
-    try {
+  /**
+   * Вернуть просроченные лоты аукциона продавцам.
+   *
+   * Отдельный метод с собственным try/catch на вызывающей стороне: падение
+   * уборки не должно ронять респавн монстров и тик ИИ, которые живут в том
+   * же блоке.
+   */
+  private async auctionSweep(): Promise<void> {
+    await this.auction.returnExpiredListings();
+  }
+
+  private async tickAI(): Promise<void> {    try {
     // Собираем онлайн-игроков по шардам и регионам из Redis
     const nearbyPlayers = new Map<string, TargetPlayer[]>();
     const allIds: string[] = [];

@@ -78,7 +78,10 @@ export type AuthError =
   | 'user_not_found'
   | 'email_taken'
   | 'username_taken'
+  | 'username_invalid'
+  | 'email_invalid'
   | 'weak_password'
+  | 'password_mismatch'
   | 'underage'
   | 'terms_not_accepted'
   | 'account_banned'
@@ -97,6 +100,9 @@ export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   user_not_found:      'Пользователь не найден',
   email_taken:         'Этот email уже зарегистрирован',
   username_taken:      'Это имя уже занято',
+  username_invalid:    'Имя: 3-20 символов, только латиница, цифры и _',
+  email_invalid:       'Некорректный email',
+  password_mismatch:   'Пароли не совпадают',
   weak_password:       'Пароль слишком простой (мин 8 символов)',
   underage:            'Доступ разрешён только с 18 лет',
   terms_not_accepted:  'Необходимо принять условия',

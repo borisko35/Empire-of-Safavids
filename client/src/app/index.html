@@ -257,6 +257,9 @@
       <div id="skills-list"></div>
       <div id="skills-available"></div>
     </div>
+    <!-- Хаб панелей: все панели игры, разложенные по смыслу.
+         Содержимое собирает hub.ts, в разметке только контейнер. -->
+    <div class="hud side-panel hidden" id="panel-hub"></div>
     <!-- Панель настроек -->
     <div class="hud side-panel hidden" id="panel-settings">
       <h3><span data-icon="gear"></span>Настройки</h3>
@@ -342,39 +345,19 @@
     </div>
 
     <!-- Кнопки-переключатели панелей -->
+    <!-- Ряд кнопок панелей.
+         Раньше здесь висело 33 кнопки в один ряд (1218 пикселей) — искать
+         нужную было нечем, подписи видны только при наведении. Теперь ряд
+         состоит из кнопки хаба и трёх кнопок, нужных по многу чаще всего:
+         сумка, квесты и карта.
+         Остальные панели живут внутри хаба (client/src/app/hub.ts) и
+         открываются оттуда. Панели не «потеряны»: хаб — второй вход в те
+         же самые панели, а не замена им. -->
     <div class="hud panel-toggles">
-      <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
-      <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
+      <button data-panel="panel-hub" data-icon="grid" title="Панели" type="button"></button>
       <button data-panel="panel-inventory" data-icon="chest" title="Сумка" type="button"></button>
-      <button data-panel="panel-dungeons" data-icon="swords" title="Данжи" type="button"></button>
-      <button data-panel="panel-shop" data-icon="coin" title="Магазин" type="button"></button>
-      <button data-panel="panel-craft" data-icon="gear" title="Крафт" type="button"></button>
-      <button data-panel="panel-auction" data-icon="coin" title="Аукцион" type="button"></button>
-      <button data-panel="panel-party" data-icon="user" title="Группа" type="button"></button>
-      <button data-panel="panel-trade" data-icon="silk" title="Караваны" type="button"></button>
-      <button data-panel="panel-mount-stable" data-icon="mount" title="Конюшня" type="button"></button>
-      <button data-panel="panel-fishing" data-icon="fish" title="Рыбалка" type="button"></button>
-      <button data-panel="panel-house" data-icon="home" title="Дом" type="button"></button>
-      <button data-panel="panel-leaderboard" data-icon="crown" title="Рейтинги" type="button"></button>
-      <button data-panel="panel-friends" data-icon="user" title="Друзья" type="button"></button>
-      <button data-panel="panel-referral" data-icon="user" title="Пригласить друга" type="button"></button>
-      <button data-panel="panel-achievements" data-icon="crown" title="Достижения" type="button"></button>
-      <button data-panel="panel-tasks" data-icon="scroll" title="Задачи" type="button"></button>
-      <button data-panel="panel-pets" data-icon="heart" title="Питомцы" type="button"></button>
-      <button data-panel="panel-pvp" data-icon="swords" title="PvP" type="button"></button>
-      <button data-panel="panel-tower" data-icon="star8" title="Башня" type="button"></button>
-      <button data-panel="panel-reputation" data-icon="flag" title="Репутация" type="button"></button>
-      <button data-panel="panel-chess" data-icon="crown" title="Шахматы" type="button"></button>
-      <button data-panel="panel-poetry" data-icon="scroll" title="Поэзия" type="button"></button>
-      <button data-panel="panel-chronicles" data-icon="star8" title="Хроники" type="button"></button>
-      <button data-panel="panel-story" data-icon="crown" title="Сюжет" type="button"></button>
-      <button data-panel="panel-admin" data-icon="shield" title="Админ" type="button" id="btn-panel-admin" class="hidden"></button>
-      <!-- Загрузка фото и видео. Кнопка появляется сотрудникам сайта
-           так же, как админская, но отдельно: файлы нужны чаще, чем
-           разбирательства с игроками. -->
-      <button data-panel="panel-media" data-icon="scroll" title="Фото и видео" type="button" id="btn-panel-media" class="hidden"></button>
-      <button data-panel="panel-skills" data-icon="bolt" title="Навыки" type="button"></button>
-      <button data-panel="panel-settings" data-icon="gear" title="Настройки" type="button"></button>
+      <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
+      <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
     </div>
 
     <!-- Цель активного квеста (стрелка-навигатор) -->
