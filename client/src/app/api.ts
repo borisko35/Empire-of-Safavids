@@ -780,7 +780,11 @@ export const api = {
     req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 
   // ── Достижения / Задачи / Репутация ─────────────────────
-  achievements: () => req<{ achievements: any[]; total: number; unlockedCount: number }>('/api/progression/achievements'),
+  // characterId обязателен: сервер считает открытые достижения по персонажу,
+  // а не по аккаунту — иначе счётчик «Разблокировано» всегда нулевой
+  achievements: (characterId: string) =>
+    req<{ achievements: any[]; total: number; unlockedCount: number }>(
+      `/api/progression/achievements?characterId=${characterId}`),
   // characterId обязателен: сервер ищет прогресс по персонажу, а не по аккаунту
   tasks: (characterId: string) =>
     req<{ tasks: any[]; completedCount: number }>(`/api/progression/tasks?characterId=${characterId}`),

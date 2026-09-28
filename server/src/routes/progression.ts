@@ -16,9 +16,21 @@ const reputation = new ReputationService();
 const db = DatabaseService.getInstance();
 
 // ── Achievements ────────────────────────────────────────
+// ТУТ БЫЛА ТА ЖЕ ОШИБКА, ЧТО В ЗАДАЧАХ ДНЯ: персонаж не передавался вовсе,
+// а открытые достижения искались по req.userId — идентификатору АККАУНТА —
+// в таблице character_achievements.character_id. Панель поэтому всегда
+// показывала «Разблокировано: 0 / 21», а строки не загорались даже у того,
+// кто что-то достиг: определения задач и достижений лежат в коде, а вот
+// прогресс игрока — в базе, и искать его надо по персонажу.
 router.get('/achievements', authMiddleware, async (req: any, res) => {
+  const characterId = String(req.query.characterId ?? '');
+  if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+  const char = await db.queryOne<{ id: string }>(
+    'SELECT id FROM characters WHERE id = $1 AND user_id = $2', [characterId, req.userId]
+  );
+  if (!char) return res.status(404).json({ error: 'Character not found' });
   const all = await achievements.getAll();
-  const unlocked = await achievements.getUnlocked(req.userId);
+  const unlocked = await achievements.getUnlocked(characterId);
   const unlockedIds = new Set(unlocked.map(a => a.id));
   res.json({
     achievements: all.map(a => ({ ...a, unlocked: unlockedIds.has(a.id) })),
@@ -28,7 +40,14 @@ router.get('/achievements', authMiddleware, async (req: any, res) => {
 });
 
 router.get('/achievements/:id/progress', authMiddleware, async (req: any, res) => {
-  const progress = await achievements.getProgress(req.userId, req.params.id);
+  // Та же болезнь: прогресс по character_id, а спрашивали про аккаунт
+  const characterId = String(req.query.characterId ?? '');
+  if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+  const char = await db.queryOne<{ id: string }>(
+    'SELECT id FROM characters WHERE id = $1 AND user_id = $2', [characterId, req.userId]
+  );
+  if (!char) return res.status(404).json({ error: 'Character not found' });
+  const progress = await achievements.getProgress(characterId, req.params.id);
   res.json(progress);
 });
 

@@ -222,6 +222,42 @@ export function buildMethodRunner(
   );
 }
 
+/**
+ * Вырезать обработчик маршрута: `router.get('/x', mw, async (req, res) => {…})`.
+ *
+ * Маршруты в routes/*.ts пишутся анонимными стрелками — имени для
+ * extractConstArrow у них нет, поэтому обработчик ищется по строке-маркеру
+ * самого маршрута; переданная строка должна встречаться ровно один раз.
+ */
+export function extractRouteHandler(source: string, marker: string): string {
+  const at = source.indexOf(marker);
+  if (at < 0) throw new Error(`маршрут ${marker} не найден`);
+  const arrow = source.indexOf('=>', at);
+  if (arrow < 0) throw new Error(`${marker}: у обработчика нет =>`);
+  const start = source.lastIndexOf('async', arrow);
+  if (start < 0 || start < at) throw new Error(`${marker}: обработчик не async`);
+  const bodyStart = source.indexOf('{', arrow);
+  if (bodyStart < 0) throw new Error(`${marker}: нет тела`);
+  const bodyEnd = matchBlock(source, bodyStart, '{', '}');
+  if (bodyEnd < 0) throw new Error(`${marker}: тело не закрыто`);
+  return source.slice(start, bodyEnd + 1);
+}
+
+/** Собрать исполняемый обработчик маршрута из настоящего исходника. */
+export function buildRouteRunner(
+  source: string,
+  marker: string,
+  deps: Record<string, unknown>,
+): (...args: never[]) => unknown {
+  const expr = toJs(extractRouteHandler(source, marker)).trim().replace(/;+$/, '');
+  const keys = Object.keys(deps);
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(...keys, `return (${expr});`);
+  return (factory as (...a: unknown[]) => (...args: never[]) => unknown)(
+    ...keys.map((k) => deps[k]),
+  );
+}
+
 /** Снять типы: получить из TypeScript настоящий JavaScript. */
 function toJs(tsSource: string): string {
   return ts.transpileModule(tsSource, {

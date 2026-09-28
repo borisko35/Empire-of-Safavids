@@ -1941,7 +1941,9 @@ async function loadAchievements(): Promise<void> {
   if (!box) return;
   box.innerHTML = '';
   try {
-    const data = await api.achievements();
+    const charId = cid();
+    if (!charId) return;
+    const data = await api.achievements(charId);
     const stats = document.createElement('div');
     stats.className = 'lb-my-rank';
     stats.textContent = `Разблокировано: ${data.unlockedCount} / ${data.total}`;
@@ -1953,14 +1955,21 @@ async function loadAchievements(): Promise<void> {
       box.append(empty);
       return;
     }
+    // Название берём по языку игрока — как в задачах дня: у достижений
+    // поля называются title / title_ru. ТУТ БЫЛА ПОЛОМКА: читалось
+    // a.titleRu, такого поля у сервера нет, и в КАЖДОЙ строке стояло
+    // «undefined» — 21 достижение подряд выглядели как битые
+    const en = document.documentElement.lang === 'en';
     for (const a of data.achievements) {
       const row = document.createElement('div');
       row.className = 'friend-entry' + (a.unlocked ? '' : ' locked');
       row.style.opacity = a.unlocked ? '1' : '0.4';
       const icon = a.icon ?? '★';
+      const name = en ? a.title : a.title_ru;
+      const desc = en ? a.description : a.description_ru;
       row.innerHTML = `<span style="font-size:18px;">${icon}</span>` +
-        `<span class="friend-name">${a.titleRu}</span>` +
-        `<span class="friend-info">${a.description_ru ?? ''}</span>` +
+        `<span class="friend-name">${name ?? ''}</span>` +
+        `<span class="friend-info">${desc ?? ''}</span>` +
         (a.reward_gold ? `<span class="lb-value">◉${a.reward_gold}</span>` : '');
       box.append(row);
     }
