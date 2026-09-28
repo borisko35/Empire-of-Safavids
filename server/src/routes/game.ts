@@ -75,7 +75,12 @@ const dailyTasks = new DailyTaskService();
 // ============================================================
 const requireCharacterOwnership = (field = 'characterId') =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const characterId = req.body?.[field];
+    // Тело или строка запроса: GET-маршруты (?characterId=) и POST-маршруты
+    // (JSON-тело) ходят через одну и ту же проверку. Раньше читалось только
+    // тело — и пять GET-маршрутов отвечали 400 «Missing characterId», пока
+    // идентификатор лежал в query.
+    const raw = req.body?.[field] ?? req.query?.[field];
+    const characterId = Array.isArray(raw) ? raw[0] : raw;
     if (!characterId) {
       res.status(400).json({ success: false, error: `Missing ${field}` });
       return;
