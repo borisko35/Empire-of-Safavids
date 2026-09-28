@@ -548,6 +548,17 @@ input, select { font: inherit; }
 .chat-log .msg b { color: var(--gold-light); font-weight: 600; }
 .chat-log .msg.sys { color: var(--teal); font-style: italic; }
 
+/* Кнопка жалобы в строке чата. Прозрачная до наведения: в чате бывает
+   сорок строк, и постоянный значок на каждой превращался бы в шум */
+.chat-log .chat-report {
+  margin-left: 6px; padding: 0 4px;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-dim, #6b7280); font-size: 11px; line-height: 1;
+  opacity: 0; transition: opacity .12s ease;
+}
+.chat-log .msg:hover .chat-report { opacity: 1; }
+.chat-log .chat-report:hover { color: #e85a4a; }
+
 /* Бейджи ролей в чате: owner/admins/moderators */
 .chat-role {
   display: inline-block;

@@ -7,6 +7,7 @@
 
 import { Router, Request, Response } from 'express';
 import { AdminService } from '../services/AdminService';
+import { ChatModerationService } from '../services/ChatModerationService';
 import { PaymentService } from '../services/PaymentService';
 import { PromoService } from '../services/PromoService';
 import { adminCheck, seniorAdminCheck } from '../middleware/adminCheck';
@@ -21,6 +22,7 @@ import type { Weather } from '../systems/WorldTimeSystem';
 
 export const adminRouter = Router();
 const adminService = new AdminService();
+const chatModeration = ChatModerationService.getInstance();
 const characterService = new CharacterService();
 const redis = RedisService.getInstance();
 
@@ -74,6 +76,19 @@ adminRouter.post('/mute', adminCheck, asyncHandler(async (req: Request, res: Res
   }
   await adminService.muteCharacter(req.userId!, characterId, durationMinutes, reason);
   return res.json({ success: true, message: 'Character muted' });
+}));
+
+// ============================================================
+// GET /api/admin/reports — очередь жалоб на игроков
+// ============================================================
+//
+// Жалобы накапливаются ChatModerationService.fileReport в таблице
+// chat_messages с channel = 'report'. Отдельной таблицы жалоб нет:
+// она понадвится, только если у жалоб появятся статусы и назначенный
+// модератор.
+adminRouter.get('/reports', adminCheck, asyncHandler(async (_req: Request, res: Response) => {
+  const reports = await chatModeration.listReports(200);
+  return res.json({ items: reports });
 }));
 
 // ============================================================

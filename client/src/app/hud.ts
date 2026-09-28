@@ -208,7 +208,21 @@ function skillCooldownSeconds(id: string): number {
 }
 
 // ── Чат ──────────────────────────────────────────────────────
-export function chatMessage(name: string | null, text: string, system = false, role: 'owner' | 'admin' | 'moderator' | null = null): void {
+/**
+ * Строка чата.
+ *
+ * authorId передаётся для кнопки жалобы: пожаловаться можно только на
+ * чужое сообщение, и серверу нужен именно автор, а не текст. Для
+ * системных строк и для собственных сообщений кнопки нет — жаловаться
+ * на собственную реплику бессмысленно.
+ */
+export function chatMessage(
+  name: string | null,
+  text: string,
+  system = false,
+  role: 'owner' | 'admin' | 'moderator' | null = null,
+  authorId?: string,
+): void {
   const log = $('chat-log');
   const msg = document.createElement('div');
   msg.className = 'msg' + (system ? ' sys' : '');
@@ -225,10 +239,54 @@ export function chatMessage(name: string | null, text: string, system = false, r
     msg.append(b);
   }
   msg.append(text);
+
+  // Кнопка жалобы: без неё сообщить о нарушителе было нечем
+  const me = session.character?.id;
+  if (authorId && me && authorId !== me) {
+    const report = document.createElement('button');
+    report.type = 'button';
+    report.className = 'chat-report';
+    report.dataset.report = authorId;
+    report.title = t('chat.report_title');
+    report.textContent = '⚑';
+    report.addEventListener('click', () => void sendReport(authorId));
+    msg.append(report);
+  }
+
   log.append(msg);
   while (log.children.length > 80) log.firstElementChild?.remove();
   log.scrollTop = log.scrollHeight;
 }
+
+/**
+ * Отправить жалобу на игрока.
+ *
+ * Причину спрашиваем, а не берём «other»: жалоба без причины бесполезна
+ * модератору, иначе он не сможет решить, что делать. Ответ сервера
+ * показываем игроку — иначе он решит, что жалоба ушла, даже если её
+ * отклонил лимит.
+ */
+async function sendReport(reportedId: string): Promise<void> {
+  const me = session.character?.id;
+  if (!me) return;
+  const raw = window.prompt(t('chat.report_reason_prompt'), 'harassment');
+  if (raw === null) return;
+  // Причина из списка идёт как есть, любой другой текст — как 'other' с
+  // пояснением в detail. Сервер всё равно проверит список, но полагаться
+  // на одну только проверку сервера нельзя: неизвестное значение молча
+  // ушло бы в content и модератор не увидел бы причины
+  const known = (REPORT_REASONS as readonly string[]).includes(raw);
+  const reason = known ? raw : 'other';
+  try {
+    await api.report(me, reportedId, reason, known ? '' : raw.slice(0, 500));
+    toast(t('chat.report_sent'), 'success');
+  } catch {
+    toast(t('chat.report_failed'), 'error');
+  }
+}
+
+/** Причины жалобы: тот же список, что принимает сервер */
+const REPORT_REASONS = ['harassment', 'cheating', 'spam', 'scamming', 'other'] as const;
 
 export function chatVisible(): boolean {
   // Режим печати = фокус в поле ввода (форма чата всегда видима в HUD,

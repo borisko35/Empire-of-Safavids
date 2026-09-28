@@ -779,6 +779,15 @@ export const api = {
   guildKick: (actorId: string, targetId: string) =>
     req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 
+  // ── Модерация ───────────────────────────────────────────
+  // Жалоба на игрока. characterId — наш персонаж, его сервер сверяет
+  // с владельцем аккаунта: иначе можно было бы жаловаться от чужого
+  report: (characterId: string, reportedId: string, reason: string, detail = '') =>
+    req<{ success: boolean; error?: string }>('/api/game/report', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, reportedId, reason, detail }),
+    }),
+
   // ── Достижения / Задачи / Репутация ─────────────────────
   // characterId обязателен: сервер считает открытые достижения по персонажу,
   // а не по аккаунту — иначе счётчик «Разблокировано» всегда нулевой

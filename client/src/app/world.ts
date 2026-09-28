@@ -1034,16 +1034,33 @@ function wireSocket(): void {
       const p = world?.players.get(characterId);
       const displayName = name ?? p?.name ?? '???';
       const prefix = channelPrefix[ev] ? t(channelPrefix[ev]) : '';
-      chatMessage(displayName, prefix + message, false, role ?? null);
+      chatMessage(displayName, prefix + message, false, role ?? null, characterId);
     });
   }
   // Ошибки чата: сервер отдаёт код, а не готовый текст
-  socket.on('chat:error', (e: { message?: string; code?: string; waitMs?: number }) => {
+  socket.on('chat:error', (e: { message?: string; code?: string; waitMs?: number; until?: string }) => {
     // Отказ по задержке. Показываем, сколько ждать, иначе игрок решит, что
     // его сообщения не доходят, и перестанет писать вовсе
     if (e.code === 'CHAT_COOLDOWN') {
       const sec = Math.max(1, Math.ceil((e.waitMs ?? 1000) / 1000));
       chatMessage(null, t('chat.cooldown').replace('{sec}', String(sec)), true);
+      return;
+    }
+    // Мьют. Показываем, до когда: игрок должен понимать, что это не навсегда
+    if (e.code === 'CHAT_MUTED') {
+      const until = e.until ? new Date(e.until) : null;
+      const mins = until && Number.isFinite(until.getTime())
+        ? Math.max(1, Math.ceil((until.getTime() - Date.now()) / 60000))
+        : 0;
+      chatMessage(null, mins > 0
+        ? t('chat.muted').replace('{min}', String(mins))
+        : t('chat.muted_no_time'), true);
+      return;
+    }
+    // Сообщение изменили фильтром. Без этой строки игрок увидел бы в чате
+    // своё сообщение с цензурой и не понял бы, что произошло
+    if (e.code === 'CHAT_FILTERED') {
+      chatMessage(null, t('chat.filtered'), true);
       return;
     }
     // Остальные ошибки приходят готовым текстом с сервера

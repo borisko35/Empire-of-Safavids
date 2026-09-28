@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { secureMiddleware } from '../middleware/auth';
 import { AuctionService } from '../services/AuctionService';
-import { auctionRateLimiter } from '../middleware/rateLimiter';
+import { auctionRateLimiter, apiRateLimiter } from '../middleware/rateLimiter';
 import { CraftingService } from '../services/CraftingService';
 import { DailyTaskService } from '../services/DailyTaskService';
+import { ChatModerationService } from '../services/ChatModerationService';
 import { startPvpArena } from '../systems/PvpArenaFlow';
 import { pvpArena } from '../systems/PvpArenaService';
 import { GuildService } from '../services/GuildService';
@@ -64,6 +65,7 @@ const boatSystem = new BoatSystem();
 const fishing = FishingSystem.getInstance();
 const petService = new PetService();
 const housingService = new HousingService();
+const chatModeration = ChatModerationService.getInstance();
 const pvpService = new PvPService();
 const endgameService = new EndGameService();
 const dailyTasks = new DailyTaskService();
@@ -1383,6 +1385,38 @@ gameRouter.post('/notifications/read', secureMiddleware, requireCharacterOwnersh
 // идентификатором — то есть не ту.
 const HOUSE_TYPES_SIMPLE = Object.entries(HOUSE_TYPES).map(([k, v]) => ({ id: k, ...v }));
 const DECORATIONS_SIMPLE = Object.entries(DECORATIONS).map(([k, v]) => ({ id: k, ...v }));
+
+// ============================================================
+// POST /api/game/report — жалоба на игрока
+// ============================================================
+//
+// Жалоба нужна была с самого начала и была невозможна: игрок не мог
+// ни на кого пожаловаться, а модератор — узнать. Отправку ограничиваем
+// пятью жалобами в час внутри сервиса, иначе форму использовали бы для
+// забивания базы.
+//
+// characterId проверяется на принадлежность игроку: иначе можно было бы
+// жаловаться от чужого персонажа и подставлять чужие жалобы.
+gameRouter.post('/report', secureMiddleware, apiRateLimiter, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const reportedId = String(req.body?.reportedId ?? '');
+    if (!reportedId) {
+      return res.status(400).json({ success: false, error: 'reportedId is required' });
+    }
+    const result = await chatModeration.fileReport(
+      characterId,
+      reportedId,
+      String(req.body?.reason ?? 'other'),
+      String(req.body?.detail ?? '').slice(0, 500),
+    );
+    if (!result.ok) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    return res.json({ success: true });
+  })
+);
 
 gameRouter.get('/house', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {

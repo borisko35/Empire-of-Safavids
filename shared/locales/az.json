@@ -253,7 +253,14 @@
     "trade": "Ticarət",
     "war": "Müharibə",
     "guild_tag": "[Gildiya] ",
-    "party_tag": "[Qrup] "
+    "party_tag": "[Qrup] ",
+    "muted": "Söhbət daha {min} dəqiqə bağlıdır.",
+    "muted_no_time": "Söhbət bağlıdır.",
+    "filtered": "Mesaj filtrdən keçirildi.",
+    "report_title": "Oyunçunu şikayət et",
+    "report_reason_prompt": "Şikayət səbəbi: harassment, cheating, spam, scamming, other",
+    "report_sent": "Şikayət moderatorlara göndərildi.",
+    "report_failed": "Şikayət göndərilmədi."
   },
   "history": {
     "title": "Səfəvi imperiyasının tarixi",

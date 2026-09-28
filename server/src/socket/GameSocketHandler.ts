@@ -25,6 +25,7 @@ import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
+import { ChatModerationService } from '../services/ChatModerationService';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
@@ -93,6 +94,7 @@ export class GameSocketHandler {
   private dailyTasks = new DailyTaskService();
   private partySystem = new PartySystem();
   private mounts = new MountSystem();
+  private chatModeration = ChatModerationService.getInstance();
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
@@ -237,7 +239,10 @@ export class GameSocketHandler {
 
       // Чат
       socket.on(SOCKET_EVENTS.CHAT_MESSAGE, (data: { message: string; channel: ChatChannel }) => {
-        this.handleChatMessage(socket, data);
+        // Обработчик асинхронный (проверка мьюта ходит в базу/Redis), поэтому
+        // ошибку глушим здесь: необработанный reject в обработчике сокета
+        // роняет соединение игрока
+        this.handleChatMessage(socket, data).catch(() => {});
       });
 
       // Интерьеры: вход/выход из зданий (с серверной проверкой координат).
@@ -1432,14 +1437,32 @@ export class GameSocketHandler {
     return CHAT_LIMITS.GUILD_CHAT_COOLDOWN_MS;
   }
 
-  private handleChatMessage(
+  private async handleChatMessage(
     socket: AuthenticatedSocket,
     data: { message: string; channel: ChatChannel }
-  ): void {
+  ): Promise<void> {
     if (!socket.characterId || !socket.region) return;
 
     const sanitized = data.message.slice(0, CHAT_LIMITS.MAX_MESSAGE_LENGTH).trim();
     if (!sanitized) return;
+
+    // Модерация: мьют и фильтр слов.
+    //
+    // ТУТ БЫЛА ДЫРА. AdminService.muteCharacter писал строку в character_mutes
+    // и публиковал событие в Redis — а читать эту таблицу не был НИКТО.
+    // Администратор мутил игрока, видел «успешно» в панели, и тот продолжал
+    // писать в чат. Мьют был нарисован, но не существовал.
+    const verdict = await this.chatModeration.screen(socket.characterId, sanitized)
+      .catch(() => ({ action: 'allow' as const }));
+    if (verdict.action === 'mute') {
+      socket.emit('chat:error', {
+        code: 'CHAT_MUTED',
+        until: verdict.until.toISOString(),
+      });
+      return;
+    }
+    const outgoing = verdict.action === 'filter' ? verdict.text : sanitized;
+    if (!outgoing.trim()) return;
 
     // Проверка задержки. Молча проглатывать нельзя: игрок решил бы, что его
     // сообщения не доходят, и просто перестал бы писать. Поэтому при отказе
@@ -1464,9 +1487,15 @@ export class GameSocketHandler {
       characterId: socket.characterId,
       name: socket.senderName ?? null,
       role: socket.senderRole ?? null,
-      message: sanitized,
+      message: outgoing,
       timestamp: Date.now(),
     };
+
+    // Отправителю говорим, что его сообщение изменили: иначе он увидит в
+    // чате сообщение с цензурой и не поймёт, что произошло
+    if (verdict.action === 'filter') {
+      socket.emit('chat:error', { code: 'CHAT_FILTERED' });
+    }
 
     switch (data.channel) {
       case 'world':

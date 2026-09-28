@@ -253,7 +253,14 @@
     "trade": "Trade",
     "war": "War",
     "guild_tag": "[Guild] ",
-    "party_tag": "[Party] "
+    "party_tag": "[Party] ",
+    "muted": "Chat is muted for another {min} min.",
+    "muted_no_time": "Chat is muted.",
+    "filtered": "Message was changed by the filter.",
+    "report_title": "Report this player",
+    "report_reason_prompt": "Reason: harassment, cheating, spam, scamming, other",
+    "report_sent": "Report sent to moderators.",
+    "report_failed": "Could not send the report."
   },
   "history": {
     "title": "History of the Safavid Empire",

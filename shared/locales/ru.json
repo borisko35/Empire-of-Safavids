@@ -253,7 +253,14 @@
     "trade": "Торговля",
     "war": "Война",
     "guild_tag": "[Гильдия] ",
-    "party_tag": "[Группа] "
+    "party_tag": "[Группа] ",
+    "muted": "Чат заблокирован ещё {min} мин.",
+    "muted_no_time": "Чат заблокирован.",
+    "filtered": "Сообщение изменено фильтром.",
+    "report_title": "Пожаловаться на игрока",
+    "report_reason_prompt": "Причина жалобы: harassment, cheating, spam, scamming, other",
+    "report_sent": "Жалоба отправлена модераторам.",
+    "report_failed": "Не удалось отправить жалобу."
   },
   "history": {
     "title": "История империи Сефевидов",
