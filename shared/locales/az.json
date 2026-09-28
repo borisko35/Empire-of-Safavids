@@ -524,7 +524,9 @@
     "tower_title": "Sonsuz Qala",
     "tower_start": "İşə başla",
     "reputation_title": "Reputasiya",
-    "reputation_none": "Reputasiya məlumatı yoxdur"
+    "reputation_none": "Reputasiya məlumatı yoxdur",
+    "game_title": "Empire of Safavids — Oyun",
+    "panels_title": "Panellər"
   },
   "common": {
     "loading": "Yüklənir…",
@@ -539,7 +541,8 @@
     "back_list": "← Siyahıya qayıt",
     "grams": " q",
     "kg": " kq",
-    "azens_word": "AZENS"
+    "azens_word": "AZENS",
+    "seconds_short": " s"
   },
   "errors": {
     "invalid_credentials": "E-poçt və ya şifrə yanlışdır",
@@ -743,7 +746,13 @@
     "k_debug": "kolleyser debug",
     "k_esc": "menyu / bağlamaq",
     "pwd_bad_fields": "Şifrə sahələri yanlış doldurulub",
-    "pwd_changed": "Şifrə dəyişdirildi!"
+    "pwd_changed": "Şifrə dəyişdirildi!",
+    "change_password": "Şifrəni dəyiş",
+    "old_password": "Köhnə şifrə",
+    "change_password_btn": "Şifrəni dəyiş",
+    "change_nick": "Adın dəyişməsi (500 AZENS)",
+    "new_name": "Yeni ad",
+    "change_name": "Adı dəyiş"
   },
   "loading": {
     "entering": "Dünyaya daxil olunur…",
@@ -1099,7 +1108,8 @@
     "t_house": "Ev",
     "t_villa": "Villa",
     "t_mansion": "Saray tipli ev",
-    "t_palace": "Saray"
+    "t_palace": "Saray",
+    "title": "Əmlak"
   },
   "party": {
     "invite": "Dəvət et",
@@ -1263,7 +1273,8 @@
     "learned": "Bacarıq öyrənildi!",
     "study": "Öyrən",
     "free": "pulsuz",
-    "prof_none": "Peşə seçilməyib"
+    "prof_none": "Peşə seçilməyib",
+    "title": "Bacarıqlar və Peşələr"
   },
   "prof": {
     "warrior": "Döyüşçü",
@@ -1272,5 +1283,71 @@
     "herbalist": "Otvuçu",
     "blacksmith": "Dəmirçi",
     "explorer": "Kəşfiyatçı"
+  },
+  "zones": {
+    "tabriz_center": "Mərkəz",
+    "tabriz_outskirts": "Ətraf",
+    "tabriz_north": "Şimal",
+    "isfahan_bazaar": "Bazar",
+    "isfahan_gates": "Qapılar",
+    "isfahan_south": "Cənub",
+    "shiraz_gardens": "Bağlar",
+    "shiraz_walls": "Divarlar",
+    "shiraz_east": "Şərq",
+    "caucasus_pass": "Keçid",
+    "caucasus_fortress": "Qala",
+    "caucasus_peaks": "Zirvələr",
+    "mesopotamia_river": "Çay",
+    "mesopotamia_ruins": "Xarabələr",
+    "mesopotamia_frontier": "Sərhəd",
+    "khorasan_oasis": "Oazis",
+    "khorasan_caravanserai": "Karvansaray",
+    "khorasan_east": "Şərq",
+    "persian_gulf_harbor": "Liman",
+    "persian_gulf_waters": "Sular",
+    "persian_gulf_islands": "Adalar"
+  },
+  "quest_type": {
+    "main": "Əsas",
+    "side": "Əlavə",
+    "daily": "Günlük",
+    "class": "Sinif",
+    "world": "Dünya"
+  },
+  "shop": {
+    "no_shop_near": "Yaxınlıqda dükan yoxdur"
+  },
+  "places": {
+    "isfahan": "İsfahən",
+    "camp": "Düşərgə",
+    "port": "İskələ",
+    "caravanserai": "Karvansaray",
+    "village": "Kənd",
+    "fort": "Qala"
+  },
+  "servers": {
+    "baku": "Bakı",
+    "nakhchivan": "Naxçıvan",
+    "ganja": "Gəncə",
+    "tebriz": "Təbriz",
+    "khoy": "Xoy",
+    "rasht": "Rəşt",
+    "isfahan": "İsfahən",
+    "derbent": "Dərbənd"
+  },
+  "map": {
+    "title": "Dünya Xəritəsi",
+    "city": "Şəhər",
+    "port": "Liman",
+    "enemy": "Düşmən"
+  },
+  "equip": {
+    "head": "Baş",
+    "chest": "Sinə",
+    "legs": "Ayaqlar",
+    "feet": "Ayaqqabı",
+    "ring": "Halqa",
+    "amulet": "Medalyon",
+    "shield": "Qalxan"
   }
 }

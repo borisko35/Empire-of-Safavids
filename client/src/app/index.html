@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Empire of Safavids — Игра</title>
+  <title data-i18n="site.game_title">Empire of Safavids — Игра</title>
   <link rel="icon" href="./favicon.ico">
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -208,7 +208,7 @@
       <div id="trade-list"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-mount-stable">
-      <h3><span data-icon="mount"></span>Конюшня</h3>
+      <h3><span data-icon="mount"></span><span data-i18n="hub.mounts">Конюшня</span></h3>
       <div id="mount-stable-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-fishing">
@@ -217,15 +217,15 @@
     </div>
     <div class="hud water-danger hidden" id="water-danger"></div>
     <div class="hud side-panel hidden" id="panel-house">
-      <h3><span data-icon="home"></span>Недвижимость</h3>
+      <h3><span data-icon="home"></span><span data-i18n="house.title">Недвижимость</span></h3>
       <div id="house-list"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-leaderboard">
-      <h3><span data-icon="crown"></span>Рейтинги</h3>
+      <h3><span data-icon="crown"></span><span data-i18n="hub.leaderboard">Рейтинги</span></h3>
       <div id="lb-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-friends">
-      <h3><span data-icon="user"></span>Друзья</h3>
+      <h3><span data-icon="user"></span><span data-i18n="hub.friends">Друзья</span></h3>
       <div id="friends-list"></div>
     </div>
     <!-- Приглашение друга. Панель добавлена рядом с «Друзьями»: игрок,
@@ -235,24 +235,24 @@
       <div id="referral-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-achievements">
-      <h3><span data-icon="crown"></span>Достижения</h3>
+      <h3><span data-icon="crown"></span><span data-i18n="hub.achievements">Достижения</span></h3>
       <div id="ach-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-tasks">
-      <h3><span data-icon="scroll"></span>Ежедневные задачи</h3>
+      <h3><span data-icon="scroll"></span><span data-i18n="site.tasks_title">Ежедневные задачи</span></h3>
       <div id="tasks-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-pets">
-      <h3><span data-icon="heart"></span>Питомцы</h3>
+      <h3><span data-icon="heart"></span><span data-i18n="hub.pets">Питомцы</span></h3>
       <div id="pets-list"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-pvp">
-      <h3><span data-icon="swords"></span>PvP Арена</h3>
+      <h3><span data-icon="swords"></span><span data-i18n="site.pvp_title">PvP Арена</span></h3>
       <div id="pvp-content"></div>
     </div>
     <!-- Панель скиллов и профессий -->
     <div class="hud side-panel hidden" id="panel-skills">
-      <h3><span data-icon="bolt"></span>Навыки и Профессии</h3>
+      <h3><span data-icon="bolt"></span><span data-i18n="skills.title">Навыки и Профессии</span></h3>
       <div id="skills-profession"></div>
       <div id="skills-list"></div>
       <div id="skills-available"></div>
@@ -269,27 +269,27 @@
     <div class="hud side-panel hidden" id="panel-hub"></div>
     <!-- Панель настроек -->
     <div class="hud side-panel hidden" id="panel-settings">
-      <h3><span data-icon="gear"></span>Настройки</h3>
+      <h3><span data-icon="gear"></span><span data-i18n="hub.settings">Настройки</span></h3>
       <!-- Поля пароля обёрнуты в форму: без этого Chrome ругается
            «Password field is not contained in a form» и не предлагает
            сохранять пароль. autocomplete нужен, чтобы браузер знал,
            какой это пароль: старый или новый. -->
       <form class="settings-section" id="form-change-pass" autocomplete="on">
-        <h4>Смена пароля</h4>
-        <input type="password" id="set-old-pass" placeholder="Старый пароль" autocomplete="current-password">
-        <input type="password" id="set-new-pass" placeholder="Новый пароль" autocomplete="new-password">
-        <input type="password" id="set-new-pass2" placeholder="Повторите пароль" autocomplete="new-password">
-        <button id="btn-change-pass" type="submit">Изменить пароль</button>
+        <h4 data-i18n="settings.change_password">Смена пароля</h4>
+        <input type="password" id="set-old-pass" placeholder="Старый пароль" data-i18n-placeholder="settings.old_password" autocomplete="current-password">
+        <input type="password" id="set-new-pass" placeholder="Новый пароль" data-i18n-placeholder="auth.new_password" autocomplete="new-password">
+        <input type="password" id="set-new-pass2" placeholder="Повторите пароль" data-i18n-placeholder="auth.confirm_password" autocomplete="new-password">
+        <button id="btn-change-pass" type="submit"><span data-i18n="settings.change_password_btn">Изменить пароль</span></button>
       </form>
       <div class="settings-section">
-        <h4>Смена ника (500 АЗЭН)</h4>
-        <input type="text" id="set-new-name" placeholder="Новое имя" maxlength="24" autocomplete="off">
-        <button id="btn-rename">Сменить имя</button>
+        <h4 data-i18n="settings.change_nick">Смена ника (500 АЗЭН)</h4>
+        <input type="text" id="set-new-name" placeholder="Новое имя" data-i18n-placeholder="settings.new_name" maxlength="24" autocomplete="off">
+        <button id="btn-rename"><span data-i18n="settings.change_name">Сменить имя</span></button>
         <span id="rename-status"></span>
       </div>
     </div>
     <div class="hud side-panel hidden" id="panel-tower">
-      <h3><span data-icon="star8"></span>Башня</h3>
+      <h3><span data-icon="star8"></span><span data-i18n="hub.tower">Башня</span></h3>
       <div id="tower-content"></div>
     </div>
     <!-- Зал славы. Панели не было: история побед над мировыми боссами
@@ -306,19 +306,19 @@
   <div id="hall-of-fame-list"></div>
 </div>
 <div class="hud side-panel hidden" id="panel-reputation">
-      <h3><span data-icon="flag"></span>Репутация</h3>
+      <h3><span data-icon="flag"></span><span data-i18n="hub.reputation">Репутация</span></h3>
       <div id="rep-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-chess">
-      <h3><span data-icon="crown"></span>Шахматы</h3>
+      <h3><span data-icon="crown"></span><span data-i18n="hub.chess">Шахматы</span></h3>
       <div id="chess-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-poetry">
-      <h3><span data-icon="scroll"></span>Поэзия</h3>
+      <h3><span data-icon="scroll"></span><span data-i18n="hub.poetry">Поэзия</span></h3>
       <div id="poetry-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-chronicles">
-      <h3><span data-icon="book"></span>Хроники</h3>
+      <h3><span data-icon="book"></span><span data-i18n="hub.chronicles">Хроники</span></h3>
       <div id="chronicles-content"></div>
     </div>
     <div class="hud side-panel hidden" id="panel-story">
@@ -374,13 +374,13 @@
          открываются оттуда. Панели не «потеряны»: хаб — второй вход в те
          же самые панели, а не замена им. -->
     <div class="hud panel-toggles">
-      <button data-panel="panel-hub" data-icon="grid" title="Панели" type="button"></button>
-      <button data-panel="panel-inventory" data-icon="chest" title="Сумка" type="button"></button>
-      <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
-      <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
+      <button data-panel="panel-hub" data-icon="grid" title="Панели" data-i18n-title="site.panels_title" type="button"></button>
+      <button data-panel="panel-inventory" data-icon="chest" title="Сумка" data-i18n-title="hub.inventory" type="button"></button>
+      <button data-panel="panel-quests" data-icon="scroll" title="Квесты" data-i18n-title="hub.quests" type="button"></button>
+      <button data-panel="panel-regions" data-icon="map" title="Регионы" data-i18n-title="hub.regions" type="button"></button>
       <!-- Уведомления. Живут в ряду, а не в хабе: игрок должен видеть
            непрочитанные, не заходя в меню. Цифра ставится из world.ts -->
-      <button data-panel="panel-notifications" data-icon="chat" title="Уведомления" type="button" class="has-badge">
+      <button data-panel="panel-notifications" data-icon="chat" title="Уведомления" data-i18n-title="hub.notifications" type="button" class="has-badge">
         <span class="unread-badge hidden" id="unread-badge">0</span>
       </button>
     </div>
@@ -401,12 +401,12 @@
     <div class="overlay hidden" id="overlay-map">
       <div class="worldmap">
         <button class="worldmap-close" id="worldmap-close" type="button">✕</button>
-        <h2 class="worldmap-title">🗺 Карта мира</h2>
+        <h2 class="worldmap-title">🗺 <span data-i18n="map.title">Карта мира</span></h2>
         <canvas id="worldmap-canvas" width="900" height="600"></canvas>
         <div class="worldmap-legend">
-          <span>🏰 Город</span><span>⛺ Лагерь</span><span>⚓ Порт</span>
-          <span>🐫 Караван-сарай</span><span>🏡 Деревня</span><span>🏔 Форт</span>
-          <span>🟢 NPC</span><span>🔴 Враг</span><span>▲ Вы</span>
+          <span>🏰 <span data-i18n="map.city">Город</span></span><span>⛺ <span data-i18n="places.camp">Лагерь</span></span><span>⚓ <span data-i18n="map.port">Порт</span></span>
+          <span>🐫 <span data-i18n="places.caravanserai">Караван-сарай</span></span><span>🏡 <span data-i18n="places.village">Деревня</span></span><span>🏔 <span data-i18n="places.fort">Форт</span></span>
+          <span>🟢 NPC</span><span>🔴 <span data-i18n="map.enemy">Враг</span></span><span>▲ <span data-i18n="panels.you">Вы</span></span>
         </div>
       </div>
     </div>
@@ -416,14 +416,14 @@
       <h3><span data-icon="user"></span> <span data-i18n="panels.character"></span></h3>
       <div class="char-panel-body" id="char-panel-body">
         <div class="char-equip-grid">
-          <div class="equip-slot" data-slot="head" id="eq-head"><span class="equip-icon">🪖</span><span class="equip-label">Голова</span></div>
-          <div class="equip-slot" data-slot="weapon" id="eq-weapon"><span class="equip-icon">⚔️</span><span class="equip-label">Оружие</span></div>
-          <div class="equip-slot" data-slot="chest" id="eq-chest"><span class="equip-icon">🛡</span><span class="equip-label">Грудь</span></div>
-          <div class="equip-slot" data-slot="legs" id="eq-legs"><span class="equip-icon">👖</span><span class="equip-label">Ноги</span></div>
-          <div class="equip-slot" data-slot="feet" id="eq-feet"><span class="equip-icon">👢</span><span class="equip-label">Ступни</span></div>
-          <div class="equip-slot" data-slot="ring" id="eq-ring"><span class="equip-icon">💍</span><span class="equip-label">Кольцо</span></div>
-          <div class="equip-slot" data-slot="amulet" id="eq-amulet"><span class="equip-icon">📿</span><span class="equip-label">Амулет</span></div>
-          <div class="equip-slot" data-slot="shield" id="eq-shield"><span class="equip-icon">🛡</span><span class="equip-label">Щит</span></div>
+          <div class="equip-slot" data-slot="head" id="eq-head"><span class="equip-icon">🪖</span><span class="equip-label" data-i18n="equip.head">Голова</span></div>
+          <div class="equip-slot" data-slot="weapon" id="eq-weapon"><span class="equip-icon">⚔️</span><span class="equip-label" data-i18n="world.slot_weapon">Оружие</span></div>
+          <div class="equip-slot" data-slot="chest" id="eq-chest"><span class="equip-icon">🛡</span><span class="equip-label" data-i18n="equip.chest">Грудь</span></div>
+          <div class="equip-slot" data-slot="legs" id="eq-legs"><span class="equip-icon">👖</span><span class="equip-label" data-i18n="equip.legs">Ноги</span></div>
+          <div class="equip-slot" data-slot="feet" id="eq-feet"><span class="equip-icon">👢</span><span class="equip-label" data-i18n="equip.feet">Ступни</span></div>
+          <div class="equip-slot" data-slot="ring" id="eq-ring"><span class="equip-icon">💍</span><span class="equip-label" data-i18n="equip.ring">Кольцо</span></div>
+          <div class="equip-slot" data-slot="amulet" id="eq-amulet"><span class="equip-icon">📿</span><span class="equip-label" data-i18n="equip.amulet">Амулет</span></div>
+          <div class="equip-slot" data-slot="shield" id="eq-shield"><span class="equip-icon">🛡</span><span class="equip-label" data-i18n="equip.shield">Щит</span></div>
         </div>
         <div class="char-stats" id="char-stats"></div>
       </div>
@@ -437,7 +437,7 @@
 
     <!-- ═══ Панель гильдии (G) ═══ -->
     <div class="hud side-panel hidden" id="panel-guild">
-      <h3><span data-icon="user"></span> Гильдия</h3>
+      <h3><span data-icon="user"></span> <span data-i18n="hub.guild">Гильдия</span></h3>
       <div id="guild-content"></div>
     </div>
 
@@ -563,9 +563,9 @@
         
         <!-- Быстрые действия -->
         <div class="menu-quick-actions">
-          <button class="btn btn-ghost" id="btn-quick-mounts" type="button">🐴 Конюшня</button>
-          <button class="btn btn-ghost" id="btn-quick-tower" type="button">🏰 Башня</button>
-          <button class="btn btn-ghost" id="btn-quick-pets" type="button">🐾 Питомцы</button>
+          <button class="btn btn-ghost" id="btn-quick-mounts" type="button">🐴 <span data-i18n="menu.quick_mounts">Конюшня</span></button>
+          <button class="btn btn-ghost" id="btn-quick-tower" type="button">🏰 <span data-i18n="menu.quick_tower">Башня</span></button>
+          <button class="btn btn-ghost" id="btn-quick-pets" type="button">🐾 <span data-i18n="menu.quick_pets">Питомцы</span></button>
         </div>
         
         <div class="menu-secondary">

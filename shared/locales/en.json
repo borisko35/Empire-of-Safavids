@@ -524,7 +524,9 @@
     "tower_title": "Endless Tower",
     "tower_start": "Start run",
     "reputation_title": "Reputation",
-    "reputation_none": "No reputation data"
+    "reputation_none": "No reputation data",
+    "game_title": "Empire of Safavids — Game",
+    "panels_title": "Panels"
   },
   "common": {
     "loading": "Loading…",
@@ -539,7 +541,8 @@
     "back_list": "← Back to the list",
     "grams": " g",
     "kg": " kg",
-    "azens_word": "AZENS"
+    "azens_word": "AZENS",
+    "seconds_short": " s"
   },
   "errors": {
     "invalid_credentials": "Wrong email or password",
@@ -743,7 +746,13 @@
     "k_debug": "collider debug",
     "k_esc": "menu / close",
     "pwd_bad_fields": "Password fields are filled in incorrectly",
-    "pwd_changed": "Password changed!"
+    "pwd_changed": "Password changed!",
+    "change_password": "Change password",
+    "old_password": "Old password",
+    "change_password_btn": "Change password",
+    "change_nick": "Change name (500 AZENS)",
+    "new_name": "New name",
+    "change_name": "Change name"
   },
   "loading": {
     "entering": "Entering the world…",
@@ -1099,7 +1108,8 @@
     "t_house": "House",
     "t_villa": "Villa",
     "t_mansion": "Mansion",
-    "t_palace": "Palace"
+    "t_palace": "Palace",
+    "title": "Real estate"
   },
   "party": {
     "invite": "Invite",
@@ -1263,7 +1273,8 @@
     "learned": "Skill learned!",
     "study": "Learn",
     "free": "free",
-    "prof_none": "No profession selected"
+    "prof_none": "No profession selected",
+    "title": "Skills & Professions"
   },
   "prof": {
     "warrior": "Warrior",
@@ -1272,5 +1283,71 @@
     "herbalist": "Herbalist",
     "blacksmith": "Blacksmith",
     "explorer": "Explorer"
+  },
+  "zones": {
+    "tabriz_center": "Center",
+    "tabriz_outskirts": "Outskirts",
+    "tabriz_north": "North",
+    "isfahan_bazaar": "Bazaar",
+    "isfahan_gates": "Gates",
+    "isfahan_south": "South",
+    "shiraz_gardens": "Gardens",
+    "shiraz_walls": "Walls",
+    "shiraz_east": "East",
+    "caucasus_pass": "Pass",
+    "caucasus_fortress": "Fortress",
+    "caucasus_peaks": "Peaks",
+    "mesopotamia_river": "River",
+    "mesopotamia_ruins": "Ruins",
+    "mesopotamia_frontier": "Frontier",
+    "khorasan_oasis": "Oasis",
+    "khorasan_caravanserai": "Caravanserai",
+    "khorasan_east": "East",
+    "persian_gulf_harbor": "Harbor",
+    "persian_gulf_waters": "Waters",
+    "persian_gulf_islands": "Islands"
+  },
+  "quest_type": {
+    "main": "Main",
+    "side": "Side",
+    "daily": "Daily",
+    "class": "Class",
+    "world": "World"
+  },
+  "shop": {
+    "no_shop_near": "No shop available nearby"
+  },
+  "places": {
+    "isfahan": "Isfahan",
+    "camp": "Camp",
+    "port": "Pier",
+    "caravanserai": "Caravanserai",
+    "village": "Village",
+    "fort": "Fort"
+  },
+  "servers": {
+    "baku": "Baku",
+    "nakhchivan": "Nakhchivan",
+    "ganja": "Ganja",
+    "tebriz": "Tabriz",
+    "khoy": "Khoy",
+    "rasht": "Rasht",
+    "isfahan": "Isfahan",
+    "derbent": "Derbent"
+  },
+  "map": {
+    "title": "World Map",
+    "city": "City",
+    "port": "Port",
+    "enemy": "Enemy"
+  },
+  "equip": {
+    "head": "Head",
+    "chest": "Chest",
+    "legs": "Legs",
+    "feet": "Feet",
+    "ring": "Ring",
+    "amulet": "Amulet",
+    "shield": "Shield"
   }
 }

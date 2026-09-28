@@ -27,7 +27,7 @@ const BUFF_ICON: Record<string, string> = { sword: '⚔️', fist: '✊', boot: 
 
 function fmtBuffTime(sec: number): string {
   if (sec >= 60) return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-  return `${sec} с`;
+  return `${sec}${t('common.seconds_short')}`;
 }
 
 function paintBuffs(): void {
@@ -117,26 +117,26 @@ export function refreshBars(): void {
   $('hud-name').textContent = s.character?.name ?? '';
   $('hud-level').textContent = `${t('badges.level')} ${s.level}`;
   $('hud-gold').textContent = `◉ ${s.character?.gold ?? 0}`;
-  const regionName = REGION_NAMES[s.character?.region ?? ''] ?? s.character?.region ?? '';
-  const zoneName = s.character?.zone ? ZONE_NAMES[s.character.zone] ?? s.character.zone : '';
+  const regionName = t(REGION_NAMES[s.character?.region ?? ''] ?? s.character?.region ?? '');
+  const zoneName = s.character?.zone ? t(ZONE_NAMES[s.character.zone] ?? s.character.zone) : '';
   $('hud-region').textContent = zoneName ? `${regionName} — ${zoneName}` : regionName;
   const azEl = document.getElementById('hud-azens');
   if (azEl) azEl.textContent = `AZENS ${s.character?.azens ?? 0}`;
 }
 
 const REGION_NAMES: Record<string, string> = {
-  tabriz: 'Тебриз', isfahan: 'Исфахан', shiraz: 'Шираз', caucasus: 'Кавказ',
-  mesopotamia: 'Месопотамия', khorasan: 'Хорасан', persian_gulf: 'Персидский залив',
+  tabriz: 'regions.tabriz', isfahan: 'regions.isfahan', shiraz: 'regions.shiraz', caucasus: 'regions.caucasus',
+  mesopotamia: 'regions.mesopotamia', khorasan: 'regions.khorasan', persian_gulf: 'regions.persian_gulf',
 };
 
 const ZONE_NAMES: Record<string, string> = {
-  tabriz_center: 'Центр', tabriz_outskirts: 'Окраины', tabriz_north: 'Север',
-  isfahan_bazaar: 'Базар', isfahan_gates: 'Ворота', isfahan_south: 'Юг',
-  shiraz_gardens: 'Сады', shiraz_walls: 'Стены', shiraz_east: 'Восток',
-  caucasus_pass: 'Перевал', caucasus_fortress: 'Крепость', caucasus_peaks: 'Пики',
-  mesopotamia_river: 'Река', mesopotamia_ruins: 'Руины', mesopotamia_frontier: 'Граница',
-  khorasan_oasis: 'Оазис', khorasan_caravanserai: 'Караван-сарай', khorasan_east: 'Восток',
-  persian_gulf_harbor: 'Гавань', persian_gulf_waters: 'Воды', persian_gulf_islands: 'Острова',
+  tabriz_center: 'zones.tabriz_center', tabriz_outskirts: 'zones.tabriz_outskirts', tabriz_north: 'zones.tabriz_north',
+  isfahan_bazaar: 'zones.isfahan_bazaar', isfahan_gates: 'zones.isfahan_gates', isfahan_south: 'zones.isfahan_south',
+  shiraz_gardens: 'zones.shiraz_gardens', shiraz_walls: 'zones.shiraz_walls', shiraz_east: 'zones.shiraz_east',
+  caucasus_pass: 'zones.caucasus_pass', caucasus_fortress: 'zones.caucasus_fortress', caucasus_peaks: 'zones.caucasus_peaks',
+  mesopotamia_river: 'zones.mesopotamia_river', mesopotamia_ruins: 'zones.mesopotamia_ruins', mesopotamia_frontier: 'zones.mesopotamia_frontier',
+  khorasan_oasis: 'zones.khorasan_oasis', khorasan_caravanserai: 'zones.khorasan_caravanserai', khorasan_east: 'zones.khorasan_east',
+  persian_gulf_harbor: 'zones.persian_gulf_harbor', persian_gulf_waters: 'zones.persian_gulf_waters', persian_gulf_islands: 'zones.persian_gulf_islands',
 };
 
 // ── Рамка цели ───────────────────────────────────────────────
@@ -300,8 +300,8 @@ export async function loadRegions(): Promise<void> {
 
 /** Русские названия типов квестов (в данных — англ. идентификаторы) */
 const QUEST_TYPE_RU: Record<string, string> = {
-  main: 'Основной', side: 'Побочный', daily: 'Ежедневный',
-  class: 'Классовый', world: 'Мировой',
+  main: 'quest_type.main', side: 'quest_type.side', daily: 'quest_type.daily',
+  class: 'quest_type.class', world: 'quest_type.world',
 };
 
 export async function loadQuests(): Promise<void> {
@@ -353,7 +353,7 @@ export async function loadQuests(): Promise<void> {
       else if (status === 'active') statusLine = `<div class="qstatus">${t('world.in_progress')}</div>`;
 
       card.innerHTML =
-        `<div class="qtype">${QUEST_TYPE_RU[q.type] ?? q.type} · ${t('badges.level')} ${q.minLevel}+</div>` +
+        `<div class="qtype">${t(QUEST_TYPE_RU[q.type] ?? q.type)} · ${t('badges.level')} ${q.minLevel}+</div>` +
         `<b>${title}</b>` +
         `<div class="qdesc">${q.description}</div>` +
         objectives +
@@ -534,7 +534,7 @@ export async function loadInventory(): Promise<void> {
       // Продать предмет в ближайший магазин (45% от цены)
       actions.append(invBtn(t('world.sell'), async () => {
         const shopId = nearestShopId();
-        if (!shopId) throw new Error('Нет доступного магазина рядом');
+        if (!shopId) throw new Error(t('shop.no_shop_near'));
         const res = await api.shopSell(shopId, cid, it.itemId, it.quantity);
         if (session.character) session.character.gold = res.gold;
         refreshBars();
@@ -578,13 +578,13 @@ const MINIMAP_RANGE = 180;   // мировых единиц по горизон�
 const TERRAIN_PAD = 24;      // запас слоя террейна (мировые единицы)
 const TERRAIN_SNAP = 16;     // шаг привязки слоя к сетке мира
 
-const MINIMAP_SETTLEMENTS: { x: number; z: number; nameRu: string; icon: string; r: number }[] = [
-  { x: CITY.x, z: CITY.z, nameRu: 'Исфахан', icon: '🏰', r: CITY.radius },
-  { x: CAMP.x, z: CAMP.z, nameRu: 'Лагерь', icon: '⛺', r: 30 },
-  { x: PORT.x, z: PORT.z, nameRu: 'Пристань', icon: '⚓', r: 30 },
-  { x: CARAVANSERAI.x, z: CARAVANSERAI.z, nameRu: 'Караван-сарай', icon: '🐫', r: 30 },
-  { x: VILLAGE.x, z: VILLAGE.z, nameRu: 'Деревня', icon: '🏡', r: 30 },
-  { x: FORT.x, z: FORT.z, nameRu: 'Форт', icon: '🏔', r: 30 },
+const MINIMAP_SETTLEMENTS: { x: number; z: number; id: string; nameKey: string; icon: string; r: number }[] = [
+  { x: CITY.x, z: CITY.z, id: 'isfahan', nameKey: 'places.isfahan', icon: '🏰', r: CITY.radius },
+  { x: CAMP.x, z: CAMP.z, id: 'camp', nameKey: 'places.camp', icon: '⛺', r: 30 },
+  { x: PORT.x, z: PORT.z, id: 'port', nameKey: 'places.port', icon: '⚓', r: 30 },
+  { x: CARAVANSERAI.x, z: CARAVANSERAI.z, id: 'caravanserai', nameKey: 'places.caravanserai', icon: '🐫', r: 30 },
+  { x: VILLAGE.x, z: VILLAGE.z, id: 'village', nameKey: 'places.village', icon: '🏡', r: 30 },
+  { x: FORT.x, z: FORT.z, id: 'fort', nameKey: 'places.fort', icon: '🏔', r: 30 },
 ];
 
 let lastMinimapRegion = '';
@@ -668,7 +668,7 @@ function buildTerrainLayer(cx: number, cz: number, sizePx: number): HTMLCanvasEl
   c.lineWidth = Math.max(1.5, sizePx / 90);
   for (const s of MINIMAP_SETTLEMENTS) {
     const p = toLayer(s.x, s.z);
-    const r = p.r(s.nameRu === 'Исфахан' ? CITY.radius : 22);
+    const r = p.r(s.id === 'isfahan' ? CITY.radius : 22);
     c.beginPath();
     c.arc(p.x, p.y, r, 0, Math.PI * 2);
     c.stroke();
@@ -786,12 +786,12 @@ export function updateMinimap(
     ctx.font = 'bold 9px sans-serif';
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
     ctx.lineWidth = 3;
-    ctx.strokeText(s.nameRu, x, y - 7);
+    ctx.strokeText(t(s.nameKey), x, y - 7);
     ctx.fillStyle = '#ffe9b8';
-    ctx.fillText(s.nameRu, x, y - 7);
+    ctx.fillText(t(s.nameKey), x, y - 7);
     // Определяем текущий регион
     if (Math.hypot(me.x - s.x, me.z - s.z) < s.r) {
-      currentRegion = s.nameRu;
+      currentRegion = t(s.nameKey);
     }
   }
   ctx.textAlign = 'left';
@@ -902,7 +902,7 @@ export function drawWorldMap(
     c.lineWidth = 1.5;
     for (const s of MINIMAP_SETTLEMENTS) {
       const p = toPx(s.x, s.z);
-      const r = Math.max(3, (s.nameRu === 'Исфахан' ? CITY.radius : 22) * scale);
+      const r = Math.max(3, (s.id === 'isfahan' ? CITY.radius : 22) * scale);
       c.beginPath();
       c.arc(p.x, p.y, r, 0, Math.PI * 2);
       c.stroke();
@@ -952,9 +952,9 @@ export function drawWorldMap(
     ctx.font = 'bold 12px sans-serif';
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
     ctx.lineWidth = 3;
-    ctx.strokeText(s.nameRu, x, y - 12);
+    ctx.strokeText(t(s.nameKey), x, y - 12);
     ctx.fillStyle = '#ffe9b8';
-    ctx.fillText(s.nameRu, x, y - 12);
+    ctx.fillText(t(s.nameKey), x, y - 12);
   }
   ctx.textAlign = 'left';
 

@@ -36,5 +36,8 @@ export async function loadLocale(code: string): Promise<Dict> {
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-placeholder]')) {
     (el as HTMLInputElement).placeholder = t(el.dataset.i18nPlaceholder!);
   }
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) {
+    el.title = t(el.dataset.i18nTitle!);
+  }
   return current;
 }

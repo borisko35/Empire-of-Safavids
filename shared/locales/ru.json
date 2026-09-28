@@ -524,7 +524,9 @@
     "tower_title": "Бесконечная Башня",
     "tower_start": "Начать забег",
     "reputation_title": "Репутация",
-    "reputation_none": "Нет данных о репутации"
+    "reputation_none": "Нет данных о репутации",
+    "game_title": "Empire of Safavids — Игра",
+    "panels_title": "Панели"
   },
   "common": {
     "loading": "Загрузка…",
@@ -539,7 +541,8 @@
     "back_list": "← Назад к списку",
     "grams": " г",
     "kg": " кг",
-    "azens_word": "АЗЕН"
+    "azens_word": "АЗЕН",
+    "seconds_short": " с"
   },
   "errors": {
     "invalid_credentials": "Неверный email или пароль",
@@ -743,7 +746,13 @@
     "k_debug": "отладка коллайдеров",
     "k_esc": "меню / закрыть",
     "pwd_bad_fields": "Неверно заполнены поля пароля",
-    "pwd_changed": "Пароль изменён!"
+    "pwd_changed": "Пароль изменён!",
+    "change_password": "Смена пароля",
+    "old_password": "Старый пароль",
+    "change_password_btn": "Изменить пароль",
+    "change_nick": "Смена ника (500 АЗЭН)",
+    "new_name": "Новое имя",
+    "change_name": "Сменить имя"
   },
   "loading": {
     "entering": "Вход в мир…",
@@ -1099,7 +1108,8 @@
     "t_house": "Дом",
     "t_villa": "Вилла",
     "t_mansion": "Особняк",
-    "t_palace": "Дворец"
+    "t_palace": "Дворец",
+    "title": "Недвижимость"
   },
   "party": {
     "invite": "Пригласить",
@@ -1263,7 +1273,8 @@
     "learned": "Навык изучен!",
     "study": "Изучить",
     "free": "бесплатно",
-    "prof_none": "Профессия не выбрана"
+    "prof_none": "Профессия не выбрана",
+    "title": "Навыки и Профессии"
   },
   "prof": {
     "warrior": "Воин",
@@ -1272,5 +1283,71 @@
     "herbalist": "Травник",
     "blacksmith": "Кузнец",
     "explorer": "Исследователь"
+  },
+  "zones": {
+    "tabriz_center": "Центр",
+    "tabriz_outskirts": "Окраины",
+    "tabriz_north": "Север",
+    "isfahan_bazaar": "Базар",
+    "isfahan_gates": "Ворота",
+    "isfahan_south": "Юг",
+    "shiraz_gardens": "Сады",
+    "shiraz_walls": "Стены",
+    "shiraz_east": "Восток",
+    "caucasus_pass": "Перевал",
+    "caucasus_fortress": "Крепость",
+    "caucasus_peaks": "Пики",
+    "mesopotamia_river": "Река",
+    "mesopotamia_ruins": "Руины",
+    "mesopotamia_frontier": "Граница",
+    "khorasan_oasis": "Оазис",
+    "khorasan_caravanserai": "Караван-сарай",
+    "khorasan_east": "Восток",
+    "persian_gulf_harbor": "Гавань",
+    "persian_gulf_waters": "Воды",
+    "persian_gulf_islands": "Острова"
+  },
+  "quest_type": {
+    "main": "Основной",
+    "side": "Побочный",
+    "daily": "Ежедневный",
+    "class": "Классовый",
+    "world": "Мировой"
+  },
+  "shop": {
+    "no_shop_near": "Нет доступного магазина рядом"
+  },
+  "places": {
+    "isfahan": "Исфахан",
+    "camp": "Лагерь",
+    "port": "Пристань",
+    "caravanserai": "Караван-сарай",
+    "village": "Деревня",
+    "fort": "Форт"
+  },
+  "servers": {
+    "baku": "Баку",
+    "nakhchivan": "Нахчивань",
+    "ganja": "Гянджа",
+    "tebriz": "Тебриз",
+    "khoy": "Хой",
+    "rasht": "Решт",
+    "isfahan": "Исфахан",
+    "derbent": "Дербент"
+  },
+  "map": {
+    "title": "Карта мира",
+    "city": "Город",
+    "port": "Порт",
+    "enemy": "Враг"
+  },
+  "equip": {
+    "head": "Голова",
+    "chest": "Грудь",
+    "legs": "Ноги",
+    "feet": "Ступни",
+    "ring": "Кольцо",
+    "amulet": "Амулет",
+    "shield": "Щит"
   }
 }

@@ -78,7 +78,7 @@ describe('Сайт: каждая ссылка на перевод существ
       it(`${page} — все data-i18n есть в ${lang}`, () => {
         const html = read(page);
         const refs = [
-          ...html.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g),
+          ...html.matchAll(/data-i18n(?:-placeholder|-title)?="([^"]+)"/g),
         ].map((m) => m[1]);
         const missing = refs
           .filter((k) => !k.includes('{{'))

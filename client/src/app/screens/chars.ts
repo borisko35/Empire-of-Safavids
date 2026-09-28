@@ -71,14 +71,14 @@ async function buildServerPicker(): Promise<void> {
       select.append(opt);
     }
   } catch {
-    select.innerHTML = '<option value="isfahan">Исфахан</option>';
+    select.innerHTML = `<option value="isfahan">${t('regions.isfahan')}</option>`;
   }
 }
 
 /** Названия игровых серверов (по id из shared/constants) */
 const SERVER_NAMES: Record<string, string> = {
-  baku: 'Баку', nakhchivan: 'Нахчивань', ganja: 'Гянджа', tebriz: 'Тебриз',
-  khoy: 'Хой', rasht: 'Решт', isfahan: 'Исфахан', derbent: 'Дербент',
+  baku: 'servers.baku', nakhchivan: 'servers.nakhchivan', ganja: 'servers.ganja', tebriz: 'servers.tebriz',
+  khoy: 'servers.khoy', rasht: 'servers.rasht', isfahan: 'servers.isfahan', derbent: 'servers.derbent',
 };
 
 let refreshListSeq = 0;
@@ -107,7 +107,7 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
       img.alt = '';
       const info = document.createElement('div');
       info.className = 'info';
-      const serverName = SERVER_NAMES[c.serverId] ?? c.serverId;
+      const serverName = t(SERVER_NAMES[c.serverId] ?? c.serverId);
       info.innerHTML =
         `<div class="name" style="color:${CLASS_COLORS[c.class] ?? 'var(--gold-light)'}">${c.name}</div>` +
         `<div class="meta">${t(`classes.${c.class}`)} · ${t('badges.level')} ${c.level} · ${regionLabel(c.region)}</div>` +
@@ -119,10 +119,10 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
       del.type = 'button';
       del.className = 'char-delete';
       del.textContent = '✕';
-      del.title = t('chars.delete') ?? 'Удалить';
+      del.title = t('chars.delete');
       del.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        if (!window.confirm(`${t('chars.delete_confirm') ?? 'Удалить персонажа'} ${c.name}?`)) return;
+        if (!window.confirm(`${t('chars.delete_confirm')} ${c.name}?`)) return;
         try {
           await api.deleteCharacter(c.id);
           await refreshList(onEnter);
@@ -141,10 +141,10 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
 
 function regionLabel(region: string): string {
   const names: Record<string, string> = {
-    tabriz: 'Тебриз', isfahan: 'Исфахан', shiraz: 'Шираз', caucasus: 'Кавказ',
-    mesopotamia: 'Месопотамия', khorasan: 'Хорасан', persian_gulf: 'Персидский залив',
+    tabriz: 'regions.tabriz', isfahan: 'regions.isfahan', shiraz: 'regions.shiraz', caucasus: 'regions.caucasus',
+    mesopotamia: 'regions.mesopotamia', khorasan: 'regions.khorasan', persian_gulf: 'regions.persian_gulf',
   };
-  return names[region] ?? region;
+  return t(names[region] ?? region);
 }
 
 async function buildClassPicker(): Promise<void> {
