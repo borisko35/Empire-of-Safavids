@@ -24,6 +24,48 @@ export class CraftingService {
     return Math.max(1, Math.min(100, 1 + Math.floor(xp / 100)));
   }
 
+/**
+ * Все профессии. Порядок как в данных — он же порядок показа в панели.
+ */
+  static readonly CATEGORIES: CraftingCategory[] = [
+    'blacksmithing', 'tailoring', 'alchemy', 'cooking', 'jewelcrafting', 'carpentry',
+  ];
+
+  /**
+   * Уровень в профессии. Читает crafting_skills, а при отсутствии строки
+   * переносит общий прогресс characters.crafting_xp.
+   *
+   * ПЕРЕНОС ПРОГРЕССА. Игрок с 5000 общего опыта получает уровень 51 в
+   * каждой профессии, в которой ещё не крафтил, а не начинает с нуля.
+   * Иначе все, кто играл до этого изменения, потеряли бы накопленное и
+   * узнали бы об этом, только увидев закрытые рецепты.
+   */
+  async skillLevels(characterId: string): Promise<Record<string, number>> {
+    const rows = await this.db.query<{ category: string; experience: number }>(
+      `SELECT category, experience FROM crafting_skills WHERE character_id = $1`,
+      [characterId]
+    ).catch((): { category: string; experience: number }[] => []);
+    const found = new Map(rows.map((r: { category: string; experience: number }) => [r.category, Number(r.experience) || 0]));
+
+    // Общий опыт нужен только для переноса: пока строки нет, берём его
+    const pooled = rows.length ? 0 : await this.pooledXp(characterId);
+    const out: Record<string, number> = {};
+    for (const cat of CraftingService.CATEGORIES) {
+      const xp = found.has(cat) ? (found.get(cat) as number) : pooled;
+      out[cat] = CraftingService.craftingLevelFromXp(xp);
+    }
+    return out;
+  }
+
+  /** Общий накопленный опыт крафта — только для переноса на профессии */
+  private async pooledXp(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ crafting_xp: string | number }>(
+      'SELECT crafting_xp FROM characters WHERE id = $1',
+      [characterId]
+    ).catch(() => null);
+    return Number(row?.crafting_xp ?? 0);
+  }
+
   async startCrafting(
     characterId: string,
     recipeId: string
@@ -31,12 +73,13 @@ export class CraftingService {
     const recipe = CRAFTING_RECIPES[recipeId];
     if (!recipe) throw new Error('Recipe not found');
 
-    // Уровень крафта берём из БД — клиентское значение не доверенно
-    const char = await this.db.queryOne<{ crafting_xp: string | number }>(
-      'SELECT crafting_xp FROM characters WHERE id = $1',
-      [characterId]
-    );
-    const craftingSkillLevel = CraftingService.craftingLevelFromXp(Number(char?.crafting_xp ?? 0));
+    // Уровень берём из БД — клиентское значение не доверенно
+    //
+    // Проверяется ПРОФЕССИЯ рецепта, а не общий уровень крафта. Раньше
+    // кузнечный опыт открывал рецепты ювелира, потому что category у
+    // рецепта в данных есть, но сервер его не смотрел.
+    const levels = await this.skillLevels(characterId);
+    const craftingSkillLevel = levels[recipe.category] ?? 1;
     if (recipe.requiredLevel > craftingSkillLevel) {
       throw new Error(`Required crafting level: ${recipe.requiredLevel}`);
     }
@@ -128,7 +171,20 @@ export class CraftingService {
            DO UPDATE SET quantity = character_items.quantity + $3`,
           [job.character_id, recipe.resultItemId, recipe.resultQuantity]
         );
-        // Начислить опыт ремесла
+        // Начислить опыт ремесла — в профессию рецепта, плюс суммой в
+        // characters.crafting_xp, чтобы общее число не потерялось.
+        //
+        // Через client, а не через this.db: свой вызов открыл бы другое
+        // соединение в обход транзакции, и при откате крафта опыт в
+        // профессии остался бы, а предмет — нет.
+        await client.query(
+          `INSERT INTO crafting_skills (character_id, category, level, experience)
+           VALUES ($1, $2, 1, $3)
+           ON CONFLICT (character_id, category) DO UPDATE
+             SET experience = crafting_skills.experience + $3,
+                 level = 1 + (crafting_skills.experience + $3) / 100`,
+          [job.character_id, recipe.category, recipe.experienceGain]
+        );
         await client.query(
           'UPDATE characters SET crafting_xp = crafting_xp + $2 WHERE id = $1',
           [job.character_id, recipe.experienceGain]

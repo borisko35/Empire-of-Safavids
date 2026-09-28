@@ -503,9 +503,33 @@ export async function loadCraft(): Promise<void> {
   if (!session.character) return;
   try {
     const { recipes } = await api.craftingRecipes();
+    // Уровень по профессиям. Шесть значений вместо одного общего числа:
+    // игрок должен видеть, ЧЕГО ему не хватает. Раньше рецепт был «Закрыт»
+    // без причины, и отличить «подними алхимию» от «подними кузнеца»
+    // было невозможно
+    // Откат: если маршрут не ответил, панель всё равно показывает рецепты,
+    // просто без уровней профессий. Тип указываем явно — из catch выходит
+    // {} без индекса, и TS не может доказать, что доступ даст число
+    const craftLevels: Record<string, number> =
+      (await api.craftingSkills(cid()).catch(() => ({ levels: {} as Record<string, number> }))).levels;
     const box = $('craft-list');
     if (!box) return;
     box.innerHTML = '';
+
+    // Шесть профессий в порядке данных — тот же, что в панели,
+    // чтобы игрок не искал, где что
+    const ORDER = ['blacksmithing', 'tailoring', 'alchemy',
+      'cooking', 'jewelcrafting', 'carpentry'];
+    const skills = document.createElement('div');
+    skills.className = 'craft-skills';
+    for (const cat of ORDER) {
+      const lvl = craftLevels[cat] ?? 1;
+      const pill = document.createElement('span');
+      pill.className = 'craft-skill';
+      pill.textContent = `${t('craft.' + cat)} ${t('craft.lvl').replace('%d', String(lvl))}`;
+      skills.append(pill);
+    }
+    box.append(skills);
 
     if (craftJobId) {
       const remain = Math.ceil((craftCompletesAt - Date.now()) / 1000);

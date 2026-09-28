@@ -517,6 +517,13 @@ export const api = {
       method: 'POST', body: JSON.stringify({ characterId, castId }),
     }),
 
+  /**
+   * Уровень крафта по профессиям. Раньше был один общий, и панель
+   * показывала «Закрыто», не объясняя, чего не хватает.
+   */
+  craftingSkills: (characterId: string) =>
+    req<{ levels: Record<string, number> }>(`/api/game/crafting/skills?characterId=${characterId}`),
+
   craftingRecipes: () =>
     req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; quantity: number }[] }[] }>(
       '/api/game/crafting/recipes',

@@ -1012,5 +1012,14 @@
   },
   "dungeon": {
     "attempts_over": "No attempts left today. They reset tomorrow."
+  },
+  "craft": {
+    "blacksmithing": "Blacksmithing",
+    "tailoring": "Tailoring",
+    "alchemy": "Alchemy",
+    "cooking": "Cooking",
+    "jewelcrafting": "Jewelcrafting",
+    "carpentry": "Carpentry",
+    "lvl": "Lv. %d"
   }
 }

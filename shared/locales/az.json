@@ -1012,5 +1012,14 @@
   },
   "dungeon": {
     "attempts_over": "Bugün cəhd bitdi. Sabah yenilənir."
+  },
+  "craft": {
+    "blacksmithing": "Dəmirçılıq",
+    "tailoring": "Təzəcəlik",
+    "alchemy": "Alximiya",
+    "cooking": "Aşpazlıq",
+    "jewelcrafting": "Zərgərlik",
+    "carpentry": "Təzəkkarlıq",
+    "lvl": "Səv. %d"
   }
 }

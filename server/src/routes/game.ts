@@ -875,6 +875,17 @@ gameRouter.post('/crafting/start', secureMiddleware, requireCharacterOwnership()
     }
   })
 );
+// GET /api/game/crafting/skills — уровень крафта по профессиям
+//
+// В данных шесть профессий, и уровень теперь свой у каждой. Раньше был
+// один общий: кузнечный опыт открывал рецепты ювелира, и панель об
+// этом не говорила — просто показывала «Закрыто».
+gameRouter.get('/crafting/skills', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const characterId = await bodyCharacterId(req, res);
+  if (!characterId) return;
+  const levels = await craftingService.skillLevels(characterId);
+  return res.json({ levels });
+}));
 
 gameRouter.post('/crafting/:jobId/complete', secureMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
