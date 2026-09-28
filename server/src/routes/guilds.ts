@@ -42,7 +42,10 @@ router.post('/leave', authMiddleware, async (req: any, res) => {
   try {
     const data = await guilds.getGuildByCharacter(req.userId);
     if (!data) { res.status(400).json({ error: 'Not in a guild' }); return; }
-    await guilds.removeMember(data.guild.id, req.userId);
+    // ТУТ БЫЛО removeMember. Уход главы оставлял гильдию сиротой: в
+    // guilds.leader_id оставался его UUID, а назначить нового главу было
+    // некому и нечем. leaveGuild передаёт главенство старшему из оставшихся.
+    await guilds.leaveGuild(data.guild.id, req.userId);
     res.json({ success: true });
   } catch (err) { res.status(400).json({ error: (err as Error).message }); }
 });
@@ -62,7 +65,10 @@ router.post('/rank', authMiddleware, async (req: any, res) => {
     if (!data || !['leader', 'officer'].includes(data.rank)) {
       res.status(403).json({ error: 'No permission' }); return;
     }
-    await guilds.setRank(data.guild.id, req.body.characterId, req.body.rank);
+    // Кто просит (req.userId) и кого меняем (body.characterId) — разные
+    // люди. Раньше передавалось только двое, и сервис не мог отличить
+    // «офицер назначает офицером» от «офицер назначает себя главным».
+    await guilds.setRank(data.guild.id, req.userId, req.body.characterId, req.body.rank);
     res.json({ success: true });
   } catch (err) { res.status(400).json({ error: (err as Error).message }); }
 });

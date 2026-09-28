@@ -1418,6 +1418,41 @@ input, select { font: inherit; }
   padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.04);
 }
 .ref-reward { margin-top: 8px; font-size: 11px; color: var(--cream-dim); line-height: 1.5; }
+
+/* Панель гильдии: поиск, вступление, состав, склад.
+   Раньше здесь был блок из сорока строк с двумя prompt() и одной кнопкой
+   «Участники»: гильдию можно было создать, но вступить в чужую было
+   нельзя, и интерфейс умел три вещи из десяти. */
+.guild-block { margin-top: 12px; }
+.guild-head { color: var(--cream); font-size: 15px; font-weight: bold; }
+.guild-info { color: var(--cream-dim); font-size: 12px; margin-top: 2px; }
+.guild-sub { color: var(--cream); font-size: 13px; margin-bottom: 6px; }
+.guild-list { display: flex; flex-direction: column; gap: 6px; }
+.guild-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.04);
+}
+.guild-row-title { color: var(--cream); font-size: 13px; flex: 1 1 auto; }
+.guild-row-desc { color: var(--cream-dim); font-size: 11px; flex: 1 1 100%; }
+.guild-actions { display: flex; gap: 6px; align-items: center; }
+.guild-field {
+  width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 8px;
+  font: inherit; font-size: 12px; border-radius: 5px;
+  background: rgba(0, 0, 0, 0.3); color: var(--cream);
+  border: 1px solid var(--panel-border);
+}
+.guild-field:focus { outline: none; border-color: var(--gold); }
+.guild-actions .guild-field { width: auto; margin-bottom: 0; }
+.guild-btn {
+  font: inherit; font-size: 12px; padding: 7px 12px; cursor: pointer;
+  border-radius: 5px; background: rgba(201, 168, 76, 0.2); color: var(--gold-light);
+  border: 1px solid rgba(201, 168, 76, 0.5); transition: background 0.2s;
+}
+.guild-btn:hover:not(:disabled) { background: rgba(201, 168, 76, 0.34); }
+.guild-btn:disabled { opacity: 0.5; cursor: default; }
+.guild-btn-danger { background: rgba(139, 26, 26, 0.28); color: #e8a0a0; border-color: rgba(139, 26, 26, 0.6); }
+.guild-btn-danger:hover:not(:disabled) { background: rgba(139, 26, 26, 0.45); }
+.guild-leave { width: 100%; margin-top: 12px; }
 .friend-actions { display: flex; gap: 4px; }
 .friend-btn {
   font: inherit; font-size: 10px; padding: 2px 7px; border-radius: 5px;

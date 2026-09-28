@@ -108,7 +108,21 @@ export class GuildService {
     await this.addLog(guildId, 'member_joined', charId);
   }
 
+  /**
+   * Исключить участника.
+   *
+   * ТУТ БЫЛО: голый DELETE без единой проверки. Маршрут /kick смотрел только,
+   * КТО просит (глава или офицер), но не КОГО. Итог: офицер мог исключить
+   * главного, а глава — исключить себя, и в обоих случаях гильдия оставалась
+   * без управления: в guilds.leader_id оставался UUID человека, который уже
+   * не в гильдии, и управлять ею было уже некому.
+   *
+   * Главного исключить нельзя: сначала он должен назначить преемника.
+   */
   async removeMember(guildId: string, charId: string): Promise<void> {
+    const guild = await this.getGuild(guildId);
+    if (!guild) throw new Error('GUILD_NOT_FOUND');
+    if (guild.leader_id === charId) throw new Error('GUILD_LEADER_PROTECTED');
     await this.db.query(
       'DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2',
       [guildId, charId]
@@ -116,11 +130,89 @@ export class GuildService {
     await this.addLog(guildId, 'member_left', charId);
   }
 
-  async setRank(guildId: string, charId: string, rank: string): Promise<void> {
+  /**
+   * Покинуть гильдию.
+   *
+   * Если уходит глава, преемником становится самый старший из оставшихся, а
+   * guilds.leader_id переписывается. Без этого уход главя навсегда оставлял
+   * гильдию сиротой: назначить нового главу было нечем, а маршрут /rank такую
+   * возможность и не давал.
+   */
+  async leaveGuild(guildId: string, charId: string): Promise<void> {
+    const guild = await this.getGuild(guildId);
+    if (!guild) throw new Error('GUILD_NOT_FOUND');
+    const wasLeader = guild.leader_id === charId;
+
     await this.db.query(
-      'UPDATE guild_members SET rank = $1 WHERE guild_id = $2 AND character_id = $3',
+      'DELETE FROM guild_members WHERE guild_id = $1 AND character_id = $2',
+      [guildId, charId]
+    );
+    await this.addLog(guildId, 'member_left', charId);
+    if (wasLeader) await this.promoteSuccessor(guildId);
+  }
+
+  /**
+   * Передать главенство самому старшему из оставшихся.
+   *
+   * Порядок тот же, что и в списке участников: офицер, ветеран, участник,
+   * а внутри ранга — кто больше внёс. Если не осталось никого, гильдия
+   * удаляется: пустая строка в поиске гильдий только мешает.
+   */
+  private async promoteSuccessor(guildId: string): Promise<void> {
+    const next = await this.db.queryOne<{ character_id: string }>(
+      `SELECT character_id FROM guild_members
+       WHERE guild_id = $1
+       ORDER BY CASE rank WHEN 'officer' THEN 0 WHEN 'veteran' THEN 1 ELSE 2 END,
+                contribution_points DESC, joined_at ASC
+       LIMIT 1`,
+      [guildId]
+    );
+    if (!next) {
+      await this.db.query('DELETE FROM guilds WHERE id = $1', [guildId]);
+      return;
+    }
+    await this.db.query(
+      'UPDATE guilds SET leader_id = $1 WHERE id = $2',
+      [next.character_id, guildId]
+    );
+    await this.db.query(
+      `UPDATE guild_members SET rank = 'leader'
+       WHERE guild_id = $1 AND character_id = $2`,
+      [guildId, next.character_id]
+    );
+    await this.addLog(guildId, 'leader_changed', next.character_id);
+  }
+
+  /**
+   * Назначить ранг участнику.
+   *
+   * ТУТ БЫЛО: UPDATE без проверок. Офицер мог сделать себя главным, главу
+   * можно было разжаловать в участника — и гильдия снова оказывалась сиротой,
+   * только теперь уже по вине офицера. Ранг приходил строкой из тела запроса,
+   * то есть в таблицу могло попасть что угодно.
+   *
+   * Теперь ранг сверяется со списком, главу не трогают, и ранг нельзя выдать
+   * себе.
+   */
+  async setRank(guildId: string, actorId: string, charId: string, rank: string): Promise<void> {
+    const GUILD_RANKS = ['leader', 'officer', 'veteran', 'member'];
+    if (!GUILD_RANKS.includes(rank)) throw new Error('RANK_INVALID');
+    if (actorId === charId) throw new Error('RANK_SELF');
+    const guild = await this.getGuild(guildId);
+    if (!guild) throw new Error('GUILD_NOT_FOUND');
+    if (guild.leader_id === charId) throw new Error('GUILD_LEADER_PROTECTED');
+    if (rank === 'leader') {
+      // Передача прав — это leave плюс назначение, одним UPDATE не обойтись
+      throw new Error('RANK_TRANSFER_UNSUPPORTED');
+    }
+    // RETURNING, потому что db.query отдаёт строки, а не rowCount: без него
+    // нельзя отличить «ранг назначен» от «такого участника нет» — оба случая
+    // молча проходят, и игрок думает, что назначил, а ничего не изменилось
+    const res = await this.db.query<{ character_id: string }>(
+      'UPDATE guild_members SET rank = $1 WHERE guild_id = $2 AND character_id = $3 RETURNING character_id',
       [rank, guildId, charId]
     );
+    if (res.length === 0) throw new Error('MEMBER_NOT_FOUND');
   }
 
   async addContribution(guildId: string, charId: string, points: number): Promise<void> {
@@ -135,20 +227,72 @@ export class GuildService {
     );
   }
 
-  async depositGold(guildId: string, _charId: string, amount: number): Promise<void> {
-    await this.db.query(
-      'UPDATE guilds SET gold = gold + $1 WHERE id = $2',
-      [amount, guildId]
-    );
-    await this.addContribution(guildId, _charId, Math.floor(amount / 10));
+  /**
+   * Положить золото в общий котёл гильдии.
+   *
+   * ТУТ БЫЛО: золото просто ПРИБАВЛЯЛОСЬ к золоту гильдии, а у игрока
+   * ничего не вычиталось. То есть любой желающий мог положить в котёл
+   * сколько угодно золота из воздуха и поднять валюту всей гильдии.
+   * Та же поломка, что с предметами ниже: склад пополнялся из ниоткуда.
+   *
+   * Теперь сначала списываем у игрока (атомарно, с проверкой баланса), и
+   * только потом кладём в котёл — обе операции в одной транзакции, чтобы не
+   * было окна «золото забрали, а в котёл не положили».
+   */
+  async depositGold(guildId: string, charId: string, amount: number): Promise<void> {
+    const gold = Math.max(0, Math.floor(amount));
+    if (gold <= 0) throw new Error('GOLD_AMOUNT_INVALID');
+
+    await this.db.transaction(async (client) => {
+      const paid = await client.query(
+        'UPDATE characters SET gold = gold - $1 WHERE id = $2 AND gold >= $1 RETURNING gold',
+        [gold, charId]
+      );
+      if (paid.rowCount === 0) throw new Error('GOLD_NOT_ENOUGH');
+      await client.query('UPDATE guilds SET gold = gold + $1 WHERE id = $2', [gold, guildId]);
+      // Вклад засчитывается в той же транзакции, что и списание: иначе
+      // игрок теряет золото без вклада в развитие гильдии
+      await client.query(
+        'UPDATE guild_members SET contribution_points = contribution_points + $1 WHERE guild_id = $2 AND character_id = $3',
+        [Math.floor(gold / 10), guildId, charId]
+      );
+    });
   }
 
+  /**
+   * Положить предмет на склад гильдии.
+   *
+   * ТУТ БЫЛО: предмет просто ВСТАВЛЯЛСЯ в таблицу склада, а из инвентаря
+   * игрока ничего не исчезало. Склад пополнялся из воздуха — сколько угодно
+   * копий любого предмета, без всякой оплаты.
+   *
+   * Теперь предмет сначала списывается из инвентаря и только потом появляется
+   * на складе, обе операции в одной транзакции.
+   */
   async depositItem(guildId: string, charId: string, itemId: string, qty: number): Promise<void> {
-    await this.db.query(
-      'INSERT INTO guild_bank (guild_id, item_id, quantity, deposited_by) VALUES ($1, $2, $3, $4)',
-      [guildId, itemId, qty, charId]
-    );
-    await this.addContribution(guildId, charId, qty * 5);
+    const count = Math.max(1, Math.floor(qty));
+
+    await this.db.transaction(async (client) => {
+      const took = await client.query(
+        `UPDATE character_items SET quantity = quantity - $1
+         WHERE id = (
+           SELECT id FROM character_items
+           WHERE character_id = $2 AND item_id = $3 AND quantity >= $1
+           ORDER BY enhancement DESC LIMIT 1
+           FOR UPDATE
+         )`,
+        [count, charId, itemId]
+      );
+      if (took.rowCount === 0) throw new Error('ITEM_NOT_ENOUGH');
+      await client.query(
+        'INSERT INTO guild_bank (guild_id, item_id, quantity, deposited_by) VALUES ($1, $2, $3, $4)',
+        [guildId, itemId, count, charId]
+      );
+      await client.query(
+        'UPDATE guild_members SET contribution_points = contribution_points + $1 WHERE guild_id = $2 AND character_id = $3',
+        [count * 5, guildId, charId]
+      );
+    });
   }
 
   async getBankItems(guildId: string): Promise<{ id: number; item_id: string; quantity: number; deposited_by: string; deposited_at: string }[]> {

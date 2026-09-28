@@ -12,6 +12,9 @@ import { toast, refreshBars, loadInventory } from './hud';
 import { onTutorialAction } from './tutorial';
 import { onSearching as onPvpSearching, onPvpHide } from './pvp';
 import { loadMediaPanel } from './media';
+// Панель гильдии вынесена в отдельный файл: в panels.ts она занимала сорок
+// строк, умела три вещи из десяти и не позволяла вступить в чужую гильдию
+import { loadGuild } from './guild';
 import { RARITY_COLORS } from '../ui/icons';
 
 // Простая словарь имен предметов для магазина (itemId -> русское название)
@@ -1765,48 +1768,6 @@ const REGION_NAMES: Record<string, string> = {
 };
 
 // ── Гильдии ────────────────────────────────────────────────
-
-async function loadGuild(): Promise<void> {
-  const box = $('panel-guild');
-  if (!box) return;
-  box.innerHTML = '';
-  try {
-    const data = await api.guildMy();
-    if (!data?.guild) {
-      // Нет гильдии — показать поиск/создание
-      box.innerHTML = '<div class="lb-empty">Вы не в гильдии</div>';
-      const createBtn = document.createElement('button');
-      createBtn.className = 'quest-accept';
-      createBtn.textContent = 'Создать гильдию';
-      createBtn.style.marginTop = '8px';
-      createBtn.addEventListener('click', () => {
-        const name = prompt('Название гильдии:');
-        const tag = prompt('Тег (2-6 символов):');
-        if (name && tag) {
-          void api.guildCreate(name, tag, '').then(() => { toast('Гильдия создана!', 'success'); void loadGuild(); });
-        }
-      });
-      box.append(createBtn);
-      return;
-    }
-    const g = data.guild;
-    box.innerHTML = `<h3 style="color:var(--cream);margin:0 0 4px;">${g.name} <span style="color:var(--gold-light);">[${g.tag}]</span></h3>` +
-      `<p style="color:var(--cream-dim);font-size:12px;margin:0 0 8px;">Ур.${g.level} · Ранг: ${data.rank} · Золото: ◉ ${g.gold}</p>`;
-    const membersBtn = document.createElement('button');
-    membersBtn.className = 'quest-accept';
-    membersBtn.textContent = 'Участники';
-    membersBtn.addEventListener('click', async () => {
-      const res = await api.guildMembers();
-      const list = box.querySelector('.guild-members') ?? document.createElement('div');
-      list.className = 'guild-members';
-      list.innerHTML = res.members.map((m: any) =>
-        `<div class="friend-entry"><span class="friend-name">${m.character_name}</span><span class="friend-info">Ур.${m.level} · ${m.rank}</span></div>`
-      ).join('');
-      if (!box.querySelector('.guild-members')) box.append(list);
-    });
-    box.append(membersBtn);
-  } catch { box.innerHTML = '<div class="lb-empty">Гильдии пока нет</div>'; }
-}
 
 // ── Достижения ─────────────────────────────────────────────
 
