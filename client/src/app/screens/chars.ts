@@ -2,11 +2,12 @@
 // Экран выбора персонажа — Empire of Safavids
 // ============================================================
 
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { session, Character } from '../state';
 import { t } from '../i18n';
 import { CLASS_COLORS } from '../../ui/icons';
 import { showScreen } from '../world';
+import { toast } from '../hud';
 import { createCharacterWithReferral } from '../referral';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -40,13 +41,24 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
     e.preventDefault();
     const name = ($('new-name') as HTMLInputElement).value.trim();
     const serverId = ($('new-server') as HTMLSelectElement).value;
+    const err = $('create-error');
+    err?.classList.add('hidden');
     try {
       // Создаём через обёртку: она приложит код приглашения и потратит его
       const { character } = await createCharacterWithReferral(name, selectedClass, serverId);
       ($('new-name') as HTMLInputElement).value = '';
       onEnter(character);
-    } catch (err) {
-      alert((err as Error).message);
+    } catch (e) {
+      // ТУТ БЫЛО alert(). Нативное окно останавливает всю страницу: пока
+      // его не закроют, не работают ни кнопки, ни ввод. И показывало оно
+      // текст ошибки БД («duplicate key value…»), потому что сервер отдавал
+      // 500. Теперь код ошибки переводится, а текст стоит в форме.
+      const code = (e as ApiError).code;
+      const msg = code && t(`errors.${code}`) !== `errors.${code}` ? t(`errors.${code}`) : t('chars.create_failed');
+      if (err) {
+        err.textContent = msg;
+        err.classList.remove('hidden');
+      }
     }
   };
 
@@ -128,7 +140,11 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
           await api.deleteCharacter(c.id);
           await refreshList(onEnter);
         } catch (err) {
-          alert((err as Error).message);
+          // Тот же alert(), что и при создании: он блокировал страницу.
+          // Сюда попадает ошибка удаления, отдельной строки для неё нет —
+          // показываем тостом, он ничего не перекрывает
+          toast(t('chars.delete_failed'), 'error');
+          void err;
         }
       });
       row.append(img, info, enter, del);

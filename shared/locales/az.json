@@ -164,7 +164,9 @@
     "recommended": "yeni başlayanlar üçün",
     "name_len": "Ad 2 ilə 24 simvol arasında olmalıdır",
     "nick_changed": "Ləqəb \"{name}\" olaraq dəyişdirildi!",
-    "need_azens": "500 AZENS lazımdır (sizdə: {n})"
+    "need_azens": "500 AZENS lazımdır (sizdə: {n})",
+    "create_failed": "Personaj yaradıla bilmədi. Başqa ad yoxlayın.",
+    "delete_failed": "Personaj silinə bilmədi"
   },
   "classes": {
     "qizilbash": "Qızılbaş Qvardiyası",
@@ -587,7 +589,8 @@
     "already_claimed": "Hesab artıq saxlanıb",
     "provider_disabled": "Bu daxil olma üsulu hələ qurulmayıb",
     "invalid_state": "Daxil olma sorğusu köhnəlib. Yenidən cəhd edin",
-    "provider_error": "Xarici xidmət vasitəsilə daxil olmaq mümkün olmadı"
+    "provider_error": "Xarici xidmət vasitəsilə daxil olmaq mümkün olmadı",
+    "name_taken": "Bu ad artıq başqa oyunçu tərəfindən tutulub"
   },
   "panels": {
     "character": "Personaj",

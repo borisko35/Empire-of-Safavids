@@ -164,7 +164,9 @@
     "recommended": "recommended for beginners",
     "name_len": "The name must be 2 to 24 characters long",
     "nick_changed": "Nickname changed to \"{name}\"!",
-    "need_azens": "500 AZENS required (you have: {n})"
+    "need_azens": "500 AZENS required (you have: {n})",
+    "create_failed": "Could not create the character. Try a different name.",
+    "delete_failed": "Could not delete the character"
   },
   "classes": {
     "qizilbash": "Qizilbash Guardian",
@@ -587,7 +589,8 @@
     "already_claimed": "Account is already saved",
     "provider_disabled": "This sign-in method is not set up yet",
     "invalid_state": "Sign-in request expired. Please try again",
-    "provider_error": "Could not sign in with the external service"
+    "provider_error": "Could not sign in with the external service",
+    "name_taken": "This name is already taken by another player"
   },
   "panels": {
     "character": "Character",

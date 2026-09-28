@@ -51,10 +51,33 @@ characterRouter.post('/', secureMiddleware, asyncHandler(async (req: Request, re
     return res.status(400).json({ error: 'Unknown game server' });
   }
 
-  const character = await characterService.createCharacter(
-    req.userId!, value.name, value.class, value.serverId, value.referralCode,
-  );
-  return res.status(201).json({ character });
+  // Имя занято.
+  //
+  // ТУТ БЫЛО: characters.name уникален, и при совпадении Postgres ронял
+  // вставку с 23505. Исключение уходило в общий обработчик, игрок получал
+  // 500 с текстом ошибки БД, а клиент показывал это нативным alert() — то
+  // есть окно поверх страницы с «duplicate key value…» вместо ответа,
+  // что имя уже занято. Проверка до вставки даёт честный 409, а перехват
+  // ниже закрывает гонку: два игрока могут выбрать одно имя одновременно.
+  const taken = await characterService.isNameTaken(value.name);
+  if (taken) {
+    return res.status(409).json({ error: 'name_taken' });
+  }
+
+  try {
+    const character = await characterService.createCharacter(
+      req.userId!, value.name, value.class, value.serverId, value.referralCode,
+    );
+    return res.status(201).json({ character });
+  } catch (err) {
+    // 23505 — нарушение уникальности. Именно на characters.name_key, но
+    // ловим по коду Postgres: он одинаков и для других ограничений, а
+    // сообщение игроку в обоих случаях одно и то же — «имя занято».
+    if ((err as { code?: string }).code === '23505') {
+      return res.status(409).json({ error: 'name_taken' });
+    }
+    throw err;
+  }
 }));
 
 // GET /api/characters/referral — мой код приглашения, ссылка и статистика
