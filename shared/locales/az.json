@@ -971,7 +971,8 @@
     "admin": "Admin",
     "settings": "Tənzimləmələr",
     "notifications": "Bildirişlər",
-    "hall_of_fame": "Şöhrət salonu"
+    "hall_of_fame": "Şöhrət salonu",
+    "mail": "Məktub"
   },
   "notifications": {
     "title": "Bildirişlər",
@@ -1000,5 +1001,13 @@
     "title": "Şöhrət salonu",
     "empty": "Hələ heç kim dünya bossunu məğlub etməyib",
     "kills": "Qələbə: %d"
+  },
+  "mail": {
+    "title": "Məktub",
+    "empty": "Məktub yoxdur",
+    "gold": "qızıl",
+    "item": "şey",
+    "claim": "Götür",
+    "claimed": "Mükafat alındı"
   }
 }

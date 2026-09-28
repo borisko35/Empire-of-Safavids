@@ -971,7 +971,8 @@
     "admin": "Admin",
     "settings": "Settings",
     "notifications": "Notifications",
-    "hall_of_fame": "Hall of Fame"
+    "hall_of_fame": "Hall of Fame",
+    "mail": "Mail"
   },
   "notifications": {
     "title": "Notifications",
@@ -1000,5 +1001,13 @@
     "title": "Hall of Fame",
     "empty": "No one has defeated a world boss yet",
     "kills": "Kills: %d"
+  },
+  "mail": {
+    "title": "Mail",
+    "empty": "No letters",
+    "gold": "gold",
+    "item": "item",
+    "claim": "Claim",
+    "claimed": "Reward received"
   }
 }

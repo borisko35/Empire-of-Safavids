@@ -808,6 +808,19 @@ export const api = {
       kills: number; guildId: string | null; guildName: string | null; lastKill: string }[] }>(
       `/api/hall-of-fame/bosses?limit=${limit}`),
 
+  // ── Почтовый ящик ──────────────────────────────────────
+  // Таблица mailbox была пуста: награды выдавались напрямую, и если
+  // предмет не помещался в сумку, он просто пропадал
+  mail: (characterId: string) =>
+    req<{ items: { id: string; subject: string; body: string | null; gold: number;
+      itemId: string | null; itemQty: number; isRead: boolean; senderName: string | null;
+      expiresAt: string; createdAt: string }[]; unread: number }>(`/api/game/mail?characterId=${characterId}`),
+  mailClaim: (characterId: string, id: string) =>
+    req<{ success: boolean; gold: number; items: { itemId: string; qty: number }[] }>(
+      '/api/game/mail/claim', { method: 'POST', body: JSON.stringify({ characterId, id }) }),
+  mailRead: (characterId: string, id: string) =>
+    req<{ success: boolean }>('/api/game/mail/read', { method: 'POST', body: JSON.stringify({ characterId, id }) }),
+
   // ── Уведомления ────────────────────────────────────────
   // Списка не было: сервер писал строки в таблицу notifications, а прочитать
   // их было нечем. Панели уведомлений в игре не существовало

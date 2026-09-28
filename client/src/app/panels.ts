@@ -2101,6 +2101,92 @@ async function loadPets(): Promise<void> {
  * было бы значило показать игроку цифру, которую никто не измерял,
  * поэтому её здесь нет.
  */
+/**
+ * Почтовый ящик: письма с наградами, которые нельзя было выдать сразу.
+ *
+ * ЧТО БЫЛО. Таблица mailbox была пуста. Награда, которая не помещалась
+ * в сумку, просто пропадала: игрок заплатил на аукционе, вещь ему
+ * отдали, но сумка переполнилась — и забрать было негде.
+ *
+ * Кнопка «Забрать» вызывает серверный забор: письмо удаляется только
+ * после успешной выдачи, поэтому повторным нажатием награду не получить.
+ */
+async function loadMail(): Promise<void> {
+  const box = $('panel-mail');
+  if (!box) return;
+  box.innerHTML = `<div class="lb-empty">${t('mail.empty')}</div>`;
+  try {
+    const { items } = await api.mail(cid());
+    if (!items.length) {
+      box.innerHTML = `<div class="lb-empty">${t('mail.empty')}</div>`;
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'mail-list';
+    for (const m of items) {
+      const row = document.createElement('div');
+      row.className = 'mail-row' + (m.isRead ? '' : ' mail-new');
+
+      const head = document.createElement('div');
+      head.className = 'mail-subject';
+      head.textContent = m.subject;
+      const when = document.createElement('div');
+      when.className = 'mail-when';
+      when.textContent = new Date(m.createdAt).toLocaleString();
+      head.append(when);
+
+      if (m.body) {
+        const body = document.createElement('div');
+        body.className = 'mail-body';
+        body.textContent = m.body;
+        row.append(head, body);
+      } else {
+        row.append(head);
+      }
+
+      // Награда: золото, предмет, или и то и другое
+      const parts: string[] = [];
+      if (m.gold > 0) parts.push(`${m.gold} ${t('mail.gold')}`);
+      if (m.itemId && m.itemQty > 0) parts.push(`${t('mail.item')} ×${m.itemQty}`);
+      if (parts.length) {
+        const reward = document.createElement('div');
+        reward.className = 'mail-reward';
+        reward.textContent = parts.join(' · ');
+        row.append(reward);
+
+        const take = document.createElement('button');
+        take.className = 'quest-accept';
+        take.textContent = t('mail.claim');
+        take.addEventListener('click', async () => {
+          take.disabled = true;
+          try {
+            const got = await api.mailClaim(cid(), m.id);
+            const gotParts: string[] = [];
+            if (got.gold > 0) gotParts.push(`+${got.gold} ${t('mail.gold')}`);
+            for (const it of got.items) gotParts.push(`+${it.qty} ${t('mail.item')}`);
+            toast(gotParts.join(' · ') || t('mail.claimed'), 'success');
+            void loadMail();
+          } catch (err) {
+            toast((err as Error).message, 'error');
+            take.disabled = false;
+          }
+        });
+        row.append(take);
+      } else {
+        // Письмо без награды: забирать нечего, достаточно отметить
+        // прочитанным, чтобы оно не висело непрочитанным
+        void api.mailRead(cid(), m.id).catch(() => {});
+      }
+
+      list.append(row);
+    }
+    box.innerHTML = '';
+    box.append(list);
+  } catch (err) {
+    box.innerHTML = `<div class="lb-empty">${(err as Error).message}</div>`;
+  }
+}
+
 async function loadHallOfFame(): Promise<void> {
   const box = $('panel-hall-of-fame');
   if (!box) return;
@@ -3329,6 +3415,9 @@ const LOADERS: Record<string, () => Promise<void>> = {
   // Зал славы. Панели не было: история побед над боссами писалась в базу,
   // и смотреть на неё было некому
   'panel-hall-of-fame': loadHallOfFame,
+  // Почтовый ящик. Панели не было: награды, не поместившиеся в сумку,
+  // просто пропадали
+  'panel-mail': loadMail,
   'panel-character': loadCharacterPanel,
   'panel-dungeons': loadDungeons,
   'panel-shop': loadShop,

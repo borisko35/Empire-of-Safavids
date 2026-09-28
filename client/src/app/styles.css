@@ -2138,3 +2138,33 @@ body[data-display="windowed"] #screen-world::after {
   color: #7fe0ab;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Панели: почтовый ящик
+   ============================================================ */
+.mail-list { display: flex; flex-direction: column; gap: 6px; }
+.mail-row {
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.mail-row.mail-new {
+  background: rgba(201, 168, 76, 0.1);
+  border-color: rgba(201, 168, 76, 0.3);
+}
+.mail-subject {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cream);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.mail-when { font-size: 10px; color: var(--cream-dim); opacity: 0.7; font-weight: 400; white-space: nowrap; }
+.mail-body { font-size: 12px; color: var(--cream-dim); line-height: 1.45; }
+.mail-reward { font-size: 12px; color: #7fe0ab; font-weight: 600; }

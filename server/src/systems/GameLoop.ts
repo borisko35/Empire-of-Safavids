@@ -13,6 +13,7 @@ import { WorldTimeSystem } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
+import { MailService } from '../services/MailService';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
@@ -99,6 +100,10 @@ export class GameLoop {
     // убийств. Не ждём — чтение из базы не должно задерживать старт
     void WorldEventSystem.getInstance().loadSchedule()
       .catch((e) => logger.error('[GameLoop] чтение расписания боссов не удалось:', e));
+    // Убрать просроченные письма. expires_at в схеме есть, но про него
+    // никто не помнил: письма копились бы вечно вместе с наградой внутри
+    void MailService.getInstance().purgeExpired()
+      .catch((e) => logger.error('[GameLoop] уборка писем не удалась:', e));
 
     this.timer = setInterval(() => this.tick(), TICK_INTERVAL_MS);
     // Сразу шлём время/погоду, иначе клиент ждёт первый тик до 60 секунд

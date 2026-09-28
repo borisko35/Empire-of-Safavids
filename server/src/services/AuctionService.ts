@@ -9,6 +9,7 @@ import { grantReputation } from '../systems/ReputationGrants';
 import { logger } from '../utils/logger';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { AUCTION_LISTING_FEE_SILVER } from '../utils/economy';
+import { MAX_INVENTORY_SLOTS } from '../../../shared/constants';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface AuctionListing {
@@ -257,13 +258,56 @@ export class AuctionService {
       );
 
       // Передать предмет покупателю (он был в эскроу с момента выставления)
-      await client.query(
-        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (character_id, item_id, enhancement)
-         DO UPDATE SET quantity = character_items.quantity + $3`,
-        [buyerId, item.itemId, item.quantity, item.enhancement]
+      //
+      // ЧТО БЫЛО. Предмет писался прямо в character_items, минуя
+      // CharacterService.addItems, — а тот проверяет вместимость сумки.
+      // То есть покупка на аукционе обходила лимит слотов: сумка могла
+      // переполниться, и никто этого не замечал.
+      //
+      // Теперь: если предмет не помещается — он ждёт в почтовом ящике.
+      // Это отложенная выдача, а не выброс: игрок освободит место и заберёт
+      // письмо. Сумка остаётся честной, вещь не пропадает.
+      const used = await client.query(
+        `SELECT COUNT(DISTINCT (item_id, enhancement)) AS slots
+         FROM character_items WHERE character_id = $1`,
+        [buyerId]
       );
+      const sameStack = await client.query(
+        `SELECT 1 FROM character_items
+         WHERE character_id = $1 AND item_id = $2 AND enhancement = $3`,
+        [buyerId, item.itemId, item.enhancement]
+      );
+      const usedSlots = Number(used.rows[0]?.slots ?? 0);
+      // Новый стек занимает слот. Такой же предмет — нет, он ляжет в
+      // существующий. Поэтому полная сумка не мешает докупить в стек
+      const needsNewSlot = sameStack.rows.length === 0;
+      const hasRoom = !needsNewSlot || usedSlots < MAX_INVENTORY_SLOTS;
+
+      if (hasRoom) {
+        await client.query(
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (character_id, item_id, enhancement)
+           DO UPDATE SET quantity = character_items.quantity + $3`,
+          [buyerId, item.itemId, item.quantity, item.enhancement]
+        );
+      } else {
+        // В той же транзакции, что и списание золота: если письмо не
+        // вставится, откатится и покупка — игрок не потеряет ни деньги,
+        // ни вещь
+        await client.query(
+          `INSERT INTO mailbox (recipient_id, subject, body, item_id, item_qty)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            buyerId,
+            'Награда с аукциона',
+            `Купленное на аукционе не поместилось в сумку (${usedSlots}/${MAX_INVENTORY_SLOTS}). Освободите место и заберите письмо.`,
+            item.itemId,
+            item.quantity,
+          ]
+        );
+        logger.info(`Auction: сумка полна (${usedSlots}), предмет ушёл в письмо (${item.itemId})`);
+      }
 
       // Уведомить продавца о продаже
       await this.notifications.send(item.sellerId, 'auction_sold', {

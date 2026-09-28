@@ -33,6 +33,7 @@ import { PremiumSystem, CURRENT_SEASON, BATTLE_PASS_TIERS } from '../systems/Pre
 import { PaymentService } from '../services/PaymentService';
 import { PromoService } from '../services/PromoService';
 import { NotificationService } from '../services/NotificationService';
+import { MailService } from '../services/MailService';
 import { PAYMENT_PROVIDERS } from '../services/paymentProviders';
 import Joi from 'joi';
 
@@ -57,6 +58,7 @@ const premiumSystem = new PremiumSystem();
 const paymentService = new PaymentService();
 const promoService = new PromoService();
 const notificationService = new NotificationService();
+const mailService = MailService.getInstance();
 const mountSystem = new MountSystem();
 const boatSystem = new BoatSystem();
 const fishing = FishingSystem.getInstance();
@@ -1266,6 +1268,42 @@ gameRouter.post('/pets/release', secureMiddleware, requireCharacterOwnership(),
     const characterId = await bodyCharacterId(req, res);
     if (!characterId) return;
     await petService.releasePet(characterId, req.body.petDbId);
+    return res.json({ success: true });
+  })
+);
+
+// ── Почтовый ящик ─────────────────────────────────────────
+// Таблица mailbox создана миграцией 002 и была пуста. Награды выдавались
+// напрямую, из чего следовало: продавец аукциона не мог получить вещь,
+// если она не помещалась в сумку, и забрать её позже было нечем — просто
+// терялась. Теперь такие награды кладутся в письмо.
+gameRouter.get('/mail', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const characterId = await bodyCharacterId(req, res);
+  if (!characterId) return;
+  const [items, unread] = await Promise.all([
+    mailService.list(characterId),
+    mailService.unreadCount(characterId),
+  ]);
+  return res.json({ items, unread });
+}));
+
+gameRouter.post('/mail/claim', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    try {
+      const reward = await mailService.claim(req.body.id, characterId);
+      return res.json({ success: true, ...reward });
+    } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
+  })
+);
+
+gameRouter.post('/mail/read', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const ok = await mailService.markRead(req.body.id, characterId);
+    if (!ok) return res.status(404).json({ error: 'Письмо не найдено' });
     return res.json({ success: true });
   })
 );
