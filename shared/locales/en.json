@@ -455,10 +455,7 @@
     "meta_desc_feedback": "Empire of Safavids feedback: bugs, ideas and questions for the team.",
     "screenshots_title": "Screenshots & Gameplay",
     "gallery_title": "Game gallery",
-    "ss_combat": "The roads leading to the city",
-    "ss_isfahan": "The city square under a night sky",
-    "ss_dungeon": "A caravan camp at night",
-    "ss_simurgh": "The gates of the city",
+    "ss_combat": "Fight with bandits: the target health bar on top",
     "features_title": "What Makes Us Unique",
     "feat_guild": "A shared bank for gold and items, roster and ranks.",
     "feat_pvp": "Duels against other players, rating and win streaks.",
@@ -541,7 +538,10 @@
     "reputation_title": "Reputation",
     "reputation_none": "No reputation data",
     "game_title": "Empire of Safavids — Game",
-    "panels_title": "Panels"
+    "panels_title": "Panels",
+    "ss_city": "Morning in Tabriz: the city, the bazaar and the townsfolk",
+    "ss_tasks": "Daily tasks: what to do today and how much is left",
+    "ss_worldmap": "World map: camps, caravanserais and forts"
   },
   "common": {
     "loading": "Loading…",

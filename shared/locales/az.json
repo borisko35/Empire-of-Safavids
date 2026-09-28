@@ -455,10 +455,7 @@
     "meta_desc_feedback": "Empire of Safavids geribildirimi: xətalar, ideyalar və komandaya suallar.",
     "screenshots_title": "Ekran görüntüləri və oyun",
     "gallery_title": "Oyun qalereyası",
-    "ss_combat": "Şəhərə aparan yollar",
-    "ss_isfahan": "Gecə səması altında şəhər meydanı",
-    "ss_dungeon": "Gecə karvan düşərgəsi",
-    "ss_simurgh": "Şəhərin qapıları",
+    "ss_combat": "Qəzaçılarla döyüş: hədəfin sağlamlıq paneli yuxarıda",
     "features_title": "Bizi fərqləndirən nədir",
     "feat_guild": "Qızıl və əşyalar üçün ümumi anbar, üzvlər və rəqəmlər.",
     "feat_pvp": "Digər oyunçularla duel, reytinq və qələbə seriyası.",
@@ -541,7 +538,10 @@
     "reputation_title": "Reputasiya",
     "reputation_none": "Reputasiya məlumatı yoxdur",
     "game_title": "Empire of Safavids — Oyun",
-    "panels_title": "Panellər"
+    "panels_title": "Panellər",
+    "ss_city": "Təbrizin səhəri: şəhər, bazar və canlı sakinlər",
+    "ss_tasks": "Gündəlik tapşırıqlar: bu gün nə etmək və nə qalıb",
+    "ss_worldmap": "Dünya xəritəsi: düşərgələr, karvanSaraylar və qalalar"
   },
   "common": {
     "loading": "Yüklənir…",

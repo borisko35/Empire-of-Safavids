@@ -605,7 +605,10 @@ body {
 .screenshot-card img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  /* 3:2, а не 16:9. Кадры сняты в окне 1290×872, и при 16/9
+     object-fit: cover срезал верх и низ — то есть рамку персонажа,
+     ряд кнопок и чат: на лендинге оставалось бы не то, что в игре */
+  aspect-ratio: 3 / 2;
   object-fit: cover;
 }
 .screenshot-caption {
