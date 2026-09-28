@@ -20,7 +20,9 @@
     "quest_log": "Журнал квестов",
     "quests": "Квесты",
     "online_time": "В игре",
-    "rating": "Рейтинг"
+    "rating": "Рейтинг",
+    "play_now": "Играть за 10 секунд",
+    "play_with_account": "Войти в свой аккаунт"
   },
   "auth": {
     "login": "Вход",

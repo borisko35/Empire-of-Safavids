@@ -17,7 +17,7 @@ function showError(message: string): void {
 }
 
 /** Ошибка авторизации: код сервера -> локализованный текст */
-function showAuthError(err: unknown): void {
+export function showAuthError(err: unknown): void {
   const code = err instanceof ApiError ? err.code : undefined;
   const localized = code ? t(`errors.${code}`) : '';
   showError(localized && localized !== `errors.${code}` ? localized : ((err as Error).message || t('common.error')));
@@ -60,6 +60,19 @@ async function initOAuthButtons(): Promise<void> {
   $('oauth-row')?.classList.remove('hidden');
 }
 
+/**
+ * Вход без регистрации.
+ *
+ * Вынесено отдельно, потому что гостем можно войти двумя путями: кнопкой
+ * на экране входа и ссылкой «Играть за 10 секунд» с лендинга (?guest=1).
+ * Дублировать четыре строки в двух местах означало бы, что поломку
+ * починят в одной копии и забудут про другую.
+ */
+export async function enterAsGuest(): Promise<void> {
+  const { data } = await api.guestLogin();
+  persistAuth(data.token, data.userId, data.username, true);
+}
+
 export function initAuthScreen(onSuccess: () => void): void {
   // Переключение вкладок
   $('tab-login').addEventListener('click', () => switchTab(true));
@@ -72,8 +85,7 @@ export function initAuthScreen(onSuccess: () => void): void {
     const btn = $('btn-guest') as HTMLButtonElement;
     btn.disabled = true;
     try {
-      const { data } = await api.guestLogin();
-      persistAuth(data.token, data.userId, data.username, true);
+      await enterAsGuest();
       onSuccess();
     } catch (err) {
       showAuthError(err);

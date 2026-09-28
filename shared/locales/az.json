@@ -20,7 +20,9 @@
     "quest_log": "Tapşırıq jurnalı",
     "quests": "Tapşırıqlar",
     "online_time": "Oyunda",
-    "rating": "Reytinq"
+    "rating": "Reytinq",
+    "play_now": "10 saniyədə oyna",
+    "play_with_account": "Hesabına daxil ol"
   },
   "auth": {
     "login": "Giriş",

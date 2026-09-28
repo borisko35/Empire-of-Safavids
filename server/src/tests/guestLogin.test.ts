@@ -8,6 +8,8 @@
 // Проверяем то, что легко сломать и трудно заметить: гость не должен
 // логиниться по паролю, аккаунт должен быть помечен гостевым, а присвоение
 // обязано сохранять тот же user_id (иначе пропадёт весь прогресс).
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AuthService } from '../services/AuthService';
 import { AUTH_ERROR_MESSAGES, type AuthError } from '../../../shared/auth.types';
 
@@ -107,11 +109,21 @@ describe('Гостевой вход', () => {
   });
 
   it('ограничивает число гостей с одного адреса (иначе наделают аккаунтов)', async () => {
-    for (let i = 0; i < 5; i++) await svc.guestLogin('9.9.9.9');
+    // Предел берём из кода, а не пишем числом: он менялся (5 → 30), когда
+    // появилась кнопка «Играть за 10 секунд», и зашитое здесь пять
+    // превратилось бы в проверку устаревшего числа, а не самого лимита.
+    const limit = Number(
+      /MAX_GUESTS_PER_IP\s*=\s*(\d+)/
+        .exec(readFileSync(join(__dirname, '../services/AuthService.ts'), 'utf-8'))?.[1] ?? 0,
+    );
+    expect(limit).toBeGreaterThan(0);
+    for (let i = 0; i < limit; i++) await svc.guestLogin('9.9.9.9');
     await expect(svc.guestLogin('9.9.9.9')).rejects.toMatchObject({ code: 'guest_rate_limited' });
     // С другого адреса — можно
     await expect(svc.guestLogin('8.8.8.8')).resolves.toBeTruthy();
-  });
+    // Вызовов столько, сколько лимит (сейчас 30), а не пять: с mock-задержкой
+    // это около восьми секунд, стандартных пяти не хватает
+  }, 30000);
 });
 
 describe('Присвоение гостевого аккаунта', () => {

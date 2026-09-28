@@ -2,12 +2,12 @@
 // Точка входа игрового клиента — Empire of Safavids
 // ============================================================
 
-import { api } from './api';
+import { api, ApiError } from './api';
 import { detectLocale, loadLocale, t } from './i18n';
 import { toast } from './hud';
 import { clearAuth, session, persistAuth, Character } from './state';
 import { enterWorld, showScreen } from './world';
-import { initAuthScreen } from './screens/auth';
+import { enterAsGuest, initAuthScreen, showAuthError } from './screens/auth';
 import { initCharsScreen } from './screens/chars';
 import { audio } from './audio';
 import { getSettings, applyDisplayMode, updateSettings, syncDisplayModeWithBrowser } from './settings';
@@ -52,6 +52,13 @@ async function boot(): Promise<void> {
   const returned = await finishOAuthReturn();
   if (returned) return;
 
+  // «Играть за 10 секунд» с лендинга: /game/?guest=1
+  //
+  // Смысл: между «заинтересовался» и «играет» стоял экран входа с полями
+  // почты и пароля. Для нового игрока, который пришёл посмотреть, это
+  // был барьер в четыре поля. Ссылка с лендинга ведёт сразу в гостя.
+  if (await enterAsGuestFromLink()) return;
+
   // Есть сохранённая сессия — сразу к персонажам
   if (session.token) {
     try {
@@ -74,6 +81,41 @@ async function boot(): Promise<void> {
  * (Google) либо ?code=… (ВК, state идёт в ответе вместе с ошибкой).
  * Возвращаем true, если вход был и мы ушли к персонажам.
  */
+/**
+ * Вход гостя по ссылке с лендинга: /game/?guest=1
+ *
+ * Параметр убирается из адреса сразу: иначе обновление страницы (F5 или
+ * тап по адресной строке) завело бы нового гостя и съедало суточный лимит
+ * гостей на адрес. Уже вошедшего игрока ссылка не трогает: при сохранённой
+ * сессии он и так идёт к персонажам.
+ *
+ * Возвращает true, если вход состоялся. При неудаче (например, суточный
+ * лимит гостей на адрес исчерпан) показываем обычный экран входа с понятной
+ * ошибкой: молча упасть на пустой экран нельзя.
+ */
+async function enterAsGuestFromLink(): Promise<boolean> {
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('guest') !== '1') return false;
+  if (session.token) return false;
+
+  url.searchParams.delete('guest');
+  window.history.replaceState({}, '', url.toString());
+
+  try {
+    await enterAsGuest();
+    await gotoCharacters();
+    return true;
+  } catch (err) {
+    const code = err instanceof ApiError ? err.code : undefined;
+    const localized = code ? t(`errors.${code}`) : '';
+    showAuthError(localized && localized !== `errors.${code}`
+      ? localized
+      : ((err as Error).message || t('common.error')));
+    showScreen('screen-auth');
+    return false;
+  }
+}
+
 async function finishOAuthReturn(): Promise<boolean> {
   const url = new URL(window.location.href);
   const code = url.searchParams.get('code');
