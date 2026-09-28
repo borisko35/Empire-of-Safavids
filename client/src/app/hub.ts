@@ -34,12 +34,6 @@ interface HubGroup {
  */
 const GROUPS: HubGroup[] = [
   {
-    id: 'social', icon: 'chat',
-    panels: [
-      { id: 'panel-notifications', titleKey: 'hub.notifications', icon: 'chat' },
-    ],
-  },
-  {
     id: 'combat', icon: 'swords',
     panels: [
       { id: 'panel-skills', titleKey: 'hub.skills', icon: 'bolt' },
@@ -62,6 +56,7 @@ const GROUPS: HubGroup[] = [
   {
     id: 'social', icon: 'user',
     panels: [
+      { id: 'panel-notifications', titleKey: 'hub.notifications', icon: 'chat' },
       { id: 'panel-guild', titleKey: 'hub.guild', icon: 'user' },
       { id: 'panel-party', titleKey: 'hub.party', icon: 'user' },
       { id: 'panel-friends', titleKey: 'hub.friends', icon: 'user' },

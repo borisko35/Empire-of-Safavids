@@ -448,6 +448,14 @@ function enterOrExitBuilding(action: string, buildingId: string, nameRu: string)
 export function openPanelById(panel: string): void {
   const el = document.getElementById(panel);
   if (!el) return;
+  // ЧТО БЫЛО. Панели копились одна на другой. Открытие только снимало
+  // класс hidden со своей панели и ничего не закрывало, а закрыть её было
+  // нечем: кнопки «×» в разметке не было ни у одной из 37 панелей, а Esc
+  // открывал меню, но панели не трогал. Итог, который и видел игрок: открыл
+  // хаб, потом инвентарь, потом задачи — три панели друг на друге, верхняя
+  // закрывает остальные, и снять их нечем, кроме повторного клика по кнопке
+  // в ряду (о чём нигде не написано).
+  closeAllPanels();
   el.classList.remove('hidden');
   document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`)
     ?.classList.add('active');
@@ -457,6 +465,74 @@ export function openPanelById(panel: string): void {
   if (panel === 'panel-quests-j') void refreshQuestPanelJ();
   if (panel === 'panel-regions') void loadRegions();
   loadPanelContent(panel);
+}
+
+/** Все панели HUD — то, что открывается кнопкой, хабом, NPC-кликом или клавишей */
+function allPanels(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>('.hud.side-panel')];
+}
+
+/** Закрыть одну панель и погасить её кнопку в ряду */
+export function closePanel(panel: string): void {
+  document.getElementById(panel)?.classList.add('hidden');
+  document.querySelector(`.panel-toggles button[data-panel="${panel}"]`)?.classList.remove('active');
+}
+
+/**
+ * Закрыть все открытые панели.
+ *
+ * Возвращает, сколько их было — на этом держится Esc: сначала он закрывает
+ * панель, и только если открытых панелей не было вовсе, открывает меню.
+ * Иначе Esc всегда открывал бы меню поверх панели, и закрыть её было бы
+ * по-прежнему нечем.
+ */
+export function closeAllPanels(): number {
+  const open = allPanels().filter((p) => !p.classList.contains('hidden'));
+  for (const p of open) closePanel(p.id);
+  return open.length;
+}
+
+/**
+ * Переключить панель: открыть (закрыв остальные) или закрыть, если открыта.
+ *
+ * Единая точка для кнопок в ряду и горячих клавиш. Раньше обе делали
+ * `classList.toggle('hidden')` напрямую — мимо openPanelById, а значит мимо
+ * доп. загрузки содержимого: панель по клавише открывалась, но с тем, что
+ * успело нарисоваться в прошлый раз.
+ */
+export function togglePanel(panel: string): void {
+  const el = document.getElementById(panel);
+  if (!el) return;
+  if (!el.classList.contains('hidden')) {
+    closePanel(panel);
+    return;
+  }
+  openPanelById(panel);
+  if (panel === 'panel-inventory') onTutorialAction('open_inventory');
+}
+
+/**
+ * Крестик в правом верхнем углу каждой панели.
+ *
+ * Ставится скриптом, а не в разметке: панелей 37, и вписать кнопку в каждую
+ * значит ещё 37 мест, где её можно забыть при добавлении новой панели.
+ * Повторный вызов ничего не дублирует — проверка по наличию кнопки.
+ */
+function installPanelCloseButtons(): void {
+  for (const panel of allPanels()) {
+    if (panel.querySelector(':scope > .panel-close')) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'panel-close';
+    btn.title = t('common.close');
+    btn.setAttribute('aria-label', t('common.close'));
+    btn.textContent = '×';
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      closePanel(panel.id);
+    });
+    panel.prepend(btn);
+  }
 }
 
 export async function enterWorld(character: Character): Promise<void> {
@@ -1054,29 +1130,23 @@ function wireInput(): void {
     } else if (e.code === 'Escape') {
       // Настройки закрывает собственный обработчик — меню не трогаем
       if (!$('overlay-settings')?.classList.contains('hidden')) return;
+      // Сначала закрываем панель. Раньше Esc только переключал меню, и панель
+      // оставалась на экране поверх него: открыть новую панель, накрыть её
+      // другой и убрать всё это было нечем.
+      if (closeAllPanels() > 0) return;
       document.getElementById('overlay-menu')?.classList.toggle('hidden');
     } else if (e.code === getBind('map')) {
       const overlay = document.getElementById('overlay-map');
       overlay?.classList.toggle('hidden');
       if (overlay && !overlay.classList.contains('hidden')) redrawWorldMap();
     } else if (e.code === getBind('character')) {
-      const panel = document.getElementById('panel-character');
-      panel?.classList.toggle('hidden');
-      if (panel && !panel.classList.contains('hidden')) loadPanelContent('panel-character');
+      togglePanel('panel-character');
     } else if (e.code === getBind('guild')) {
-      const panel = document.getElementById('panel-guild');
-      panel?.classList.toggle('hidden');
-      if (panel && !panel.classList.contains('hidden')) loadPanelContent('panel-guild');
+      togglePanel('panel-guild');
     } else if (e.code === getBind('quests')) {
-      const panel = document.getElementById('panel-quests-j');
-      panel?.classList.toggle('hidden');
-      if (panel && !panel.classList.contains('hidden')) void refreshQuestPanelJ();
+      togglePanel('panel-quests-j');
     } else if (e.code === getBind('inventory')) {
-      const panel = document.getElementById('panel-inventory');
-      panel?.classList.toggle('hidden');
-      // Клавиша I открывает панель так же, как клик по кнопке — иначе сумка пустая
-      if (panel && !panel.classList.contains('hidden')) void loadInventory();
-      onTutorialAction('open_inventory');
+      togglePanel('panel-inventory');
     } else if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
       const skill = session.skills[idx];
@@ -1135,20 +1205,24 @@ function wireInput(): void {
   };
 
   // Переключатели панелей
+  //
+  // ЧТО БЫЛО. Обработчик делал `classList.toggle('hidden')` сам, мимо
+  // openPanelById. Поэтому открытая панель не закрывала другие, а её
+  // содержимое не перезагружалось — панель показывала то, что нарисовалась
+  // в прошлый раз. Теперь всё идёт через togglePanel.
+  installPanelCloseButtons();
   for (const btn of document.querySelectorAll<HTMLButtonElement>('.panel-toggles button')) {
     btn.addEventListener('click', () => {
-      const panel = document.getElementById(btn.dataset.panel!);
-      panel?.classList.toggle('hidden');
-      btn.classList.toggle('active', !panel?.classList.contains('hidden'));
-      if (btn.dataset.panel === 'panel-regions') void loadRegions();
-      if (btn.dataset.panel === 'panel-quests') void loadQuests();
-      if (btn.dataset.panel === 'panel-inventory') {
-        void loadInventory();
-        // Шаг туториала засчитывается и по иконке мышью, не только по клавише I —
-        // иначе новичок, нажавший иконку, застрял бы на шаге
-        onTutorialAction('open_inventory');
-      }
-      loadPanelContent(btn.dataset.panel);
+      const panel = btn.dataset.panel;
+      if (!panel) return;
+      const wasOpen = !document.getElementById(panel)?.classList.contains('hidden');
+      togglePanel(panel);
+      // Повторный клик закрыл панель — закрывать её обработчику нечего
+      if (wasOpen) return;
+      if (panel === 'panel-regions') void loadRegions();
+      if (panel === 'panel-quests') void loadQuests();
+      if (panel === 'panel-inventory') void loadInventory();
+      loadPanelContent(panel);
     });
   }
 
