@@ -57,9 +57,10 @@ describe('Панель загрузок: контейнер не разруша�
 });
 
 describe('Горожане: не разбегаются по миру', () => {
-  it('центр прогулки можно передать — по умолчанию это город', () => {
-    // Раньше центр был зашит на CITY, и прогулки всегда шли в город
-    expect(civ).toMatch(/function freeSpot\(cx: number, cz: number, homeX = CITY\.x, homeZ = CITY\.z\)/);
+  it('центр прогулки и её радиус передаются явно', () => {
+    // Прежняя подпись кончалась на homeZ — радиуса блуждания не было
+    // вовсе, и freeSpot брал его константой.
+    expect(civ).toMatch(/wanderR = WANDER_R/);
   });
 
   it('дом горожанина — его собственный, а не позиция игрока', () => {
@@ -76,9 +77,39 @@ describe('Горожане: не разбегаются по миру', () => {
     expect(civ).toMatch(/homeX: p\.x, homeZ: p\.z/);
   });
 
-  it('в городе прогулки остаются тесными, в поле — просторнее', () => {
-    expect(civ).toMatch(/const inCity = Math\.hypot\(homeX - CITY\.x, homeZ - CITY\.z\) < HOME_R/);
-    expect(civ).toMatch(/const span = inCity \? HOME_R : 46/);
+  it('горожане живут в РАЙОНАХ, а не разбросаны по всему городу', () => {
+    // ТУТ БЫЛ ТЕСТ, ЗАКРЕПЛЯВШИЙ ПОЛОМКУ. Он требовал ровно этого:
+    //
+    //   const inCity = Math.hypot(homeX - CITY.x, homeZ - CITY.z) < HOME_R;
+    //   const span = inCity ? HOME_R : 46;
+    //
+    // То есть проверка падала бы, если бы горожане перестали расходиться на
+    // 85 м. А 85 м при радиусе города 116 м — это весь город: 22 горожанина
+    // на 42 000 м², одиноким человеком на квадрат 44×44 м. Замер: 4,5
+    // горожанина в радиусе 40 м, ближайший в 21,8 м. Город читался пустым.
+    // Игрок написал «в городе нет граждан» — и был прав.
+    //
+    // Теперь блуждание идёт вокруг дома на 16-20 м, а дома лежат в РАЙОНАХ.
+    const wander = Number(civ.match(/const WANDER_R = (\d+)/)?.[1]);
+    expect(wander).toBeGreaterThan(0);
+    expect(wander).toBeLessThanOrEqual(25);
+
+    // Районов несколько, и они описаны числами, а не «где получится»
+    const districts = civ.match(/\{ x: -?\d+, z: -?\d+, r: \d+ \}/g) ?? [];
+    expect(districts.length).toBeGreaterThanOrEqual(3);
+    // Ни один район не должен быть размером с полгорода
+    for (const d of districts) {
+      expect(Number(/r: (\d+)/.exec(d)![1])).toBeLessThanOrEqual(25);
+    }
+
+    // Каждый горожанин получает дом в одном из районов
+    expect(civ).toMatch(/DISTRICTS\[DISTRICT_PICK\[i % DISTRICT_PICK\.length\]\]/);
+
+    // Базару достаётся больше всех: он и есть главное людное место
+    const picks = /const DISTRICT_PICK: readonly number\[\] = \[([^\]]*)\]/.exec(civ)?.[1] ?? '';
+    const slots = picks.split(',').map((s) => s.trim()).filter(Boolean);
+    const bazaar = slots.filter((s) => s === '0').length;
+    expect(bazaar).toBeGreaterThan(slots.length / 3);
   });
 
   it('горожанин не лезет под ноги игроку', () => {
