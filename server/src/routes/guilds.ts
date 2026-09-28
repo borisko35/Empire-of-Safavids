@@ -41,9 +41,15 @@ router.get('/', authMiddleware, async (req: any, res) => {
 });
 
 router.get('/search', authMiddleware, async (req, res) => {
-  const q = String(req.query.q || '');
-  const results = await guilds.searchGuilds(q);
-  res.json({ guilds: results });
+  // Без try/catch ошибка БД уходила в unhandled rejection: ответ не
+  // отправлялся вовсе, клиент висел и получал 504
+  try {
+    const q = String(req.query.q || '');
+    const results = await guilds.searchGuilds(q);
+    res.json({ guilds: results });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 router.post('/create', authMiddleware, async (req: any, res) => {
