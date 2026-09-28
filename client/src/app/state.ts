@@ -99,6 +99,11 @@ export const session = {
   selfPos: { x: 0, z: 0 },
   /** Активная лодка (из панели рыбалки); null — игрок на суше */
   boat: null as null | { id: string; nameRu: string; waterSpeed: number; swimSpeed: number; fishingBonus: number; catchLimit: number },
+  /**
+   * Активный скакун: скорость приходит с сервера, потому что считается по
+   * таблице скакунов и уровню в character_mounts. null — игрок пешком.
+   */
+  mount: null as null | { id: string; nameRu: string; speed: number; level: number },
   level: 0, experience: 0,
   /**
    * Персонаж мёртв: открыт экран смерти, ходить и бить нельзя.
@@ -106,6 +111,11 @@ export const session = {
    * deathScreen, и 3D-слой не должен знать, как он выглядит.
    */
   dead: false,
+  /**
+   * Экипировка для 3D-аватара: вид оружия и цвет брони.
+   * null — сервер ещё не ответил, до тех пор показываем вид класса.
+   */
+  gear: null as null | { weapon: boolean; armorColor: number | null },
   /** Убийства за сессию: monsterId -> количество (для прогресса квестов) */
   kills: {} as Record<string, number>,
   /** Прогресс квестов с сервера: questId -> { status, progress } */

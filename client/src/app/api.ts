@@ -754,7 +754,11 @@ export const api = {
     req<{ tasks: any[]; completedCount: number }>(`/api/progression/tasks?characterId=${characterId}`),
   tasksProgress: (characterId: string) =>
     req<{ completedCount: number }>(`/api/progression/tasks/progress?characterId=${characterId}`),
-  reputation: () => req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>('/api/progression/reputation'),
+  // Персонаж обязателен: сервер ищет по character_reputation.character_id,
+  // а не по аккаунту. Раньше он не передавался, и панель всегда была пустой.
+  reputation: (characterId: string) =>
+    req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>(
+      `/api/progression/reputation?characterId=${characterId}`),
   factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
 
   // ── Питомцы ─────────────────────────────────────────────

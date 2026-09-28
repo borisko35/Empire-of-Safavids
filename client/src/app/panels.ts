@@ -941,6 +941,45 @@ export async function loadTrade(): Promise<void> {
 
 // ── Конюшня ──────────────────────────────────────────────
 
+/** Скакун в том виде, в каком его отдаёт сервер: скорость уже посчитана */
+interface MountView {
+  mount_id: string; name_ru: string; rarity: string;
+  level: number; speed: number; base_speed: number; max_speed: number;
+  is_active: boolean; carry_bonus: number;
+}
+
+/**
+ * Запомнить активного скакуна в сессии.
+ *
+ * Отсюда world.ts берёт скорость каждый кадр. Раньше скорость не хранилась
+ * нигде: MountSystem.getMountSpeed был написан, но не вызывался, и купленный
+ * конь не менял ровно ничего.
+ */
+function applyActiveMount(mounts: MountView[] | undefined): void {
+  const active = (mounts ?? []).find(m => m.is_active);
+  session.mount = active
+    ? { id: active.mount_id, nameRu: active.name_ru, speed: active.speed, level: active.level }
+    : null;
+}
+
+/**
+ * Загрузить список скакунов и применить активного.
+ *
+ * Вызывается и при входе в игру, и при открытии конюшни: скорость должна
+ * быть известна сразу, а не после первого захода в панель.
+ */
+export async function loadActiveMount(): Promise<void> {
+  if (!session.character) return;
+  try {
+    const { mounts } = await api.mountsMy(cid());
+    applyActiveMount(mounts as MountView[]);
+  } catch { /* конюшня недоступна — едем пешком */ }
+}
+
+const RARITY_RU: Record<string, string> = {
+  common: 'Обычный', rare: 'Редкий', epic: 'Эпик', legendary: 'Легендарный', mythical: 'Мифический',
+};
+
 export async function loadMounts(): Promise<void> {
   if (!session.character) return;
   const box = $('mount-stable-content');
@@ -948,17 +987,52 @@ export async function loadMounts(): Promise<void> {
   box.innerHTML = '';
 
   try {
-    // Скакуны, доступные в конюшне
+    const { mounts } = await api.mountsMy(cid());
+    const owned = (mounts ?? []) as MountView[];
+    applyActiveMount(owned);
+
+    // ── Свои скакуны ──
+    // Раньше этот раздел печатал только заголовок «Ваши скакуны (N)» и
+    // больше ничего: сами строки рисовались только для товаров конюшни.
+    // Конь из боевого пропуска в конюшне не продаётся — значит, надеть его
+    // было нечем, а «Верхом» без скорости ничего не давал.
+    const mine = document.createElement('div');
+    mine.className = 'panel-subhead';
+    mine.textContent = owned.length ? `Ваши скакуны (${owned.length})` : 'Скакунов пока нет';
+    box.append(mine);
+
+    for (const m of owned) {
+      const row = rowEl('inv-item');
+      const name = document.createElement('span');
+      name.className = 'inv-name';
+      name.textContent = m.name_ru;
+      const speed = document.createElement('span');
+      speed.className = 'inv-qty';
+      // Текущая скорость, а не диапазон: игроку важно, насколько быстро он
+      // поедет сейчас, а не на каком он уровне
+      speed.textContent = `⚡ ${m.speed} м/с`;
+      row.append(name, speed);
+      const info = document.createElement('span');
+      info.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
+      info.textContent =
+        `уровень ${m.level} · ${m.base_speed}–${m.max_speed} м/с` +
+        (m.carry_bonus ? ` · груз +${m.carry_bonus}` : '') +
+        (m.rarity in RARITY_RU ? ` · ${RARITY_RU[m.rarity]}` : '');
+      row.append(info);
+      const actBtn = actionButton(m.is_active ? '✔ Верхом' : 'Верхом', async () => {
+        await api.mountActivate(cid(), m.mount_id);
+        await loadMounts();
+        toast(m.is_active ? `${m.name_ru} отпущен` : `${m.name_ru} призываем`, 'success');
+      });
+      if (m.is_active) actBtn.style.opacity = '0.7';
+      row.append(actBtn);
+      box.append(row);
+    }
+
+    // ── Конюшня ──
     const { shops } = await api.shops();
     const stableShop = shops.find(s => s.id === 'shop_isfahan_stable');
     if (!stableShop) return;
-
-    // Текущие скакуны персонажа
-    const { mounts } = await api.mountsMy(cid());
-    const owned = new Map<string, any>();
-    for (const m of mounts ?? []) {
-      if (!owned.has(m.mount_id)) owned.set(m.mount_id, m);
-    }
 
     const title = document.createElement('div');
     title.className = 'panel-subhead';
@@ -975,61 +1049,34 @@ export async function loadMounts(): Promise<void> {
       price.className = 'inv-qty';
       price.textContent = `${cur2 === 'azens' ? 'AZENS' : 'gold'} ${item.price}`;
       row.append(name, price);
-      const info = document.createElement('span');
-      info.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
-      const def = MOUNT_DEFS[item.itemId];
-      if (def) {
-        info.textContent = `⚡ ${def.baseSpeed}–${def.maxSpeed} м/с · ${def.rarity === 'rare' ? 'Редкий' : def.rarity === 'common' ? 'Обычный' : 'Эпик'} · ур.${def.minLevel}+`;
+      if (owned.some(m => m.mount_id === item.itemId)) {
+        // Уже есть: покупать второй раз смысла нет, кнопка в списке сверху
+        const has = document.createElement('span');
+        has.style.cssText = 'color:#8a8; font-size:0.82em; width:100%';
+        has.textContent = 'уже есть в вашей конюшне';
+        row.append(has);
+        box.append(row);
+        continue;
       }
-      row.append(info);
-      const ownedMount = owned.get(item.itemId);
-      if (ownedMount) {
-        const actBtn = actionButton(ownedMount.is_active ? '✔ Верхом' : 'Верхом', async () => {
-          await api.mountActivate(cid(), item.itemId);
+      const buyBtn = actionButton('Купить', async () => {
+        const res = await api.mountsBuy('shop_isfahan_stable', cid(), item.itemId);
+        if (res.success && session.character) {
+          if (typeof res.gold === 'number') session.character.gold = res.gold;
+          if (typeof res.azens === 'number') session.character.azens = res.azens;
+          refreshBars();
+          toast(`${name.textContent} куплен!`, 'success');
           await loadMounts();
-          toast(`Скакун ${name.textContent} призываем`, 'success');
-        });
-        if (ownedMount.is_active) actBtn.style.opacity = '0.7';
-        const sellBtn = actionButton('Продать', async () => {
-          toast('Скакун продан', 'info');
-          await loadMounts();
-        });
-        sellBtn.style.opacity = '0.6';
-        row.append(actBtn, sellBtn);
-      } else {
-        const buyBtn = actionButton('Купить', async () => {
-          const res = await api.mountsBuy('shop_isfahan_stable', cid(), item.itemId);
-          if (res.success && session.character) {
-            if (typeof res.gold === 'number') session.character.gold = res.gold;
-            if (typeof res.azens === 'number') session.character.azens = res.azens;
-            refreshBars();
-            toast(`${name.textContent} куплен!`, 'success');
-            await loadMounts();
-          } else if (res && 'error' in res) {
-            toast(String(res.error), 'error');
-          }
-        });
-        row.append(buyBtn);
-      }
+        } else if (res && 'error' in res) {
+          toast(String(res.error), 'error');
+        }
+      });
+      row.append(buyBtn);
       box.append(row);
-    }
-
-    if (mounts?.length) {
-      const sub = document.createElement('div');
-      sub.className = 'panel-subhead';
-      sub.textContent = `Ваши скакуны (${mounts.length})`;
-      box.append(sub);
     }
   } catch {
     /* недоступно */
   }
 }
-
-const MOUNT_DEFS: Record<string, { baseSpeed: number; maxSpeed: number; rarity: string; minLevel: number }> = {
-  mount_arabian_horse:    { baseSpeed: 6, maxSpeed: 9,  rarity: 'common', minLevel: 1 },
-  mount_bactrian_camel:   { baseSpeed: 4.5, maxSpeed: 6.5, rarity: 'common', minLevel: 10 },
-  mount_qizilbash_warhorse: { baseSpeed: 7, maxSpeed: 11, rarity: 'rare', minLevel: 30 },
-};
 
 
 async function loadLeaderboard(): Promise<void> {
@@ -2160,30 +2207,87 @@ async function loadTower(): Promise<void> {
 
 // ── Репутация ──────────────────────────────────────────────
 
+/** Фракция с её лестницей рангов — приходит с сервера вместе с порогами. */
+interface FactionInfo {
+  id: string; name: string; nameRu: string;
+  ranks: { name: string; nameRu: string; minRep: number }[];
+}
+
+/** Ключ перевода ранга по его английскому названию: «Trade Prince» → trade_prince. */
+function rankKey(englishName: string): string {
+  return `reputation.rank.${englishName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+}
+
+/**
+ * Ранг по числу репутации.
+ *
+ * Считаем здесь, а не берём rank_title из ответа: сервер хранит в базе
+ * русское название, и в английской версии панель показывала бы «Тень».
+ * Если ключа перевода нет — откатываемся на серверное название.
+ */
+function rankOf(faction: FactionInfo, value: number): { label: string; next: number | null } {
+  let index = 0;
+  faction.ranks.forEach((r, i) => { if (value >= r.minRep) index = i; });
+  const current = faction.ranks[index];
+  const label = t(rankKey(current.name)) === rankKey(current.name) ? current.nameRu : t(rankKey(current.name));
+  const following = faction.ranks[index + 1];
+  return { label, next: following ? following.minRep : null };
+}
+
 async function loadReputation(): Promise<void> {
   const box = $('panel-reputation');
   if (!box) return;
   box.innerHTML = '';
+  const characterId = cid();
+  if (!characterId) {
+    box.innerHTML = `<div class="lb-empty">${t('reputation.no_character')}</div>`;
+    return;
+  }
   try {
-    const data = await api.reputation();
-    const factions = data.reputation ?? [];
-    if (!factions.length) {
-      const empty = document.createElement('div');
-      empty.className = 'lb-empty';
-      empty.textContent = 'Репутация пока не заработана';
-      box.append(empty);
-      return;
-    }
-    for (const r of factions) {
+    // Фракции берём отдельным запросом: там и все четыре (а не только те,
+    // где что-то начислено), и пороги рангов для полоски прогресса.
+    const [repData, factionData] = await Promise.all([
+      api.reputation(characterId),
+      api.factions(),
+    ]);
+    const mine = new Map((repData.reputation ?? []).map(r => [r.faction, r.reputation]));
+    const factions = (factionData.factions as FactionInfo[]) ?? [];
+
+    for (const f of factions) {
+      const value = mine.get(f.id) ?? 0;
+      const { label, next } = rankOf(f, value);
       const row = document.createElement('div');
-      row.className = 'friend-entry';
-      const pct = Math.min(100, Math.round((r.reputation / 1500) * 100));
-      row.innerHTML = `<span class="friend-name">${r.faction}</span>` +
-        `<span class="friend-info">${r.rank_title ?? 'Нейтрал'}</span>` +
-        `<span class="lb-value">${r.reputation} (${pct}%)</span>`;
+      row.className = 'rep-row';
+      const pct = next === null
+        ? 100
+        : Math.max(0, Math.min(100, Math.round(((value - lastThreshold(f, value)) / Math.max(1, next - lastThreshold(f, value))) * 100)));
+      const nameKey = `reputation.faction.${f.id}`;
+      const name = t(nameKey) === nameKey ? f.nameRu : t(nameKey);
+      row.innerHTML =
+        `<div class="rep-head">` +
+          `<span class="rep-faction">${name}</span>` +
+          `<span class="rep-rank">${label}</span>` +
+          `<span class="rep-num">${value}</span>` +
+        `</div>` +
+        `<div class="rep-bar"><i style="width:${pct}%"></i></div>` +
+        (next === null ? '' : `<div class="rep-next">${t('reputation.next_rank')}: ${next}</div>`);
       box.append(row);
     }
-  } catch { box.innerHTML = '<div class="lb-empty">Репутация недоступна</div>'; }
+
+    const hint = document.createElement('div');
+    hint.className = 'rep-hint';
+    hint.textContent = t('reputation.hint');
+    box.append(hint);
+  } catch {
+    box.innerHTML = `<div class="lb-empty">${t('reputation.unavailable')}</div>`;
+  }
+}
+
+/** Порог, с которого считается текущий шаг прогресса к следующему рангу. */
+function lastThreshold(faction: FactionInfo, value: number): number {
+  let min = faction.ranks[0]?.minRep ?? 0;
+  for (const r of faction.ranks) { if (value >= r.minRep) min = r.minRep; }
+  return min;
 }
 
 // ── Диспетчер панелей ────────────────────────────────────────

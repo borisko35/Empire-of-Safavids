@@ -48,6 +48,11 @@ export const FACTIONS: Faction[] = [
     ] },
 ];
 
+/** Фракции нужны за пределами сервиса: подписчику показываем, где ранг вырос. */
+export const FACTION_NAMES_RU: Record<string, string> = Object.fromEntries(
+  FACTIONS.map(f => [f.id, f.nameRu]),
+);
+
 export class ReputationService {
   private db = DatabaseService.getInstance();
 

@@ -4,6 +4,7 @@
 
 import { DatabaseService } from '../services/DatabaseService';
 import { RedisService } from '../services/RedisService';
+import { camelizeRow } from '../utils/camelize';
 import { logger } from '../utils/logger';
 
 export type MountType = 'horse' | 'camel' | 'elephant' | 'warhorse' | 'mythical';
@@ -32,6 +33,25 @@ export interface PlayerMount {
   isActive: boolean;
   customName?: string;
   acquiredAt: Date;
+}
+
+/** Скакун глазами игрока: строка базы плюс то, что считал сервер. */
+export interface PlayerMountView {
+  character_id: string;
+  mount_id: string;
+  level: number;
+  experience: number;
+  is_active: boolean;
+  acquired_at: Date;
+  /** Скорость шагом с учётом уровня скакуна */
+  speed: number;
+  base_speed: number;
+  max_speed: number;
+  name: string;
+  name_ru: string;
+  rarity: MountDefinition['rarity'];
+  carry_bonus: number;
+  combat_allowed: boolean;
 }
 
 export const MOUNTS: Record<string, MountDefinition> = {
@@ -172,10 +192,61 @@ export class MountSystem {
     return def.baseSpeed + (def.maxSpeed - def.baseSpeed) * t;
   }
 
-  async getCharacterMounts(characterId: string): Promise<PlayerMount[]> {
-    return this.db.query<PlayerMount>(
+  /**
+   * Скорость скакуна с учётом его уровня.
+   *
+   * Уровень берётся из character_mounts.level, а не из аргумента: раньше
+   * метод был написан, но не вызывался нигде, поэтому купленный конь не
+   * давал скорости вообще, а расти ему было нечем.
+   */
+  async getActiveMount(characterId: string): Promise<{ mount: PlayerMount; def: MountDefinition; speed: number } | null> {
+    // camelizeRow, а не голый SELECT *: PostgreSQL отдаёт mount_id и
+    // is_active, а интерфейс PlayerMount обещает mountId и isActive. Без
+    // перевода типа врут, и обращение к полю падает
+    const row = await this.db.queryOne<Record<string, unknown>>(
+      'SELECT * FROM character_mounts WHERE character_id = $1 AND is_active = TRUE',
+      [characterId]
+    );
+    const mount = camelizeRow<PlayerMount>(row);
+    if (!mount) return null;
+    const def = MOUNTS[mount.mountId];
+    // Запись в базе без записи в MOUNTS — грязь после правки таблицы.
+    // Молча возвращаем null: едем пешком, а не падаем на каждом шагу
+    if (!def) return null;
+    return { mount, def, speed: this.getMountSpeed(def, mount.level) };
+  }
+
+  /**
+   * Все скакуны персонажа вместе с их скоростью и названиями.
+   *
+   * Раньше клиент держал свою копию таблицы MOUNTS, причём на три скакуна
+   * из шести: боевой слон, Симург и корабль показывались без описания.
+   * Скорость считает сервер, у клиента своей копии больше нет.
+   */
+  async listForPlayer(characterId: string): Promise<PlayerMountView[]> {
+    const rows = await this.db.query<Record<string, unknown>>(
       'SELECT * FROM character_mounts WHERE character_id = $1 ORDER BY acquired_at DESC',
       [characterId]
     );
+    return rows.map(raw => {
+      const row = camelizeRow<PlayerMount>(raw)!;
+      const def = MOUNTS[row.mountId];
+      return {
+        character_id: row.characterId,
+        mount_id: row.mountId,
+        level: row.level,
+        experience: row.experience,
+        is_active: row.isActive,
+        acquired_at: row.acquiredAt,
+        base_speed: def?.baseSpeed ?? 0,
+        max_speed: def?.maxSpeed ?? 0,
+        speed: def ? this.getMountSpeed(def, row.level) : 0,
+        name: def?.name ?? row.mountId,
+        name_ru: def?.nameRu ?? row.mountId,
+        rarity: def?.rarity ?? 'common',
+        carry_bonus: def?.carryBonus ?? 0,
+        combat_allowed: def?.combatAllowed ?? false,
+      };
+    });
   }
 }

@@ -845,5 +845,39 @@
     "sandstorm": "Qum fırtınası",
     "snow": "Qar",
     "wind": "Külək"
+  },
+  "reputation": {
+    "hint": "Qızılbaşı — canavar öldürmə, Sufilər — tapşırıqlar, Ticarətçilər — auksiyon, Assasinlər — PvP qələbələri.",
+    "no_character": "Personaj seçilməyib",
+    "unavailable": "Reputasiya əlçatan deyil",
+    "next_rank": "Növbəti ranga",
+    "faction": {
+      "qizilbash": "Qızılbaşı hökmdarlığı",
+      "sufi": "Sufi mistikləri",
+      "merchants": "İpək Yolu ticarətçiləri",
+      "assassins": "Assasinlər hökmdarlığı"
+    },
+    "rank": {
+      "outsider": "Qərib",
+      "recruit": "Yeni əsgər",
+      "warrior": "Döyüşçü",
+      "commander": "Komandir",
+      "champion": "Çempion",
+      "seeker": "Axtarışçı",
+      "adept": "Müqəddəs",
+      "mystic": "Mistik",
+      "sage": "Müdrik",
+      "illuminated": "Nurani",
+      "peddler": "Səyyar satıcı",
+      "trader": "Ticarətçi",
+      "merchant": "Sahibkar",
+      "magnate": "Ticarət nəhangi",
+      "trade_prince": "Ticarət şahzadəsi",
+      "shadow": "Kölgə",
+      "blade": "Qılınc",
+      "assassin": "Assasin",
+      "master": "Ustad",
+      "phantom": "Xəyal"
+    }
   }
 }

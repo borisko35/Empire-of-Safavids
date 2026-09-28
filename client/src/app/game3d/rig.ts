@@ -44,6 +44,13 @@ export interface Rig {
   equipShield: (visible: boolean) => void;
   isWeaponEquipped: () => boolean;
   isShieldEquipped: () => boolean;
+  /**
+   * Цвет надетой брони на груди; null — без брони (цвет класса).
+   *
+   * Раньше внешний вид вообще не зависел от того, что надето: у всех стоял
+   * один и тот же силуэт класса, поэтому смена доспеха не была видна.
+   */
+  setArmorTint: (color: number | null) => void;
   dispose: () => void;
 }
 
@@ -390,6 +397,11 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
     },
     isWeaponEquipped() { return weaponOn; },
     isShieldEquipped() { return shieldOn; },
+    setArmorTint(color) {
+      // Тон груди. Перекрашиваем материал халата, а не создаём второй меш:
+      // иначе на каждый доспех плодилась бы копия геометрии
+      robe.color.setHex(color ?? cfg.robe);
+    },
     dispose() {
       group.traverse((o) => {
         const mesh = o as THREE.Mesh;
@@ -503,6 +515,7 @@ function buildDemon(): Rig {
     equipShield() {},
     isWeaponEquipped() { return false; },
     isShieldEquipped() { return false; },
+    setArmorTint() {},
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }
@@ -581,6 +594,7 @@ function buildSimurgh(): Rig {
     equipShield() {},
     isWeaponEquipped() { return false; },
     isShieldEquipped() { return false; },
+    setArmorTint() {},
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }
@@ -733,6 +747,7 @@ function buildFish(cfg: FishCfg): Rig {
     equipShield() {},
     isWeaponEquipped() { return false; },
     isShieldEquipped() { return false; },
+    setArmorTint() {},
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }
@@ -820,6 +835,7 @@ function buildScorpion(): Rig {
     equipWeapon() {}, equipShield() {},
     isWeaponEquipped() { return false; },
     isShieldEquipped() { return false; },
+    setArmorTint() {},
     dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
   };
 }

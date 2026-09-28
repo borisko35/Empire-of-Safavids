@@ -35,6 +35,9 @@ const MAX_TELEPORT_DISTANCE = 20.0;
 // Порог нарушений до автобана
 const AUTO_BAN_VIOLATIONS = 5;
 
+/** Предел скорости для игрока верхом: пеший плюс скорость скакуна */
+export const MOUNT_ANTICHEAT_CAP_FLOOR = 12.0;
+
 export class AntiCheatSystem {
   private db    = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
@@ -50,7 +53,14 @@ export class AntiCheatSystem {
   validateMovement(
     characterId: string,
     newPos: Vector3,
-    now: number = Date.now()
+    now: number = Date.now(),
+    // Разрешённая скорость для этого игрока. По умолчанию — пешая.
+    //
+    // Раньше параметра не было, и предел был один на всех: игрок на Симурге
+    // (16 м/с) неизбежно ловил speed_hack за честную езду. Скорость
+    // скакуна приходит сюда от MountSystem — то есть из character_mounts,
+    // а не из присланного пакета: подделать её движением нельзя.
+    maxSpeed: number = MAX_SPEED
   ): { valid: boolean; reason?: string } {
     const last = this.lastPositions.get(characterId);
 
@@ -77,8 +87,8 @@ export class AntiCheatSystem {
       }
 
       // Проверка speed hack
-      if (distance / dt > MAX_SPEED * 1.3) { // +30% толерантность
-        return { valid: false, reason: `Speed hack: ${(distance / dt).toFixed(1)} u/s (max ${MAX_SPEED}) @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
+      if (distance / dt > maxSpeed * 1.3) { // +30% толерантность
+        return { valid: false, reason: `Speed hack: ${(distance / dt).toFixed(1)} u/s (max ${maxSpeed.toFixed(1)}) @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
       }
     }
 

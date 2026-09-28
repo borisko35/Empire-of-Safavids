@@ -409,6 +409,18 @@ export function renderEquipment(equipment: {
   items: { slot: string; nameRu: string; rarity: string; enhancement: number }[];
   stats: Record<string, number>;
 }): void {
+  // Сначала 3D-аватар, потом панель. Раньше вид персонажа вообще не зависел
+  // от надетого: оружие и щит выводились из класса, так что смена доспеха
+  // была видна только в панели. Именно сюда приходит экипировка и при
+  // надевании, и при снятии, и при открытии инвентаря.
+  const equipped = new Map(equipment.items.map(i => [i.slot, i]));
+  const armor = equipped.get('armor');
+  session.gear = {
+    weapon: equipped.has('weapon'),
+    // Цвет груди — по редкости доспеха: замена брони должна быть видна
+    armorColor: armor ? parseInt((RARITY_COLOR[armor.rarity] ?? RARITY_COLOR.common).slice(1), 16) : null,
+  };
+
   const box = $('equipment-summary');
   if (!box) return;
   box.innerHTML = '';

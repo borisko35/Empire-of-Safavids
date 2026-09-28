@@ -12,6 +12,10 @@ import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { PvPService } from '../services/PvPService';
+import { FACTION_NAMES_RU } from '../services/ReputationService';
+import { grantReputation } from '../systems/ReputationGrants';
+import { MountSystem } from '../systems/MountSystem';
+import { MOUNT_ANTICHEAT_CAP_FLOOR } from '../systems/AntiCheatSystem';
 import { pvpArena } from '../systems/PvpArenaService';
 import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
@@ -86,6 +90,7 @@ export class GameSocketHandler {
   private worldEvents = WorldEventSystem.getInstance();
   private dailyTasks = new DailyTaskService();
   private partySystem = new PartySystem();
+  private mounts = new MountSystem();
 
   // Активные игроки: characterId -> сокет
   private activePlayers = new Map<string, AuthenticatedSocket>();
@@ -110,6 +115,16 @@ export class GameSocketHandler {
   private lastQuestEval = new Map<string, number>();
   // Серия лёгких атак (комбо): characterId -> { count, lastAt }
   private comboChains = new Map<string, { count: number; lastAt: number }>();
+  // Скакун: characterId -> { mountId, speed } — последняя известная серверу
+  // скорость. Кэш, а не источник истины: истина в character_mounts, но
+  // античит спрашивает скорость на каждом пакете движения (десятки в
+  // секунду), а ходить в базу так часто нельзя
+  private mountSpeeds = new Map<string, { mountId: string; speed: number }>();
+  // Откуда отсчитывать путь для опыта скакуна: characterId -> позиция
+  private mountExpAt = new Map<string, { x: number; z: number }>();
+  // Игроки, вошедшие в игру внутри здания: им прощается первый пакет
+  // движения. Одноразовая отсрочка, снимается при первом же движении
+  private insideSpawnGrace = new Set<string>();
 
   /** Широковещательное объявление мирового события — только шарду события */
   broadcastWorldEvent(payload: Record<string, unknown>): void {
@@ -444,6 +459,19 @@ export class GameSocketHandler {
       // Базовая точка античита = точка спавна: первый пакет движения
       // после входа не должен считаться телепортом от старой позиции
       this.antiCheat.resetPosition(character.id, character.position);
+      // Если игрок вошёл в игру внутри здания, первый пакет движения
+      // прощаем. Причина конкретная: комнаты интерьеров лежат ЗА границей
+      // мира (комната у тракта около x=2500 при WORLD_HALF = 1200), и клиент
+      // на первом кадре клампит позицию к границе, если не восстановил
+      // режим «внутри». Сервер видит скачок больше тысячи метров, считает его
+      // телепортом и кикает. Пять таких переподключений за сутки — и
+      // AutoCheatSystem вешает перманентный бан за «читерство».
+      //
+      // Клиент это уже чинит (enterBuildingLocalAt при входе в мир), но старый
+      // бандл в кэше браузера ещё неделю будет жить, а бан необратим.
+      if (Object.values(INTERIORS).some(d => isInsideRoom(d, character.position.x, character.position.z))) {
+        this.insideSpawnGrace.add(character.id);
+      }
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
 
@@ -508,7 +536,16 @@ export class GameSocketHandler {
     if (this.deadPlayers.has(characterId)) return;
 
     // Скорость / телепорт
-    const moveCheck = this.antiCheat.validateMovement(characterId, data.position);
+    //
+    // Предел берётся из активного скакуна. Пока скорость кэширована, берём
+    // её из памяти: в базу за скоростью не ходят на каждом пакете (их
+    // десятки в секунду). Кэш пуст при первом движении после входа — тогда
+    // читаем один раз, не дожидаясь: первый пакет всё равно медленный.
+    if (!this.mountSpeeds.has(characterId)) void this.refreshMountSpeed(characterId);
+    const mountSpeed = this.mountSpeeds.get(characterId)?.speed ?? 0;
+    const moveCheck = this.antiCheat.validateMovement(
+      characterId, data.position, Date.now(), MOUNT_ANTICHEAT_CAP_FLOOR + mountSpeed
+    );
     if (!moveCheck.valid) {
       // Амнистия переходов у дверей и внутри комнат: легальный вход/выход
       // (включая старые клиенты без ack и граничные случаи) никогда не кикает.
@@ -517,7 +554,10 @@ export class GameSocketHandler {
       const legal = Object.values(INTERIORS).some(
         (d) => isInsideRoom(d, px, pz) || Math.hypot(px - d.doorX, pz - d.doorZ) <= 30
       );
-      if (legal) {
+      // Вход в игру внутри здания: прощаем ОДИН пакет и снимаем отсрочку.
+      // Игрок оказывается у границы мира не по своей воле, и наказывать его
+      // за переподключение нельзя — иначе пять переподключений дают бан
+      if (legal || this.insideSpawnGrace.delete(characterId)) {
         this.antiCheat.resetPosition(characterId, data.position);
       } else {
         await this.punish(socket, 'speed_hack', moveCheck.reason ?? 'invalid movement', 2);
@@ -540,6 +580,11 @@ export class GameSocketHandler {
         socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: done });
       }
       this.lastQuestEval.set(characterId, now);
+      // Активный скакун мог смениться (игрок нажал «Верхом» в конюшне), а
+      // предел скорости у античита обязан это увидеть
+      await this.refreshMountSpeed(characterId);
+      // Опыт скакуну за пройденный путь
+      await this.grantMountExperience(characterId, data.position);
     }
 
     // Транслировать другим игрокам в регионе
@@ -549,6 +594,68 @@ export class GameSocketHandler {
       direction: data.direction,
       timestamp: now,
     });
+  }
+
+  /**
+   * Перечитать активного скакуна и обновить кэш скорости.
+   *
+   * Кэш, а не истина: истина в character_mounts, но античит спрашивает
+   * скорость на каждом пакете движения, а ходить в базу десятки раз в
+   * секунду нельзя. Обновляется раз в 5 секунд (в том же блоке, что и запись
+   * позиции) и при первом движении после входа.
+   */
+  private async refreshMountSpeed(characterId: string): Promise<void> {
+    try {
+      const active = await this.mounts.getActiveMount(characterId);
+      if (active) {
+        this.mountSpeeds.set(characterId, { mountId: active.mount.mountId, speed: active.speed });
+      } else {
+        this.mountSpeeds.set(characterId, { mountId: '', speed: 0 });
+      }
+    } catch {
+      // База недоступна — едем с пешим пределом. Лучше рискнуть киком на
+      // ездоке, чем обрушить движение всем
+      this.mountSpeeds.set(characterId, { mountId: '', speed: 0 });
+    }
+  }
+
+  /**
+   * Опыт активному скакуну за пройденный путь.
+   *
+   * Раньше addMountExperience не вызывался нигде, поэтому уровень скакуна
+   * всегда оставался первым, а getMountSpeed — мёртвым кодом: скорость
+   * зависела только от baseSpeed и никогда не росла.
+   *
+   * Отсчёт идёт от прошлой точки замера, а не от позиции входа в игру: иначе
+   * первое сохранение после долгого отсутствия засчитало бы путь, который
+   * игрок прошёл вчера. Точка замера ставится в этом же методе, поэтому
+   * повторный вызов в ту же секунду пути не начислит.
+   */
+  private async grantMountExperience(characterId: string, pos: { x: number; z: number }): Promise<void> {
+    const mount = this.mountSpeeds.get(characterId);
+    if (!mount?.mountId) return;   // пешком — опыта скакуну не идёт
+    const last = this.mountExpAt.get(characterId);
+    this.mountExpAt.set(characterId, { x: pos.x, z: pos.z });
+    if (!last) return;    // первый замер: базы для пути ещё нет
+
+    const meters = Math.hypot(pos.x - last.x, pos.z - last.z);
+    // Скорость ~7 м/с, опыт 1 за 10 м: десятый уровень — около 40 км пути,
+    // то есть полтора-два часа верховой езды за игру
+    const exp = Math.floor(meters / 10);
+    if (exp <= 0) return;
+    try {
+      const res = await this.mounts.addMountExperience(characterId, mount.mountId, exp);
+      if (res.leveledUp) {
+        // Скорость выросла — обновляем и кэш, и игрока: иначе езда была бы
+        // быстрее прежней, а предел античита остался бы старым
+        await this.refreshMountSpeed(characterId);
+        this.activePlayers.get(characterId)?.emit(SERVER_EVENTS.NOTIFICATION, {
+          type: 'mount_level',
+          titleRu: 'Скакун окреп',
+          bodyRu: `Уровень ${res.newLevel}`,
+        });
+      }
+    } catch { /* скакун мог быть удалён или снят — это не повод ронять игру */ }
   }
 
   // ============================================================
@@ -874,6 +981,18 @@ export class GameSocketHandler {
       // Начисляем награду убийце: опыт, золото и лут из таблицы монстра
       const def = monsterCtx.definition;
       const reward = await this.characterService.addExperience(attacker.id, def.expReward);
+
+      // Репутация за убийство. Раньше не начислялась: addReputation был
+      // написан и не вызывался. Повышение ранга показываем игроку — иначе
+      // единственным признаком того, что репутация растёт, было бы число,
+      // которое игрок и не смотрел бы.
+      void grantReputation(attacker.id, 'monsterKill', (faction, rankRu) => {
+        socket.emit(SERVER_EVENTS.NOTIFICATION, {
+          type: 'rank_up',
+          titleRu: 'Новый ранг',
+          bodyRu: `${FACTION_NAMES_RU[faction] ?? faction}: ${rankRu}`,
+        });
+      });
 
       const gold = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
       await this.characterService.addGold(attacker.id, gold).catch(() => {});
@@ -1451,6 +1570,13 @@ export class GameSocketHandler {
     this.lastPositionPersist.delete(socket.characterId);
     this.lastQuestEval.delete(socket.characterId);
     this.comboChains.delete(socket.characterId);
+    // Кэши скакуна: иначе после выхода и возврата игрок поехал бы со
+    // старой скоростью, пока не обновится
+    this.mountSpeeds.delete(socket.characterId);
+    this.mountExpAt.delete(socket.characterId);
+    // Отсрочка первого пакета — на одну сессию. Без удаления игрок,
+    // вошедший в здании, получил бы её снова при следующем входе
+    this.insideSpawnGrace.delete(socket.characterId);
     // Задержки чата тоже: иначе карта росла бы на каждого зашедшего игрока
     // и держала в памяти его id до перезапуска сервера
     this.chatLastSent.delete(socket.characterId);

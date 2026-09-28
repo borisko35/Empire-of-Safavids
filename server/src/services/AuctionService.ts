@@ -5,6 +5,7 @@
 import { DatabaseService } from './DatabaseService';
 import { RedisService } from './RedisService';
 import { NotificationService } from './NotificationService';
+import { grantReputation } from '../systems/ReputationGrants';
 import { logger } from '../utils/logger';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { AUCTION_LISTING_FEE_SILVER } from '../utils/economy';
@@ -198,6 +199,9 @@ export class AuctionService {
     await this.redis.publish('auction:new_listing', { itemId, price });
 
     logger.info(`Auction listing created: ${itemId} x${quantity} for ${price}g by ${sellerId}`);
+    // Репутация за торговлю. Раньше не начислялась нигде — фракция
+    // «Торговцы Шёлкового пути» не могла подняться в принципе.
+    void grantReputation(listing.sellerId, 'auctionSale');
     return listing;
   }
 

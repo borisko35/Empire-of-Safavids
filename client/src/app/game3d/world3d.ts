@@ -36,11 +36,21 @@ export interface World3DCallbacks {
   onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string) => void;
 }
 
+/** Экипировка своего персонажа, видимая на 3D-аватаре */
+export interface LocalGear {
+  /** Оружие надето — в руке видно клинок */
+  weapon: boolean;
+  /** Цвет груди по редкости доспеха; null — брони нет */
+  armorColor: number | null;
+}
+
 const GRAVITY = 20;
 const JUMP_V = 7.6;
 const WALK_SPEED = 4.2;
 const RUN_SPEED = 7.6;
 const CROUCH_SPEED = 2.2;
+/** Во сколько раз бег верхом быстрее шага верхом */
+const MOUNT_SPRINT_MULT = 1.4;
 const PLAYER_R = 1.0;   // радиус персонажа для столкновений
 const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
 
@@ -119,6 +129,22 @@ export class World3D {
   private boatStaminaSave = 0;
   /** Скорость в воде на лодке, м/с */
   private boatSwimSpeed = 0;
+  /**
+   * Активный скакун: его скорость шагом, м/с. 0 — пешком.
+   *
+   * Скорость Скакуна ЗАМЕНЯет пешую, а не прибавляется. Числа в таблице
+   * скакунов (3.5–12 м/с) меньше бега пешком (7.6), так что «скорость +
+   * бонус» означало бы, что дорогой Симург едет медленнее, чем бег без
+   * него. Шагом едем на полной скорости скакуна, бегом — в 1.4 раза быстрее.
+   */
+  private mountSpeed = 0;
+  /**
+   * Экипировка своего персонажа для рига; null — сервер ещё не ответил.
+   *
+   * armorColor — цвет груди по редкости доспеха, чтобы смена брони была видна
+   * не только в панели.
+   */
+  private localGear: LocalGear | null = null;
   /** Сколько секунд осталось показывать «выдохся» после конца стамины */
   private exhaustedFlash = 0;
   private stepTimer = 0;
@@ -173,9 +199,19 @@ export class World3D {
     this.boatSwimSpeed = boatId ? Math.max(0, swimSpeed) : 0;
   }
 
+  /**
+   * Скорость активного скакуна (шагом), 0 — игрок пешком.
+   *
+   * Число присылает сервер вместе со списком скакунов: считать скорость на
+   * клиенте нельзя, там своя копия таблицы, которая разошлась с серверной.
+   * Предел скорости у античита тоже считает сервер — из character_mounts.
+   */
+  setMountSpeed(speed: number): void {
+    this.mountSpeed = Number.isFinite(speed) && speed > 0 ? speed : 0;
+  }
+
   /** Хватает ли выносливости на бег (и на усиленное плавание) */
-  setSprintAllowed(v: boolean): void {
-    // Момент, когда силы кончились, — один раз подсказываем игроку
+  setSprintAllowed(v: boolean): void {    // Момент, когда силы кончились, — один раз подсказываем игроку
     if (this.sprintAllowed && !v) this.exhaustedFlash = 0.4;
     this.sprintAllowed = v;
   }
@@ -204,32 +240,18 @@ export class World3D {
   /** Последнее направление движения в мировых координатах (для пакетов player:move) */
   get moveDir() { return this.lastDir; }
 
-  /** Экипировать/снять оружие у персонажа */
-  equipPlayerWeapon(show: boolean): void {
-    if (!this.me) return;
-    const b = this.rigs.get(this.me.id);
-    if (b && b.kind === 'player') b.rig.equipWeapon(show);
-  }
-
-  /** Экипировать/снять щит у персонажа */
-  equipPlayerShield(show: boolean): void {
-    if (!this.me) return;
-    const b = this.rigs.get(this.me.id);
-    if (b && b.kind === 'player') b.rig.equipShield(show);
-  }
-
-  /** Проверить, экипировано ли оружие */
-  isPlayerWeaponEquipped(): boolean {
-    if (!this.me) return false;
-    const b = this.rigs.get(this.me.id);
-    return b && b.kind === 'player' ? b.rig.isWeaponEquipped() : false;
-  }
-
-  /** Проверить, экипирован ли щит */
-  isPlayerShieldEquipped(): boolean {
-    if (!this.me) return false;
-    const b = this.rigs.get(this.me.id);
-    return b && b.kind === 'player' ? b.rig.isShieldEquipped() : false;
+  /**
+   * Экипировка своего персонажа для 3D-рига.
+   *
+   * ЧТО БЫЛО. Вид оружия и щита выводился из класса, а не из того, что надето:
+   * суфий с купленным мечом ходил без меча, кызылбаш без оружия — с мечом.
+   * Слот щита в игре вообще нет (weapon, armor, accessory), поэтому щит
+   * остаётся классовым: это не забытый код, а решение.
+   */
+  setLocalGear(gear: LocalGear | null): void {
+    // null — «экипировка ещё не пришла», и риг показывает классовый вид.
+    // Объект с weapon: false — «пришла, оружия нет», и меч убирается
+    this.localGear = gear;
   }
 
   // ── Инициализация ────────────────────────────────────────────
@@ -710,14 +732,20 @@ export class World3D {
         b.rig.group.userData.playerId = id;
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
-        // Экипировка по умолчанию: оружие класса видно, щит только для Кызылбаша
-        const isLocal = id === this.me?.id;
-        if (isLocal) {
-          const hasWeapon = p.charClass !== 'sufi_mystic';
-          const hasShield = p.charClass === 'qizilbash';
-          b.rig.equipWeapon(hasWeapon);
-          b.rig.equipShield(hasShield);
+      }
+      // Свой персонаж: вид — из надетого, а не из класса. Применяем на каждом
+      // проходе, а не только при создании рига: игрок надевает и снимает
+      // вещи на ходу, и без этого риг обновлялся бы только при входе в игру
+      if (id === this.me?.id) {
+        if (this.localGear) {
+          b.rig.equipWeapon(this.localGear.weapon);
+          b.rig.setArmorTint(this.localGear.armorColor);
+        } else {
+          // Экипировка ещё не пришла с сервера: показываем то, что даёт класс
+          b.rig.equipWeapon(p.charClass !== 'sufi_mystic');
         }
+        // Щит классовый: слота щита в игре нет (weapon, armor, accessory)
+        b.rig.equipShield(p.charClass === 'qizilbash');
       }
       // Высота тела — из логической позиции (мосты, плавание, интерьеры),
       // а не из ландшафта: иначе тело «улетает» на горы в кармане
@@ -952,9 +980,16 @@ export class World3D {
     const swimSpeed = SWIM_SPEED + (WALK_SPEED - SWIM_SPEED) * waterBonus;
     const swimSprint = SWIM_SPRINT + (RUN_SPEED - SWIM_SPRINT) * waterBonus;
     const boatSpeed = this.boatId ? this.boatSwimSpeed : 0;
+    // Скакун меняет скорость на суше: шагом — его полная, бегом — в 1.4 раза
+    // больше. В воде скакун не помогает (там лодка и сапоги), иначе конь
+    // ускорял бы ещё и плавление.
+    // Приседание всегда оставляет пешую скорость: это «крадусь тихо», и
+    // верхом красться бессмысленно.
+    const landWalk = this.mountSpeed > 0 ? this.mountSpeed : WALK_SPEED;
+    const landRun = this.mountSpeed > 0 ? this.mountSpeed * MOUNT_SPRINT_MULT : RUN_SPEED;
     const speed = (this.swimming
       ? (shifting ? Math.max(swimSprint, boatSpeed * 1.25) : Math.max(swimSpeed, boatSpeed))
-      : this.crouch ? CROUCH_SPEED : shifting ? RUN_SPEED : WALK_SPEED)
+      : this.crouch ? CROUCH_SPEED : shifting ? landRun : landWalk)
       * (wading ? wadeMult : 1);
     // Направление камеры в мире (нужно и для поворота рига ниже)
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);

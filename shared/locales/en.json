@@ -845,5 +845,39 @@
     "sandstorm": "Sandstorm",
     "snow": "Snow",
     "wind": "Wind"
+  },
+  "reputation": {
+    "hint": "Qizilbash — monster kills, Sufi — quests, Merchants — auctions, Assassins — PvP wins.",
+    "no_character": "No character selected",
+    "unavailable": "Reputation unavailable",
+    "next_rank": "Next rank at",
+    "faction": {
+      "qizilbash": "Qizilbash Order",
+      "sufi": "Sufi Mystics",
+      "merchants": "Silk Road Merchants",
+      "assassins": "Order of Assassins"
+    },
+    "rank": {
+      "outsider": "Outsider",
+      "recruit": "Recruit",
+      "warrior": "Warrior",
+      "commander": "Commander",
+      "champion": "Champion",
+      "seeker": "Seeker",
+      "adept": "Adept",
+      "mystic": "Mystic",
+      "sage": "Sage",
+      "illuminated": "Illuminated",
+      "peddler": "Peddler",
+      "trader": "Trader",
+      "merchant": "Merchant",
+      "magnate": "Magnate",
+      "trade_prince": "Trade Prince",
+      "shadow": "Shadow",
+      "blade": "Blade",
+      "assassin": "Assassin",
+      "master": "Master",
+      "phantom": "Phantom"
+    }
   }
 }

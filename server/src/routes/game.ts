@@ -1098,7 +1098,9 @@ gameRouter.post('/mounts/my', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const { characterId } = req.body;
     if (!characterId) return res.status(400).json({ error: 'characterId required' });
-    const mounts = await mountSystem.getCharacterMounts(characterId);
+    // Скорость и названия считает сервер: у клиента была своя копия таблицы
+    // скакунов на три записи из шести, и половина описаний не показывалась
+    const mounts = await mountSystem.listForPlayer(characterId);
     return res.json({ mounts });
   })
 );

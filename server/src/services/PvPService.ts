@@ -3,6 +3,7 @@
 // ============================================================
 
 import { DatabaseService } from './DatabaseService';
+import { grantReputation } from '../systems/ReputationGrants';
 import { logger } from '../utils/logger';
 
 export interface PvPMatch {
@@ -249,6 +250,10 @@ export class PvPService {
     await this.updateRanking(loserId, loserNewRating, false);
 
     logger.info(`[PvP] Match ${match.id} won by ${winnerId} (${winnerChange >= 0 ? '+' : ''}${winnerChange})`);
+    // Репутация за победу — фракция Ассасинов, и раньше не начислялась.
+    // Стоим ПОСЛЕ проверки done.length: если матч уже закрыт другим запросом,
+    // награда не должна начислиться второй раз, как и рейтинг.
+    void grantReputation(winnerId, 'pvpWin');
     return { status: 'settled', winnerId, winnerChange, loserChange, winnerNewRating, loserNewRating };
   }
 

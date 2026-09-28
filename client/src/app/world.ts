@@ -8,7 +8,7 @@ import { api } from './api';
 import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
-import { loadPanelContent, checkWaterDanger, resetWaterDanger } from './panels';
+import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount } from './panels';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
@@ -505,12 +505,33 @@ export async function enterWorld(character: Character): Promise<void> {
   };
   world.players.set(me.id, me);
   world3d.attach(world, me);
+  // Восстановить состояние «внутри здания» по позиции спавна.
+  //
+  // ЧТО БЫЛО. Метод enterBuildingLocalAt был написан с этой самой целью и
+  // комментарием, но его не вызывал НИКТО. Комнаты интерьеров лежат за
+  // границей мира (комната у тракта около x=2500, а WORLD_HALF = 1200),
+  // поэтому при входе внутрь здания выполнялся кламп границ: игрок
+  // оказывался в (1170, 1170), а сервер видел скачок больше тысячи метров
+  // и отвечал punish(speed_hack) — кик. Пять таких переподключений подряд,
+  // и AntiCheatSystem вешал permanent-бан.
+  //
+  // Телепорта и пакета тут нет: сервер сам сбросил трекинг при авторизации,
+  // нужно только вернуть клиенту правильный режим.
+  const inside = world3d.enterBuildingLocalAt(me.pos.x, me.pos.z);
+  if (inside) toast(t('world.inside_enter').replace('{name}', inside), 'info');
   markLoading(0.85, t('loading.connecting'));
   await nextPaint();
   fillMenuInfo();
   wireSettings();
   void loadAdminRights();
   void loadBuffs();
+  // Активный скакун: без этого игрок входит в игру пешком, даже если
+  // оставил коня в конюшне. Скорость нужна с первой секунды, а не после
+  // первого захода в конюшню
+  void loadActiveMount();
+  // Экипировка — тоже сразу: иначе аватар до первого открытия инвентаря
+  // ходит с классовым оружием вместо надетого
+  void loadInventory();
   if (session.isGuest) showGuestBanner();
   // Туториал новичка. Раньше не вызывался НИ РАЗУ, хотя был написан целиком:
   // игрок попадал в город с двадцатью кнопками без единой подсказки.
@@ -1359,6 +1380,12 @@ function loop(now: number): void {
   // (после отдыха — быстрее). Сервер считает то же самое раз в 5 секунд.
   // Снаряжение для воды (сапоги/плащ) уменьшает расход и снимает замедление.
   world3d?.setWaterBonus(session.waterBonus.waterSpeed, session.waterBonus.swimStamina);
+  // Скорость скакуна приходит с сервера: она считается по таблице скакунов
+  // и уровню в character_mounts, и там же считается предел античита
+  world3d?.setMountSpeed(session.mount?.speed ?? 0);
+  // Экипировка для аватара: оружие в руке и цвет брони. Пока сервер не
+  // ответил (session.gear === null), риг показывает вид класса
+  world3d?.setLocalGear(session.gear);
   // Лодка (если встал на воду) заменяет сапоги в воде: лучший бонус, не сумма
   const boat = session.boat;
   world3d?.setBoat(

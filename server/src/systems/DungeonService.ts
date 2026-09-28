@@ -11,6 +11,7 @@ import { DUNGEONS_DATABASE, DungeonDefinition } from '../data/dungeons';
 import { MONSTERS_DATABASE } from '../data/monsters';
 import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
+import { grantReputation } from './ReputationGrants';
 import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
 
@@ -184,6 +185,8 @@ export class DungeonService {
       items: def.rewards.guaranteedItems,
     };
     logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${def.rewards.experience}xp, +${gold}g)`);
+    // Репутация за данж — заметный поступок, а не рядовой бой
+    void grantReputation(killerId, 'dungeonClear');
     this.disposeSession(session);
     return info;
   }

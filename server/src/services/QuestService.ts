@@ -2,6 +2,7 @@ import { DatabaseService } from './DatabaseService';
 import { CharacterService } from './CharacterService';
 import { QUESTS_DATABASE, QuestDefinition, QuestObjectiveDef } from '../data/quests';
 import { ITEMS_DATABASE } from '../data/items';
+import { grantReputation } from '../systems/ReputationGrants';
 import { QUEST_NPC_ALIAS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
@@ -301,6 +302,10 @@ export class QuestService {
     }
 
     logger.info(`Quest completed: ${def.id} by character ${characterId}`);
+
+    // Репутация за квест. Раньше не начислялась нигде: addReputation был
+    // написан, но не вызывался, и панель репутации показывала честные нули.
+    void grantReputation(characterId, 'questDone');
     return {
       questId: def.id,
       titleRu: def.titleRu,

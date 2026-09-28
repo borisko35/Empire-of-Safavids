@@ -11,6 +11,7 @@ import { CharacterService } from '../services/CharacterService';
 import { DatabaseService } from '../services/DatabaseService';
 import { ITEMS_DATABASE } from '../data/items';
 import { RedisService } from '../services/RedisService';
+import { grantReputation } from './ReputationGrants';
 import { logger } from '../utils/logger';
 
 export interface TradeContractDef {
@@ -242,6 +243,10 @@ export class TradeService {
     ).catch(() => {});
     await this.redis.del(CONTRACT_KEY(characterId)).catch(() => {});
     logger.info(`[Trade] Contract ${def.id} delivered by ${characterId}`);
+    // Репутация за доставленный караван — фракция Торговцев. Повторно не
+    // начислится: после сдачи статус становится 'delivered', и getActive
+    // возвращает null, поэтому повторный deliver отсекается строкой выше.
+    void grantReputation(characterId, 'tradeDone');
     return { ok: true, gold: def.rewardGold, exp: def.rewardExp, silver, syrian, contract: def };
   }
 
