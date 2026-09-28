@@ -1171,6 +1171,14 @@ function wireInput(): void {
     } else if (e.code === 'Escape') {
       // Настройки закрывает собственный обработчик — меню не трогаем
       if (!$('overlay-settings')?.classList.contains('hidden')) return;
+      // Карта мира — тоже оверлей. Раньше Esc её не трогал, и меню
+      // открывалось ПОВЕРХ карты: игрок жал Esc, чтобы убрать карту,
+      // а получал меню, под которым карта оставалась.
+      const mapOverlay = $('overlay-map');
+      if (mapOverlay && !mapOverlay.classList.contains('hidden')) {
+        mapOverlay.classList.add('hidden');
+        return;
+      }
       // Сначала закрываем панель. Раньше Esc только переключал меню, и панель
       // оставалась на экране поверх него: открыть новую панель, накрыть её
       // другой и убрать всё это было нечем.
@@ -1263,6 +1271,7 @@ function wireInput(): void {
   // Открытие панели теперь целиком в openPanelById. Обработчик только
   // переключает: всё, что нужно догрузить, уже сделано по дороге.
   installPanelCloseButtons();
+  wireWorldMapClose();
   for (const btn of document.querySelectorAll<HTMLButtonElement>('.panel-toggles button')) {
     btn.addEventListener('click', () => {
       const panel = btn.dataset.panel;
@@ -1462,6 +1471,23 @@ function useSkill(skillId: string): void {
 }
 
 // ── Игровой цикл ─────────────────────────────────────────────
+
+/**
+ * Крестик на полноэкранной карте.
+ *
+ * ТУТ БЫЛА МЁРТВАЯ КНОПКА. Разметка с кнопкой ✕ была с самого начала,
+ * обработчика к ней не подключил никто: карта закрывалась только клавишей
+ * M. Игрок жал крестик — ничего не происходило, и карту приходилось
+ * закрывать клавишей, о которой на кнопке не написано.
+ */
+function wireWorldMapClose(): void {
+  const close = document.getElementById('worldmap-close');
+  if (!close || close.dataset.wired === '1') return;
+  close.dataset.wired = '1';
+  close.addEventListener('click', () => {
+    document.getElementById('overlay-map')?.classList.add('hidden');
+  });
+}
 
 function redrawWorldMap(): void {
   if (!me || !world) return;
