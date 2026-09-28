@@ -1,0 +1,21 @@
+# Empire of Safavids — правила для поисковых систем
+#
+# Страницы сайта открыты индексации: лендинг, форум, обратная связь, трейлер.
+# Закрыты только технические адреса — им в поиске делать нечего.
+#
+# Файл лежит в client/web/ и раздаётся nginx'ом по адресу /robots.txt.
+# Раньше его не было вовсе, а nginx отдавал на этот запрос лендинг
+# (try_files ... /index.html), то есть поисковик получал вместо правил
+# html-страницу.
+
+User-agent: *
+Allow: /
+
+# Админка и служебные адреса: поисковику нечего там искать
+Disallow: /admin.html
+Disallow: /api/
+Disallow: /socket.io/
+Disallow: /download/
+Disallow: /health
+
+Sitemap: https://www.game.eos-gameonline.com/sitemap.xml

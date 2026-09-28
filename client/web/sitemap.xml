@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Карта сайта. Список страниц для поисковых систем.
+
+  Адреса — на боевой домен из deploy/.env (DOMAIN). Раньше в canonical и
+  og:url стоял empire-of-safavids.com, который не отвечает: поисковик
+  считал бы канонической другую страницу и уводил игроков в пустоту.
+
+  Игра (/game/) в карту не входит намеренно: это приложение на JavaScript,
+  индексировать в нём нечего, а обход только жрёт лимит.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.game.eos-gameonline.com/</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://www.game.eos-gameonline.com/forum.html</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://www.game.eos-gameonline.com/feedback.html</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://www.game.eos-gameonline.com/trailer.html</loc>
+    <lastmod>2026-09-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+</urlset>
