@@ -95,7 +95,10 @@
     "you_won": "Qazandın! Reytinq rəqib təsdiqlədikdən sonra yenilənir.",
     "you_lost": "Prolostun. Reytinq rəqib təsdiqlədikdən sonra yenilənir.",
     "draw": "Heç-heçə — reytinq dəyişmir.",
-    "wait_opponent": "Rəqibin təsdiqini gözləyirik"
+    "wait_opponent": "Rəqibin təsdiqini gözləyirik",
+    "cancel_search": "Axtarışı ləğv et",
+    "search_cancelled": "Rəqib axtarışı ləğv edildi",
+    "no_match_to_cancel": "Aktiv axtarış yoxdur"
   },
   "link": {
     "title": "Bağlı hesablar",
@@ -232,7 +235,6 @@
     "send": "Göndər",
     "world": "Dünya",
     "region": "Region",
-    "guild": "Birlik",
     "guild": "Birlik",
     "party": "Dəstə",
     "system": "Sistem",
@@ -792,7 +794,7 @@
     "scenes_in_chapter": "Faslin səhnələri",
     "unlocks_at": "Açılır"
   },
-    "guild": {
+  "guild": {
     "none": "Siz gildiyada deyilsiniz",
     "not_found": "Heç nə tapılmadı",
     "search": "Axtar",
@@ -967,6 +969,30 @@
     "story": "Hekayə",
     "media": "Foto və video",
     "admin": "Admin",
-    "settings": "Tənzimləmələr"
+    "settings": "Tənzimləmələr",
+    "notifications": "Bildirişlər"
+  },
+  "notifications": {
+    "title": "Bildirişlər",
+    "empty": "Hələ bildiriş yoxdur",
+    "read_all": "Hamısını oxunmuş işarələ"
+  },
+  "pets": {
+    "renamed": "Heyvanın adı dəyişdi",
+    "released": "Heyvan azadlığa buraxıldı",
+    "release_confirm": "Heyvan azadlığa buraxılsın? Bunu geri qaytarmaq mümkün deyil."
+  },
+  "house": {
+    "decor_title": "Məbədə bəzək",
+    "decor_none": "Bütün mebellər artıq qoyulub",
+    "decor_place": "Qoy",
+    "decor_placed": "Mebel qoyuldu",
+    "decor_count": "Qoyulmuş əşya"
+  },
+  "party": {
+    "invite": "Dəvət et",
+    "invite_ph": "Personajın adı",
+    "invited": "Dəvət göndərildi",
+    "invite_empty": "Personajın adını daxil edin"
   }
 }

@@ -151,6 +151,24 @@ export class GameSocketHandler {
       const ended = pvpArena.checkTimeout();
       if (ended) announceArenaEnd(ended.matchId, ended.winnerId, 'time');
     }, 1000);
+
+    // Живая доставка уведомлений.
+    //
+    // ЧТО БЫЛО. NotificationService писал строку в таблицу notifications и
+    // публиковал в Redis-канал player:notification. На этот канал НИКТО не
+    // подписывался: комментарий в сервисе обещал, что «GameSocketHandler
+    // пересылает конкретному сокету», но подписки не было. Уведомления до
+    // игрока не доходили вовсе — ни тостом, ни чем-либо.
+    void this.redis.subscribe('player:notification', (message) => {
+      const characterId = String(message.characterId ?? '');
+      if (!characterId) return;
+      this.activePlayers.get(characterId)?.emit(SERVER_EVENTS.NOTIFICATION, {
+        type: message.type,
+        titleRu: message.titleRu,
+        bodyRu: message.bodyRu,
+        data: message.data,
+      });
+    }).catch((e) => logger.error('[Notification] subscribe failed:', e));
   }
 
   /** Доступ из REST-роутов (например, travel): текущий обработчик сокетов */
@@ -285,6 +303,16 @@ export class GameSocketHandler {
             level: res.level,
             experience: res.experience,
           }).catch((error) => logger.debug('Leaderboard sync skipped:', error));
+          // Время в игре. Тик регенерации идёт ровно раз в 5 секунд по
+          // каждому онлайн-игроку, так что счётчик копится без погрешности.
+          //
+          // Через increment, а не updateStats: там col = col + n. В updateStats
+          // было бы col = n, и пятью секундами позже тик затирал бы всё
+          // накопленное нулём — именно поэтому счётчики и не пускали в
+          // updateStats (deadCodeFindings.test.ts). Запрет был по сути
+          // прав, но указывал на разделение методов, а не на отказ от счётчиков.
+          await this.leaderboardService.increment(socket.characterId, { playtimeSeconds: 5 })
+            .catch((error) => logger.debug('Leaderboard playtime skipped:', error));
         }
       } catch (error) {
         logger.debug('Regen tick skipped:', error);
@@ -986,6 +1014,12 @@ export class GameSocketHandler {
       // написан и не вызывался. Повышение ранга показываем игроку — иначе
       // единственным признаком того, что репутация растёт, было бы число,
       // которое игрок и не смотрел бы.
+      // Счётчик убийств для вкладки рейтинга «Убийства». Раньше она
+      // показывала 0 у всех: колонка monsters_killed была в схеме с самого
+      // начала, и её не писал никто. Через increment, потому что тик
+      // регенерации раз в 5 секунд перезаписывает строку рейтинга целиком.
+      void this.leaderboardService.increment(attacker.id, { monstersKilled: 1 })
+        .catch((error) => logger.debug('Leaderboard kills skipped:', error));
       void grantReputation(attacker.id, 'monsterKill', (faction, rankRu) => {
         socket.emit(SERVER_EVENTS.NOTIFICATION, {
           type: 'rank_up',

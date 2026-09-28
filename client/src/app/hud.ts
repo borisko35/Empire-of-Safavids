@@ -1086,3 +1086,24 @@ export async function promptClaimAccount(): Promise<boolean> {
     $('btn-claim-cancel').onclick = () => done(false);
   });
 }
+
+// ============================================================
+// Непрочитанные уведомления
+// ============================================================
+//
+// Красная цифра на кнопке уведомлений.
+//
+// Живёт здесь, а не в world.ts: panels.ts зовёт её из панели уведомлений,
+// а world.ts импортирует panels.ts — импорт оттуда создал бы цикл. hud.ts
+// импортируется обоими.
+//
+// Без цифры единственным признаком того, что уведомление пришло, был тост,
+// исчезавший через пару секунд. Счётчик живёт в сессии, поэтому переживает
+// открытие и закрытие панели.
+export function renderUnreadBadge(): void {
+  const el = document.getElementById('unread-badge');
+  if (!el) return;
+  const n = session.notifications.unread;
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.classList.toggle('hidden', n <= 0);
+}

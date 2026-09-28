@@ -23,7 +23,7 @@ import {
   type DisplayMode, type GraphicsLevel,
 } from './settings';
 import {
-  chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap,
+  chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap, renderUnreadBadge,
   drawWorldMap,
   loadSkillbar, openChat, refreshBars, setWorldTime, showTarget, startCooldown,
   tickCooldowns, toast, loadBuffs, clearBuffs,
@@ -435,6 +435,7 @@ function enterOrExitBuilding(action: string, buildingId: string, nameRu: string)
     },
   );
 }
+
 
 /**
  * Открыть панель по имени.
@@ -954,8 +955,24 @@ function wireSocket(): void {
     if (e.message) chatMessage(null, e.message, true);
   });
 
-  socket.on('notification', (msg: { message?: string; text?: string; title?: string }) => {
-    toast(msg.message ?? msg.text ?? msg.title ?? '', 'info');
+  /**
+   * Живое уведомление.
+   *
+   * ЧТО БЫЛО. Обработчик читал msg.message / msg.text / msg.title, а сервер
+   * присылает titleRu / bodyRu. Три поля не совпадали ни с одним, поэтому
+   * тост выводился ПУСТЫМ: игрок видел всплывашку без текста и не понимал,
+   * что произошло. Поля переименованы на стороне NotificationService, когда
+   * шаблоны получили title_ru / body_ru под колонки таблицы, а обработчик
+   * остался с прошлыми именами.
+   */
+  socket.on('notification', (msg: {
+    type?: string; titleRu?: string; bodyRu?: string; title?: string; body?: string;
+  }) => {
+    const title = msg.titleRu ?? msg.title ?? '';
+    const body = msg.bodyRu ?? msg.body ?? '';
+    toast([title, body].filter(Boolean).join(' — '), 'info');
+    session.notifications.unread++;
+    renderUnreadBadge();
   });
 
   socket.on('world:time', (payload: Record<string, unknown>) => {

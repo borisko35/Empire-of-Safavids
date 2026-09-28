@@ -97,6 +97,12 @@ export const session = {
    * промах: удочка улетела бы туда, где игрок был полминуты назад.
    */
   selfPos: { x: 0, z: 0 },
+  /**
+   * Счётчик непрочитанных уведомлений для красной цифры.
+   * Уведомления пишутся сервером в таблицу, а прочитать их было нечем:
+   * панели не существовало, а тост исчезал через пару секунд.
+   */
+  notifications: { unread: 0 },
   /** Активная лодка (из панели рыбалки); null — игрок на суше */
   boat: null as null | { id: string; nameRu: string; waterSpeed: number; swimSpeed: number; fishingBonus: number; catchLimit: number },
   /**

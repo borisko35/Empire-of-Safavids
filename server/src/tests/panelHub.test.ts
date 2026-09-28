@@ -15,6 +15,14 @@ const read = (p: string): string => readFileSync(join(repoRoot, p), 'utf-8');
 
 const hub = stripComments(read('client/src/app/hub.ts'));
 const html = read('client/src/app/index.html');
+const css = read('client/src/app/styles.css');
+
+/** Правило CSS по селектору: поиск по одному слову находит чужое свойство */
+function cssRule(source: string, selector: string): string {
+  const i = source.indexOf(selector + ' {');
+  if (i < 0) throw new Error(`правило ${selector} не найдено`);
+  return source.slice(i, source.indexOf('}', i));
+}
 const panels = stripComments(read('client/src/app/panels.ts'));
 const world = stripComments(read('client/src/app/world.ts'));
 const hud = stripComments(read('client/src/app/hud.ts'));
@@ -30,11 +38,26 @@ const locale = (lang: string): Record<string, unknown> =>
   JSON.parse(read(`shared/locales/${lang}.json`));
 
 describe('Хаб панелей: в ряд больше не насыпают панели', () => {
-  it('кнопок в ряду мало', () => {
-    // ГЛАВНОЕ. Раньше их было 33
+  it('кнопок в ряду мало, и ряд не дотягивается до центра', () => {
+    // Изначально в ряду было 33 кнопки на 1218 пикселей. Сейчас их единицы.
+    //
+    // Проверка не на точное число: ряд пополняется по мере надобности, и
+    // закреплять «4» значило бы запретить добавить кнопку уведомлений, без
+    // которой игрок не видит непрочитанных. Требуемое одно: ряд остаётся
+    // коротким, а его естественная ширина меньше отведённых 46vw.
     const row = html.slice(html.indexOf('class="hud panel-toggles"'));
     const buttons = (row.slice(0, row.indexOf('</div>')).match(/<button/g) ?? []).length;
-    expect({ кнопок_в_ряду: buttons }).toEqual({ кнопок_в_ряду: 4 });
+    const rule = cssRule(css, '.panel-toggles');
+    const buttonRule = cssRule(css, '.panel-toggles button');
+    const w = Number(/width:\s*(\d+)px/.exec(buttonRule)?.[1] ?? 0);
+    const gap = Number(/gap:\s*(\d+)px/.exec(rule)?.[1] ?? 0);
+    const natural = buttons * (w + gap);
+    expect({
+      кнопок: buttons,
+      естественная_ширина: natural,
+      помещается: natural < 1920 * 0.46,
+    }).toEqual({ кнопок: expect.any(Number), естественная_ширина: expect.any(Number), помещается: true });
+    expect(buttons).toBeLessThanOrEqual(6);
   });
 
   it('в ряду есть кнопка хаба', () => {

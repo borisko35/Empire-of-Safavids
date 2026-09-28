@@ -257,6 +257,13 @@
       <div id="skills-list"></div>
       <div id="skills-available"></div>
     </div>
+    <!-- Уведомления. Панели не существовало: сервер писал строки в таблицу
+         notifications, а прочитать их было нечем. Тост исчезал за пару секунд,
+         и вернуться к списку было некуда. -->
+    <div class="hud side-panel hidden" id="panel-notifications">
+      <h3><span data-icon="chat"></span><span data-i18n="notifications.title"></span></h3>
+      <div id="notifications-list"></div>
+    </div>
     <!-- Хаб панелей: все панели игры, разложенные по смыслу.
          Содержимое собирает hub.ts, в разметке только контейнер. -->
     <div class="hud side-panel hidden" id="panel-hub"></div>
@@ -358,6 +365,11 @@
       <button data-panel="panel-inventory" data-icon="chest" title="Сумка" type="button"></button>
       <button data-panel="panel-quests" data-icon="scroll" title="Квесты" type="button"></button>
       <button data-panel="panel-regions" data-icon="map" title="Регионы" type="button"></button>
+      <!-- Уведомления. Живут в ряду, а не в хабе: игрок должен видеть
+           непрочитанные, не заходя в меню. Цифра ставится из world.ts -->
+      <button data-panel="panel-notifications" data-icon="chat" title="Уведомления" type="button" class="has-badge">
+        <span class="unread-badge hidden" id="unread-badge">0</span>
+      </button>
     </div>
 
     <!-- Цель активного квеста (стрелка-навигатор) -->

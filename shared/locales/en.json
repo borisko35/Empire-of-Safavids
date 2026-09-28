@@ -95,7 +95,10 @@
     "you_won": "You won! Your rating updates once your opponent confirms.",
     "you_lost": "You lost. Your rating updates once your opponent confirms.",
     "draw": "Draw — no rating change.",
-    "wait_opponent": "Waiting for your opponent to confirm"
+    "wait_opponent": "Waiting for your opponent to confirm",
+    "cancel_search": "Cancel search",
+    "search_cancelled": "Opponent search cancelled",
+    "no_match_to_cancel": "No active search"
   },
   "link": {
     "title": "Linked accounts",
@@ -232,7 +235,6 @@
     "send": "Send",
     "world": "World",
     "region": "Region",
-    "guild": "Guild",
     "guild": "Guild",
     "party": "Party",
     "system": "System",
@@ -792,7 +794,7 @@
     "scenes_in_chapter": "Chapter scenes",
     "unlocks_at": "Unlocks at"
   },
-    "guild": {
+  "guild": {
     "none": "You are not in a guild",
     "not_found": "Nothing found",
     "search": "Search",
@@ -967,6 +969,30 @@
     "story": "Story",
     "media": "Photos and videos",
     "admin": "Admin",
-    "settings": "Settings"
+    "settings": "Settings",
+    "notifications": "Notifications"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet",
+    "read_all": "Mark all as read"
+  },
+  "pets": {
+    "renamed": "Pet renamed",
+    "released": "Pet released",
+    "release_confirm": "Release the pet? This cannot be undone."
+  },
+  "house": {
+    "decor_title": "Furniture",
+    "decor_none": "All furniture is already placed",
+    "decor_place": "Place",
+    "decor_placed": "Furniture placed",
+    "decor_count": "Items placed"
+  },
+  "party": {
+    "invite": "Invite",
+    "invite_ph": "Character name",
+    "invited": "Invitation sent",
+    "invite_empty": "Enter a character name"
   }
 }

@@ -52,6 +52,51 @@ export class LeaderboardService {
       // совпадают
       const ph = `$${values.length}`;
       cols.push(col);
+      fields.push(`${col} = leaderboard.${col} + ${ph}`);
+    }
+
+    if (cols.length === 0) return;
+
+    await this.db.query(
+      `INSERT INTO leaderboard (character_id, ${cols.join(', ')}, updated_at)
+       VALUES ($1, ${cols.map((_, i) => `$${i + 2}`).join(', ')}, NOW())
+       ON CONFLICT (character_id) DO UPDATE SET ${fields.join(', ')}, updated_at = NOW()`,
+      [characterId, ...values]
+    );
+  }
+
+  /**
+   * НАКОПИТЬ счётчики рейтинга: убийства, квесты, время игры.
+   *
+   * Отдельный метод от updateStats — и это не разделение ради разделения.
+   * updateStats пишет значения АБСОЛЮТНО (`col = $n`) и вызывается раз в
+   * 5 секунд из тика регенерации. Если бы счётчики убийств и квестов шли туда
+   * же, тик затирал бы их нулями каждые пять секунд — поэтому в
+   * deadCodeFindings.test.ts и стоял запрет на monstersKilled и
+   * questsCompleted внутри updateStats. Запрет был прав по сути, но указывал
+   * не на то решение: счётчики надо было не убирать, а накапливать там, где
+   * событие и происходит.
+   *
+   * Здесь `col = leaderboard.col + $n`. Строка рейтинга может ещё не
+   * существовать — тогда она создаётся, и накопленное не теряется.
+   */
+  async increment(characterId: string, counters: {
+    monstersKilled?: number;
+    questsCompleted?: number;
+    playtimeSeconds?: number;
+  }): Promise<void> {
+    const cols: string[] = [];
+    const values: number[] = [];
+    const fields: string[] = [];
+
+    for (const [key, val] of Object.entries(counters)) {
+      // Ноль и undefined не прибавляем: пустой вызов ничего не пишет
+      if (!val) continue;
+      const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+      values.push(Math.floor(val));
+      const ph = `$${values.length}`;
+      cols.push(col);
+      // Именно сложение, а не присваивание — ради этого метод отдельный
       fields.push(`${col} = ${ph}`);
     }
 
@@ -76,6 +121,15 @@ export class LeaderboardService {
     const countRow = await this.db.queryOne<{ count: string }>('SELECT COUNT(*) AS count FROM leaderboard');
     const total = Number(countRow?.count ?? 0);
 
+    // Вкладка PvP. Настоящий рейтинг живёт в pvp_rankings, и его ведёт
+    // PvPService при каждой победе. В leaderboard лежала вторая копия того же
+    // числа, которую никто не писал, — поэтому у всех стояло 1000 и порядок
+    // был произвольным. Читаем настоящую таблицу, а не её копию.
+    const isPvp = type === 'pvp';
+    const order = isPvp ? 'COALESCE(pr.rating, 0)' : orderCol;
+    const value = isPvp ? 'COALESCE(pr.rating, 0)' : this.getValueExpression(type);
+    const pvpJoin = isPvp ? 'LEFT JOIN pvp_rankings pr ON pr.character_id = l.character_id' : '';
+
     const rows = await this.db.query<{
       rank_num: string;
       character_id: string;
@@ -85,15 +139,16 @@ export class LeaderboardService {
       value: number;
       guild_name: string | null;
     }>(
-      `SELECT RANK() OVER (ORDER BY ${orderCol} DESC) AS rank_num,
+      `SELECT RANK() OVER (ORDER BY ${order} DESC) AS rank_num,
               l.character_id, c.name AS character_name, c.class AS class_name,
-              l.level, ${this.getValueExpression(type)} AS value,
+              l.level, ${value} AS value,
               g.name AS guild_name
        FROM leaderboard l
        JOIN characters c ON c.id = l.character_id
        LEFT JOIN guild_members gm ON gm.character_id = l.character_id
        LEFT JOIN guilds g ON g.id = gm.guild_id
-       ORDER BY ${orderCol} DESC
+       ${pvpJoin}
+       ORDER BY ${order} DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );

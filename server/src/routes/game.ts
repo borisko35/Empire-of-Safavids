@@ -95,6 +95,30 @@ const requireBodyField = (field: string) =>
     next();
   };
 
+/**
+ * Идентификатор персонажа из тела запроса или из строки запроса.
+ *
+ * Службы ищут по character_id, а req.userId — это идентификатор АККАУНТА.
+ * Эта ошибка повторилась уже шесть раз (задачи дня, репутация, конюшня,
+ * башня, гильдии, питомцы), и каждая выглядела как «панель пустая».
+ * requireCharacterOwnership проверяет принадлежность, но кладёт проверку
+ * внутрь middleware; GET-маршрутам она недоступна, поэтому идентификатор
+ * достаётся здесь — и уже проверенным.
+ */
+const bodyCharacterId = async (req: Request, res: Response): Promise<string | null> => {
+  const characterId = String(req.body?.characterId ?? req.query?.characterId ?? '');
+  if (!characterId) {
+    res.status(400).json({ error: 'characterId is required' });
+    return null;
+  }
+  const character = await characterService.getCharacterById(characterId);
+  if (!character || character.userId !== req.userId) {
+    res.status(403).json({ error: 'Character does not belong to you' });
+    return null;
+  }
+  return characterId;
+};
+
 // ============================================================
 // АУКЦИОН
 // ============================================================
@@ -1179,20 +1203,37 @@ gameRouter.post('/mounts/my', secureMiddleware, requireCharacterOwnership(),
 );
 
 // ── Питомцы ──────────────────────────────────────────────
-gameRouter.get('/pets', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const list = await petService.getPets(req.userId!);
-  res.json({ pets: list, allDefs: petService.getAllDefs() });
-}));
+// ШЕСТОЕ повторение той же поломки. Маршруты отдавали сервису req.userId —
+// идентификатор АККАУНТА, а PetService ищет по character_pets.character_id.
+// Это разные числа, поэтому питомцев не было видно никогда: getPets всегда
+// возвращала пустой список, а renamePet и releasePet меняли строку под чужим
+// идентификатором — то есть не ту. Заодно это объясняет, почему «переименовать
+// и отпустить» выглядело как неподключённая кнопка: кнопок не было, а если бы
+// были — молчали бы.
+gameRouter.get('/pets', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const list = await petService.getPets(characterId);
+    res.json({ pets: list, allDefs: petService.getAllDefs() });
+  })
+);
 
-gameRouter.get('/pets/active', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const pet = await petService.getActivePet(req.userId!);
-  res.json({ pet });
-}));
+gameRouter.get('/pets/active', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const pet = await petService.getActivePet(characterId);
+    res.json({ pet });
+  })
+);
 
 gameRouter.post('/pets/acquire', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
     try {
-      const pet = await petService.acquirePet(req.userId!, req.body.petId);
+      const pet = await petService.acquirePet(characterId, req.body.petId);
       return res.json({ success: true, pet });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
@@ -1200,8 +1241,10 @@ gameRouter.post('/pets/acquire', secureMiddleware, requireCharacterOwnership(),
 
 gameRouter.post('/pets/activate', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
     try {
-      await petService.setActive(req.userId!, req.body.petDbId);
+      await petService.setActive(characterId, req.body.petDbId);
       return res.json({ success: true });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
@@ -1209,32 +1252,91 @@ gameRouter.post('/pets/activate', secureMiddleware, requireCharacterOwnership(),
 
 gameRouter.post('/pets/rename', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    await petService.renamePet(req.userId!, req.body.petDbId, req.body.nickname);
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const nickname = String(req.body.nickname ?? '').trim();
+    if (!nickname) return res.status(400).json({ error: 'nickname is required' });
+    await petService.renamePet(characterId, req.body.petDbId, nickname);
     return res.json({ success: true });
   })
 );
 
 gameRouter.post('/pets/release', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    await petService.releasePet(req.userId!, req.body.petDbId);
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    await petService.releasePet(characterId, req.body.petDbId);
+    return res.json({ success: true });
+  })
+);
+
+// ── Уведомления ──────────────────────────────────────────
+// ЧТО БЫЛО. NotificationService писал строки в таблицу notifications (лот
+// продан, новое письмо, мировой босс), и getUnread/markAllRead были написаны и
+// не вызывались нигде. Панели уведомлений в игре не существовало, а тост
+// исчезал через пару секунд. Возвращаться к списку было некуда.
+//
+// Персонаж обязателен: notifications.character_id — это персонаж, а не аккаунт.
+gameRouter.get('/notifications', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const [items, unread] = await Promise.all([
+      notificationService.list(characterId),
+      notificationService.getUnreadCount(characterId),
+    ]);
+    return res.json({ items, unread });
+  })
+);
+
+gameRouter.post('/notifications/read-all', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    await notificationService.markAllRead(characterId);
+    return res.json({ success: true });
+  })
+);
+
+gameRouter.post('/notifications/read', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const ok = await notificationService.markRead(characterId, req.body.id);
+    if (!ok) return res.status(404).json({ error: 'Notification not found' });
     return res.json({ success: true });
   })
 );
 
 // ── Недвижимость ─────────────────────────────────────────
+// СЕДЬМОЕ повторение той же поломки: HousingService ищет по
+// player_houses.character_id, а маршруты передавали req.userId. Дом не
+// показывался никогда, а placeDecoration менял строку под чужим
+// идентификатором — то есть не ту.
 const HOUSE_TYPES_SIMPLE = Object.entries(HOUSE_TYPES).map(([k, v]) => ({ id: k, ...v }));
 const DECORATIONS_SIMPLE = Object.entries(DECORATIONS).map(([k, v]) => ({ id: k, ...v }));
 
-gameRouter.get('/house', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const house = await housingService.getHouse(req.userId!);
-  const decorations = house ? await housingService.getDecorations(req.userId!) : [];
-  return res.json({ house, playerDecorations: decorations, houseTypes: HOUSE_TYPES_SIMPLE, allDecorations: DECORATIONS_SIMPLE });
-}));
+gameRouter.get('/house', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const house = await housingService.getHouse(characterId);
+    const decorations = house ? await housingService.getDecorations(characterId) : [];
+    return res.json({
+      house,
+      playerDecorations: decorations,
+      houseTypes: HOUSE_TYPES_SIMPLE,
+      allDecorations: DECORATIONS_SIMPLE,
+    });
+  })
+);
 
 gameRouter.post('/house/buy', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
     try {
-      const house = await housingService.buyHouse(req.userId!, req.body.region, req.body.houseType);
+      const house = await housingService.buyHouse(characterId, req.body.region, req.body.houseType);
       return res.json({ success: true, house });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
@@ -1242,8 +1344,10 @@ gameRouter.post('/house/buy', secureMiddleware, requireCharacterOwnership(),
 
 gameRouter.post('/house/upgrade', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
     try {
-      const house = await housingService.upgradeHouse(req.userId!);
+      const house = await housingService.upgradeHouse(characterId);
       return res.json({ success: true, house });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
@@ -1251,8 +1355,10 @@ gameRouter.post('/house/upgrade', secureMiddleware, requireCharacterOwnership(),
 
 gameRouter.post('/house/decorate', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
     try {
-      await housingService.placeDecoration(req.userId!, req.body.decorationId);
+      await housingService.placeDecoration(characterId, req.body.decorationId);
       return res.json({ success: true });
     } catch (err) { return res.status(400).json({ error: (err as Error).message }); }
   })
@@ -1326,23 +1432,35 @@ gameRouter.get('/pvp/rankings', secureMiddleware, asyncHandler(async (req: Reque
   return res.json({ rankings });
 }));
 
-gameRouter.get('/pvp/me', secureMiddleware,
+// ВОСЬМОЕ повторение. PvPService ищет по pvp_rankings.character_id и
+// pvp_arena.player1_id, а маршруты передавали req.userId. Свой рейтинг и своя
+// история матчей показывали пустоту у каждого, кто играл.
+// А отмена поиска не работала по той же причине: UPDATE шёл по нулю строк, и
+// матч оставался в состоянии 'waiting' — то есть «Найти бой» нельзя было
+// отменить вообще.
+gameRouter.get('/pvp/me', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    const rank = await pvpService.getMyRanking(req.userId!);
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const rank = await pvpService.getMyRanking(characterId);
     return res.json({ ranking: rank });
   })
 );
 
-gameRouter.get('/pvp/history', secureMiddleware,
+gameRouter.get('/pvp/history', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    const history = await pvpService.getMatchHistory(req.userId!);
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const history = await pvpService.getMatchHistory(characterId);
     return res.json({ history });
   })
 );
 
 gameRouter.post('/pvp/cancel', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    await pvpService.cancelMatch(req.body.matchId, req.userId!);
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    await pvpService.cancelMatch(req.body.matchId, characterId);
     return res.json({ success: true });
   })
 );

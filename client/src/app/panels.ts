@@ -8,7 +8,7 @@
 import { api, EquipmentState } from './api';
 import { t } from './i18n';
 import { session, Character } from './state';
-import { toast, refreshBars, loadInventory } from './hud';
+import { toast, refreshBars, loadInventory, renderUnreadBadge } from './hud';
 import { onTutorialAction } from './tutorial';
 import { onSearching as onPvpSearching, onPvpHide } from './pvp';
 import { loadMediaPanel } from './media';
@@ -703,8 +703,38 @@ export async function loadParty(): Promise<void> {
         const head = document.createElement('div');
         head.className = 'panel-subhead';
         head.textContent = `${t('panels.party')} (${party.members.length}/${party.maxSize})`;
-        box.append(head);
-        for (const m of party.members) {
+            box.append(head);
+
+        // ── Пригласить ──────────────────────────────────
+            // Маршрут /parties/:partyId/invite был написан, клиентской
+            // обёртки не было: партия всегда состояла из одного человека, и
+            // пригласить было некем.
+            //
+            // Приглашение сразу добавляет игрока в группу — согласия у него не
+            // спрашивается. Пока у партии нет последствий, это терпимо; когда
+            // появится общий опыт, понадобится подтверждение.
+        const isLeader = party.members.some(
+          (m: { characterId: string; role: string }) => m.characterId === cid() && m.role === 'leader');
+        if (isLeader && party.members.length < party.maxSize) {
+          const inviteRow = rowEl('inv-item');
+          const nameField = document.createElement('input');
+          nameField.type = 'text';
+          nameField.placeholder = t('party.invite_ph');
+          nameField.style.cssText = 'background:#1a1410;color:#f5f0e8;border:1px solid #5a4a30;padding:4px 8px;border-radius:4px;flex:1;min-width:0';
+          inviteRow.append(nameField);
+          inviteRow.append(actionButton(t('party.invite'), async () => {
+            const target = nameField.value.trim();
+            if (!target) { toast(t('party.invite_empty'), 'error'); return; }
+            try {
+              await api.partyInvite(partyId, cid(), target);
+              nameField.value = '';
+              toast(t('party.invited'), 'success');
+              await loadParty();
+            } catch (err) { toast((err as Error).message, 'error'); }
+          }));
+          box.append(inviteRow);
+            }
+            for (const m of party.members) {
           const row = rowEl('inv-item');
           const label = document.createElement('span');
           label.className = 'inv-name';
@@ -1948,7 +1978,7 @@ async function loadPets(): Promise<void> {
   if (!box) return;
   box.innerHTML = '';
   try {
-    const data = await api.pets();
+    const data = await api.pets(cid());
     if (!data.pets.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';
@@ -1993,8 +2023,13 @@ async function loadPets(): Promise<void> {
       const def = data.allDefs.find((d: any) => d.id === p.pet_id);
       const row = document.createElement('div');
       row.className = 'friend-entry' + (p.is_active ? ' current' : '');
-      row.innerHTML = `<span class="friend-name">${p.nickname ?? def?.name_ru ?? p.pet_id}</span>` +
-        `<span class="friend-info">Ур.${p.level} · ${def?.type ?? ''}</span>`;
+      const nameEl = document.createElement('span');
+      nameEl.className = 'friend-name';
+      nameEl.textContent = p.nickname ?? def?.name_ru ?? p.pet_id;
+      const infoEl = document.createElement('span');
+      infoEl.className = 'friend-info';
+      infoEl.textContent = `Ур.${p.level} · ${def?.type ?? ''}`;
+      row.append(nameEl, infoEl);
       if (!p.is_active) {
         const actBtn = document.createElement('button');
         actBtn.className = 'friend-btn';
@@ -2002,10 +2037,120 @@ async function loadPets(): Promise<void> {
         actBtn.addEventListener('click', async () => { await api.petActivate(cid(), p.id); void loadPets(); });
         row.append(actBtn);
       }
+
+      // Переименовать и отпустить.
+      //
+      // Маршруты /pets/rename и /pets/release и обёртки petRename/petRelease
+      // были написаны, а кнопок не было. Заодно выяснилось, что сервер искал
+      // питомцев по идентификатору АККАУНТА: список был пуст, а переименование
+      // меняло чужую строку — то есть молчало.
+      const renameBtn = document.createElement('button');
+      renameBtn.className = 'friend-btn';
+      renameBtn.textContent = 'Переименовать';
+      renameBtn.addEventListener('click', async () => {
+        const nickname = prompt('Новое имя питомца', p.nickname ?? def?.name_ru ?? '');
+        if (!nickname || !nickname.trim()) return;
+        try {
+          await api.petRename(cid(), p.id, nickname.trim());
+          toast(t('pets.renamed'), 'success');
+          void loadPets();
+        } catch (err) { toast((err as Error).message, 'error'); }
+      });
+      row.append(renameBtn);
+
+      const releaseBtn = document.createElement('button');
+      releaseBtn.className = 'friend-btn friend-btn--danger';
+      releaseBtn.textContent = 'Отпустить';
+      releaseBtn.addEventListener('click', async () => {
+        // Отпустить питомца необратимо, поэтому спрашиваем. Раньше кнопки не
+        // было, и игрок не мог понять, что она вообще нужна
+        if (!confirm(t('pets.release_confirm'))) return;
+        try {
+          await api.petRelease(cid(), p.id);
+          toast(t('pets.released'), 'info');
+          void loadPets();
+        } catch (err) { toast((err as Error).message, 'error'); }
+      });
+      row.append(releaseBtn);
+
       box.append(row);
     }
   } catch (err) {
     box.innerHTML = `<div class="lb-empty">Ошибка: ${(err as Error).message}</div>`;
+  }
+}
+
+// ── Уведомления ────────────────────────────────────────────
+
+/**
+ * Список уведомлений.
+ *
+ * ЧТО БЫЛО. Панели не существовало. NotificationService писал строки в
+ * таблицу notifications (мировой босс, лот продан, новое письмо), и всё, что
+ * могло их показать, — тост, исчезавший через пару секунд. Возвращаться к
+ * списку было некуда, а счётчика непрочитанных не существовало.
+ */
+async function loadNotifications(): Promise<void> {
+  const box = $('notifications-list');
+  if (!box) return;
+  box.innerHTML = '';
+  try {
+    const { items, unread } = await api.notifications(cid());
+    session.notifications.unread = unread;
+    renderUnreadBadge();
+
+    if (!items?.length) {
+      const empty = document.createElement('div');
+      empty.className = 'lb-empty';
+      empty.textContent = t('notifications.empty');
+      box.append(empty);
+      return;
+    }
+
+    for (const n of items) {
+      const row = document.createElement('div');
+      row.className = 'note-row' + (n.is_read ? '' : ' unread');
+      const title = document.createElement('div');
+      title.className = 'note-title';
+      title.textContent = n.title_ru;
+      const body = document.createElement('div');
+      body.className = 'note-body';
+      body.textContent = n.body_ru;
+      const when = document.createElement('div');
+      when.className = 'note-when';
+      when.textContent = new Date(n.created_at).toLocaleString();
+      row.append(title, body, when);
+      if (!n.is_read) {
+        // Клик по строке снимает точку: читать по одному «Прочитать все» —
+        // неудобно, когда в списке пятьдесят строк
+        row.addEventListener('click', async () => {
+          try { await api.notificationRead(cid(), n.id); } catch { /* не критично */ }
+          row.classList.remove('unread');
+          session.notifications.unread = Math.max(0, session.notifications.unread - 1);
+          renderUnreadBadge();
+        });
+      }
+      box.append(row);
+    }
+
+    if (unread > 0) {
+      const all = document.createElement('button');
+      all.className = 'quest-accept';
+      all.style.marginTop = '10px';
+      all.textContent = t('notifications.read_all');
+      all.addEventListener('click', async () => {
+        all.disabled = true;
+        try {
+          await api.notificationsReadAll(cid());
+          session.notifications.unread = 0;
+          renderUnreadBadge();
+          for (const el of box.querySelectorAll('.note-row.unread')) el.classList.remove('unread');
+        } catch (err) { toast((err as Error).message, 'error'); all.disabled = false; }
+      });
+      box.append(all);
+    }
+  } catch (err) {
+    box.innerHTML = `<div class="lb-empty">${(err as Error).message}</div>`;
   }
 }
 
@@ -2034,7 +2179,7 @@ async function loadHouse(): Promise<void> {
   if (!box) return;
   box.innerHTML = '';
   try {
-    const data = await api.house();
+    const data = await api.house(cid());
     if (!data.house) {
       // Нет дома — показываем выбор
       const empty = document.createElement('div');
@@ -2133,6 +2278,56 @@ async function loadHouse(): Promise<void> {
       maxLabel.textContent = '✓ Максимальный уровень';
       box.append(maxLabel);
     }
+
+    // ── Обстановка ─────────────────────────────────────────
+    // Маршрут /house/decorate и обёртка houseDecorate были написаны, а кнопки
+    // не было: api.house() отдавал allDecorations, и панель его игнорировала.
+    // Заодно выяснилось, что маршрут отдавал сервису идентификатор АККАУНТА
+    // вместо персонажа — то есть расставить было нечем, даже если бы кнопка
+    // появилась.
+    const placed = new Set((data.playerDecorations ?? []).map((d: { decoration_id?: string }) => d.decoration_id));
+    const decorHead = document.createElement('div');
+    decorHead.className = 'panel-subhead';
+    decorHead.textContent = t('house.decor_title');
+    box.append(decorHead);
+
+    const available = (data.allDecorations ?? []).filter((d: { id: string }) => !placed.has(d.id));
+    if (!available.length) {
+      const none = document.createElement('div');
+      none.className = 'lb-empty';
+      none.textContent = t('house.decor_none');
+      box.append(none);
+    } else {
+      const sel = document.createElement('select');
+      sel.style.cssText = 'background:#1a1410;color:#f5f0e8;border:1px solid #5a4a30;padding:4px 8px;border-radius:4px;max-width:100%';
+      for (const d of available) {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = `${d.name_ru ?? d.name ?? d.id} · ${d.price ?? 0} ${t('world.gold')}`;
+        sel.append(opt);
+      }
+      const put = document.createElement('button');
+      put.className = 'quest-accept';
+      put.style.marginTop = '8px';
+      put.textContent = t('house.decor_place');
+      put.addEventListener('click', async () => {
+        put.disabled = true;
+        try {
+          await api.houseDecorate(cid(), sel.value);
+          toast(t('house.decor_placed'), 'success');
+          void loadHouse();
+        } catch (err) { toast((err as Error).message, 'error'); put.disabled = false; }
+      });
+      box.append(sel, put);
+    }
+
+    if (placed.size) {
+      const mine = document.createElement('div');
+      mine.className = 'note-when';
+      mine.style.marginTop = '8px';
+      mine.textContent = `${t('house.decor_count')}: ${placed.size}`;
+      box.append(mine);
+    }
   } catch {
     box.innerHTML = '<div class="lb-empty">Ошибка загрузки</div>';
   }
@@ -2147,7 +2342,7 @@ async function loadPvP(): Promise<void> {
   try {
     let rankData: { ranking?: any } = {};
     let rankRes: { rankings?: any[] } = {};
-    try { [rankData, rankRes] = await Promise.all([api.pvpMe(), api.pvpRankings(10)]); } catch {}
+    try { [rankData, rankRes] = await Promise.all([api.pvpMe(cid()), api.pvpRankings(10)]); } catch {}
     const myRank = rankData.ranking;
     if (myRank) {
       const tierIcons: Record<string, string> = { bronze: '🥉', silver: '🥈', gold: '🥇', diamond: '💎', legendary: '👑' };
@@ -2165,13 +2360,17 @@ async function loadPvP(): Promise<void> {
     findBtn.className = 'quest-accept';
     findBtn.textContent = 'Найти бой';
     findBtn.style.margin = '8px 0';
+    // Соперника может не оказаться: тогда сервер позовёт позже через
+    // pvp:match_found, а сейчас просто ждём. Отменить ожидание было нечем —
+    // матч оставался в состоянии 'waiting' до бесконечности, и повторное
+    // «Найти бой» натыкалось на «Already searching».
+    let pendingMatchId: number | null = null;
     findBtn.addEventListener('click', async () => {
       findBtn.disabled = true;
       onPvpSearching();
       try {
-        // Соперника может не оказаться: тогда сервер позовёт позже через
-        // pvp:match_found, а сейчас просто ждём
-        await api.pvpFindMatch(cid());
+        const res = await api.pvpFindMatch(cid());
+        pendingMatchId = typeof res?.match?.id === 'number' ? res.match.id : null;
       } catch (err) {
         onPvpHide();
         toast((err as Error).message, 'error');
@@ -2180,6 +2379,28 @@ async function loadPvP(): Promise<void> {
       }
     });
     box.append(findBtn);
+
+    // Отмена поиска. Маршрут /pvp/cancel был написан, обёртки не было.
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'quest-accept';
+    cancelBtn.style.margin = '0 0 8px';
+    cancelBtn.textContent = t('pvp.cancel_search');
+    cancelBtn.disabled = true;
+    cancelBtn.addEventListener('click', async () => {
+      if (pendingMatchId === null) { toast(t('pvp.no_match_to_cancel'), 'info'); return; }
+      cancelBtn.disabled = true;
+      try {
+        await api.pvpCancel(cid(), pendingMatchId);
+        pendingMatchId = null;
+        onPvpHide();
+        toast(t('pvp.search_cancelled'), 'info');
+        void loadPvP();
+      } catch (err) {
+        toast((err as Error).message, 'error');
+        cancelBtn.disabled = false;
+      }
+    });
+    box.append(cancelBtn);
     // Топ-10
     const title = document.createElement('div');
     title.className = 'panel-subhead';
@@ -3040,6 +3261,9 @@ const LOADERS: Record<string, () => Promise<void>> = {
   // Хаб панелей. Содержимое он собирает сам, но id должен быть в диспетчере:
   // иначе панель откроется пустой
   'panel-hub': async () => { const { loadHub } = await import('./hub'); loadHub(); },
+  // Панели уведомлений не было: сервер писал строки в таблицу notifications,
+  // а прочитать их было нечем. Тост исчезал за пару секунд
+  'panel-notifications': loadNotifications,
   'panel-character': loadCharacterPanel,
   'panel-dungeons': loadDungeons,
   'panel-shop': loadShop,

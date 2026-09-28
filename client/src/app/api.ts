@@ -577,6 +577,19 @@ export const api = {
       body: JSON.stringify({ characterId }),
     }),
 
+  /**
+   * Пригласить в группу.
+   *
+   * inviterId, а не characterId: так маршрут называет того, кто зовёт, и по
+   * нему проверяется, что он вообще глава. Переименовывать поле на клиенте
+   * незачем — сервер проверяет именно это имя.
+   */
+  partyInvite: (partyId: string, inviterId: string, targetId: string) =>
+    req<{ success: boolean }>(`/api/game/parties/${partyId}/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ inviterId, targetId }),
+    }),
+
   regions: () => req<{ regions: RegionInfo[] }>('/api/world/regions'),
 
   travel: (characterId: string, region: string) =>
@@ -774,8 +787,10 @@ export const api = {
   factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
 
   // ── Питомцы ─────────────────────────────────────────────
-  pets: () => req<{ pets: any[]; allDefs: any[] }>('/api/game/pets'),
-  petsActive: () => req<{ pet: any }>('/api/game/pets/active'),
+  // Персонаж обязателен: сервер искал питомцев по account id, из-за чего
+  // список был пуст, а переименование меняло чужую строку
+  pets: (characterId: string) => req<{ pets: any[]; allDefs: any[] }>(`/api/game/pets?characterId=${characterId}`),
+  petsActive: (characterId: string) => req<{ pet: any }>(`/api/game/pets/active?characterId=${characterId}`),
   petAcquire: (characterId: string, petId: string) =>
     req<{ success: boolean; pet: any }>('/api/game/pets/acquire', { method: 'POST', body: JSON.stringify({ characterId, petId }) }),
   petActivate: (characterId: string, petDbId: number) =>
@@ -784,6 +799,17 @@ export const api = {
     req<{ success: boolean }>('/api/game/pets/rename', { method: 'POST', body: JSON.stringify({ characterId, petDbId, nickname }) }),
   petRelease: (characterId: string, petDbId: number) =>
     req<{ success: boolean }>('/api/game/pets/release', { method: 'POST', body: JSON.stringify({ characterId, petDbId }) }),
+
+  // ── Уведомления ────────────────────────────────────────
+  // Списка не было: сервер писал строки в таблицу notifications, а прочитать
+  // их было нечем. Панели уведомлений в игре не существовало
+  notifications: (characterId: string) =>
+    req<{ items: { id: string; type: string; title_ru: string; body_ru: string; is_read: boolean; created_at: string }[]; unread: number }>(
+      `/api/game/notifications?characterId=${characterId}`),
+  notificationsReadAll: (characterId: string) =>
+    req<{ success: boolean }>('/api/game/notifications/read-all', { method: 'POST', body: JSON.stringify({ characterId }) }),
+  notificationRead: (characterId: string, id: string) =>
+    req<{ success: boolean }>('/api/game/notifications/read', { method: 'POST', body: JSON.stringify({ characterId, id }) }),
 
   // ── Конюшня: скакуны ────────────────────────────────────
   mountsBuy: (shopId: string, characterId: string, mountId: string) =>
@@ -804,7 +830,9 @@ export const api = {
 
 
   // ── Дом ─────────────────────────────────────────────────
-  house: () => req<{ house: any; playerDecorations: any[]; houseTypes: any[]; allDecorations: any[] }>('/api/game/house'),
+  house: (characterId: string) =>
+    req<{ house: any; playerDecorations: any[]; houseTypes: any[]; allDecorations: any[] }>(
+      `/api/game/house?characterId=${characterId}`),
   houseBuy: (characterId: string, region: string, houseType: string) =>
     req<{ success: boolean; house: any }>('/api/game/house/buy', { method: 'POST', body: JSON.stringify({ characterId, region, houseType }) }),
   houseUpgrade: (characterId: string) =>
@@ -828,8 +856,14 @@ export const api = {
       winnerId?: string; winnerChange?: number; loserChange?: number; settleAfter?: string;
     }>(`/api/game/pvp/matches/${matchId}/status`),
   pvpRankings: (limit = 50) => req<{ rankings: any[] }>(`/api/game/pvp/rankings?limit=${limit}`),
-  pvpMe: () => req<{ ranking: any }>('/api/game/pvp/me'),
-  pvpHistory: () => req<{ history: any[] }>('/api/game/pvp/history'),
+  // Персонаж обязателен: сервер искал рейтинг по account id, из-за чего свой
+  // рейтинг и своя история матчей были пустыми у каждого
+  pvpMe: (characterId: string) => req<{ ranking: any }>(`/api/game/pvp/me?characterId=${characterId}`),
+  pvpHistory: (characterId: string) => req<{ history: any[] }>(`/api/game/pvp/history?characterId=${characterId}`),
+  // Отмена поиска. Маршрут был написан, обёртки не было: матч оставался в
+  // состоянии 'waiting' навсегда, и «Найти бой» нельзя было отменить
+  pvpCancel: (characterId: string, matchId: number) =>
+    req<{ success: boolean }>('/api/game/pvp/cancel', { method: 'POST', body: JSON.stringify({ characterId, matchId }) }),
 
   // ── Бесконечная Башня ───────────────────────────────────
   // Персонаж обязателен: сервер ищет по endless_tower.character_id, а не по

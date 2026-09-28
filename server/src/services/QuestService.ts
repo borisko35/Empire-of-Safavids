@@ -3,6 +3,7 @@ import { CharacterService } from './CharacterService';
 import { QUESTS_DATABASE, QuestDefinition, QuestObjectiveDef } from '../data/quests';
 import { ITEMS_DATABASE } from '../data/items';
 import { grantReputation } from '../systems/ReputationGrants';
+import { LeaderboardService } from './LeaderboardService';
 import { QUEST_NPC_ALIAS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
@@ -42,6 +43,13 @@ export type AcceptQuestResult =
 export class QuestService {
   private db = DatabaseService.getInstance();
   private characters = new CharacterService();
+  /**
+   * Рейтинг нужен здесь ради одного счётчика: вкладка «Квесты» показывала
+   * ноль у всех, потому что колонку quests_completed не писал никто.
+   * Накапливаем именно здесь, где квест закрывается, а не в тике регенерации:
+   * тик перезаписывает строку рейтинга целиком раз в 5 секунд.
+   */
+  private leaderboard = new LeaderboardService();
 
   /** Состояние всех квестов персонажа (таблица character_quests из схемы 001) */
   async getState(characterId: string): Promise<QuestStateRow[]> {
@@ -305,6 +313,10 @@ export class QuestService {
 
     // Репутация за квест. Раньше не начислялась нигде: addReputation был
     // написан, но не вызывался, и панель репутации показывала честные нули.
+    // Счётчик выполненных квестов для вкладки рейтинга «Квесты» — так же
+    // пустая, как была «Убийства»: quests_completed никто не писал.
+    void this.leaderboard.increment(characterId, { questsCompleted: 1 })
+      .catch(() => { /* рейтинг не критичен для выдачи награды */ });
     void grantReputation(characterId, 'questDone');
     return {
       questId: def.id,

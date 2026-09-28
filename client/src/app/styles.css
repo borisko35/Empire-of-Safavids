@@ -1252,6 +1252,36 @@ input, select { font: inherit; }
 }
 
 /* ============================================================
+   Панели: уведомления
+   ============================================================ */
+/* Позиция отрицательная, чтобы цифра не сдвигала иконку: кнопка 36
+   пикселей, цифра сидит на её правом верхнем углу и свисает наружу */
+.panel-toggles button.has-badge { position: relative; }
+.unread-badge {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 16px; height: 16px; padding: 0 3px;
+  border-radius: 8px;
+  background: #e85a4a; color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px;
+  text-align: center; pointer-events: none;
+}
+
+.note-row {
+  padding: 8px 10px; margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+.note-row.unread {
+  background: rgba(201, 168, 76, 0.1);
+  border-color: rgba(201, 168, 76, 0.35);
+  cursor: pointer;
+}
+.note-row.unread:hover { background: rgba(201, 168, 76, 0.16); }
+.note-title { font-size: 13px; font-weight: 600; color: var(--cream); }
+.note-body { margin-top: 3px; font-size: 12px; color: var(--cream-dim); line-height: 1.45; }
+.note-when { margin-top: 4px; font-size: 10.5px; color: var(--cream-dim); opacity: 0.7; }
+/* ============================================================
    Панели: хаб
    ============================================================ */
 /* Ряд кнопок панели теперь короткий (хаб, сумка, квесты, карта), поэтому

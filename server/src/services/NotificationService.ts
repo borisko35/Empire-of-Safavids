@@ -87,6 +87,22 @@ export class NotificationService {
     logger.info(`[Notification] Global: ${type}`);
   }
 
+  /**
+   * Всё, что приходило игроку, прочитанное и нет.
+   *
+   * Раньше был только getUnread — и он не вызывался НИ ОДНОГО РАЗА. Уведомления
+   * писались в таблицу (мировой босс, лот продан, новое письмо), и всё, что
+   * мог их показать, — тост, который через пару секунд исчезал. Возвращаться к
+   * списку было некуда: панели уведомлений в игре не существовало.
+   */
+  async list(characterId: string, limit = 50): Promise<Notification[]> {
+    return this.db.query<Notification>(
+      `SELECT * FROM notifications WHERE character_id = $1
+       ORDER BY created_at DESC LIMIT $2`,
+      [characterId, limit]
+    );
+  }
+
   async getUnread(characterId: string): Promise<Notification[]> {
     return this.db.query<Notification>(
       `SELECT * FROM notifications WHERE character_id = $1 AND is_read = FALSE ORDER BY created_at DESC LIMIT 50`,
@@ -94,10 +110,46 @@ export class NotificationService {
     );
   }
 
+  /** Сколько непрочитанных — для красной цифры на кнопке */
+  async getUnreadCount(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count FROM notifications WHERE character_id = $1 AND is_read = FALSE`,
+      [characterId]
+    );
+    return parseInt(row?.count ?? '0', 10) || 0;
+  }
+
   async markAllRead(characterId: string): Promise<void> {
     await this.db.query(
       `UPDATE notifications SET is_read = TRUE WHERE character_id = $1`,
       [characterId]
     );
+  }
+
+  /** Прочитать одно: нужно, чтобы снять точку с конкретной строки */
+  async markRead(characterId: string, id: string): Promise<boolean> {
+    const res = await this.db.query<{ id: string }>(
+      `UPDATE notifications SET is_read = TRUE
+       WHERE id = $1 AND character_id = $2 RETURNING id`,
+      [id, characterId]
+    );
+    return res.length > 0;
+  }
+
+  /**
+   * Убрать прочитанные старше месяца.
+   *
+   * Без этого таблица растёт вечно: send пишет строку КАЖДЫЙ раз, когда
+   * лот продали, друг вошёл, пришло письмо. За год игры это сотни тысяч строк
+   * на аккаунт, и они ни разу не удаляются.
+   */
+  async pruneRead(characterId: string, keepDays = 30): Promise<number> {
+    const res = await this.db.query<{ id: string }>(
+      `DELETE FROM notifications
+       WHERE character_id = $1 AND is_read = TRUE AND created_at < NOW() - ($2 || ' days')::interval
+       RETURNING id`,
+      [characterId, String(keepDays)]
+    );
+    return res.length;
   }
 }
