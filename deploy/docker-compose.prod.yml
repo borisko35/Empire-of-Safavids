@@ -69,6 +69,11 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in deploy/.env}
       CLIENT_ORIGIN: ${CLIENT_ORIGIN:-https://${DOMAIN}}
+      # Сколько прокси стоит перед сервером: nginx клиента и Caddy. Express
+      # без этого значения берёт req.ip из адреса сокета, то есть у всех
+      # игроков ip был бы адресом контейнера nginx — один счётчик
+      # ограничений на весь сервер. Подробнее в server/src/index/index.ts.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-2}
       # Вход через внешние сервисы. Пустое значение — не ошибка: OAuthService
       # считает провайдера выключенным и прячет кнопку. Пока переменные не
       # перечислены здесь, значения из deploy/.env до контейнера не доходят.
