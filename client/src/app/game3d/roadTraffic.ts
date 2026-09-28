@@ -16,7 +16,7 @@
 // чтобы движение шло ровно по нарисованной дороге, а не рядом с ней.
 
 import * as THREE from 'three';
-import { ROAD_PATHS, groundHeight } from './terrain';
+import { ROAD_PATHS, CITY, groundHeight } from './terrain';
 
 export interface RoadTrafficHandle {
   /**
@@ -63,6 +63,44 @@ function roadLength(road: RoadDef): number {
   return Math.max(1, Math.hypot(road.to.x - road.from.x, road.to.z - road.from.z));
 }
 
+/**
+ * Участок дороги ВНЕ города, либо null, если дорога целиком в городе.
+ *
+ * Дороги идут от центра города к воротам и дальше, поэтому участок вне
+ * стен — это хвост дороги. Считаем перебором точек и берём самый длинный
+ * непрерывный кусок: дорога может входить в город и выходить из него
+ * дважды, и брать «первую точку снаружи» тогда нельзя.
+ *
+ * Запас от стен — 12 м: у самой стены верблюд с тюками висел бы на
+ * кровле башни.
+ */
+const OUTSIDE_MARGIN = 12;
+function outsideCityRange(road: RoadDef): { t0: number; t1: number } | null {
+  const STEPS = 240;
+  const out: boolean[] = [];
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    const x = road.from.x + (road.to.x - road.from.x) * t;
+    const z = road.from.z + (road.to.z - road.from.z) * t;
+    out.push(Math.hypot(x - CITY.x, z - CITY.z) > CITY.radius + OUTSIDE_MARGIN);
+  }
+  let best = { len: 0, t0: 0, t1: 0 };
+  let start = -1;
+  for (let i = 0; i <= STEPS; i++) {
+    if (out[i] && start < 0) start = i;
+    const closed = !out[i] || i === STEPS;
+    if (start >= 0 && closed) {
+      const len = i - start;
+      if (len > best.len) best = { len, t0: start / STEPS, t1: i / STEPS };
+      start = -1;
+    }
+  }
+  // Короче 30 м дороги — не дорога для каравана, и точка может оказаться
+  // вплотную к стене
+  if (best.len === 0 || (best.t1 - best.t0) < 0.05) return null;
+  return { t0: best.t0, t1: best.t1 };
+}
+
 /** Точка на дороге: t = 0 — начало, t = 1 — конец. */
 function pointOn(path: { from: { x: number; z: number }; to: { x: number; z: number } }, t: number): { x: number; z: number; y: number; angle: number } {
   const { from, to } = path;
@@ -94,6 +132,38 @@ interface Walker {
    * CARAVAN_SPEED / WALKER_SPEED — это ровно метры в секунду.
    */
   len: number;
+  /**
+   * Свой участок дороги: откуда до куда ему можно идти.
+   *
+   * ТУТ БЫЛО НИЧЕГО: путник отыгрывал всю дорогу от 0 до 1. А дороги
+   * начинаются В ЦЕНТРЕ ГОРОДА (ROAD_PATHS: from = CITY), и город
+   * занимает круг радиусом 116 м. То есть караван с верблюдами и путник
+   * шли через городскую площадь, между домами и лотками. Игрок написал:
+   * «Верблюды оказались в городе».
+   *
+   * Теперь участок задаётся outsideCityRange: та часть дороги, что вне
+   * стен. Заодно исчезает и вторая ошибка той же строки — откат на
+   * [-0.05, 1.05] уводил путника за конец дороги, где полотна нет.
+   */
+  tMin: number;
+  tMax: number;
+  /**
+   * Дорога, по которой он идёт.
+   *
+   * ТУТ БЫЛО НЕ ПОЛЕ, А ПРИВЕДЕНИЕ ТИПА: путь писали как
+   * `travellers.push(w as Walker & { road: RoadDef })`. Приведение типа —
+   * это только подсказка компилятору, на рантайме в объекте ничего не
+   * появляется. Итог: w.road === undefined у всех, а цикл обновления
+   * начинается с `if (!road) continue` — то есть пропускает каждого.
+   *
+   * ЧТО ВИДЕЛ ИГРОК. Шесть верблюдов и двенадцать людей стояли в мировом
+   * начале координат (0,0) и не двигались ни на шаг. (0,0) — это 43 м от
+   * центра Исфахана при радиусе стен 116 м, то есть ровно посреди города.
+   * Отсюда «Верблюды оказались в городе». Путники с заданиями, на которых
+   * можно кликнуть и получить задание, не работали по той же причине:
+   * позиция фигурки никогда не выставлялась, стояла в нуле.
+   */
+  road?: RoadDef;
 }
 
 /**
@@ -136,7 +206,7 @@ function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
     legs.push(pivot);
   }
 
-  return { group: g, legs, t: 0, dir: 1, speed: WALKER_SPEED, phase: 0, lag: 0, len: 0 };
+  return { group: g, legs, t: 0, dir: 1, speed: WALKER_SPEED, phase: 0, lag: 0, len: 0, tMin: 0, tMax: 1 };
 }
 
 /** Верблюд с тюком. Ноги — четыре отдельные, чтобы шаг читался. */
@@ -191,7 +261,7 @@ function makeCamel(packColor: THREE.Material): Walker {
     }
   }
 
-  return { group: g, legs, t: 0, dir: 1, speed: CARAVAN_SPEED, phase: 0, lag: 0, len: 0 };
+  return { group: g, legs, t: 0, dir: 1, speed: CARAVAN_SPEED, phase: 0, lag: 0, len: 0, tMin: 0, tMax: 1 };
 }
 
 /** Жёлтый восклицательный знак над тем, кто даёт задание. */
@@ -233,11 +303,17 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
   // ── Караваны ───────────────────────────────────────────────
   // Идут по дальним дорогам, чтобы не резать игроку путь в город. Три штуки
   // с разными стартовыми точками — иначе они слипаются в одну колонну.
-  const caravanRoads = [ROAD_PATHS[3], ROAD_PATHS[1], ROAD_PATHS[2]].filter(Boolean);
-  for (const road of caravanRoads) caravanPaths.push(road);
+  // Дорога берётся, только если у неё есть кусок вне стен. Дорога от города
+  // к точке возрождения (ROAD_PATHS[0]) целиком внутри города — 43 м при
+  // радиусе стен 116 м, — и каравану на ней делать нечего.
+  const caravanRoads = [ROAD_PATHS[3], ROAD_PATHS[1], ROAD_PATHS[2]]
+    .filter(Boolean)
+    .map(road => ({ road, range: outsideCityRange(road) }))
+    .filter((x): x is { road: RoadDef; range: { t0: number; t1: number } } => x.range !== null);
+  for (const { road } of caravanRoads) caravanPaths.push(road);
 
   const PACKS = [M.pack1, M.pack2, M.pack3];
-  caravanRoads.forEach((road, ci) => {
+  caravanRoads.forEach(({ road, range }, ci) => {
     // Колонна: замыкающий, верблюд, верблюд, замыкающий постом сзади.
     const column: Walker[] = [
       makePerson(0x6a5636, 'cap'),
@@ -248,13 +324,19 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
     // Отставание по t: метры вдоль дороги между соседями
     const lags = [0, -0.018, -0.036, -0.054];
     column.forEach((w, i) => {
-      w.t = 0.15 + ci * 0.3;
+      // Старт — на своём участке, а не в 15% пути от центра города
+      const span = range.t1 - range.t0;
+      w.tMin = range.t0;
+      w.tMax = range.t1;
+      w.t = range.t0 + span * ((0.15 + ci * 0.3) % 1);
       w.dir = ci % 2 === 0 ? 1 : -1;
-      w.lag = lags[i];
+      // Отставание не должно выкидывать замыкающего за стену города
+      w.lag = Math.max(lags[i], -span * 0.1);
       // Сзади идёт замыкающий, поэтому у него знак минус: он позади
       group.add(w.group);
       w.len = roadLength(road);
-      travellers.push(w as Walker & { road: RoadDef });
+      w.road = road;
+      travellers.push(w);
     });
   });
 
@@ -262,12 +344,24 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
   // Шестеро. Двое из них дают задание — на них можно кликнуть, и откроется
   // панель задач, ровно как у городских NPC с флагом quest.
   const WALKERS_PER_ROAD = 3;
-  for (let i = 0; i < WALKERS_PER_ROAD * 2; i++) {
-    const road = ROAD_PATHS[i % ROAD_PATHS.length];
+  // ТУТ БЫЛО ROAD_PATHS[i % ROAD_PATHS.length] и w.t = (i * 0.17) % 1.
+  // Первая дорога идёт от центра города к точке возрождения и целиком лежит
+  // внутри стен (43 м при радиусе 116), а t = 0 — это ровно площадь. Путники
+  // стояли посреди Исфахана, и город выглядел так, будто по нему идёт
+  // случайный поток. Теперь дорога отбирается с участком вне стен.
+  const walkerRoads = ROAD_PATHS
+    .map(road => ({ road, range: outsideCityRange(road) }))
+    .filter((x): x is { road: RoadDef; range: { t0: number; t1: number } } => x.range !== null);
+  const WALKER_COUNT = WALKERS_PER_ROAD * 2;
+  for (let i = 0; i < WALKER_COUNT && walkerRoads.length > 0; i++) {
+    const { road, range } = walkerRoads[i % walkerRoads.length];
     const hasQuest = i % 3 === 0;
     const name = WALKER_NAMES[i % WALKER_NAMES.length];
     const w = makePerson(0x3a3a42 + (i % 4) * 0x0a1410, i % 2 === 0 ? 'turban' : 'cap');
-    w.t = (i * 0.17) % 1;
+    const span = range.t1 - range.t0;
+    w.tMin = range.t0;
+    w.tMax = range.t1;
+    w.t = range.t0 + span * ((i * 0.37) % 1);
     w.dir = i % 2 === 0 ? 1 : -1;
     w.speed = WALKER_SPEED * (0.85 + (i % 3) * 0.12);
 
@@ -281,22 +375,22 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
     }
     group.add(w.group);
     w.len = roadLength(road);
-      travellers.push(w as Walker & { road: RoadDef });
+    w.road = road;
+    travellers.push(w);
   }
 
   function update(dt: number, now: number, px: number, pz: number): void {
-    for (const entry of travellers) {
-      const w = entry as Walker & { road: RoadDef };
+    for (const w of travellers) {
       const road = w.road;
       if (!road) continue;
 
       // Идём вперёд. Отставание держит колонну: у каждого своё t, но оно
       // сдвинуто на lag, поэтому задние идут ровно позади передних.
       w.t += (w.dir * w.speed * dt) / w.len;
-      if (w.t > 1.05) { w.t = 1.05; w.dir = -1; }
-      if (w.t < -0.05) { w.t = -0.05; w.dir = 1; }
+      if (w.t > w.tMax) { w.t = w.tMax; w.dir = -1; }
+      if (w.t < w.tMin) { w.t = w.tMin; w.dir = 1; }
 
-      const along = THREE.MathUtils.clamp(w.t + w.lag, 0, 1);
+      const along = THREE.MathUtils.clamp(w.t + w.lag, w.tMin, w.tMax);
       const p = pointOn(road, along);
       w.group.position.set(p.x, p.y, p.z);
       w.group.rotation.y = w.dir > 0 ? p.angle : p.angle + Math.PI;

@@ -1,37 +1,45 @@
-// Извлечение НАСТОЯЩЕГО тела функции из исходника TypeScript.
+// Извлечение НАСТОЯЩЕГО тела функции из исходника TypeScript и его запуск.
 //
 // ЗАЧЕМ. Правило проекта: тест должен выполнять настоящую функцию из кода, а
 // не её копию. Копия — это расхождение: сегодня тест проверяет одно, а завтра
 // в коде другое, и тест продолжает быть зелёным, потому что проверяет не
 // код, а себя.
 //
-// Тут ровно обратная задача: тесты лежат в server/src/tests, под клиентский
-// раннер их нет, а импортировать world.ts целиком нельзя — он тянет звук,
+// Тут ровно обратная задача: тесты лежат в server/src/tests, клиентского
+// раннера у них нет, а импортировать world.ts целиком нельзя — он тянет звук,
 // сокет и движок. Поэтому берём тело функции ИЗ ФАЙЛА и исполняем его на
-// подставном document. Правка в теле функции ломает тест; правка в
-// сигнатуре (новый тип) — нет, и это единственное, что тест не видит.
+// подставных зависимостях. Правка в теле ломает тест; копия логики в тесте
+// не ломалась бы никогда.
+//
+// ПОЧЕМУ ЧЕРЕЗ typescript, А НЕ РЕГУЛЯРКАМИ. Тело функции — это программа на
+// TypeScript, и внутри него есть всё: `const out: boolean[] = []`,
+// `document.querySelector<HTMLButtonElement>(...)`, возвращаемые типы. Вырезать
+// это регулярками нельзя безопасно: `имя: тип` встречается и в теле
+// (`const out: boolean[]`), и съедает оттуда половину функции. transpileModule
+// делает ровно то, что нужно, и не может испортить код.
 //
 // ЧТО ЗДЕСЬ НЕ ТЕСТИРУЕТСЯ. Тест не знает про game3d, socket и загрузчики
 // панелей — они подставляются заглушками-регистрами, которые только
 // запоминают вызов. Их содержимое здесь не важно, важно лишь, что
 // openPanelById позвала их в правильном порядке.
+import * as ts from 'typescript';
 
 /**
  * Вырезать тело функции по имени.
  *
- * Ищет `function <name>(` (с необязательным `export`), находит закрывающую
- * скобку тела по балансу и снимает с исходника TypeScript-обвязку:
- *   - аннотации параметров и возвращаемого типа: `(panel: string): void`
- *   - дженерики вызова: `document.querySelector<HTMLButtonElement>(`
+ * Ищет `function <name>(` (с необязательным `export`), пропускает возвращаемый
+ * тип и находит тело по балансу скобок.
  *
- * Обе правки безопасны: аннотация типа идёт до `:` или до `{`, а дженерик
- * вызова — строго между именем метода и открытой скобкой.
+ * Пропуск возвращаемого типа сделан по указателю, а не регуляркой: у
+ * `outsideCityRange` тип начинается с `{`, и первый `{` после скобки
+ * параметров — это его, а не тело. Регулярка на этом месте обрезала бы
+ * функцию по `{` типа.
  */
 export function extractFunction(source: string, name: string): string {
   const decl = new RegExp(`(?:export\\s+)?function\\s+${name}\\s*\\(`).exec(source);
   if (!decl) throw new Error(`функция ${name} не найдена`);
 
-  // Открывающая скобка параметров
+  // Закрывающая скобка параметров
   let i = decl.index + decl[0].length - 1;
   let depth = 0;
   for (; i < source.length; i++) {
@@ -40,8 +48,30 @@ export function extractFunction(source: string, name: string): string {
   }
   const paramsEnd = i;
 
-  // Открывающая скобка тела
-  let bodyStart = source.indexOf('{', paramsEnd);
+  // Возвращаемый тип, если он есть
+  let afterParams = paramsEnd + 1;
+  while (afterParams < source.length && /\s/.test(source[afterParams])) afterParams++;
+  if (source[afterParams] === ':') {
+    let j = afterParams + 1;
+    while (j < source.length && /\s/.test(source[j])) j++;
+    if (source[j] === '{') {
+      // Объектный тип: до парной скобки, затем хвост `| null`
+      let d = 0;
+      for (; j < source.length; j++) {
+        if (source[j] === '{') d++;
+        else if (source[j] === '}' && --d === 0) { j++; break; }
+      }
+      const rest = /^\s*(\|\s*[A-Za-z_$][\w$]*\s*)*/.exec(source.slice(j));
+      j += rest ? rest[0].length : 0;
+    } else {
+      // Простой тип: идентификатор с дженериками и пробелами
+      const simple = /^[A-Za-z_$][\w$<>,.\s.[\]]*/.exec(source.slice(j));
+      j += simple ? simple[0].length : 0;
+    }
+    afterParams = j;
+  }
+
+  const bodyStart = source.indexOf('{', afterParams);
   if (bodyStart < 0) throw new Error(`у ${name} нет тела`);
 
   depth = 0;
@@ -52,24 +82,25 @@ export function extractFunction(source: string, name: string): string {
   }
   if (bodyEnd < 0) throw new Error(`тело ${name} не закрыто`);
 
-  let out = source.slice(decl.index, bodyEnd + 1);
-  // export function → function (иначе вне модуля это синтаксическая ошибка)
-  out = out.replace(/^export\s+/, '');
-  // Аннотации: `name(a: string, b: Foo<Bar>[])` → `name(a, b)`
-  const head = out.slice(0, out.indexOf(')'));
-  const tail = out.slice(out.indexOf(')'));
-  const cleanHead = head.replace(/([A-Za-z_$][\w$]*)\s*:\s*[^,)]+/g, '$1');
-  // Возвращаемый тип: `): number {` → `) {`
-  out = cleanHead + tail.replace(/\)\s*:\s*[^{]+\{/, ') {');
-  // Дженерики вызова: `.querySelector<HTMLButtonElement>(` → `.querySelector(`
-  out = out.replace(/\.(querySelector|querySelectorAll|getElementById)\s*<[^<>]*>\s*\(/g, '.$1(');
-  return out;
+  // `export function` — вне модуля это синтаксическая ошибка, а transpileModule
+  // с ModuleKind.None превратит его в обращение к exports, которого тут нет
+  return (
+    source.slice(decl.index, paramsEnd + 1).replace(/^export\s+/, '') +
+    source.slice(bodyStart, bodyEnd + 1)
+  );
+}
+
+/** Снять типы: получить из TypeScript настоящий JavaScript. */
+function toJs(tsSource: string): string {
+  return ts.transpileModule(tsSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2019, module: ts.ModuleKind.None },
+  }).outputText;
 }
 
 /**
  * Собрать исполняемую функцию из нескольких настоящих тел.
  *
- * extra — подставляемые заглушки (загрузчики панелей, переводчик). Их
+ * deps — подставляемые заглушки (загрузчики панелей, город, document). Их
  * содержимое тест не проверяет, поэтому передаётся снаружи.
  */
 export function buildRunner(
@@ -83,7 +114,7 @@ export function buildRunner(
   const factory = new Function(
     'document',
     ...keys,
-    `${body}\nreturn { ${names.join(', ')} };`,
+    `${toJs(body)}\nreturn { ${names.join(', ')} };`,
   );
   const values = keys.map((k) => deps[k]);
   return (...args: never[]) =>
