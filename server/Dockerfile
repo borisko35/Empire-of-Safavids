@@ -10,6 +10,9 @@ WORKDIR /app
 COPY server/tsconfig.json ./server/
 COPY server/src ./server/src
 COPY shared ./shared
+# Тест gameI18n проверяет настоящую функцию t() из клиентского кода,
+# поэтому файл должен попасть в сборку. В рабочий образ он не идёт.
+COPY client/src/app/i18n.ts ./client/src/app/i18n.ts
 
 WORKDIR /app/server
 RUN npm run build
