@@ -11,9 +11,11 @@ import { DUNGEONS_DATABASE, DungeonDefinition } from '../data/dungeons';
 import { MONSTERS_DATABASE } from '../data/monsters';
 import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
+import { DatabaseService } from '../services/DatabaseService';
 import { grantReputation } from './ReputationGrants';
 import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface DungeonSession {
   id: string;
@@ -43,6 +45,7 @@ export class DungeonService {
   private sessions = new Map<string, DungeonSession>();
   private monsterToSession = new Map<string, string>();
   private characterToSession = new Map<string, string>();
+  private db = DatabaseService.getInstance();
   private ai = new AISystem(); // заглушка: заменяется при init
   private characters = new CharacterService();
 
@@ -83,8 +86,16 @@ export class DungeonService {
       return { ok: false, code: 'dungeon_wrong_region' };
     }
 
+    // Идентификатор сессии — UUID, а не строка вида dg_1756_abc123.
+    //
+    // ЧТО БЫЛО. Идентификатор собирался из времени и случайных символов, а
+    // колонка dungeon_sessions.id объявлена как UUID со ссылкой на
+    // characters(id). Такое значение в колонку UUID не пишется: Postgres
+    // отвергал бы его. То есть сессия не могла оказаться в базе в принципе,
+    // и перезапуск сервера стирал все заходы молча — без ошибки, без записи
+    // в лог. Пять таблиц dungeon_* существовали, но не наполнялись.
     const session: DungeonSession = {
-      id: `dg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: uuidv4(),
       dungeonId,
       region: def.region,
       shardId: character.serverId ?? 'isfahan',
@@ -96,6 +107,28 @@ export class DungeonService {
       startedAt: Date.now(),
     };
 
+    this.spawnSessionMonsters(session, def);
+
+    this.sessions.set(session.id, session);
+    this.characterToSession.set(characterId, session.id);
+    // Запись в базу. Ошибка здесь не должна отменять вход: игрок уже
+    // внутри, монстры уже заспавнены. Но молча проглатывать нельзя — иначе
+    // останется ровно то же, что было: потерянный заход без следа.
+    await this.persistSession(session).catch((e) =>
+      logger.warn(`[Dungeon] не удалось записать сессию ${session.id}: ${e}`));
+    logger.info(`[Dungeon] ${def.nameRu} started by ${character.name} (${session.monsterIds.size} monsters)`);
+    return { ok: true, session };
+  }
+
+  /**
+   * Заспавнить монстров захода.
+   *
+   * Один код на два случая: новый заход (enter) и восстановление после
+   * перезапуска. Если бы списки монстров и боссов набирались в двух местах,
+   * то одна из копий рано или поздно разошлась бы с другой, и восстановленный
+   * заход считался бы выигранным тем, чего на самом деле не было убито.
+   */
+  private spawnSessionMonsters(session: DungeonSession, def: DungeonDefinition): void {
     for (const room of def.rooms) {
       for (const group of room.monsters) {
         for (const pos of group.positions) {
@@ -110,11 +143,111 @@ export class DungeonService {
         }
       }
     }
+  }
 
-    this.sessions.set(session.id, session);
-    this.characterToSession.set(characterId, session.id);
-    logger.info(`[Dungeon] ${def.nameRu} started by ${character.name} (${session.monsterIds.size} monsters)`);
-    return { ok: true, session };
+  /**
+   * Записать сессию и её участников в базу.
+   *
+   * dungeon_sessions и dungeon_members созданы миграцией 010 и с тех пор
+   * пустые. Монстры намеренно не сохраняются: их состав выводится из
+   * DUNGEONS_DATABASE при восстановлении, а идентификаторы экземпляров
+   * всё равно меняются при каждом спавне.
+   */
+  private async persistSession(session: DungeonSession): Promise<void> {
+    await this.db.query(
+      `INSERT INTO dungeon_sessions (id, dungeon_id, difficulty, leader_id, max_size, started_at, status)
+       VALUES ($1, $2, 'normal', $3, 5, to_timestamp($4 / 1000.0), 'active')
+       ON CONFLICT (id) DO NOTHING`,
+      [session.id, session.dungeonId, session.leaderId, session.startedAt]
+    );
+    for (const memberId of session.members) {
+      await this.db.query(
+        `INSERT INTO dungeon_members (session_id, character_id, role)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (session_id, character_id) DO NOTHING`,
+        [session.id, memberId, memberId === session.leaderId ? 'leader' : 'member']
+      );
+    }
+  }
+
+  /**
+   * Закрыть сессию в базе: простав��ить статус и время завершения.
+   *
+   * abandoned — игрок вышел сам, completed — заход доведён до конца.
+   */
+  private async closeSessionInDb(sessionId: string, status: 'completed' | 'abandoned'): Promise<void> {
+    await this.db.query(
+      `UPDATE dungeon_sessions
+       SET status = $2, completed_at = NOW()
+       WHERE id = $1 AND status = 'active'`,
+      [sessionId, status]
+    ).catch((e) => logger.warn(`[Dungeon] не удалось закрыть сессию ${sessionId}: ${e}`));
+  }
+
+  /**
+   * Вернуть из базы заходы, которые остались активными после перезапуска.
+   *
+   * ЧТО ЭТО ДЕЛАЕТ. Сервер поднимается, читает незакрытые сессии и снова
+   * спавнит их монстров. Игрок, зашедший в данж перед рестартом, возвращается
+   * в тот же заход, а не начинает заново. Без этого перезапуск обслуживания
+   * стирал прогресс всех, кто в этот момент был внутри.
+   *
+   * Вызывается один раз при старте сервера, до приёма соединений.
+   */
+  async restoreActiveSessions(): Promise<number> {
+    const rows = await this.db.query<{
+      id: string; dungeon_id: string; leader_id: string; started_at: Date;
+    }>(
+      `SELECT s.id, s.dungeon_id, s.leader_id, s.started_at
+       FROM dungeon_sessions s
+       WHERE s.status = 'active'`
+    ).catch((e) => {
+      logger.warn(`[Dungeon] не удалось прочитать активные сессии: ${e}`);
+      return [];
+    });
+    if (!rows.length) return 0;
+
+    let restored = 0;
+    for (const row of rows) {
+      const def = DUNGEONS_DATABASE[row.dungeon_id];
+      if (!def) {
+        // Данж в коде удалили, а сессия осталась. Закрываем, чтобы не висела
+        // вечно и не занимала место в восстановлении при следующем старте
+        await this.closeSessionInDb(row.id, 'abandoned');
+        continue;
+      }
+      const leader = await this.characters.getCharacterById(row.leader_id).catch(() => null);
+      if (!leader) {
+        await this.closeSessionInDb(row.id, 'abandoned');
+        continue;
+      }
+
+      const members = await this.db.query<{ character_id: string }>(
+        'SELECT character_id FROM dungeon_members WHERE session_id = $1',
+        [row.id]
+      ).catch(() => []);
+
+      const session: DungeonSession = {
+        id: row.id,
+        dungeonId: row.dungeon_id,
+        region: def.region,
+        shardId: leader.serverId ?? 'isfahan',
+        leaderId: row.leader_id,
+        members: new Set(members.map(m => m.character_id)),
+        monsterIds: new Set(),
+        requiredBossIds: new Set(),
+        killedBossIds: new Set(),
+        startedAt: new Date(row.started_at).getTime(),
+      };
+      session.members.add(row.leader_id);
+      this.spawnSessionMonsters(session, def);
+
+      this.sessions.set(session.id, session);
+      for (const memberId of session.members) this.characterToSession.set(memberId, session.id);
+      restored++;
+    }
+    if (restored) logger.info(`[Dungeon] восстановлено активных заходов: ${restored}`);
+    return restored;
   }
 
   /** Выйти из данжа: монстры сессии убираются из мира */
@@ -128,6 +261,10 @@ export class DungeonService {
     session.members.delete(characterId);
 
     if (session.members.size === 0 && !session.completedAt) {
+      // Последний участник вышел — заход брошен. Без этой записи сессия
+      // осталась бы в базе со статусом active и вернулась бы при следующем
+      // перезапуске сервера как живая, хотя монстров давно нет
+      await this.closeSessionInDb(session.id, 'abandoned');
       this.disposeSession(session);
     }
     return true;
@@ -187,6 +324,21 @@ export class DungeonService {
     logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${def.rewards.experience}xp, +${gold}g)`);
     // Репутация за данж — заметный поступок, а не рядовой бой
     void grantReputation(killerId, 'dungeonClear');
+
+    // История прохождений. Таблица создана миграцией 010 и с тех пор пуста:
+    // без неё нельзя ни показать игроку «сколько данжей ты прошёл», ни
+    // понять, какие из них никто не проходил (на таких стоит переписать
+    // награду — обычно они слишком жёсткие или слишком щедрые).
+    const durationSec = Math.max(0, Math.round((session.completedAt - session.startedAt) / 1000));
+    const totalMonsters = session.requiredBossIds.size + session.monsterIds.size;
+    await this.db.query(
+      `INSERT INTO dungeon_history
+         (character_id, dungeon_id, difficulty, result, monsters_killed, bosses_killed, duration_sec)
+       VALUES ($1, $2, 'normal', 'completed', $3, $4, $5)`,
+      [killerId, session.dungeonId, totalMonsters, session.killedBossIds.size, durationSec]
+    ).catch((e) => logger.warn(`[Dungeon] не удалось записать историю: ${e}`));
+    await this.closeSessionInDb(session.id, 'completed');
+
     this.disposeSession(session);
     return info;
   }

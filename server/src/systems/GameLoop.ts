@@ -80,6 +80,13 @@ export class GameLoop {
 
     // Данжи и мировые события работают на том же ИИ игрового цикла
     DungeonService.getInstance().attachAI(this.spawnSystem.getAI());
+    // Вернуть заходы, которые остались активными до перезапуска.
+    // После attachAI: восстановление спавнит монстров через общий ИИ,
+    // и до его подключения спавнить было бы нечем.
+    //
+    // Не ждём: восстановление ходит в базу, а игроки уже подключаются.
+    void DungeonService.getInstance().restoreActiveSessions()
+      .catch((e) => logger.error('[GameLoop] восстановление заходов не удалось:', e));
     WorldEventSystem.getInstance().init(
       this.spawnSystem.getAI(),
       () => this.spawnSystem.getActiveShards(),
