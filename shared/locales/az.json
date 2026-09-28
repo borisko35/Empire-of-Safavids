@@ -1009,5 +1009,8 @@
     "item": "şey",
     "claim": "Götür",
     "claimed": "Mükafat alındı"
+  },
+  "dungeon": {
+    "attempts_over": "Bugün cəhd bitdi. Sabah yenilənir."
   }
 }

@@ -17,6 +17,20 @@ import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Сколько раз в день персонаж может войти в данж.
+ *
+ * Считается ПРОВЕДЁННЫЙ заход, а не удачный: зашёл и вышел, не убив никого,
+ * — попытка израсходована, потому что время и монстры уже потрачены. Иначе
+ * лимит обходился бы заходом-выходом, и толку от него не было бы.
+ *
+ * Три попытки на данж в сутки на персонажа. Ограничение не на аккаунт:
+ * один игрок с тремя персонажами получает девять, и это осознанно — иначе
+ * вторая покупка персонажа становилась бы наказанием за игру.
+ * Правится одной строкой, если понадобится иное число.
+ */
+const DUNGEON_ATTEMPTS_PER_DAY = 3;
+
 export interface DungeonSession {
   id: string;
   dungeonId: string;
@@ -66,7 +80,7 @@ export class DungeonService {
    * клиенты участников получают их через обычный канал спавна региона.
    */
   async enter(characterId: string, dungeonId: string): Promise<
-    { ok: true; session: DungeonSession } | { ok: false; code: string }
+    { ok: true; session: DungeonSession; attemptsLeft: number } | { ok: false; code: string }
   > {
     const def: DungeonDefinition | undefined = DUNGEONS_DATABASE[dungeonId];
     if (!def) return { ok: false, code: 'dungeon_not_found' };
@@ -75,6 +89,12 @@ export class DungeonService {
     if (existingId) {
       const existing = this.sessions.get(existingId);
       if (existing && !existing.completedAt) return { ok: false, code: 'dungeon_already_inside' };
+    }
+
+    // Списание попытки — до любой работы: если лимит исчерпан, не должен
+    // ни читаться персонаж, ни создаваться сессия в памяти
+    if (await this.attemptsLeft(characterId, dungeonId) <= 0) {
+      return { ok: false, code: 'dungeon_attempts_exhausted' };
     }
 
     const character = await this.characters.getCharacterById(characterId);
@@ -94,6 +114,12 @@ export class DungeonService {
     // отвергал бы его. То есть сессия не могла оказаться в базе в принципе,
     // и перезапуск сервера стирал все заходы молча — без ошибки, без записи
     // в лог. Пять таблиц dungeon_* существовали, но не наполнялись.
+    // Списываем здесь, а не в самом начале: уровень, регион и «уже внутри»
+    // — отказы, за которые попытку списывать нечестно. Игрок не получил
+    // ни монстра, ни минуты захода
+    if (!(await this.spendAttempt(characterId, dungeonId))) {
+      return { ok: false, code: 'dungeon_attempts_exhausted' };
+    }
     const session: DungeonSession = {
       id: uuidv4(),
       dungeonId,
@@ -117,7 +143,10 @@ export class DungeonService {
     await this.persistSession(session).catch((e) =>
       logger.warn(`[Dungeon] не удалось записать сессию ${session.id}: ${e}`));
     logger.info(`[Dungeon] ${def.nameRu} started by ${character.name} (${session.monsterIds.size} monsters)`);
-    return { ok: true, session };
+    // Остаток спрашиваем заново после списания, а не запоминаем до него:
+    // вход в данж — редкое действие, лишний запрос ничего не стоит, зато
+    // число не может разойтись с тем, что реально лежит в базе
+    return { ok: true, session, attemptsLeft: await this.attemptsLeft(characterId, dungeonId) };
   }
 
   /**
@@ -248,6 +277,44 @@ export class DungeonService {
     }
     if (restored) logger.info(`[Dungeon] восстановлено активных заходов: ${restored}`);
     return restored;
+  }
+
+/**
+ * Сколько попыток сегодня осталось у персонажа в этом данже.
+ *
+ * reset_date пришлось бы сравнивать в коде, и тогда смена суток зависела бы
+ * от часового пояса сервера: игрок в другом поясе увидел бы «попытки
+ * кончились» до полуночи. День считает база — CURRENT_DATE в Postgres
+ * один на всех.
+ */
+  async attemptsLeft(characterId: string, dungeonId: string): Promise<number> {
+    const row = await this.db.queryOne<{ attempts: number }>(
+      `SELECT attempts FROM dungeon_attempts
+       WHERE character_id = $1 AND dungeon_id = $2 AND reset_date = CURRENT_DATE`,
+      [characterId, dungeonId]
+    ).catch(() => null);
+    return Math.max(0, DUNGEON_ATTEMPTS_PER_DAY - (Number(row?.attempts) || 0));
+  }
+
+  /**
+   * Списать попытку. Возвращает false, если дневной лимит исчерпан.
+   *
+   * UPDATE с условием attempts < лимит, а не SELECT с последующим UPDATE:
+   * две одновременные попытки входа (двойной клик, две вкладки) иначе обе
+   * прочитали бы «осталось 1» и обе прошли бы. Postgres же обновляет строку
+   * один раз: вторая попытка увидит attempts уже 3 и вернёт ноль строк.
+   */
+  private async spendAttempt(characterId: string, dungeonId: string): Promise<boolean> {
+    const res = await this.db.query<{ attempts: number }>(
+      `INSERT INTO dungeon_attempts (character_id, dungeon_id, attempts, reset_date)
+       VALUES ($1, $2, 1, CURRENT_DATE)
+       ON CONFLICT (character_id, dungeon_id) DO UPDATE
+         SET attempts = dungeon_attempts.attempts + 1
+       WHERE reset_date = CURRENT_DATE AND dungeon_attempts.attempts < $3
+       RETURNING attempts`,
+      [characterId, dungeonId, DUNGEON_ATTEMPTS_PER_DAY]
+    );
+    return res.length > 0;
   }
 
   /** Выйти из данжа: монстры сессии убираются из мира */

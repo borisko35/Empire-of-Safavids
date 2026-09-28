@@ -1009,5 +1009,8 @@
     "item": "item",
     "claim": "Claim",
     "claimed": "Reward received"
+  },
+  "dungeon": {
+    "attempts_over": "No attempts left today. They reset tomorrow."
   }
 }

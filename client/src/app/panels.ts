@@ -86,6 +86,19 @@ export async function loadDungeons(): Promise<void> {
     if (!box) return;
     box.innerHTML = '';
 
+    // Попытки на сегодня. Кнопка «Войти» без этого сообщения в конце дня
+    // просто перестаёт работать, и игрок думает, что игра сломалась.
+    // Сообщаем один раз на всю панель: счётчик общий на персонажа, и
+    // приписывать его к каждому данжу было бы враньём — они считаются
+    // раздельно, и одна цифра означала бы разное для разных данжей
+    const attempts = (status as { attempts?: Record<string, number> }).attempts;
+    if (attempts && Object.values(attempts).every(n => n <= 0)) {
+      const warn = document.createElement('div');
+      warn.className = 'dungeon-attempts-over';
+      warn.textContent = t('dungeon.attempts_over');
+      box.append(warn);
+    }
+
     if (status.active) {
       const st = rowEl('inv-item dungeon-status');
       const name = document.createElement('span');

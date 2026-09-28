@@ -2168,3 +2168,20 @@ body[data-display="windowed"] #screen-world::after {
 .mail-when { font-size: 10px; color: var(--cream-dim); opacity: 0.7; font-weight: 400; white-space: nowrap; }
 .mail-body { font-size: 12px; color: var(--cream-dim); line-height: 1.45; }
 .mail-reward { font-size: 12px; color: #7fe0ab; font-weight: 600; }
+
+
+/* ============================================================
+   Панели: данжи — предупреждение о попытках
+   ============================================================ */
+/* Показывается, когда дневной лимит попыток исчерпан. Без него кнопка
+   «Войти» просто перестаёт работать, и это выглядит как поломка игры. */
+.dungeon-attempts-over {
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(200, 90, 74, 0.14);
+  border: 1px solid rgba(200, 90, 74, 0.4);
+  color: #e8a79c;
+  font-size: 12px;
+  line-height: 1.45;
+}

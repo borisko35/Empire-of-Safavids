@@ -746,6 +746,10 @@ gameRouter.post('/dungeons/:dungeonId/enter', secureMiddleware, requireCharacter
         monsterCount: result.session.monsterIds.size,
         bossCount: result.session.requiredBossIds.size,
         killedBossCount: result.session.killedBossIds.size,
+        // Сколько попыток осталось. Без этого игрок видит, что кнопка
+        // перестала работать, и не понимает почему: «вход запрещён» без
+        // числа выглядит как поломка, а «осталось 0 до завтра» — как правило
+        attemptsLeft: result.attemptsLeft,
       },
     });
   })
@@ -763,7 +767,17 @@ gameRouter.post('/dungeons/leave', secureMiddleware, requireCharacterOwnership()
 gameRouter.post('/dungeons/status', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
     const session = dungeonService.getSessionForCharacter(req.body.characterId);
-    if (!session) return res.json({ active: false });
+    if (!session) {
+      // Попытки отдаём даже без активной сессии: именно когда игрок стоит
+      // вне данжа, ему и нужно знать, сколько раз ещё можно войти. Без этого
+      // кнопка «Войти» просто перестаёт работать, и выглядит поломкой, а не
+      // правилом игры
+      const available = await Promise.all(
+        Object.keys(DUNGEONS_DATABASE).map(async (id) =>
+          [id, await dungeonService.attemptsLeft(req.body.characterId, id)] as const)
+      );
+      return res.json({ active: false, attempts: Object.fromEntries(available) });
+    }
     const def = DUNGEONS_DATABASE[session.dungeonId];
     return res.json({
       active: true,
