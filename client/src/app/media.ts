@@ -47,9 +47,9 @@ const MAX_VIDEO = 300 * 1024 * 1024;
 const OK_EXT = /\.(png|jpe?g|gif|webp|mp4|webm|mov)$/i;
 
 function humanSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} КБ`;
-  return `${bytes} Б`;
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}${t('common.mb')}`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)}${t('common.kb')}`;
+  return `${bytes}${t('common.b')}`;
 }
 
 function token(): string {

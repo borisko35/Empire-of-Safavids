@@ -54,12 +54,12 @@ export async function openNpcDialogue(npcId: string): Promise<void> {
     // Разговор мог закрыть talk-цель — обновляем журнал и стрелку-навигатор
     if (data.questsCompleted?.length) {
       for (const q of data.questsCompleted) {
-        toast(`Квест завершён: ${q.titleRu} (+${q.experience} ${t('world.exp')})`, 'success');
+        toast(t('dialogue.quest_done').replace('{name}', q.titleRu).replace('{n}', String(q.experience)).replace('{unit}', t('world.exp')), 'success');
       }
     }
     window.dispatchEvent(new CustomEvent('quest:accepted'));
   } catch (err) {
-    toast('Не удалось начать разговор', 'error');
+    toast(t('dialogue.talk_failed'), 'error');
     closeNpcDialogue();
   }
 }
@@ -86,7 +86,7 @@ function renderDialogue(data: NpcInfo): void {
   const tone = data.memory?.tone ?? 'neutral';
   const toneIcon = tone === 'friendly' ? '😊' : tone === 'hostile' ? '😠' : '😐';
   nameEl.textContent = `${data.nameRu} ${toneIcon} Lv.${lvl}`;
-  (nameEl as HTMLElement).title = `Дружба ${lvl}/5 tone=${tone}`;
+  (nameEl as HTMLElement).title = t('dialogue.friendship').replace('{lvl}', String(lvl)).replace('{tone}', tone);
   textEl.textContent = data.line.textRu;
 
   choicesEl.innerHTML = '';
@@ -107,7 +107,7 @@ function renderDialogue(data: NpcInfo): void {
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'dialog-close-btn';
-    closeBtn.textContent = 'Завершить разговор';
+    closeBtn.textContent = t('dialogue.finish');
     closeBtn.addEventListener('click', closeNpcDialogue);
     choicesEl.appendChild(closeBtn);
   } else {
@@ -134,14 +134,14 @@ async function handleChoice(choiceIndex: number): Promise<void> {
   // accept с клиента не нужен: он создавал дубль строки character_quests
   // (до появления уникального индекса) и сбрасывал progress.
   if (choice.action === 'quest' && choice.questId) {
-    toast('Квест принят! Проверь панель квестов (J)', 'success');
+    toast(t('dialogue.quest_accepted'), 'success');
     // авто-обновим панель квестов без похода в меню
     try { const { loadQuests } = await import('./hud'); await loadQuests(); } catch {}
   }
 
   // Проверка перемещения к NPC
   if (choice.action === 'move') {
-    toast('Направляйтесь к нужному NPC', 'info');
+    toast(t('dialogue.goto_npc'), 'info');
   }
 
   // Загрузить следующую реплику
@@ -169,7 +169,7 @@ async function handleChoice(choiceIndex: number): Promise<void> {
     // Разговор мог закрыть talk-цель / завершить квест — обновить журнал и стрелку
     if (data.questsCompleted?.length) {
       for (const q of data.questsCompleted) {
-        toast(`Квест завершён: ${q.titleRu} (+${q.experience} ${t('world.exp')})`, 'success');
+        toast(t('dialogue.quest_done').replace('{name}', q.titleRu).replace('{n}', String(q.experience)).replace('{unit}', t('world.exp')), 'success');
         void requestCutsceneForQuest(q.questId);
       }
     }
@@ -184,7 +184,7 @@ async function handleChoice(choiceIndex: number): Promise<void> {
     }
     window.dispatchEvent(new CustomEvent('quest:accepted'));
   } catch (err) {
-    toast('Ошибка диалога', 'error');
+    toast(t('dialogue.error'), 'error');
   }
 }
 

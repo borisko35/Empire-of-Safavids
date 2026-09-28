@@ -20,14 +20,14 @@ export interface CutsceneLine {
 }
 
 const TYPE_MS = 18;          // скорость печатной машинки
-const BACKDROP_LABELS: Record<string, { ru: string; en: string }> = {
-  throne_room: { ru: 'Тронный зал', en: 'Throne Room' },
-  tabriz_gate: { ru: 'Ворота Тебриза', en: 'Tabriz Gate' },
-  caravan_road: { ru: 'Караванная дорога', en: 'Caravan Road' },
-  silk_road_fort: { ru: 'Крепость на Шёлковом Пути', en: 'Silk Road Fort' },
-  caucasus_pass: { ru: 'Кавказский перевал', en: 'Caucasus Pass' },
-  desert_dunes: { ru: 'Барханы Хорасана', en: 'Khorasan Dunes' },
-  gulf_harbor: { ru: 'Пристань Залива', en: 'Gulf Harbour' },
+const BACKDROP_LABELS: Record<string, string> = {
+  throne_room: 'cutscene.throne_room',
+  tabriz_gate: 'cutscene.tabriz_gate',
+  caravan_road: 'cutscene.caravan_road',
+  silk_road_fort: 'cutscene.silk_road_fort',
+  caucasus_pass: 'cutscene.caucasus_pass',
+  desert_dunes: 'cutscene.desert_dunes',
+  gulf_harbor: 'cutscene.gulf_harbor',
 };
 
 interface Running {
@@ -62,7 +62,7 @@ export function playCutscene(scene: CutsceneData, end?: () => void): void {
 
   const place = BACKDROP_LABELS[scene.backdrop];
   const titleEl = el('cutscene-place');
-  if (titleEl) titleEl.textContent = place ? (lang() === 'en' ? place.en : place.ru) : '';
+  if (titleEl) titleEl.textContent = place ? t(place) : '';
 
   const nameEl = el('cutscene-speaker');
   if (nameEl) nameEl.textContent = scene.titleRu;

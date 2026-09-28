@@ -60,6 +60,15 @@ const SOURCE_FILES = [
   'client/src/app/panels.ts',
   'client/src/app/hud.ts',
   'client/src/app/screens/chars.ts',
+  'client/src/app/game3d/interiors.ts',
+  'client/src/app/game3d/world3d.ts',
+  'client/src/app/dialogue.ts',
+  'client/src/app/cutscene.ts',
+  'client/src/app/world.ts',
+  'client/src/app/connectionIndicator.ts',
+  'client/src/app/media.ts',
+  'client/src/app/tutorial.ts',
+  'client/src/app/main.ts',
 ] as const;
 const HTML_FILE = 'client/src/app/index.html';
 
@@ -77,6 +86,20 @@ type Scan = {
 // попадают в t() динамически — вызов t(ZONE_NAMES[z]) парсер не разберёт,
 // поэтому без этой проверки опечатка в ключе никем не была бы поймана.
 const LOOKS_LIKE_KEY = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
+
+// Но не всякая похожая строка — ключ: localStorage.getItem('eos.locale')
+// тоже проходит по маске. Смотрим только на литералы-значения из карт:
+// { tabriz: 'regions.tabriz' }, константы и массивы.
+function inMapContext(node: ts.Node): boolean {
+  const p = node.parent;
+  if (!p) return false;
+  return (
+    ts.isPropertyAssignment(p) ||
+    ts.isPropertyDeclaration(p) ||
+    ts.isVariableDeclaration(p) ||
+    ts.isArrayLiteralExpression(p)
+  );
+}
 
 function scan(rel: string): Scan {
   const path = join(repoRoot, rel);
@@ -96,7 +119,9 @@ function scan(rel: string): Scan {
       const raw = src.slice(start + 1, node.getEnd() - 1);
       literals.push({ line: sf.getLineAndCharacterOfPosition(start).line + 1, raw });
     }
-    if (ts.isStringLiteral(node) && LOOKS_LIKE_KEY.test(node.text)) keyLike.push(node.text);
+    if (ts.isStringLiteral(node) && LOOKS_LIKE_KEY.test(node.text) && inMapContext(node)) {
+      keyLike.push(node.text);
+    }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 't') {
       const arg = node.arguments[0];
       if (arg && (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))) {
@@ -153,10 +178,14 @@ describe('Перевод клиента: скан не вхолостую', () =
   it('в экране создания персонажа больше 90 строковых литералов', () => {
     expect(SCANS[2].literals.length).toBeGreaterThan(90);
   });
+  it('каждый файл скана содержит больше 25 литералов (файл не читается — проверка ниже вхолостую)', () => {
+    const empty = SCANS.filter((s) => s.literals.length <= 25).map((s) => s.rel);
+    expect({ пустых: empty }).toEqual({ пустых: [] });
+  });
   it('вызовов t() больше 450, ключей больше 350', () => {
     expect(ALL_T_CALLS).toBeGreaterThan(450);
     expect(KEYS.length).toBeGreaterThan(350);
-    expect(ALL_LITERALS).toBeGreaterThan(2400);
+    expect(ALL_LITERALS).toBeGreaterThan(3400);
   });
 });
 

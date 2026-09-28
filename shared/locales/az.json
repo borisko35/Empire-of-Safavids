@@ -234,7 +234,11 @@
     "inside_not_inside": "Siz binada deyilsiniz",
     "inside_unknown": "Bu bina əlçatan deyil",
     "inside_not_auth": "Əvvəlcə oyuna daxil olun",
-    "inside_failed": "Binaya daxil olmaq mümkün olmadı"
+    "inside_failed": "Binaya daxil olmaq mümkün olmadı",
+    "qj_no_char": "Personaj yoxdur",
+    "qj_empty": "Aktiv tapşırıq yoxdur",
+    "qj_empty_hint": "Tapşırıq almaq üçün NPC ilə danışın",
+    "qj_error": "Tapşırıqları yükləmək olmadı"
   },
   "chat": {
     "cooldown": "Çox tez. {sec} saniye gözləyin.",
@@ -247,7 +251,9 @@
     "party": "Dəstə",
     "system": "Sistem",
     "trade": "Ticarət",
-    "war": "Müharibə"
+    "war": "Müharibə",
+    "guild_tag": "[Gildiya] ",
+    "party_tag": "[Qrup] "
   },
   "history": {
     "title": "Səfəvi imperiyasının tarixi",
@@ -542,7 +548,10 @@
     "grams": " q",
     "kg": " kq",
     "azens_word": "AZENS",
-    "seconds_short": " s"
+    "seconds_short": " s",
+    "mb": " MB",
+    "kb": " KB",
+    "b": " B"
   },
   "errors": {
     "invalid_credentials": "E-poçt və ya şifrə yanlışdır",
@@ -996,7 +1005,14 @@
     }
   },
   "dialogue": {
-    "friendship_up": "Dost oldunuz!"
+    "friendship_up": "Dost oldunuz!",
+    "quest_done": "Tapşırıq tamamlandı: {name} (+{n} {unit})",
+    "talk_failed": "Söhbətə başlamaq mümkün olmadı",
+    "friendship": "Dostluq {lvl}/5 tone={tone}",
+    "finish": "Söhbəti bitir",
+    "quest_accepted": "Tapşırıq qəbul olundu! Quest panelinə bax (J)",
+    "goto_npc": "Tələb olunan NPC-yə gedin",
+    "error": "Dialoq xətası"
   },
   "tower": {
     "title": "Qüllə",
@@ -1349,5 +1365,32 @@
     "ring": "Halqa",
     "amulet": "Medalyon",
     "shield": "Qalxan"
+  },
+  "buildings": {
+    "stable": "Hansır",
+    "barracks": "Qışlaq",
+    "workshop": "Emalatxana",
+    "tavern": "Mehxanə",
+    "observatory": "Rəsədxanə",
+    "science": "Elm Mərkəzi",
+    "arena": "Kolizeum",
+    "auction_house": "Hərrac Evi",
+    "circus": "Səfəvi Sirki",
+    "exit": "Çıxış"
+  },
+  "cutscene": {
+    "throne_room": "Taxt zalı",
+    "tabriz_gate": "Təbriz qapısı",
+    "caravan_road": "Karvan yolu",
+    "silk_road_fort": "İpək Yolu qalası",
+    "caucasus_pass": "Qafqaz keçidi",
+    "desert_dunes": "Xorasan qumluqları",
+    "gulf_harbor": "Körfəz limanı"
+  },
+  "conn": {
+    "off": "● Bağlantı kəsildi",
+    "on": "● Qoşulub",
+    "reconnect": "🔄 Yenidən qoşulur…",
+    "connecting": "🔄 Qoşulur…"
   }
 }

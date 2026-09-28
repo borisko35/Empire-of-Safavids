@@ -234,7 +234,11 @@
     "inside_not_inside": "You are not inside a building",
     "inside_unknown": "This building is unavailable",
     "inside_not_auth": "Sign in to the game first",
-    "inside_failed": "Could not enter the building"
+    "inside_failed": "Could not enter the building",
+    "qj_no_char": "No character",
+    "qj_empty": "No active quests",
+    "qj_empty_hint": "Talk to an NPC to get quests",
+    "qj_error": "Failed to load quests"
   },
   "chat": {
     "cooldown": "Too fast. Wait {sec} sec.",
@@ -247,7 +251,9 @@
     "party": "Party",
     "system": "System",
     "trade": "Trade",
-    "war": "War"
+    "war": "War",
+    "guild_tag": "[Guild] ",
+    "party_tag": "[Party] "
   },
   "history": {
     "title": "History of the Safavid Empire",
@@ -542,7 +548,10 @@
     "grams": " g",
     "kg": " kg",
     "azens_word": "AZENS",
-    "seconds_short": " s"
+    "seconds_short": " s",
+    "mb": " MB",
+    "kb": " KB",
+    "b": " B"
   },
   "errors": {
     "invalid_credentials": "Wrong email or password",
@@ -996,7 +1005,14 @@
     }
   },
   "dialogue": {
-    "friendship_up": "You have become friends!"
+    "friendship_up": "You have become friends!",
+    "quest_done": "Quest completed: {name} (+{n} {unit})",
+    "talk_failed": "Could not start a conversation",
+    "friendship": "Friendship {lvl}/5 tone={tone}",
+    "finish": "End conversation",
+    "quest_accepted": "Quest accepted! Check the quest panel (J)",
+    "goto_npc": "Head to the right NPC",
+    "error": "Dialogue error"
   },
   "tower": {
     "title": "Tower",
@@ -1349,5 +1365,32 @@
     "ring": "Ring",
     "amulet": "Amulet",
     "shield": "Shield"
+  },
+  "buildings": {
+    "stable": "Stable",
+    "barracks": "Barracks",
+    "workshop": "Workshop",
+    "tavern": "Tavern",
+    "observatory": "Observatory",
+    "science": "Science Centre",
+    "arena": "Arena-Colosseum",
+    "auction_house": "Auction House",
+    "circus": "Safavid Circus",
+    "exit": "Exit"
+  },
+  "cutscene": {
+    "throne_room": "Throne Room",
+    "tabriz_gate": "Tabriz Gate",
+    "caravan_road": "Caravan Road",
+    "silk_road_fort": "Silk Road Fort",
+    "caucasus_pass": "Caucasus Pass",
+    "desert_dunes": "Khorasan Dunes",
+    "gulf_harbor": "Gulf Harbour"
+  },
+  "conn": {
+    "off": "● Disconnected",
+    "on": "● Connected",
+    "reconnect": "🔄 Reconnecting…",
+    "connecting": "🔄 Connecting…"
   }
 }

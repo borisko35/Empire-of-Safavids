@@ -164,14 +164,14 @@ async function refreshQuestPanelJ(): Promise<void> {
   if (!listEl) return;
   const cid = session.character?.id;
   if (!cid) {
-    listEl.innerHTML = '<div class="quest-j-empty">Нет персонажа</div>';
+    listEl.innerHTML = '<div class="quest-j-empty">' + t('world.qj_no_char') + '</div>';
     return;
   }
   try {
     const [defs, { quests }] = await Promise.all([getQuestDefs(), api.questState(cid)]);
     const active = (quests || []).filter((q) => q.status === 'active');
     if (!active.length) {
-      listEl.innerHTML = '<div class="quest-j-empty">Нет активных заданий<br><small>Поговорите с NPC чтобы получить задания</small></div>';
+      listEl.innerHTML = '<div class="quest-j-empty">' + t('world.qj_empty') + '<br><small>' + t('world.qj_empty_hint') + '</small></div>';
       return;
     }
     listEl.innerHTML = active.map((q) => {
@@ -190,7 +190,7 @@ async function refreshQuestPanelJ(): Promise<void> {
         `</div>`;
     }).join('');
   } catch {
-    listEl.innerHTML = '<div class="quest-j-empty">Ошибка загрузки квестов</div>';
+    listEl.innerHTML = '<div class="quest-j-empty">' + t('world.qj_error') + '</div>';
   }
 }
 
@@ -1009,12 +1009,12 @@ function wireSocket(): void {
 
   // ── Чат ── сервер поддерживает world/region/guild/party (см. GameSocketHandler.handleChatMessage)
   const chatEvents = ['chat:world', 'chat:region', 'chat:guild', 'chat:party'] as const;
-  const channelPrefix: Record<string, string> = { 'chat:guild': '[Гильдия] ', 'chat:party': '[Группа] ' };
+  const channelPrefix: Record<string, string> = { 'chat:guild': 'chat.guild_tag', 'chat:party': 'chat.party_tag' };
   for (const ev of chatEvents) {
     socket.on(ev, ({ characterId, name, role, message }: { characterId: string; name?: string | null; role?: 'owner' | 'admin' | 'moderator' | null; message: string }) => {
       const p = world?.players.get(characterId);
       const displayName = name ?? p?.name ?? '???';
-      const prefix = channelPrefix[ev] ?? '';
+      const prefix = channelPrefix[ev] ? t(channelPrefix[ev]) : '';
       chatMessage(displayName, prefix + message, false, role ?? null);
     });
   }
@@ -1453,7 +1453,7 @@ async function checkExploreObjectives(): Promise<void> {
           const res = await api.questExplore(session.character.id, st.questId, o.id);
           if (res.completed?.length) {
             for (const q of res.completed) {
-              toast(`Квест завершён: ${q.titleRu} (+${q.experience} ${t('world.exp')})`, 'success');
+              toast(t('dialogue.quest_done').replace('{name}', q.titleRu).replace('{n}', String(q.experience)).replace('{unit}', t('world.exp')), 'success');
             }
             window.dispatchEvent(new CustomEvent('quest:accepted'));
           }

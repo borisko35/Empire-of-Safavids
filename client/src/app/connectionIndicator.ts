@@ -3,6 +3,7 @@
 // ============================================================
 // Показывает состояние WebSocket-соединения в HUD.
 
+import { t } from './i18n';
 import { onConnectionStateChange, ConnectionState } from './net';
 
 /** Создать индикатор состояния соединения в HUD */
@@ -13,7 +14,7 @@ export function initConnectionIndicator(): void {
   const el = document.createElement('div');
   el.id = 'conn-status';
   el.className = 'conn-status conn-status--disconnected';
-  el.textContent = '● Отключено';
+  el.textContent = t('conn.off');
   el.style.cssText = `
     position: fixed; bottom: 16px; right: 16px;
     padding: 8px 16px; border-radius: 8px;
@@ -32,27 +33,27 @@ export function initConnectionIndicator(): void {
     switch (state) {
       case 'connected':
         el.className = 'conn-status conn-status--connected';
-        el.textContent = '● Подключено';
+        el.textContent = t('conn.on');
         el.style.color = '#51cf66';
         el.style.opacity = '1';
         setTimeout(() => { el.style.opacity = '0'; }, 3000);
         break;
       case 'reconnecting':
         el.className = 'conn-status conn-status--reconnecting';
-        el.textContent = '🔄 Переподключение…';
+        el.textContent = t('conn.reconnect');
         el.style.color = '#ffd43b';
         el.style.opacity = '1';
         break;
       case 'connecting':
         el.className = 'conn-status conn-status--connecting';
-        el.textContent = '🔄 Подключение…';
+        el.textContent = t('conn.connecting');
         el.style.color = '#ffd43b';
         el.style.opacity = '1';
         break;
       case 'disconnected':
       default:
         el.className = 'conn-status conn-status--disconnected';
-        el.textContent = '● Отключено';
+        el.textContent = t('conn.off');
         el.style.color = '#ff6b6b';
         el.style.opacity = '1';
         break;

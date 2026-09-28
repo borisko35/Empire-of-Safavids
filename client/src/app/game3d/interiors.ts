@@ -11,6 +11,7 @@
 // телепорта и не верит клиентским координатам (защита от абьюза).
 
 import * as THREE from 'three';
+import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
 
@@ -19,7 +20,7 @@ export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'obse
 export interface BuildingDef {
   id: string;
   kind: BuildingKind;
-  nameRu: string;
+  nameKey: string;
   icon: string;
   /** Дверь снаружи (мировые координаты). */
   doorX: number;
@@ -34,16 +35,16 @@ export interface BuildingDef {
 }
 
 // Локальные позиции домов в Исфахане (относительно центра города)
-const SPOTS: { id: string; kind: BuildingKind; nameRu: string; icon: string; lx: number; lz: number }[] = [
-  { id: 'stable', kind: 'stable', nameRu: 'Конюшня', icon: '🐴', lx: -18.6, lz: -69.5 },
-  { id: 'barracks', kind: 'barracks', nameRu: 'Казарма', icon: '🛡️', lx: 36.0, lz: -62.4 },
-  { id: 'workshop', kind: 'workshop', nameRu: 'Мастерская', icon: '⚒️', lx: 67.7, lz: -24.6 },
-  { id: 'tavern', kind: 'tavern', nameRu: 'Таверна', icon: '🍺', lx: 67.7, lz: 24.6 },
-  { id: 'observatory', kind: 'observatory', nameRu: 'Обсерватория', icon: '🔭', lx: 24.6, lz: 67.7 },
-  { id: 'science', kind: 'science', nameRu: 'Научный центр', icon: '⚗️', lx: -65.2, lz: 30.4 },
-  { id: 'arena', kind: 'arena', nameRu: 'Арена-колизей', icon: '⚔️', lx: -40.0, lz: -50.0 },
-  { id: 'auction_house', kind: 'auction_house', nameRu: 'Аукционный дом', icon: '🏛️', lx: 50.0, lz: 50.0 },
-  { id: 'circus', kind: 'circus', nameRu: 'Цирк Сефевидов', icon: '🎪', lx: -55.0, lz: 45.0 },
+const SPOTS: { id: string; kind: BuildingKind; nameKey: string; icon: string; lx: number; lz: number }[] = [
+  { id: 'stable', kind: 'stable', nameKey: 'buildings.stable', icon: '🐴', lx: -18.6, lz: -69.5 },
+  { id: 'barracks', kind: 'barracks', nameKey: 'buildings.barracks', icon: '🛡️', lx: 36.0, lz: -62.4 },
+  { id: 'workshop', kind: 'workshop', nameKey: 'buildings.workshop', icon: '⚒️', lx: 67.7, lz: -24.6 },
+  { id: 'tavern', kind: 'tavern', nameKey: 'buildings.tavern', icon: '🍺', lx: 67.7, lz: 24.6 },
+  { id: 'observatory', kind: 'observatory', nameKey: 'buildings.observatory', icon: '🔭', lx: 24.6, lz: 67.7 },
+  { id: 'science', kind: 'science', nameKey: 'buildings.science', icon: '⚗️', lx: -65.2, lz: 30.4 },
+  { id: 'arena', kind: 'arena', nameKey: 'buildings.arena', icon: '⚔️', lx: -40.0, lz: -50.0 },
+  { id: 'auction_house', kind: 'auction_house', nameKey: 'buildings.auction_house', icon: '🏛️', lx: 50.0, lz: 50.0 },
+  { id: 'circus', kind: 'circus', nameKey: 'buildings.circus', icon: '🎪', lx: -55.0, lz: 45.0 },
 ];
 
 export const POCKET_X = 2500;
@@ -107,7 +108,7 @@ export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   return {
     id: s.id,
     kind: s.kind,
-    nameRu: s.nameRu,
+    nameKey: s.nameKey,
     icon: s.icon,
     doorX,
     doorZ,
@@ -198,9 +199,9 @@ export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
     roof.rotation.y = Math.PI / 4;
     roof.castShadow = true;
     const door = box(2.2, 3.4, 0.3, M.woodDark, 0, 1.7, 3.05);
-    door.userData = { doorBuilding: s.id, doorAction: 'enter', doorName: s.nameRu };
+    door.userData = { doorBuilding: s.id, doorAction: 'enter', doorName: t(s.nameKey) };
     const frame = box(2.8, 3.8, 0.2, M.gold, 0, 1.9, 3.0);
-    const sign = signMesh(s.nameRu);
+    const sign = signMesh(t(s.nameKey));
     sign.position.set(0, 4.0, 3.12);
     const lamp = box(0.5, 0.5, 0.5, M.lamp, 2.1, 3.1, 3.1);
     const win1 = box(1.4, 1.2, 0.2, M.teal, -2.9, 2.6, 3.05);
@@ -534,10 +535,10 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
   // Дверь выхода (клик = выйти). Круг в проёме не даёт выйти пешком —
   // только кликом: иначе игрок окажется в пустоте кармана.
   const exitDoor = box(2.4, 3.2, 0.25, M.woodDark, cx, FLOOR_Y + 1.6, cz + hd);
-  exitDoor.userData = { doorBuilding: def.id, doorAction: 'exit', doorName: def.nameRu };
+  exitDoor.userData = { doorBuilding: def.id, doorAction: 'exit', doorName: t(def.nameKey) };
   g.add(exitDoor);
   colliders.push({ x: cx, z: cz + hd, r: 1.4 });
-  const exitSign = signMesh('Выход');
+  const exitSign = signMesh(t('buildings.exit'));
   exitSign.position.set(cx, FLOOR_Y + 3.9, cz + hd - 0.4);
   exitSign.rotation.y = Math.PI;
   g.add(exitSign);

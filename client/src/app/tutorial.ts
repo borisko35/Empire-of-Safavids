@@ -71,7 +71,7 @@ export async function initTutorial(characterId: string): Promise<void> {
     showStep(data.currentStep);
   } catch (err) {
     // Туториал не должен ломать игру: нет доступа к прогрессу — просто молчим
-    console.warn('[tutorial] недоступен:', (err as Error).message);
+    console.warn('[tutorial] not available:', (err as Error).message);
     isTutorialActive = false;
   }
 }
@@ -177,7 +177,7 @@ async function advanceTutorial(): Promise<void> {
     showStep(result.tutorialStep);
   } catch (err) {
     // Сервер не ответил — не блокируем игрока, просто прячем обучалку
-    console.warn('[tutorial] не удалось перейти:', (err as Error).message);
+    console.warn('[tutorial] cannot advance:', (err as Error).message);
     hideTutorial();
   }
 }

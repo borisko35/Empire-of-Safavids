@@ -234,7 +234,11 @@
     "inside_not_inside": "Вы не внутри здания",
     "inside_unknown": "Это здание недоступно",
     "inside_not_auth": "Сначала войдите в игру",
-    "inside_failed": "Не удалось войти в здание"
+    "inside_failed": "Не удалось войти в здание",
+    "qj_no_char": "Нет персонажа",
+    "qj_empty": "Нет активных заданий",
+    "qj_empty_hint": "Поговорите с NPC чтобы получить задания",
+    "qj_error": "Ошибка загрузки квестов"
   },
   "chat": {
     "cooldown": "Слишком часто. Подождите {sec} сек.",
@@ -247,7 +251,9 @@
     "party": "Группа",
     "system": "Система",
     "trade": "Торговля",
-    "war": "Война"
+    "war": "Война",
+    "guild_tag": "[Гильдия] ",
+    "party_tag": "[Группа] "
   },
   "history": {
     "title": "История империи Сефевидов",
@@ -542,7 +548,10 @@
     "grams": " г",
     "kg": " кг",
     "azens_word": "АЗЕН",
-    "seconds_short": " с"
+    "seconds_short": " с",
+    "mb": " МБ",
+    "kb": " КБ",
+    "b": " Б"
   },
   "errors": {
     "invalid_credentials": "Неверный email или пароль",
@@ -996,7 +1005,14 @@
     }
   },
   "dialogue": {
-    "friendship_up": "Вы подружились!"
+    "friendship_up": "Вы подружились!",
+    "quest_done": "Квест завершён: {name} (+{n} {unit})",
+    "talk_failed": "Не удалось начать разговор",
+    "friendship": "Дружба {lvl}/5 tone={tone}",
+    "finish": "Завершить разговор",
+    "quest_accepted": "Квест принят! Проверь панель квестов (J)",
+    "goto_npc": "Направляйтесь к нужному NPC",
+    "error": "Ошибка диалога"
   },
   "tower": {
     "title": "Башня",
@@ -1349,5 +1365,32 @@
     "ring": "Кольцо",
     "amulet": "Амулет",
     "shield": "Щит"
+  },
+  "buildings": {
+    "stable": "Конюшня",
+    "barracks": "Казарма",
+    "workshop": "Мастерская",
+    "tavern": "Таверна",
+    "observatory": "Обсерватория",
+    "science": "Научный центр",
+    "arena": "Арена-колизей",
+    "auction_house": "Аукционный дом",
+    "circus": "Цирк Сефевидов",
+    "exit": "Выход"
+  },
+  "cutscene": {
+    "throne_room": "Тронный зал",
+    "tabriz_gate": "Ворота Тебриза",
+    "caravan_road": "Караванная дорога",
+    "silk_road_fort": "Крепость на Шёлковом Пути",
+    "caucasus_pass": "Кавказский перевал",
+    "desert_dunes": "Барханы Хорасана",
+    "gulf_harbor": "Пристань Залива"
+  },
+  "conn": {
+    "off": "● Отключено",
+    "on": "● Подключено",
+    "reconnect": "🔄 Переподключение…",
+    "connecting": "🔄 Подключение…"
   }
 }

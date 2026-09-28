@@ -26,7 +26,7 @@ async function boot(): Promise<void> {
   try {
     await loadLocale(detectLocale());
   } catch {
-    console.warn('[i18n] Не удалось загрузить словарь, показываем тексты по умолчанию');
+    console.warn('[i18n] failed to load locale, falling back to markup');
   }
 
   // Индикатор состояния соединения

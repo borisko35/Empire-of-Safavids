@@ -7,6 +7,7 @@
 // эффекты и плавающий урон. Сетевые данные читает из entities.World.
 
 import * as THREE from 'three';
+import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
@@ -716,7 +717,7 @@ export class World3D {
       Math.abs(x - b.roomCx) <= 16 && Math.abs(z - b.roomCz) <= 16) ?? null;
     if (!def) return null;
     this.interiors.enter(def.id);
-    return def.nameRu;
+    return t(def.nameKey);
   }
 
   // ── Синхронизация ригов ──────────────────────────────────────
