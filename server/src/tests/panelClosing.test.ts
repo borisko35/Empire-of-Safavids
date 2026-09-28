@@ -160,6 +160,44 @@ describe('Панель открывается поверх других, а не
   });
 });
 
+describe('Кнопка в ряду открывает панель один раз, а не два', () => {
+  /** Кусок обработчика кнопок в ряду — как он есть в коде */
+  const handler = /for \(const btn of document\.querySelectorAll<HTMLButtonElement>\('\.panel-toggles button'\)\) \{[\s\S]*?\n {2}\}/.exec(world)?.[0];
+
+  it('обработчик найден (иначе проверки ниже вхолостую)', () => {
+    expect(typeof handler).toBe('string');
+  });
+
+  it('содержимое не грузится второй раз', () => {
+    // ГЛАВНОЕ. togglePanel уходит в openPanelById, а тот уже вызывает и
+    // список, и loadPanelContent. Второй вызов в обработчике запускал ту же
+    // асинхронную загрузку параллельно, и содержимое выводилось дважды:
+    // в панели квестов было 16 карточек вместо 8, в задачах дня — две
+    // одинаковые таблицы. Нашлось на скриншоте для лендинга.
+    for (const loader of ['loadPanelContent', 'loadQuests', 'loadInventory', 'loadRegions']) {
+      expect({ loader, встречается: new RegExp(`\\b${loader}\\(`).test(handler ?? '') })
+        .toEqual({ loader, встречается: false });
+    }
+  });
+
+  it('открытие идёт через togglePanel — он умеет и закрывать', () => {
+    // Возврат к прямому openPanelById сломал бы повторный клик: панель
+    // не закрывалась бы, а кнопка не гасилась
+    expect(handler).toMatch(/togglePanel\(panel\)/);
+    expect(handler).not.toMatch(/openPanelById\(/);
+  });
+
+  it('openPanelById по-прежнему грузит содержимое — один раз за открытие', () => {
+    // Правка не должна была убрать загрузку altogether: с пустой панелью
+    // игрок увидит, что данные не приходят
+    const dom = fakeDom(IDS);
+    const { api, calls } = panelApi(dom.document);
+    api.togglePanel('panel-quests' as never);
+    expect(calls.filter((c) => c === 'loadQuests').length).toBe(1);
+    expect(calls.filter((c) => c === 'loadPanelContent').length).toBe(1);
+  });
+});
+
 describe('Esc закрывает панель, а не открывает поверх неё меню', () => {
   it('Esc сперва закрывает открытые панели', () => {
     // Раньше обработчик шёл прямо в overlay-menu. Панель оставалась на

@@ -1247,23 +1247,27 @@ function wireInput(): void {
 
   // Переключатели панелей
   //
-  // ЧТО БЫЛО. Обработчик делал `classList.toggle('hidden')` сам, мимо
+  // ЧТО БЫЛО (1). Обработчик делал `classList.toggle('hidden')` сам, мимо
   // openPanelById. Поэтому открытая панель не закрывала другие, а её
   // содержимое не перезагружалось — панель показывала то, что нарисовалась
   // в прошлый раз. Теперь всё идёт через togglePanel.
+  //
+  // ЧТО БЫЛО (2). После перехода на togglePanel обработчик стал вызывать
+  // загрузку содержимого ВТОРЫМ разом: togglePanel уходит в openPanelById,
+  // а тот уже грузит и список, и подгрузку панели. Второй вызов запускал
+  // ту же асинхронную загрузку параллельно, и содержимое выводилось
+  // дважды: в панели квестов было 16 карточек вместо 8, в задачах дня —
+  // две одинаковые таблицы. Нашёл на скриншоте для лендинга: панель
+  // задач сфотографировалась с удвоенным содержимым.
+  //
+  // Открытие панели теперь целиком в openPanelById. Обработчик только
+  // переключает: всё, что нужно догрузить, уже сделано по дороге.
   installPanelCloseButtons();
   for (const btn of document.querySelectorAll<HTMLButtonElement>('.panel-toggles button')) {
     btn.addEventListener('click', () => {
       const panel = btn.dataset.panel;
       if (!panel) return;
-      const wasOpen = !document.getElementById(panel)?.classList.contains('hidden');
       togglePanel(panel);
-      // Повторный клик закрыл панель — закрывать её обработчику нечего
-      if (wasOpen) return;
-      if (panel === 'panel-regions') void loadRegions();
-      if (panel === 'panel-quests') void loadQuests();
-      if (panel === 'panel-inventory') void loadInventory();
-      loadPanelContent(panel);
     });
   }
 
