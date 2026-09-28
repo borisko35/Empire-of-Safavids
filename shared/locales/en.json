@@ -970,7 +970,8 @@
     "media": "Photos and videos",
     "admin": "Admin",
     "settings": "Settings",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "hall_of_fame": "Hall of Fame"
   },
   "notifications": {
     "title": "Notifications",
@@ -994,5 +995,10 @@
     "invite_ph": "Character name",
     "invited": "Invitation sent",
     "invite_empty": "Enter a character name"
+  },
+  "hall": {
+    "title": "Hall of Fame",
+    "empty": "No one has defeated a world boss yet",
+    "kills": "Kills: %d"
   }
 }

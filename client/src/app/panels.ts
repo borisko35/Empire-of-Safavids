@@ -2090,6 +2090,68 @@ async function loadPets(): Promise<void> {
  * могло их показать, — тост, исчезавший через пару секунд. Возвращаться к
  * списку было некуда, а счётчика непрочитанных не существовало.
  */
+/**
+ * Зал славы: кто повалил мирового босса и сколько раз.
+ *
+ * Панели не было. Таблица world_boss_kills наполнялась с прошлого коммита,
+ * но смотреть на историю было некому — то есть она наполнялась впустую.
+ *
+ * Про долю урона: сервер не собирает расклад по урону за бой, поэтому
+ * колонка top_damage хранит только победителя. Показывать «долю урона»
+ * было бы значило показать игроку цифру, которую никто не измерял,
+ * поэтому её здесь нет.
+ */
+async function loadHallOfFame(): Promise<void> {
+  const box = $('panel-hall-of-fame');
+  if (!box) return;
+  box.innerHTML = '<div class="lb-empty">' + t('hall.empty') + '</div>';
+  try {
+    const { entries } = await api.hallOfFame(20);
+  if (!entries.length) {
+    box.innerHTML = '<div class="lb-empty">' + t('hall.empty') + '</div>';
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'hall-list';
+  for (const e of entries) {
+    const row = document.createElement('div');
+    // Первые три места подсвечиваются: залав славы без разницы выглядит
+    // как обычный список, а именно он зовёт людей драться за босса
+    row.className = 'hall-row' + (e.rank <= 3 ? ' hall-top' : '');
+
+    const place = document.createElement('span');
+    place.className = 'hall-place';
+    place.textContent = e.rank === 1 ? '1' : e.rank === 2 ? '2' : e.rank === 3 ? '3' : String(e.rank);
+
+    const who = document.createElement('div');
+    who.className = 'hall-who';
+    const name = document.createElement('div');
+    name.className = 'hall-name';
+    name.textContent = e.characterName;
+    const meta = document.createElement('div');
+    meta.className = 'hall-meta';
+    meta.textContent = [
+      e.class,
+      e.guildName,
+      new Date(e.lastKill).toLocaleDateString(),
+    ].filter(Boolean).join(' · ');
+    who.append(name, meta);
+
+    const kills = document.createElement('span');
+    kills.className = 'hall-kills';
+    kills.textContent = t('hall.kills').replace('%d', String(e.kills));
+
+    row.append(place, who, kills);
+    list.append(row);
+  }
+  box.innerHTML = '';
+  box.append(list);
+  } catch (err) {
+  box.innerHTML = '<div class="lb-empty">' + (err as Error).message + '</div>';
+  }
+}
+
 async function loadNotifications(): Promise<void> {
   const box = $('notifications-list');
   if (!box) return;
@@ -3264,6 +3326,9 @@ const LOADERS: Record<string, () => Promise<void>> = {
   // Панели уведомлений не было: сервер писал строки в таблицу notifications,
   // а прочитать их было нечем. Тост исчезал за пару секунд
   'panel-notifications': loadNotifications,
+  // Зал славы. Панели не было: история побед над боссами писалась в базу,
+  // и смотреть на неё было некому
+  'panel-hall-of-fame': loadHallOfFame,
   'panel-character': loadCharacterPanel,
   'panel-dungeons': loadDungeons,
   'panel-shop': loadShop,

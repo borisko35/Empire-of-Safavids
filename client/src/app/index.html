@@ -292,7 +292,14 @@
       <h3><span data-icon="star8"></span>Башня</h3>
       <div id="tower-content"></div>
     </div>
-    <div class="hud side-panel hidden" id="panel-reputation">
+    <!-- Зал славы. Панели не было: история побед над мировыми боссами
+         писалась в таблицу world_boss_kills, и смотреть на неё было
+         некому. -->
+<div class="hud side-panel hidden" id="panel-hall-of-fame">
+  <h3><span data-icon="crown"></span><span data-i18n="hall.title"></span></h3>
+  <div id="hall-of-fame-list"></div>
+</div>
+<div class="hud side-panel hidden" id="panel-reputation">
       <h3><span data-icon="flag"></span>Репутация</h3>
       <div id="rep-content"></div>
     </div>

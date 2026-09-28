@@ -970,7 +970,8 @@
     "media": "Foto və video",
     "admin": "Admin",
     "settings": "Tənzimləmələr",
-    "notifications": "Bildirişlər"
+    "notifications": "Bildirişlər",
+    "hall_of_fame": "Şöhrət salonu"
   },
   "notifications": {
     "title": "Bildirişlər",
@@ -994,5 +995,10 @@
     "invite_ph": "Personajın adı",
     "invited": "Dəvət göndərildi",
     "invite_empty": "Personajın adını daxil edin"
+  },
+  "hall": {
+    "title": "Şöhrət salonu",
+    "empty": "Hələ heç kim dünya bossunu məğlub etməyib",
+    "kills": "Qələbə: %d"
   }
 }

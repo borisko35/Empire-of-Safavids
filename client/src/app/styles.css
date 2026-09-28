@@ -2094,3 +2094,47 @@ body[data-display="windowed"] #screen-world::after {
   color: #8fe6a0;
 }
 .dialog-quest-btn:hover { background: rgba(74,168,106,0.2); }
+
+/* ============================================================
+   Панели: зал славы
+   ============================================================ */
+/* Место — колонка, число — справа, имя и класс — в середине.
+   Первая тройка подсвечена золотом: без этого список выглядит как
+   очередной рейтинг, а именно он зовёт людей драться за босса. */
+.hall-list { display: flex; flex-direction: column; gap: 4px; }
+.hall-row {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.hall-row.hall-top {
+  background: rgba(201, 168, 76, 0.12);
+  border-color: rgba(201, 168, 76, 0.32);
+}
+.hall-place {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--cream-dim);
+}
+.hall-top .hall-place { color: #e3c46a; font-size: 17px; }
+.hall-who { min-width: 0; }
+.hall-name {
+  font-size: 13px;
+  color: var(--cream);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hall-meta { margin-top: 2px; font-size: 10.5px; color: var(--cream-dim); opacity: 0.75; }
+.hall-kills {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7fe0ab;
+  white-space: nowrap;
+}

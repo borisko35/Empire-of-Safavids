@@ -74,6 +74,9 @@ const GROUPS: HubGroup[] = [
       { id: 'panel-tasks', titleKey: 'hub.tasks', icon: 'scroll' },
       { id: 'panel-achievements', titleKey: 'hub.achievements', icon: 'crown' },
       { id: 'panel-reputation', titleKey: 'hub.reputation', icon: 'flag' },
+      // Зал славы: кто повалил мирового босса. Рядом с репутацией —
+      // обе панели про то, что игрок сделал и что о нём помнят
+      { id: 'panel-hall-of-fame', titleKey: 'hub.hall_of_fame', icon: 'crown' },
       { id: 'panel-leaderboard', titleKey: 'hub.leaderboard', icon: 'crown' },
       { id: 'panel-pets', titleKey: 'hub.pets', icon: 'heart' },
     ],

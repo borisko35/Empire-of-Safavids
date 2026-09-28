@@ -800,6 +800,14 @@ export const api = {
   petRelease: (characterId: string, petDbId: number) =>
     req<{ success: boolean }>('/api/game/pets/release', { method: 'POST', body: JSON.stringify({ characterId, petDbId }) }),
 
+  // ── Зал славы мировых боссов ────────────────────────────
+  // Раньше история побед над мировыми боссами писалась в базу, но смотреть
+  // на неё было некому: панели не существовало
+  hallOfFame: (limit = 20) =>
+    req<{ entries: { rank: number; characterId: string; characterName: string; class: string;
+      kills: number; guildId: string | null; guildName: string | null; lastKill: string }[] }>(
+      `/api/hall-of-fame/bosses?limit=${limit}`),
+
   // ── Уведомления ────────────────────────────────────────
   // Списка не было: сервер писал строки в таблицу notifications, а прочитать
   // их было нечем. Панели уведомлений в игре не существовало
