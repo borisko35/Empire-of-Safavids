@@ -66,7 +66,8 @@ async function buildServerPicker(): Promise<void> {
     for (const srv of servers) {
       const opt = document.createElement('option');
       opt.value = srv.id;
-      opt.textContent = `${srv.nameRu} — ${t('chars.online')}: ${srv.online}${srv.recommended ? ` ★ ${t('chars.recommended')}` : ''}`;
+      const srvName = t(SERVER_NAMES[srv.id] ?? srv.nameRu);
+      opt.textContent = `${srvName} — ${t('chars.online')}: ${srv.online}${srv.recommended ? ` ★ ${t('chars.recommended')}` : ''}`;
       if (srv.recommended) opt.selected = true;
       select.append(opt);
     }

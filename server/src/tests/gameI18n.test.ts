@@ -248,6 +248,42 @@ describe('Перевод клиента: ключи из карт тоже пе�
   }
 });
 
+// Второй эшелон переводов: серверные сущности с фиксированным id. У зоны и
+// шарда имя в интерфейде берётся по id из shared/constants — добавили зону и
+// забыли ключ, и игрок на английском увидит либо путь, либо русское имя с
+// сервера.
+describe('Перевод клиента: id зон и шардов перекрыты ключами', () => {
+  const constants = readFileSync(join(repoRoot, 'shared/constants.ts'), 'utf-8');
+  const ZONE_IDS = [...constants.matchAll(/\{ id: '([a-z_]+)', region: '[a-z]+', name: /g)].map(
+    (m) => m[1],
+  );
+  const SERVER_IDS = [...constants.matchAll(/export const GAME_SERVERS[\s\S]*?\n\];/g)].flatMap(
+    (m) => [...m[0].matchAll(/\{ id: '([a-z_]+)'/g)].map((x) => x[1]),
+  );
+
+  it('нашёл зоны и шарды в constants (иначе проверка вхолостую)', () => {
+    expect(ZONE_IDS.length).toBeGreaterThanOrEqual(15);
+    expect(SERVER_IDS.length).toBeGreaterThanOrEqual(6);
+  });
+
+  const ALL_KEYS = [
+    ...ZONE_IDS.map((id) => `zones.${id}`),
+    ...SERVER_IDS.map((id) => `servers.${id}`),
+  ];
+
+  for (const lang of LOCALES) {
+    it(`${lang} — t() переводит имя каждой зоны и каждого шарда`, async () => {
+      await loadLocale(lang);
+      const missing = ALL_KEYS.filter((key) => t(key) === key);
+      expect({ lang, total: ALL_KEYS.length, missing }).toEqual({
+        lang,
+        total: ALL_KEYS.length,
+        missing: [],
+      });
+    });
+  }
+});
+
 // ── index.html: русский текст только под data-i18n ───────────
 //
 // Страница собрана руками, тут нет ни литералов, ни t() — текст подставляется

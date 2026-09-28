@@ -1051,9 +1051,14 @@ function wireSocket(): void {
     renderUnreadBadge();
   });
 
-  socket.on('zone:changed', (payload: { zone: { id: string; nameRu: string; dangerLevel: number } | null }) => {
+  socket.on('zone:changed', (payload: { zone: { id: string; name: string; nameRu: string; dangerLevel: number } | null }) => {
     if (payload.zone) {
-      toast(`${payload.zone.nameRu}`, 'info');
+      // Подпись зоны берём из словаря (тот же ключ, что на миникарте).
+      // t() при отсутствии ключа возвращает сам путь — тогда показываем
+      // английское имя с сервера, но никогда не русское.
+      const key = `zones.${payload.zone.id}`;
+      const zoneName = t(key);
+      toast(zoneName === key ? payload.zone.name : zoneName, 'info');
     }
   });
 
