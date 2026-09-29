@@ -115,6 +115,59 @@ export interface EquipmentState {
   bonuses?: { waterSpeed: number; swimStamina: number };
 }
 
+/**
+ * Шаг воронки: сколько людей дошло и какая доля от предыдущего шага.
+ * fromPrevious = null у первого шага (предыдущего нет) и у шага, где
+ * предыдущий ноль (делить не на что).
+ */
+export interface FunnelStep {
+  step: string;
+  titleRu: string;
+  users: number;
+  fromPrevious: number | null;
+  fromStart: number | null;
+}
+
+/**
+ * Когорта людей, пришедших в один день.
+ *
+ * d1/d7/d30 = null, а не 0, когда день возврата ещё не наступил: «ещё не
+ * могло вернуться» и «не вернулось» — разные вещи, и ноль в панели читался
+ * бы как «никто не возвращается».
+ *
+ * full = false у когорт, собранных до появления события session_start:
+ * до этого входа в мир в аналитике не было, часть возвратов не засчитана.
+ */
+export interface RetentionCohort {
+  day: string;
+  users: number;
+  d1: number | null;
+  d7: number | null;
+  d30: number | null;
+  full: boolean;
+}
+
+export interface AdminFunnelReport {
+  funnel: {
+    windowDays: number;
+    from: string;
+    to: string;
+    steps: FunnelStep[];
+  };
+  retention: {
+    from: string;
+    to: string;
+    cohorts: RetentionCohort[];
+    totals: { users: number; d1: number | null; d7: number | null; d30: number | null };
+    incompleteCohorts: number;
+  };
+  active: { day: string; logins: number; sessions: number }[];
+  /** С какого дня в аналитике существует вход в мир */
+  sessionStartSince: string;
+  /** С какого дня есть каждое событие. null = событие не писалось ни разу */
+  eventSince: Record<string, string | null>;
+}
+
 export const api = {
   register: (body: {
     username: string; email: string; password: string; confirmPassword: string;
@@ -243,6 +296,17 @@ export const api = {
 
   adminPayments: (limit = 50) =>
     req<{ payments: { id: string; user_id: string; character_id: string; real_currency: string; real_amount: string; azens_credited: string; status: string; created_at: string; character_name: string }[] }>(`/api/admin/payments?limit=${limit}`),
+
+  /**
+   * Воронка новичка и удержание D1/D7/D30.
+   *
+   * В ответе есть eventSince — с какого дня в аналитике появилось каждое
+   * событие. Показывать его в панели обязательно: у событий, которые
+   * писать начали недавно, значения по старым когортам всегда ноль, и без
+   * даты этот ноль читается как «игроки застревают».
+   */
+  adminFunnel: (days = 30) =>
+    req<AdminFunnelReport>(`/api/admin/funnel?days=${days}`),
 
   adminFinance: () =>
     req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { azens: string; silver: string; syrian: string; redemptions: number }; grants: { currency: string; count: number; total: string }[]; velocity: { user_id: string; completed_24h: number }[] }>('/api/admin/finance'),

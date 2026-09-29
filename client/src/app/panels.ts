@@ -2861,6 +2861,112 @@ function adminInput(placeholder: string, width = '110px', type = 'text'): HTMLIn
   return el;
 }
 
+/** Прочерк вместо выдуманного числа: делить не на что или день не наступил */
+function dash(): string {
+  return '—';
+}
+
+/** Процент, если есть знаменатель. Нет знаменателя — прочерк, а не 0% */
+function shareText(share: number | null): string {
+  return share === null ? dash() : `${share}%`;
+}
+
+/**
+ * Раздел «Воронка и удержание» в админ-панели.
+ *
+ * Показывает три вещи: провал между соседними шагами воронки, удержание по
+ * когортам и активных игроков по дням. Все три — с оговорками о данных,
+ * иначе цифры врут тихо.
+ */
+async function renderAdminFunnel(box: HTMLElement, days: number): Promise<void> {
+  // Один контейнер на все нажатия: два нажатия подряд показали бы два
+  // отчёта, и какой из них свежий, пришлось бы угадывать
+  const outId = 'admin-funnel-out';
+  let out = document.getElementById(outId) as HTMLDivElement | null;
+  if (!out) {
+    out = document.createElement('div');
+    out.id = outId;
+    out.style.width = '100%';
+    box.append(out);
+  }
+  out.innerHTML = `<div class="quest-j-desc">${t('admin.funnel_loading')}</div>`;
+  try {
+    const rep = await api.adminFunnel(days);
+
+    // ── Воронка ──
+    const lines: string[] = [
+      t('admin.funnel_window').replace('{from}', rep.funnel.from).replace('{to}', rep.funnel.to),
+    ];
+    for (const step of rep.funnel.steps) {
+      lines.push(
+        t('admin.funnel_step')
+          .replace('{title}', step.titleRu)
+          .replace('{users}', String(step.users))
+          .replace('{prev}', shareText(step.fromPrevious))
+          .replace('{start}', shareText(step.fromStart)),
+      );
+    }
+    if (rep.funnel.steps.every(s => s.users === 0)) {
+      lines.push(t('admin.funnel_no_players'));
+    }
+
+    // ── Удержание ──
+    const r = rep.retention;
+    lines.push('');
+    lines.push(t('admin.funnel_retention_title'));
+    lines.push(
+      t('admin.funnel_retention_totals')
+        .replace('{users}', String(r.totals.users))
+        .replace('{d1}', shareText(r.totals.d1))
+        .replace('{d7}', shareText(r.totals.d7))
+        .replace('{d30}', shareText(r.totals.d30)),
+    );
+    if (r.incompleteCohorts > 0) {
+      lines.push(t('admin.funnel_retention_incomplete').replace('{count}', String(r.incompleteCohorts)));
+    }
+    // Когорты показываем новые сверху: свежая когорта отвечает на вопрос
+    // «что сейчас происходит», а не «что было месяц назад»
+    const recent = [...r.cohorts].reverse().slice(0, 10);
+    for (const c of recent) {
+      lines.push(
+        t('admin.funnel_cohort')
+          .replace('{day}', c.day)
+          .replace('{users}', String(c.users))
+          .replace('{d1}', shareText(c.d1))
+          .replace('{d7}', shareText(c.d7))
+          .replace('{d30}', shareText(c.d30))
+          + (c.full ? '' : ' ' + t('admin.funnel_cohort_partial')),
+      );
+    }
+
+    // ── Активные по дням ──
+    lines.push('');
+    lines.push(t('admin.funnel_active_title'));
+    const peak = Math.max(1, ...rep.active.map(a => Math.max(a.logins, a.sessions)));
+    const bars: string[] = [];
+    for (const a of rep.active.slice(-14)) {
+      const h = Math.round((Math.max(a.logins, a.sessions) / peak) * 26);
+      bars.push(`${a.day.slice(5)}: ${t('admin.funnel_active_row').replace('{logins}', String(a.logins)).replace('{sessions}', String(a.sessions))} ${'▇'.repeat(Math.max(1, h))}`);
+    }
+    lines.push(...bars);
+
+    // ── Честность данных ──
+    // Самое важное в разделе. Событие, которое никто не писал, даёт ноль
+    // в воронке, и этот ноль без даты выглядит как «игроки застревают».
+    const missing = Object.entries(rep.eventSince).filter(([, since]) => !since).map(([ev]) => ev);
+    if (missing.length) {
+      lines.push('');
+      lines.push(t('admin.funnel_data_missing').replace('{events}', missing.join(', ')));
+    }
+    lines.push(t('admin.funnel_data_since').replace('{day}', rep.sessionStartSince));
+
+    out.innerHTML = lines.map(l => (l === '' ? '<div style="height:6px"></div>' : `<div class="quest-j-desc">${l}</div>`)).join('');
+  } catch (err) {
+    out.innerHTML = `<div class="lb-empty">${t('admin.funnel_failed')}</div>`;
+    console.warn('[admin] funnel report failed', err);
+  }
+}
+
 export async function loadAdmin(): Promise<void> {
   const box = $('admin-list');
   if (!box) return;
@@ -2869,6 +2975,25 @@ export async function loadAdmin(): Promise<void> {
     box.innerHTML = `<div class="inv-empty">${t('admin.no_access')}</div>`;
     return;
   }
+
+  // ── Воронка и удержание ──
+  // Первым разделом: это ответ на вопрос «что происходит с игрой», и он
+  // не должен прятаться под поиском игроков и наказаниями
+  adminSub(box, t('admin.funnel_title'));
+  const funnelRow = rowEl('inv-item');
+  let funnelDays = 30;
+  const funnelBtn = actionButton(t('admin.funnel_show'), async () => {
+    await renderAdminFunnel(box, funnelDays);
+  });
+  const winRow = rowEl('inv-item');
+  for (const w of [7, 30, 90]) {
+    winRow.append(actionButton(`${w} ${t('admin.funnel_days')}`, async () => {
+      funnelDays = w;
+      await renderAdminFunnel(box, funnelDays);
+    }));
+  }
+  funnelRow.append(funnelBtn);
+  box.append(funnelRow, winRow);
 
   // ── Поиск игрока ──
   adminSub(box, t('admin.players_sub').replace('{role}', String(session.isAdminRole)));
