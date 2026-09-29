@@ -105,6 +105,8 @@ export const SOCKET_EVENTS = {
   COMBAT_ERROR: 'combat:error',
   /** Выбор боевой стойки: клиент шлёт, сервер проверяет и сохраняет */
   COMBAT_STANCE: 'combat:stance',
+  /** Включение активного навыка профессии: Зикр, Тадж */
+  SKILL_ACTIVATE: 'skill:activate',
 
   // Chat
   CHAT_MESSAGE: 'chat:message',

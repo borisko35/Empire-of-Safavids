@@ -18,6 +18,16 @@ export interface SkillDef {
   damageMultiplier: number;
   range: number;
   aoe: boolean;
+  /**
+   * Пассивная часть: постоянные множители урона и досягаемости.
+   * Живёт в навыке, а не в стойке, потому что навык выбирают один раз и
+   * забывают, а стойку переключают часто.
+   */
+  passive?: { damage: number; reach: number };
+  /**
+   * Активная часть: временный эффект по нажатию. Пусто - навык пассивен.
+   */
+  active?: { buff: string };
 }
 
 export interface ProfessionDef {
@@ -55,6 +65,10 @@ const SKILLS: SkillDef[] = [
   { id: 'forge_weapon', name: 'forge_weapon', nameRu: 'Кузница оружия', professionId: 'blacksmith', level: 1, xp: 0, manaCost: 10, staminaCost: 20, cooldown: 60, damageMultiplier: 0, range: 0, aoe: false },
   { id: 'reinforce_armor', name: 'reinforce_armor', nameRu: 'Укрепление брони', professionId: 'blacksmith', level: 5, xp: 100, manaCost: 15, staminaCost: 15, cooldown: 45, damageMultiplier: 0, range: 0, aoe: false },
   { id: 'masterwork', name: 'masterwork', nameRu: 'Мастерский шедевр', professionId: 'blacksmith', level: 15, xp: 500, manaCost: 30, staminaCost: 30, cooldown: 120, damageMultiplier: 0, range: 0, aoe: false },
+  // Dervish skills - Аламы, Зикр, Тадж
+  { id: 'alams', name: 'alams', nameRu: 'Аламы', professionId: 'dervish', level: 1, xp: 0, manaCost: 0, staminaCost: 0, cooldown: 0, damageMultiplier: 0, range: 0, aoe: false, passive: { damage: 0.15, reach: 1.25 } },
+  { id: 'zikr', name: 'zikr', nameRu: 'Зикр', professionId: 'dervish', level: 5, xp: 100, manaCost: 25, staminaCost: 20, cooldown: 45, damageMultiplier: 0, range: 0, aoe: false, active: { buff: 'buff_damage_zikr' } },
+  { id: 'taj', name: 'taj', nameRu: 'Тадж', professionId: 'dervish', level: 10, xp: 300, manaCost: 30, staminaCost: 25, cooldown: 60, damageMultiplier: 0, range: 0, aoe: false, active: { buff: 'buff_protect_taj' } },
   // Explorer skills
   { id: 'spot_secret', name: 'spot_secret', nameRu: 'Поиск секретов', professionId: 'explorer', level: 1, xp: 0, manaCost: 5, staminaCost: 5, cooldown: 10, damageMultiplier: 0, range: 20, aoe: false },
   { id: 'treasure_map', name: 'treasure_map', nameRu: 'Карта сокровищ', professionId: 'explorer', level: 10, xp: 300, manaCost: 20, staminaCost: 10, cooldown: 300, damageMultiplier: 0, range: 0, aoe: false },
@@ -67,6 +81,7 @@ const PROFESSIONS: ProfessionDef[] = [
   { id: 'herbalist', name: 'herbalist', nameRu: 'Травник', description: 'Зелья и настойки сильнее на 2.4% за уровень профессии.', icon: 'leaf', level: 1, xp: 0 },
   { id: 'blacksmith', name: 'blacksmith', nameRu: 'Кузнец', description: 'Улучшение вещей дешевле на 1.2% за уровень профессии.', icon: 'hammer', level: 1, xp: 0 },
   { id: 'explorer', name: 'explorer', nameRu: 'Исследователь', description: 'Опыт из заданий и убийств +1.6% за уровень профессии.', icon: 'compass', level: 1, xp: 0 },
+  { id: 'dervish', name: 'dervish', nameRu: 'Дервиш', description: 'Аламы удлиняют удар, Зикр прибавляет урона, Тадж прикрывает от чужого.', icon: 'flame', level: 1, xp: 0 },
 ];
 
 /**
@@ -269,6 +284,48 @@ export class SkillsService {
 
   async getProfessionSkills(professionId: string): Promise<SkillDef[]> {
     return SKILLS.filter(s => s.professionId === professionId);
+  }
+
+  /**
+   * Множители от пассивных навыков персонажа.
+   *
+   * Собираются из выученных навыков, а не из профессии: пассивка может
+   * быть и на навыке, и на profession_id, и привязывать её к профессии
+   * значило бы дублировать правило в двух местах.
+   *
+   * Неизвестный или невыученный навык пропускается: навык могли удалить
+   * из каталога, и бой от этого не должен падать.
+   */
+  async getPassiveMultipliers(characterId: string): Promise<{ damage: number; reach: number }> {
+    let damage = 1;
+    let reach = 1;
+    try {
+      const rows = await this.db.query<{ skill_id: string }>(
+        'SELECT skill_id FROM character_skills WHERE character_id = $1',
+        [characterId]
+      ).catch(() => []);
+      for (const r of rows) {
+        const def = SKILLS.find(s => s.id === r.skill_id);
+        if (!def?.passive) continue;
+        damage *= def.passive.damage;
+        reach *= def.passive.reach;
+      }
+    } catch {
+      // Отсутствие таблиц не должно ронять удар
+    }
+    return { damage, reach };
+  }
+
+  /**
+   * Активный навык персонажа: есть ли он выучен и что он даёт.
+   */
+  async getActiveSkill(characterId: string, skillId: string): Promise<SkillDef | null> {
+    const row = await this.db.queryOne<{ skill_id: string }>(
+      'SELECT skill_id FROM character_skills WHERE character_id = $1 AND skill_id = $2',
+      [characterId, skillId]
+    ).catch(() => null);
+    if (!row) return null;
+    return SKILLS.find(s => s.id === row.skill_id) ?? null;
   }
 
   /**

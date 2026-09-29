@@ -8,7 +8,7 @@ import { api } from './api';
 import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
-import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop } from './panels';
+import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop, loadSkills } from './panels';
 import { setHubStaff } from './hub';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
@@ -925,6 +925,17 @@ function wireSocket(): void {
   });
 
   // ── Бой ──
+  // Ответ на включение активного навыка. Приходит тем же combat:result,
+  // что и удар, поэтому обрабатывается здесь же, до проверки цели: у
+  // включения навыка нет ни атакующего, ни цели.
+  socket.on('combat:result', (raw: unknown) => {
+    const act = raw as { skillActivated?: boolean; skillId?: string };
+    if (act?.skillActivated) {
+      toast(t('skills.skill_activate') + ': ' + (act.skillId ?? ''), 'success');
+      void loadSkills();
+    }
+  });
+
   socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
@@ -1264,6 +1275,14 @@ function wireInput(): void {
   };
 
   window.addEventListener('game:skill', (e) => useSkill((e as CustomEvent<string>).detail));
+
+  // Включение активного навыка профессии (Зикр, Тадж). Панель шлёт
+  // событие окна, потому что про сокет не знает; здесь оно уходит на сервер.
+  window.addEventListener('game:skill-activate', (e) => {
+    const skillId = (e as CustomEvent<string>).detail;
+    if (!skillId || isDead()) return;
+    socket.emit('skill:activate', { skillId });
+  });
   window.addEventListener('quest:accepted', () => { void refreshNavTarget(); void refreshQuestPanelJ(); });
 
   $('btn-continue')?.addEventListener('click', () => document.getElementById('overlay-menu')?.classList.add('hidden'));

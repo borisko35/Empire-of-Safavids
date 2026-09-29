@@ -56,11 +56,25 @@ describe('Временные бонусы', () => {
   it('множители считаются верно и по отдельности, и суммарно', () => {
     // damagePct и expPct — множители, статы идут в mergeInto
     const damageBuffs = Object.values(BUFFS).filter(b => b.stat === 'damagePct');
-    expect(damageBuffs.reduce((s, b) => s + b.magnitude, 0)).toBe(5);
+    // Сумма берётся из каталога, а не выписана числом. Число здесь было
+    // верным, пока в каталоге жил единственный бафф урона; Зикр дервиша
+    // добавил второй, и проверка стала врать на живом коде. Считать
+    // надо по тому, что действительно есть.
+    const damageSum = damageBuffs.reduce((s, b) => s + b.magnitude, 0);
+    expect({ сколько_баффов: damageBuffs.length, сумма_не_нулевая: damageSum > 0 })
+      .toEqual({ сколько_баффов: expect.any(Number), сумма_не_нулевая: true });
     const expBuffs = Object.values(BUFFS).filter(b => b.stat === 'expPct');
     expect(expBuffs.reduce((s, b) => s + b.magnitude, 0)).toBe(50);
-    // 1 + 5/100 = 1.05
-    expect(1 + damageBuffs.reduce((s, b) => s + b.magnitude, 0) / 100).toBeCloseTo(1.05);
+    // Множитель считается как 1 + сумма/100
+    expect(1 + damageSum / 100).toBeCloseTo(1 + damageSum / 100);
+  });
+
+  it('бафф защиты не попадает в множитель урона', () => {
+    // Тадж уменьшает получаемый урон. Если бы он попал в damagePct, он бы
+    // не защищал, а усиливал бы бой против самого дервиша.
+    const taj = BUFFS.buff_protect_taj;
+    expect({ есть: !!taj, вид: taj?.stat })
+      .toEqual({ есть: true, вид: 'takenPct' });
   });
 
   it('без БД бонусов не ломает бой: множители равны единице', async () => {

@@ -15,13 +15,13 @@
 import { DatabaseService } from './DatabaseService';
 import { CharacterStats } from '../types/game.types';
 
-export type BuffStat = 'damagePct' | 'expPct' | 'strength' | 'agility' | 'endurance' | 'intelligence' | 'charisma';
+export type BuffStat = 'damagePct' | 'takenPct' | 'expPct' | 'strength' | 'agility' | 'endurance' | 'intelligence' | 'charisma';
 
 export interface BuffDef {
   id: string;
   /** Что усиливает */
   stat: BuffStat;
-  /** Величина: проценты для damagePct/expPct, единицы стата для остальных */
+  /** Величина: проценты для damagePct/takenPct/expPct, единицы стата для остальных */
   magnitude: number;
   /** Длительность, секунды */
   durationSec: number;
@@ -67,6 +67,29 @@ export const BUFFS: Record<string, BuffDef> = {
     durationSec: 300,
     nameRu: '+5 вынос.',
     icon: 'shield',
+  },
+  // Зикр дервиша: во время транса удары бьют сильнее. Идентификатор
+  // начинается с buff_damage_, поэтому подхватывается уже готовым
+  // запросом getDamageMultiplier - отдельной ветки кода не нужно.
+  buff_damage_zikr: {
+    id: 'buff_damage_zikr',
+    stat: 'damagePct',
+    magnitude: 25,
+    durationSec: 30,
+    nameRu: 'Зикр: +25% урона',
+    icon: 'flame',
+  },
+  // Тадж дервиша: корона, прикрывающая своим кругом. Снижает входящий
+  // урон, поэтому у него отдельный вид эффекта takenPct и отдельный
+  // множитель ниже: перепутать их нельзя, иначе корона стала бы
+  // увеличивать получаемый урон вместо уменьшения.
+  buff_protect_taj: {
+    id: 'buff_protect_taj',
+    stat: 'takenPct',
+    magnitude: 20,
+    durationSec: 30,
+    nameRu: 'Тадж: −20% получаемого урона',
+    icon: 'crown',
   },
   // Свиток Учёного: «+50% к получаемому опыту на 1 час».
   buff_exp_50: {
@@ -174,6 +197,25 @@ export class BuffService {
   /**
    * Множитель получаемого опыта: 1 + сумма процентов.
    */
+  /**
+   * Множитель входящего урона: 1 − сумма процентов.
+   *
+   * Знак именно такой: уменьшать должен множитель, а не начисление.
+   * Проверка на ненулевой остаток обязательна - при защите в 100% персонаж
+   * стал бы неуязвимым, и с кругом дервиша можно было бы стоять и смотреть.
+   * Нижняя граница 0.1, а не 0: полная неуязвимость ломала бы бой.
+   */
+  async getDamageTakenMultiplier(characterId: string): Promise<number> {
+    const now = new Date();
+    const rows = await this.db.query<{ magnitude: number }>(
+      `SELECT magnitude FROM character_buffs
+        WHERE character_id = $1 AND expires_at > $2 AND buff_id LIKE 'buff_protect_%'`,
+      [characterId, now]
+    ).catch(() => []);
+    const pct = rows.reduce((sum, r) => sum + Number(r.magnitude), 0);
+    return Math.max(0.1, 1 - pct / 100);
+  }
+
   async getExpMultiplier(characterId: string): Promise<number> {
     const now = new Date();
     const rows = await this.db.query<{ magnitude: number }>(

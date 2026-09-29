@@ -272,6 +272,11 @@ export class GameSocketHandler {
         await this.handleStanceChange(socket, data);
       });
 
+      // Включение активного навыка профессии (Зикр, Тадж)
+      socket.on(SOCKET_EVENTS.SKILL_ACTIVATE, async (data: { skillId?: string }) => {
+        await this.handleSkillActivate(socket, data);
+      });
+
       // Решение после смерти: возродиться в городе или на месте.
       // Раньше сервер воскрешал мгновенно и такого события не слушал —
       // клиентский deathScreen отправлял 'respawn' в пустоту.
@@ -861,6 +866,65 @@ export class GameSocketHandler {
   }
 
   /**
+   * Включение активного навыка профессии.
+   *
+   * Проверяется всё, из-за чего навык не должен включиться: навык выучен,
+   * активный, откал прошёл, хватает маны и выносливости, эффект
+   * существует. Пропуск любой проверки означал бы либо бесплатный откат,
+   * либо эффект без выученного навыка.
+   *
+   * Откал живёт в памяти вместе с кулдаунами классовых навыков:
+   * он не должен переживать перезаход, иначе перезаход обнулял бы его,
+   * и игрок мог бы включать Тадж без предела.
+   */
+  private async handleSkillActivate(socket: AuthenticatedSocket, data: { skillId?: string }): Promise<void> {
+    if (!socket.characterId) return;
+    const skillId = String(data?.skillId ?? '');
+    if (!skillId) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'unknown_skill' });
+      return;
+    }
+
+    const skill = await skillsService.getActiveSkill(socket.characterId, skillId);
+    if (!skill) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'unknown_skill', skillId });
+      return;
+    }
+    if (!skill.active?.buff) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'skill_not_active' });
+      return;
+    }
+    // Обе траты одним вызовом: раздельные списывания означали бы, что при
+    // нехватке маны выносливость уже потрачена, а навык не включился.
+    const paid = await this.characterService.spendResources(
+      socket.characterId, skill.manaCost, skill.staminaCost
+    );
+    if (!paid) {
+      // Не различаем, чего именно не хватило: клиент покажет обе полоски,
+      // и игрок увидит, где не хватило, без лишнего вопроса.
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'not_enough_mana' });
+      return;
+    }
+    if (skill.cooldown > 0 && !this.checkCooldown(socket.characterId, skill.id, skill.cooldown)) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'skill_cooldown', skillId: skill.id });
+      return;
+    }
+
+    const buff = await this.buffs.grant(socket.characterId, skill.active.buff);
+    if (!buff) {
+      // Эффекта нет в каталоге: ресурсы уже потрачены, а навык не дал
+      // ничего. Возврат обязателен, иначе игрок терял бы ресурсы за
+      // несуществующий эффект.
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'skill_no_effect' });
+      return;
+    }
+    // Отдельного события о баффах в проекте нет: плашки обновляет клиент
+    // по таймеру через /api/characters/:id/buffs. Отправка несуществующего
+    // события выглядела бы как «мы обновили игрока», а игрок бы ждал.
+    socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { skillActivated: true, skillId: skill.id, buff });
+  }
+
+  /**
    * Смена боевой стойки.
    *
    * Смена мгновенная, но не бесплатная: конная стрельба требует скакуна, и
@@ -1010,12 +1074,17 @@ export class GameSocketHandler {
       // стойка, и оба проверяются числами.
       const prof = await professionOf(attacker.id);
       const profDamage = professionBonuses(prof?.id ?? null, prof?.level ?? 0).damage;
-      const totalDamageScale = stance.damage * profDamage;
+      // Пассивные навыки: Аламы удлиняют удар и прибавляют урона.
+      // Считаются здесь, а не внутри расчёта, чтобы обе ветви боя брали
+      // одно и то же.
+      const passives = await skillsService.getPassiveMultipliers(attacker.id);
+      const totalDamageScale = stance.damage * profDamage * passives.damage;
+      const totalReach = stance.reach * passives.reach;
 
       // Досягаемость. Проверяем по серверным позициям, а не по присланным
       // клиентом: иначе правкой клиента можно бить через полкарты, указав
       // свою позицию рядом с жертвой. Монстры - по позиции из ИИ.
-      const reach = (weapon?.range ?? DEFAULT_WEAPON.range) * stance.reach;
+      const reach = (weapon?.range ?? DEFAULT_WEAPON.range) * totalReach;
       const isBasic = action.actionType === 'attack' && !action.skillId;
       if (isBasic) {
         let targetPos: { x: number; y: number; z: number } | null = null;
@@ -1142,7 +1211,11 @@ export class GameSocketHandler {
     // Временный бонус «+5% к урону» (кебаб). Множитель, а не стат:
     // бонус не должен попадать в панель характеристик и не трогать броню.
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
-    result.damage = Math.floor(result.damage * defenseMult * dmgBuff);
+    // Тадж дервиша: корона прикрывает своим кругом, поэтому входящий урон
+    // уменьшается. Множитель защиты входит в ту же цепочку, что и блок,
+    // иначе корона и щит считались бы вопреки друг другу.
+    const takenMult = await this.buffs.getDamageTakenMultiplier(target.id);
+    result.damage = Math.floor(result.damage * defenseMult * dmgBuff * takenMult);
 
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });

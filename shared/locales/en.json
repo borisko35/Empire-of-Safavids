@@ -206,6 +206,8 @@
     "combat_error_wrong_shard": "Target is on another game server",
     "combat_error_not_in_group": "You are not in this dungeon group",
     "combat_error_stance_needs_mount": "This stance is only available on horseback",
+    "combat_error_skill_not_active": "This skill is not activated: it works on its own",
+    "combat_error_skill_no_effect": "The skill has no effect — contact the administration",
     "combat_error_stance_unknown": "No such stance",
     "stance_title": "Combat style",
     "stance_balanced": "Standard",
@@ -1348,6 +1350,14 @@
     "study": "Learn",
     "free": "free",
     "xp_short": "XP",
+"skill_alams": "Alams",
+"skill_zikr": "Zikr",
+"skill_taj": "Taj",
+"skill_alams_hint": "Passive: a quarter longer and 15% stronger strike",
+"skill_zikr_hint": "Active: +25% damage for 30 seconds",
+"skill_taj_hint": "Active: −20% damage taken for 30 seconds",
+"skill_activate": "Activate",
+"skill_passive_badge": "passive",
     "prof_none": "No profession selected",
     "title": "Skills & Professions"
   },
@@ -1357,6 +1367,7 @@
     "merchant": "Merchant",
     "herbalist": "Herbalist",
     "blacksmith": "Blacksmith",
+    "dervish": "Dervish",
     "explorer": "Explorer"
   },
   "zones": {

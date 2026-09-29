@@ -3753,7 +3753,7 @@ export async function loadSkills(): Promise<void> {
         + xpBar(profession.xp, profession.level)
       : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.prof_none')}</div>
          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
-           ${['warrior','archer','merchant','herbalist','blacksmith','explorer'].map(id => `
+           ${['warrior','archer','merchant','herbalist','blacksmith','dervish','explorer'].map(id => `
              <button class="inv-action" data-prof="${id}">📜 ${t('prof.' + id)} — ${t('skills.free')}</button>
            `).join('')}
          </div>`;
@@ -3784,9 +3784,30 @@ export async function loadSkills(): Promise<void> {
           return '';
         }
       }));
-      skillsBox.innerHTML = skills
-        .map((s, i) => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}${bars[i] ?? ''}</div>`)
-        .join('');
+      // Пассивный навык помечен, и кнопки «включить» не получает: такая
+      // кнопка обещала бы действие, которого у пассива нет.
+      const skillRows = (s: { id: string; nameRu: string; level: number; manaCost: number; staminaCost: number; active?: unknown }, bar: string): string => {
+        const translated = t(`skills.skill_${s.id}`);
+        const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
+        const active = !!s.active;
+        return `<div class="inv-item"><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
+          + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
+                    : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)
+          + `${bar}</div>`;
+      };
+      skillsBox.innerHTML = skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
+
+      // Включение активных навыков: Зикр, Тадж. Ответ сервера приходит
+      // сюда же, и панель перерисовывается - игрок видит, что навык работает,
+      // и сразу получает свою долю опыта.
+      skillsBox.querySelectorAll('[data-activate]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          // Через событие окна, а не напрямую в сокет: панель про сокет
+          // ничего не знает. Так же сделан вызов навыков (game:skill).
+          const id = (btn as HTMLButtonElement).dataset.activate;
+          window.dispatchEvent(new CustomEvent('game:skill-activate', { detail: id }));
+        });
+      });
     } else {
       skillsBox.innerHTML = `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
     }

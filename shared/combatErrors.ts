@@ -17,7 +17,9 @@ export type CombatErrorCode =
   | 'wrong_shard'
   | 'not_in_group'
   | 'stance_needs_mount'
-  | 'unknown_stance';
+  | 'unknown_stance'
+  | 'skill_not_active'
+  | 'skill_no_effect';
 
 export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   attack_too_fast: 'world.combat_error_attack_too_fast',
@@ -36,6 +38,9 @@ export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   // Стойки
   stance_needs_mount: 'world.combat_error_stance_needs_mount',
   unknown_stance: 'world.combat_error_stance_unknown',
+  // Активный навык профессии
+  skill_not_active: 'world.combat_error_skill_not_active',
+  skill_no_effect: 'world.combat_error_skill_no_effect',
 };
 
 /** Известен ли серверу этот код (неизвестные коды показываем как есть) */
