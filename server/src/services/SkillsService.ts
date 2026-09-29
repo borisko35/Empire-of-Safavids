@@ -69,8 +69,113 @@ const PROFESSIONS: ProfessionDef[] = [
   { id: 'explorer', name: 'explorer', nameRu: 'Исследователь', description: 'Открывает секретные локации.', icon: 'compass', level: 1, xp: 0 },
 ];
 
+/**
+ * Насколько опыта нужно навыку, чтобы взять следующий уровень.
+ *
+ * Порог был `level * 100`, а остаток при повышении вычитался как
+ * `newLevel * 100`. То есть требовалось по старому уровню, а остаток
+ * считался по новому: на втором уровне игрок получал 200 опыта при
+ * необходимых 100 и уносил с собой лишнее. Мелочь, из-за которой
+ * прокачка шла быстрее задуманного и по-разному на каждом уровне.
+ */
+/**
+ * Сколько урона нужно набрать, чтобы дать одну порцию опыта.
+ *
+ * Порог нужен по двум причинам. Первый: начисление на каждый удар
+ * отдельно округлялось бы в ноль при мелких ударах, и быстрый клинок
+ * прокачивался бы медленнее тяжёлого — противоположно смыслу. Второй:
+ * без порога каждый удар означал бы запись в базу, а это сотни записей
+ * за минуту боя.
+ */
+export const SKILL_XP_DAMAGE_STEP = 60;
+
+export function skillXpForNextLevel(level: number): number {
+  return 100 + (level - 1) * 50;
+}
+
+export interface XpGainResult {
+  /** Навык после начисления: уровень и остаток опыта. */
+  level: number;
+  xp: number;
+  /** Сколько уровней взято за раз: одна выдача может дать и два. */
+  levelsGained: number;
+}
+
+/**
+ * Посчитать новый уровень и остаток опыта. Чистая функция — ради неё
+ * написан тест, который перебирает рубежи: сдвиг на единицу в этой
+ * арифметике не виден ни в описании, ни в панели.
+ */
+export function applySkillXp(currentLevel: number, currentXp: number, xpGain: number): XpGainResult {
+  let level = Math.max(1, currentLevel);
+  let xp = Math.max(0, currentXp) + Math.max(0, xpGain);
+  let levelsGained = 0;
+  // Потолок совпадает с потолком в базе: выше 50 навык не растёт, и опыт
+  // копится в остатке, а не пропадает молча.
+  while (level < 50 && xp >= skillXpForNextLevel(level)) {
+    xp -= skillXpForNextLevel(level);
+    level++;
+    levelsGained++;
+  }
+  if (level >= 50) xp = Math.min(xp, skillXpForNextLevel(50));
+  return { level, xp, levelsGained };
+}
+
 export class SkillsService {
   private db = DatabaseService.getInstance();
+
+  /**
+   * Начислить опыт навыку от настоящего действия.
+   *
+   * Единственный путь начисления. Маршрут, где клиент присылал
+   * `xp: 1000000`, удалён: он позволял вошедшему игроку прокачать чужой
+   * навык на чужого персонажа до потолка одним запросом.
+   */
+  async gainSkillXp(characterId: string, skillId: string, xpGain: number): Promise<XpGainResult | null> {
+    if (!Number.isFinite(xpGain) || xpGain <= 0) return null;
+    const row = await this.db.queryOne<{ level: number; xp: number }>(
+      'SELECT level, xp FROM character_skills WHERE character_id = $1 AND skill_id = $2',
+      [characterId, skillId]
+    );
+    if (!row) return null;
+    const skill = SKILLS.find(s => s.id === skillId);
+    if (!skill) return null;
+
+    const result = applySkillXp(Number(row.level), Number(row.xp), xpGain);
+    await this.db.query(
+      'UPDATE character_skills SET level = $1, xp = $2 WHERE character_id = $3 AND skill_id = $4',
+      [result.level, result.xp, characterId, skillId]
+    );
+    if (result.levelsGained > 0) {
+      logger.info(`[Skills] ${characterId} ${skillId} -> level ${result.level} (+${result.levelsGained})`);
+    }
+    return result;
+  }
+
+  /**
+   * Профессиональный опыт от того же действия.
+   *
+   * Порог и остаток считаются той же формулой, что и у навыка: раньше
+   * профессия требовала `level * 200` при остатке по новому уровню —
+   * та же ошибка, что была в навыках.
+   */
+  async gainProfessionXp(characterId: string, xp: number): Promise<(ProfessionDef & { levelsGained: number }) | null> {
+    if (!Number.isFinite(xp) || xp <= 0) return null;
+    const row = await this.db.queryOne<{ profession_id: string; level: number; xp: number }>(
+      'SELECT profession_id, level, xp FROM character_professions WHERE character_id = $1',
+      [characterId]
+    );
+    if (!row) return null;
+    const prof = PROFESSIONS.find(p => p.id === row.profession_id);
+    if (!prof) return null;
+
+    const result = applySkillXp(Number(row.level), Number(row.xp), xp);
+    await this.db.query(
+      'UPDATE character_professions SET level = $1, xp = $2 WHERE character_id = $3',
+      [result.level, result.xp, characterId]
+    );
+    return { ...prof, level: result.level, xp: result.xp, levelsGained: result.levelsGained };
+  }
 
   async getCharacterSkills(characterId: string): Promise<SkillDef[]> {
     const rows = await this.db.query<{ skill_id: string; level: number; xp: number; unlocked_at: Date }>(
@@ -127,35 +232,6 @@ export class SkillsService {
     return { ...skill, level: 1, xp: 0 };
   }
 
-  async upgradeSkill(characterId: string, skillId: string, xpGain: number): Promise<SkillDef | null> {
-    const row = await this.db.queryOne<{ level: number; xp: number }>(
-      'SELECT level, xp FROM character_skills WHERE character_id = $1 AND skill_id = $2',
-      [characterId, skillId]
-    );
-    if (!row) return null;
-
-    const skill = SKILLS.find(s => s.id === skillId);
-    if (!skill) return null;
-
-    const newXp = row.xp + xpGain;
-    const xpNeeded = row.level * 100;
-    
-    if (newXp >= xpNeeded && row.level < 50) {
-      const newLevel = row.level + 1;
-      await this.db.query(
-        `UPDATE character_skills SET level = $1, xp = $2 - $1 * 100 WHERE character_id = $3 AND skill_id = $4`,
-        [newLevel, newXp, characterId, skillId]
-      );
-      return { ...skill, level: newLevel, xp: newXp - newLevel * 100 };
-    } else {
-      await this.db.query(
-        `UPDATE character_skills SET xp = $1 WHERE character_id = $2 AND skill_id = $3`,
-        [newXp, characterId, skillId]
-      );
-      return { ...skill, level: row.level, xp: newXp };
-    }
-  }
-
   // Professions
   async getCharacterProfession(characterId: string): Promise<ProfessionDef | null> {
     const row = await this.db.queryOne<{ profession_id: string; level: number; xp: number }>(
@@ -195,37 +271,66 @@ export class SkillsService {
     return SKILLS.filter(s => s.professionId === professionId);
   }
 
-  async gainProfessionXp(characterId: string, xp: number): Promise<ProfessionDef | null> {
+  /**
+   * Опыт до следующего уровня навыка — панели нужен сам порог, а не только
+   * накопленное. Без него игрок видит «120 XP» и не понимает, сколько ещё.
+   */
+  async getSkillProgress(characterId: string, skillId: string): Promise<{ level: number; xp: number; needed: number } | null> {
     const row = await this.db.queryOne<{ level: number; xp: number }>(
-      'SELECT level, xp FROM character_professions WHERE character_id = $1',
-      [characterId]
+      'SELECT level, xp FROM character_skills WHERE character_id = $1 AND skill_id = $2',
+      [characterId, skillId]
     );
     if (!row) return null;
+    return {
+      level: Number(row.level),
+      xp: Number(row.xp),
+      needed: skillXpForNextLevel(Number(row.level)),
+    };
+  }
 
-    const profRow = await this.db.queryOne<{ profession_id: string }>(
-      'SELECT profession_id FROM character_professions WHERE character_id = $1',
-      [characterId]
-    );
-    const prof = PROFESSIONS.find(p => p.id === profRow?.profession_id);
-    if (!prof) return null;
+  /**
+   * Полный начис по бою: профессия плюс навык.
+   *
+   * Оба решения принимаются здесь, а не в обработчике сокета, потому что
+   * только тут известно, какие навыки у персонажа вообще выучены. Правила
+   * честные и проверяемые:
+   *
+   *  - опыт капает только за урон, который действительно прилетел. Уход
+   *    в dodge, промах и удар, снятый щитом, опыта не дают, иначе можно
+   *    было бы качать навык, стоя на месте;
+   *  - удар навыком даёт больше опыта, чем обычный: навык, в который
+   *    игрок вложился, и должен расти быстрее;
+   *  - навык качается только тот, которым били. Остальные не растут «за
+   *    компанию» — иначе можно было бы выучить дешёвый навык и растить
+   *    им дорогой, ни разу его не применив;
+   *  - обычный удар растит самый ранний по требованию уровню из выученных,
+   *    иначе прокачка навыков жила бы только на классовых умениях.
+   */
+  async gainProgressForHit(
+    characterId: string,
+    usedSkillId: string | null,
+    damage: number
+  ): Promise<{ skill: XpGainResult | null; profession: (ProfessionDef & { levelsGained: number }) | null }> {
+    if (!Number.isFinite(damage) || damage <= 0) return { skill: null, profession: null };
 
-    const newXp = row.xp + xp;
-    const xpNeeded = row.level * 200;
-    
-    if (newXp >= xpNeeded && row.level < 100) {
-      const newLevel = row.level + 1;
-      await this.db.query(
-        `UPDATE character_professions SET level = $1, xp = $2 - $1 * 200 WHERE character_id = $3`,
-        [newLevel, newXp, characterId]
-      );
-      return { ...prof, level: newLevel, xp: newXp - newLevel * 200 };
-    } else {
-      await this.db.query(
-        `UPDATE character_professions SET xp = $1 WHERE character_id = $2`,
-        [newXp, characterId]
-      );
-      return { ...prof, level: row.level, xp: newXp };
+    const steps = Math.floor(damage / SKILL_XP_DAMAGE_STEP);
+    if (steps < 1) return { skill: null, profession: null };
+
+    const isSkill = !!usedSkillId;
+    const profession = await this.gainProfessionXp(characterId, steps * (isSkill ? 2 : 1));
+
+    let targetId = usedSkillId;
+    if (!targetId) {
+      const learned = await this.db.query<{ skill_id: string }>(
+        `SELECT skill_id FROM character_skills
+          WHERE character_id = $1
+          ORDER BY level ASC, unlocked_at ASC`,
+        [characterId]
+      ).catch(() => []);
+      targetId = learned[0]?.skill_id ?? null;
     }
+    const skill = targetId ? await this.gainSkillXp(characterId, targetId, steps * (isSkill ? 3 : 1)) : null;
+    return { skill, profession };
   }
 }
 

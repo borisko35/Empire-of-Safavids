@@ -21,6 +21,7 @@ import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
+import { skillsService } from '../services/SkillsService';
 import { STANCES, isCombatStance, type CombatStance, type StanceProfile } from '../systems/CombatStance';
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
@@ -887,6 +888,28 @@ export class GameSocketHandler {
     socket.emit(SOCKET_EVENTS.COMBAT_STANCE, { stance: applied });
   }
 
+  /**
+   * Опыт навыка и профессии за нанесённый урон.
+   *
+   * Здесь только вызов: правила начисления живут в SkillsService, где
+   * известно, какие навыки у персонажа выучены, и где их можно проверить
+   * без поднятия сервера. Раньше единственным источником опыта был
+   * маршрут, где клиент сам присылал сумму, и проверки владельца не было.
+   *
+   * void, а не await: опыт не должен задерживать удар. Ошибка глотается
+   * здесь - отсутствие таблиц не должно ронять бой.
+   */
+  private grantCombatProgress(characterId: string, action: CombatAction, damage: number): void {
+    if (!Number.isFinite(damage) || damage <= 0) return;
+    void skillsService.gainProgressForHit(
+      characterId,
+      action.actionType === 'attack' ? action.skillId ?? null : null,
+      damage
+    ).catch((err: Error) => {
+      logger.warn(`[Skills] progress failed for ${characterId}: ${err.message}`);
+    });
+  }
+
   private async handleCombatAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
     if (!socket.characterId || !socket.region) return;
     // Мёртвый не бьёт: ни во что, ни по кому. Без проверки можно было бы
@@ -1130,6 +1153,11 @@ export class GameSocketHandler {
     // Применяем урон к цели (персистентно)
     const applied = await this.characterService.applyDamage(target.id, result.damage);
 
+    // Опыт за настоящий удар. Начисляется здесь, а не по запросу клиента:
+    // единственным путём начисления был маршрут, где игрок сам присылал
+    // сумму, и проверки владельца не было вовсе.
+    this.grantCombatProgress(attacker.id, action, result.damage);
+
     // Журнал боёв. Каждый удар между игроками пишется целиком: это и есть
     // материал для разбора споров «он меня убил нечестно». Раньше таблица
     // combat_logs существовала со всей схемой, но не записывал никто -
@@ -1253,6 +1281,10 @@ export class GameSocketHandler {
 
     const ai = GameLoop.getInstance().getSpawnSystem().getAI();
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
+
+    // Опыт навыков и профессии за удар по монстру. Тот же путь, что и в PvP:
+    // сумма берётся из нанесённого урона, а не из пакета клиента.
+    this.grantCombatProgress(attacker.id, action, result.damage);
 
     // Журнал боёв по монстрам. Обычный мусор не пишется - решение принимает
     // buildCombatLogEntry, он же возвращает null, если писать нечего.

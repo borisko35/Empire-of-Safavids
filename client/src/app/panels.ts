@@ -3716,6 +3716,24 @@ export function loadPanelContent(panelId: string | undefined): void {
 }
 
 // ── Панель навыков и профессий ──────────────────────────────
+
+/**
+ * Полоса опыта.
+ *
+ * Ширина считается по порогу, который присылает сервер, а не «на глаз».
+ * Заглушка на месте опыта выглядела бы как работающая шкала и молчала бы
+ * о том, сколько осталось до уровня.
+ */
+function xpBar(xp: number, level: number, needed?: number): string {
+  // Порог берётся из ответа сервера, если он есть. Формула здесь повторяет
+  // серверную намеренно: без неё полоса была бы врёт при любом изменении
+  // правил, а молчала бы ровно тогда, когда игрок смотрит на неё чаще всего.
+  const need = needed ?? (100 + (Math.max(1, level) - 1) * 50);
+  const pct = need > 0 ? Math.min(100, Math.max(0, Math.round((xp / need) * 100))) : 0;
+  return `<div class="xp-bar" title="${xp} / ${need}"><i style="width:${pct}%"></i></div>`
+    + `<div class="xp-text">${xp} / ${need} ${t('skills.xp_short')}</div>`;
+}
+
 export async function loadSkills(): Promise<void> {
   const charId = session.character?.id;
   if (!charId) return;
@@ -3728,7 +3746,11 @@ export async function loadSkills(): Promise<void> {
   try {
     const { profession } = await api.getProfession(charId);
     profBox.innerHTML = profession
-      ? `<div class="inv-item"><b>${profession.nameRu}</b> — ${t('badges.level')}${profession.level} (${profession.xp} XP)</div>`
+      // Полоса опыта у профессии. Раньше стояло только «уровень 3 (240 XP)»:
+      // игрок видел число, но не знал, сколько нужно до следующего уровня,
+      // и не мог понять, растёт оно вообще или нет.
+      ? `<div class="inv-item"><b>${profession.nameRu}</b> — ${t('badges.level')}${profession.level}</div>`
+        + xpBar(profession.xp, profession.level)
       : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.prof_none')}</div>
          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
            ${['warrior','archer','merchant','herbalist','blacksmith','explorer'].map(id => `
@@ -3750,9 +3772,24 @@ export async function loadSkills(): Promise<void> {
   try {
     const { skills } = await api.getSkills(charId);
     const profId = skills[0]?.professionId;
-    skillsBox.innerHTML = skills.length
-      ? skills.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}</div>`).join('')
-      : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
+    if (skills.length) {
+      // Прогресс каждого навыка запрашивается отдельно: в списке сервер
+      // отдаёт уровень, но не порог следующего, а без порога полоса была бы
+      // выдуманной. Отказ по одному навыку не роняет весь список.
+      const bars = await Promise.all(skills.map(async (s) => {
+        try {
+          const { progress } = await api.skillProgress(charId, s.id);
+          return xpBar(progress.xp, progress.level, progress.needed);
+        } catch {
+          return '';
+        }
+      }));
+      skillsBox.innerHTML = skills
+        .map((s, i) => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}${bars[i] ?? ''}</div>`)
+        .join('');
+    } else {
+      skillsBox.innerHTML = `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
+    }
     if (profId) {
       const { skills: avail } = await api.getProfessionSkills(profId);
       const known = new Set(skills.map(s => s.id));

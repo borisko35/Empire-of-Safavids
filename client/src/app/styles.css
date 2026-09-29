@@ -1866,6 +1866,14 @@ input, select { font: inherit; }
 .equip-slot.equipped { border-color: var(--gold); background: rgba(201, 168, 76, 0.18); }
 .equip-slot.equipped .equip-label { font-size: 9px; font-weight: 600; }
 
+/* Полоса опыта навыка и профессии */
+.xp-bar {
+  height: 4px; margin: 4px 0 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.08); overflow: hidden;
+}
+.xp-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #6fa96f, #9fd39a); }
+.xp-text { font-size: 10px; color: var(--cream-dim); opacity: 0.85; }
+
 /* Боевые стойки: выбор стиля боя */
 .stance-list { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 3px; }
 .stance-row {

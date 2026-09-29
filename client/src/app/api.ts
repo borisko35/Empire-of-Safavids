@@ -232,6 +232,10 @@ export const api = {
   characterStance: (characterId: string) =>
     req<{ stance: string }>(`/api/characters/${characterId}/stance`),
 
+  /** Прогресс навыка: уровень, накопленный опыт и порог следующего уровня */
+  skillProgress: (characterId: string, skillId: string) =>
+    req<{ progress: { level: number; xp: number; needed: number } }>(`/api/skills/progress/${skillId}?characterId=${characterId}`),
+
   getSkills: (characterId: string) =>
     req<{ skills: any[] }>(`/api/skills?characterId=${characterId}`),
 
