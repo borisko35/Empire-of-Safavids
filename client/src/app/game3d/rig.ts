@@ -876,6 +876,539 @@ export function buildMonsterRig(monsterId: string): Rig {
 }
 
 /** Риг игрока по классу */
+// ── Фигура по рисунку: халат в два слоя, тюрбан, перевязь ──────
+//
+// Всё, что ниже, относится к одному только игроку. NPC собираются через
+// buildHumanoid, и он намеренно не тронут: переписать его вместе с героем
+// означало бы поменять облик всех горожан и мобов, а это отдельное решение
+// владельца, а не побочный эффект.
+
+// Смешать цвет с кремовым: приглушение вместо замены.
+function muted(color: number, toward: number, t: number): number {
+  const c = new THREE.Color(color);
+  const d = new THREE.Color(toward);
+  c.lerp(d, t);
+  return c.getHex();
+}
+
+/**
+ * Тело вращения по профилю.
+ *
+ * phiStart и phiLength дают разрез спереди: халат на рисунке распахнут, и из
+ * щели видна светлая рубаха. Прежний халат был сплошным телом вращения, то
+ * есть колоколом без всяких слоёв.
+ *
+ * Углы: three раскладывает профиль как x = r·sin(phi), z = r·cos(phi), то
+ * есть перед (+Z) - это phi = 0, а не phi = π/2. Разрез шириной gap по центру
+ * спереди получается, если вести обходот от gap/2 на 2π - gap.
+ *
+ * Первая версия ставила phiStart = π/2 + gap/2, и разрез оказывался сбоку:
+ * халат был распахнут на левом боку, а капюшон наполовину закрывал лицо.
+ * Ошибку видно только глазами - все проверки были зелёные.
+ */
+function lathe(
+  points: [number, number][],
+  material: THREE.Material,
+  seg = 16,
+  phiStart = 0,
+  phiLength = Math.PI * 2,
+): THREE.Mesh {
+  const profile = points.map(([x, y]) => new THREE.Vector2(x, y));
+  const mesh = new THREE.Mesh(new THREE.LatheGeometry(profile, seg, phiStart, phiLength), material);
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** Плоская полоса с толщиной: лацканы, конец перевязи, хвост тюрбана. */
+function slab(w: number, h: number, d: number, m: THREE.Material): THREE.Mesh {
+  return box(w, h, d, m);
+}
+
+/** Ширина разреза халата спереди. */
+const ROBE_GAP = 0.75;
+
+/**
+ * Тюрбан на макушке.
+ *
+ * Голова в сборке устроена так: начало группы - у основания черепа, сам
+ * череп поднят на 0.12. Прежний тюрбан ставился на ноль группы, то есть
+ * на шею, и накрывал лицо. Теперь весь головной убор поднимается на
+ * HEAD_TOP = 0.19 - выше середины черепа, но ниже его вершины.
+ */
+const HEAD_TOP = 0.19;
+
+function buildTurban(color: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.y = HEAD_TOP;
+  const m = mat(color, 0.95, 0.05);
+  const mLight = mat(muted(color, 0xf4ecd8, 0.28), 0.95, 0.05);
+
+  // Купол: основание на макушке, вершина выше черепа
+  const dome = lathe([
+    [0.0, 0.0], [0.14, 0.004], [0.168, 0.03], [0.175, 0.075],
+    [0.172, 0.115], [0.15, 0.148], [0.09, 0.166], [0.0, 0.172],
+  ], m, 20);
+  g.add(dome);
+
+  // Витки намотки. Радиус каждого чуть больше купола на этой высоте, иначе
+  // кольца утонут в ткани и намотки не видно.
+  // Радиус каждого витка - радиус купола на этой высоте плюс 0.014. Первый
+  // вариант ставил виток уже купола, и он просто тонул в ткани: намотка
+  // читалась как brim, то есть персонаж был в шляпе.
+  const wraps: [number, number][] = [[0.03, 0.182], [0.075, 0.19], [0.115, 0.188]];
+  wraps.forEach(([y, r], i) => {
+    const wrap = new THREE.Mesh(new THREE.TorusGeometry(r, 0.03, 7, 20), i === 1 ? mLight : m);
+    wrap.rotation.x = Math.PI / 2;
+    wrap.rotation.z = 0.26 * (i - 1);
+    wrap.position.y = y;
+    wrap.castShadow = true;
+    g.add(wrap);
+  });
+
+  // Хвост ткани сзади - та самая деталь, по которой тюрбан узнаётся
+  const tail = slab(0.1, 0.24, 0.06, m);
+  tail.position.set(0.05, 0.07, -0.16);
+  tail.rotation.x = 0.55;
+  g.add(tail);
+  return g;
+}
+
+/** Мягкая шапка с загнутой вершиной: у дипломата на рисунке именно такая. */
+function buildSoftCap(color: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.y = HEAD_TOP;
+  const m = mat(color, 0.9, 0.06);
+  const cap = lathe([
+    [0.0, 0.0], [0.14, 0.0], [0.158, 0.045], [0.155, 0.09],
+    [0.13, 0.13], [0.08, 0.155], [0.0, 0.165],
+  ], m, 18);
+  g.add(cap);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.085, 8), m);
+  tip.position.set(0, 0.185, -0.055);
+  tip.rotation.x = -0.95;
+  tip.castShadow = true;
+  g.add(tip);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(0.152, 0.02, 6, 18), mat(muted(color, 0x000000, 0.35), 0.9, 0.06));
+  band.rotation.x = Math.PI / 2;
+  band.position.y = 0.022;
+  g.add(band);
+  return g;
+}
+
+/**
+ * Капюшон: купол и полы, лицо открыто.
+ *
+ * Первый вариант был сферой с вырезанным спереди сектором. Сфера с вырезом
+ * не годится: материал односторонний, поэтому сквозь вырез видно насквозь,
+ * а края выреза - дуги - читаются как два рога. Теперь это тело вращения с
+ * разрезом: края у него радиальные и прямые, то есть выглядят как вырез
+ * капюшона, а материал двусторонний, и изнутри видно подкладку.
+ */
+function buildHood(color: number): THREE.Group {
+  const g = new THREE.Group();
+  g.position.y = HEAD_TOP;
+  const m = mat(color, 0.95, 0.04);
+  m.side = THREE.DoubleSide;
+  // Одна деталь вместо двух: пола идёт от шеи вверх, обходит голову и
+  // смыкается на макушке, спереди остаётся вырез под лицо.
+  //
+  // Второй вариант был куполом плюс отдельной полой. Купол начинался на
+  // 0.19 - как раз на уровне бровей (0.196) - и нависал над лицом, так что
+  // капюшон закрывал голову целиком. Здесь нижняя точка профиля - это шея,
+  // а лоб остаётся открытым.
+  g.add(lathe([
+    [0.152, -0.1], [0.172, -0.02], [0.18, 0.08], [0.176, 0.15],
+    [0.156, 0.21], [0.115, 0.245], [0.055, 0.262], [0.0, 0.268],
+  ], m, 20, 0.95, Math.PI * 2 - 1.9));
+  return g;
+}
+
+/** Борода каплей плюс усы. Прежняя была приплюснутым шаром. */
+function buildBeard(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const m = mat(color, 0.9, 0.05);
+  // Борода: уже и короче прежней. Широкая капля закрывала подбородок и
+  // читалась вместе с усами как маска на пол-лица.
+  const drop = new THREE.Mesh(new THREE.ConeGeometry(0.072, 0.19, 7), m);
+  drop.rotation.x = Math.PI;
+  drop.position.set(0, -0.03, 0.08);
+  drop.castShadow = true;
+  g.add(drop);
+  // Усы: две полоски, расходящиеся от центра. Прежний брусок шириной 0.15
+  // лежал поперёк рта и был единственной тёмной полосой на лице.
+  for (const side of [-1, 1]) {
+    const stache = slab(0.062, 0.024, 0.04, m);
+    stache.position.set(side * 0.038, 0.088, 0.128);
+    stache.rotation.z = side * 0.3;
+    g.add(stache);
+  }
+  return g;
+}
+
+/**
+ * Сапог с голенищем.
+ *
+ * В прежней сборке подошва стояла на -0.93 относительно бедра при высоте
+ * бедра 0.95 - то есть на земле. Здесь бедро выше (0.92), а сапог длинный
+ * и достаёт до земли: подошва на -0.86, то есть на высоте 0.06.
+ */
+function buildBoot(color: number): THREE.Group {
+  const g = new THREE.Group();
+  const m = mat(color, 0.8, 0.15);
+  const shaft = cyl(0.058, 0.078, 0.8, m, 10);
+  shaft.position.y = -0.4;
+  const cuffRing = new THREE.Mesh(new THREE.TorusGeometry(0.066, 0.016, 6, 12), mat(muted(color, 0x000000, 0.3), 0.8, 0.15));
+  cuffRing.rotation.x = Math.PI / 2;
+  cuffRing.position.y = -0.76;
+  const foot = box(0.11, 0.1, 0.24, mat(muted(color, 0x000000, 0.25), 0.8, 0.15));
+  foot.position.set(0, -0.86, 0.04);
+  const toe = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 6), mat(muted(color, 0x000000, 0.15), 0.8, 0.15));
+  toe.scale.set(0.85, 0.6, 1.25);
+  // Мысок отодвинут назад: на 0.14 он вылезал из-под рубахи (0.218 против
+  // радиуса ткани 0.212) и проглядывал в просмотре между полами халата.
+  toe.position.set(0, -0.87, 0.085);
+  g.add(shaft, cuffRing, foot, toe);
+  return g;
+}
+
+/**
+ * Сборка фигуры по рисунку.
+ *
+ * Сохраняется всё, чего ждёт остальная игра: те же группы (body, torso,
+ * head, armL/armR, legL/legR), оружие в правой руке, щит в левой, та же
+ * анимация и тот же контракт Rig.
+ */
+function buildFigure(cfg: HumanoidCfg): Rig {
+  const CREAM = 0xe8dcc0;          // нижняя рубаха
+  const SASH = 0x8a6a3c;           // перевязь
+  const HAIR = 0x4a3524;           // волосы и борода
+  const LEATHER = 0x6b4a2f;        // сапоги
+
+  const upper = mat(muted(cfg.robe, CREAM, 0.42), 0.94, 0.04);
+  // Халат виден изнутри, когда он распахнут, поэтому двусторонний.
+  upper.side = THREE.DoubleSide;
+  const under = mat(CREAM, 0.95, 0.03);
+  const sashMat = mat(SASH, 0.9, 0.06);
+  const s = cfg.scale ?? 1;
+
+  const group = new THREE.Group();
+  const body = new THREE.Group();     // опускается при приседе
+  group.add(body);
+
+  // ── Ноги и сапоги ──
+  // Расставка ног подобрана так, чтобы сапог целиком помещался внутрь рубахи.
+  // При прежней расстановке (±0.11) и прежней толщине сапога (радиус 0.098)
+  // его край доходил до 0.208 при радиусе рубахи 0.211 - то есть нога
+  // упиралась в ткань почти вплотную, и в просмотре сапоги проглядывали
+  // сквозь рубаху. Теперь запас около 0.045.
+  const legL = new THREE.Group(); legL.name = 'legL'; legL.position.set(-0.085, 0.92, 0);
+  const legR = new THREE.Group(); legR.name = 'legR'; legR.position.set(0.085, 0.92, 0);
+  const boot = buildBoot(LEATHER);
+  legL.add(boot.clone());
+  legR.add(boot.clone());
+  body.add(legL, legR);
+
+  // ── Торс ──
+  const torso = new THREE.Group();
+  // Имена группам: без них проверка геометрии вынуждена угадывать, где
+  // торс, по координатам, и не может отличить «анимация на суше отработала»
+  // от «персонаж всё это время считался в воде» - а это разные ветки кода.
+  torso.name = 'torso';
+  torso.position.y = 0.98;
+
+  // Нижняя рубаха: светлая, видна в разрезе халата и снизу
+  const tunic = lathe([
+    [0.0, -0.85], [0.2, -0.84], [0.212, -0.5], [0.205, -0.15],
+    [0.198, 0.12], [0.2, 0.32], [0.182, 0.48], [0.13, 0.58], [0.0, 0.62],
+  ], under, 20);
+  torso.add(tunic);
+
+  // Халат: тот же профиль, что и у юбки, но сверху он идёт к плечам, и спереди
+  // в нём настоящий разрез. Радиус держится ровным (0.215–0.225), а внизу
+  // чуть расширяется - это халат, а не колокол.
+  const robe = lathe([
+    [0.228, -0.93], [0.232, -0.6], [0.226, -0.28], [0.222, 0.0],
+    [0.228, 0.26], [0.216, 0.46], [0.17, 0.58], [0.0, 0.63],
+  ], upper, 26, ROBE_GAP / 2, Math.PI * 2 - ROBE_GAP);
+  torso.add(robe);
+
+  // Плечи: полусфера с тем же разрезом, чтобы линия халата не замыкалась
+  const shoulders = new THREE.Mesh(
+    new THREE.SphereGeometry(0.215, 18, 10, ROBE_GAP / 2, Math.PI * 2 - ROBE_GAP),
+    upper,
+  );
+  shoulders.scale.set(1.06, 0.52, 0.9);
+  shoulders.position.y = 0.5;
+  shoulders.castShadow = true;
+  torso.add(shoulders);
+
+  // Лацканы: две полосы, сходящиеся на груди, - на рисунке халат там
+  // перехвачен, и это то, что держит разрез от расползания.
+  //
+  // Цвет - затемнённый халат, а не смешанный с кремовым. Смешанный с
+  // кремовым лацкан выходил светлее халата и читался серыми лямками.
+  const lapelMat = mat(muted(cfg.robe, 0x1a1410, 0.34), 0.94, 0.04);
+  for (const side of [-1, 1]) {
+    const lapel = slab(0.1, 0.36, 0.05, lapelMat);
+    lapel.position.set(side * 0.075, 0.4, 0.165);
+    lapel.rotation.z = side * 0.34;
+    lapel.rotation.y = -side * 0.42;
+    torso.add(lapel);
+  }
+  // Воротник
+  // Прежний воротник был тором радиусом 0.105 с трубкой 0.028 - белый пончик
+  // вокруг шеи. Уменьшен и опущен к горлу.
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.082, 0.019, 6, 14), under);
+  collar.rotation.x = Math.PI / 2;
+  collar.position.y = 0.578;
+  torso.add(collar);
+
+  // ── Перевязь: широкая, с узлом и свисающим концом ──
+  // На рисунке пояс держит весь силуэт. Тонкий золотой пояс прежней сборки
+  // этого не давал. Радиус чуть больше халата, иначе она в нём тонет.
+  const sash = cyl(0.232, 0.238, 0.2, sashMat, 16);
+  sash.position.y = 0.13;
+  torso.add(sash);
+  const sashEdge = cyl(0.239, 0.239, 0.03, mat(muted(SASH, 0x000000, 0.3), 0.9, 0.06), 16);
+  sashEdge.position.y = 0.225;
+  torso.add(sashEdge);
+  const knot = sphere(0.042, mat(muted(SASH, 0x000000, 0.15), 0.9, 0.06), 8);
+  knot.position.set(0.12, 0.11, 0.175);
+  torso.add(knot);
+  // Начало ниже пояса: прежний конец перевязи начинался выше ремня, и его
+  // тёмный угол торчал на поясе чёрной запятой.
+  const sashTail = slab(0.09, 0.36, 0.045, sashMat);
+  sashTail.position.set(0.13, -0.2, 0.175);
+  sashTail.rotation.z = 0.05;
+  torso.add(sashTail);
+
+  // ── Голова ──
+  const head = new THREE.Group();
+  head.name = 'head';
+  head.position.y = 0.68;
+  const skull = sphere(0.155, mat(0xe4b284, 0.95), 16);
+  skull.position.y = 0.12;
+  skull.scale.set(0.94, 1.05, 0.98);
+  // Челюсть: убирает шарообразность
+  const jaw = cyl(0.02, 0.115, 0.11, mat(0xd6a37a, 0.95), 12);
+  jaw.position.set(0, 0.045, 0.035);
+  head.add(skull, jaw);
+  head.add(buildBeard(HAIR));
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.021, 6, 6), MAT.eye);
+  eyeL.position.set(-0.058, 0.155, 0.125);
+  const eyeR = eyeL.clone(); eyeR.position.x = 0.058;
+  head.add(eyeL, eyeR);
+  for (const side of [-1, 1]) {
+    const brow = box(0.05, 0.013, 0.02, mat(HAIR, 0.9, 0.05));
+    brow.position.set(side * 0.058, 0.196, 0.126);
+    head.add(brow);
+  }
+  // Волосы под убором: показывают, что под тюрбаном или шапкой есть голова
+  const hair = sphere(0.157, mat(HAIR, 0.92, 0.05), 14);
+  hair.scale.set(1, 0.78, 1);
+  hair.position.set(0, 0.13, -0.012);
+  head.add(hair);
+
+  if (cfg.hat === 'helmet') {
+    const helmGrp = new THREE.Group();
+    helmGrp.position.y = HEAD_TOP;
+    const helm = lathe([
+      [0.0, 0.0], [0.148, 0.0], [0.172, 0.06], [0.176, 0.14], [0.15, 0.2], [0.0, 0.23],
+    ], mat(cfg.hatColor, 0.6, 0.35), 18);
+    helmGrp.add(helm);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.168, 0.022, 6, 18), mat(muted(cfg.hatColor, 0x000000, 0.25), 0.6, 0.35));
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.02;
+    helmGrp.add(rim);
+    const plume = slab(0.035, 0.16, 0.12, mat(0x8a1f2a, 0.9, 0.05));
+    plume.position.set(0, 0.3, -0.04);
+    plume.rotation.x = -0.25;
+    helmGrp.add(plume);
+    head.add(helmGrp);
+  } else if (cfg.hat === 'turban') {
+    head.add(buildTurban(cfg.hatColor));
+  } else if (cfg.hat === 'hood') {
+    head.add(buildHood(cfg.hatColor));
+  } else {
+    head.add(buildSoftCap(cfg.hatColor));
+  }
+  torso.add(head);
+
+  // ── Руки: широкий рукав, потом кисть ──
+  const armL = new THREE.Group(); armL.name = 'armL'; armL.position.set(-0.26, 0.46, 0);
+  const armR = new THREE.Group(); armR.name = 'armR'; armR.position.set(0.26, 0.46, 0);
+  const armGeo = () => {
+    const a = new THREE.Group();
+    const upperSleeve = cyl(0.092, 0.078, 0.3, upper, 10);
+    upperSleeve.position.y = -0.15;
+    // Расширяющийся книзу рукав - «бубен» на рисунке
+    const wideSleeve = cyl(0.1, 0.148, 0.32, upper, 12);
+    wideSleeve.position.y = -0.44;
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.022, 6, 14), mat(muted(cfg.robeDark, CREAM, 0.4), 0.94, 0.04));
+    cuff.rotation.x = Math.PI / 2;
+    cuff.position.y = -0.585;
+    const hand = sphere(0.068, mat(0xe4b284, 0.95), 8);
+    hand.position.y = -0.66;
+    a.add(upperSleeve, wideSleeve, cuff, hand);
+    return a;
+  };
+  armL.add(armGeo()); armR.add(armGeo());
+  torso.add(armL, armR);
+
+  // ── Оружие в правой руке ──
+  let weaponRef: THREE.Group | null = null;
+  if (cfg.weapon !== 'none') {
+    weaponRef = buildWeapon(cfg.weapon);
+    weaponRef.position.set(0.04, -0.6, 0.12);
+    weaponRef.rotation.x = 0.32;
+    armR.add(weaponRef);
+  }
+
+  // ── Щит в левой ──
+  let shieldRef: THREE.Mesh | null = null;
+  let bossRef: THREE.Mesh | null = null;
+  if (cfg.shield) {
+    const shieldMat = mat(0xb08a52, 0.8, 0.05);
+    shieldMat.emissive = new THREE.Color(0x3a2a14);
+    shieldMat.emissiveIntensity = 0.55;
+    const rimMat = mat(0xb9a06a, 0.45, 0.6);
+    rimMat.emissive = new THREE.Color(0x2a2410);
+    rimMat.emissiveIntensity = 0.5;
+    shieldRef = cyl(0.27, 0.27, 0.045, shieldMat, 14);
+    shieldRef.rotation.x = Math.PI / 2;
+    shieldRef.rotation.y = 0.32;
+    shieldRef.rotation.z = 0.12;
+    shieldRef.position.set(-0.2, -0.5, 0.14);
+    const rim = cyl(0.295, 0.295, 0.028, rimMat, 14);
+    rim.rotation.copy(shieldRef.rotation);
+    rim.position.set(-0.2, -0.5, 0.135);
+    bossRef = sphere(0.06, MAT.gold, 8);
+    bossRef.position.set(-0.2, -0.5, 0.19);
+    armL.add(shieldRef, rim, bossRef);
+  }
+
+  let weaponOn = !!weaponRef;
+  let shieldOn = !!shieldRef;
+
+  body.add(torso);
+  group.scale.setScalar(s);
+
+  // ── Анимация ──
+  // Копия прежней: движение, присед, прыжок, плавание, атака и смерть.
+  // ── Анимация ──
+  // Копия прежней: движение, присед, прыжок, плавание, атака и смерть.
+  // Рост ног и рук изменился, поэтому опорные точки сдвинуты на их длину.
+  let phase = Math.random() * 6;
+  let attackT = -1;
+  let blockT = 0;
+  let crouchT = 0;
+  let airT = 0;
+  let deadT = 0;
+  let swimT = 0;
+
+  return {
+    group,
+    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    update(dt, p) {
+      const speedRatio = Math.min(1, p.speed / 7);
+      phase += dt * (p.moving ? 2.2 + p.speed * 1.35 : 2);
+
+      attackT = attackT < 0 ? -1 : attackT + dt / 0.45;
+      if (attackT > 1.35) attackT = -1;
+      blockT += ((p.block ? 1 : 0) - blockT) * Math.min(1, dt * 10);
+      crouchT += ((p.crouch ? 1 : 0) - crouchT) * Math.min(1, dt * 8);
+      airT += ((p.grounded ? 1 : 0) - airT) * Math.min(1, dt * 10);
+      deadT = p.dead ? Math.min(1, deadT + dt * 2.2) : 0;
+      swimT += ((p.swimming ? 1 : 0) - swimT) * Math.min(1, dt * 6);
+
+      const inWater = swimT > 0.01;
+
+      if (inWater) {
+        const swimLean = 0.55 * swimT;
+        torso.rotation.x += (swimLean - torso.rotation.x) * Math.min(1, dt * 6);
+        torso.position.y = 0.68 * (1 - swimT) + 0.55 * swimT;
+        const swimPhase = phase * 0.8;
+        const armSwingL = Math.sin(swimPhase) * 0.7 * swimT;
+        const armSwingR = Math.sin(swimPhase + Math.PI) * 0.7 * swimT;
+        armL.rotation.x += (armSwingL - 0.3 * swimT - armL.rotation.x) * Math.min(1, dt * 8);
+        armL.rotation.z += (-0.4 * swimT - armL.rotation.z) * Math.min(1, dt * 8);
+        armR.rotation.x += (armSwingR - 0.3 * swimT - armR.rotation.x) * Math.min(1, dt * 8);
+        armR.rotation.z += (0.4 * swimT - armR.rotation.z) * Math.min(1, dt * 8);
+        const legKick = Math.sin(swimPhase * 1.3) * 0.3 * swimT;
+        legL.rotation.x += (legKick - 0.2 * swimT - legL.rotation.x) * Math.min(1, dt * 10);
+        legR.rotation.x += (-legKick - 0.2 * swimT - legR.rotation.x) * Math.min(1, dt * 10);
+      }
+
+      const w = Math.sin(phase);
+      const swingAmp = p.moving ? 0.28 + 0.5 * speedRatio : 0.035;
+
+      if (!inWater) {
+        const legLX = w * swingAmp - airT * 0.55 - crouchT * 0.7;
+        const legRX = -w * swingAmp - airT * 0.3 - crouchT * 0.5;
+        legL.rotation.x += (legLX - legL.rotation.x) * Math.min(1, dt * 14);
+        legR.rotation.x += (legRX - legR.rotation.x) * Math.min(1, dt * 14);
+
+        const bob = p.moving && p.grounded ? Math.abs(Math.cos(phase)) * 0.05 * (0.4 + speedRatio) : Math.sin(phase * 0.6) * 0.012;
+        torso.position.y = 0.98 + bob - crouchT * 0.34;
+        const leanX = (p.moving ? 0.1 * speedRatio : 0.02 * Math.sin(phase * 0.5)) + crouchT * 0.32 + airT * 0.12;
+        torso.rotation.x += (leanX - torso.rotation.x) * Math.min(1, dt * 8);
+        torso.rotation.y *= (1 - Math.min(1, dt * 6));
+
+        const armLX = -w * swingAmp * 0.75 - blockT * 2.1 - airT * 0.35 + crouchT * 0.3;
+        const armRX = w * swingAmp * 0.75 + airT * 0.3;
+        armL.rotation.x += (armLX - armL.rotation.x) * Math.min(1, dt * 12);
+        armL.rotation.z += (blockT * -0.5 - armL.rotation.z) * Math.min(1, dt * 12);
+        armR.rotation.x += (armRX - armR.rotation.x) * Math.min(1, dt * 12);
+        armR.rotation.z += (attackT >= 0 && attackT < 0.35 ? -0.9 : 0) * 1 - armR.rotation.z * 0.2;
+      }
+
+      if (attackT >= 0) {
+        const t = attackT;
+        if (t < 0.35) {
+          const k = t / 0.35;
+          armR.rotation.x = -0.2 - k * 2.1;
+          torso.rotation.y = -k * 0.35;
+        } else if (t < 0.62) {
+          const k = (t - 0.35) / 0.27;
+          armR.rotation.x = -2.3 + k * 3.3;
+          torso.rotation.y = -0.35 + k * 0.55;
+        } else {
+          const k = (t - 0.62) / 0.73;
+          armR.rotation.x = 1.0 - k * 1.0;
+          torso.rotation.y = 0.2 * (1 - k);
+        }
+      }
+
+      if (deadT > 0) {
+        group.rotation.x = -Math.PI / 2 * Math.min(1, deadT * 1.4);
+        body.position.y = -deadT * 0.25;
+      } else {
+        group.rotation.x *= (1 - Math.min(1, dt * 8));
+        body.position.y = -crouchT * 0.36;
+      }
+    },
+    equipWeapon(visible: boolean) {
+      if (weaponRef) { weaponRef.visible = visible; weaponOn = visible; }
+    },
+    equipShield(visible: boolean) {
+      if (shieldRef) { shieldRef.visible = visible; bossRef && (bossRef.visible = visible); shieldOn = visible; }
+    },
+    isWeaponEquipped() { return weaponOn; },
+    isShieldEquipped() { return shieldOn; },
+    setArmorTint(color) {
+      // Перекрашиваем материал верха: под нагрудным доспехом должен
+      // меняться халат, иначе игрок не видит, что надел
+      upper.color.setHex(color ?? cfg.robe);
+    },
+    dispose() {
+      group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+      });
+    },
+  };
+}
+
 export function buildPlayerRig(charClass: string): Rig {
   const cfgs: Record<string, HumanoidCfg> = {
     qizilbash: { robe: 0xa62c38, robeDark: 0x7c1f28, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true },
@@ -884,7 +1417,9 @@ export function buildPlayerRig(charClass: string): Rig {
     bazaar_merchant: { robe: 0xc9a03a, robeDark: 0x96752a, hat: 'turban', hatColor: 0xe8e0d0, weapon: 'dagger' },
     court_diplomat: { robe: 0x3a7fb2, robeDark: 0x2a5e84, hat: 'cap', hatColor: 0xb2b8c4, weapon: 'rapier' },
   };
-  return buildHumanoid(cfgs[charClass] ?? cfgs.qizilbash);
+  // Сборка по рисунку: халат в два слоя, тюрбан, перевязь, борода,
+  // сапоги. NPC собираются через buildHumanoid - он не тронут.
+  return buildFigure(cfgs[charClass] ?? cfgs.qizilbash);
 }
 
 

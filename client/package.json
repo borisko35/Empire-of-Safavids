@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:figure": "tsx tools/check-figure.ts"
   },
   "dependencies": {
     "@types/three": "^0.185.4",
@@ -16,6 +17,7 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "tsx": "^4.23.15",
     "typescript": "^5.4.5",
     "vite": "^8.3.0"
   }
