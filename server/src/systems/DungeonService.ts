@@ -375,7 +375,7 @@ export class DungeonService {
     const gold = def.rewards.gold.min + Math.floor(Math.random() * (def.rewards.gold.max - def.rewards.gold.min + 1));
 
     await this.characters.addExperience(killerId, def.rewards.experience).catch(() => {});
-    await this.characters.addGold(killerId, gold).catch(() => {});
+    await this.characters.addGoldReward(killerId, gold).catch(() => {});
     for (const itemId of def.rewards.guaranteedItems) {
       await this.characters.addItems(killerId, [{ itemId, qty: 1 }]).catch(() => {});
     }

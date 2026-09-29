@@ -350,7 +350,10 @@ gameRouter.post('/shops/:shopId/sell', secureMiddleware, requireCharacterOwnersh
     } catch (err) {
       return res.status(400).json({ error: (err as Error).message });
     }
-    const gold = await characterService.addGold(value.characterId, totalGain);
+    // Продажа лута NPC-лавке - тоже доход, поэтому сезонный бонус к золоту
+    // её касается. А вот возврат за неудачную покупку выше остался на
+    // addGold: возврат не должен ни выплачиваться, ни выплачиваться больше.
+    const gold = await characterService.addGoldReward(value.characterId, totalGain);
     return res.json({ success: true, goldGained: totalGain, gold });
   })
 );

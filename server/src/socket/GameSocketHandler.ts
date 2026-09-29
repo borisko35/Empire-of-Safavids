@@ -1102,7 +1102,7 @@ export class GameSocketHandler {
       });
 
       const gold = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
-      await this.characterService.addGold(attacker.id, gold).catch(() => {});
+      await this.characterService.addGoldReward(attacker.id, gold).catch(() => {});
 
       const loot: { itemId: string; nameRu: string; qty: number }[] = [];
       for (const entry of def.lootTable) {

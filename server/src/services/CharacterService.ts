@@ -8,6 +8,7 @@ import { getBuffService, ITEM_BUFFS, type ActiveBuff } from './BuffService';
 import { ReferralService } from './ReferralService';
 import { logger } from '../utils/logger';
 import { analytics } from './AnalyticsService';
+import { seasonalEvent } from './SeasonalEventService';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
@@ -238,7 +239,10 @@ export class CharacterService {
     if (!character) throw new Error('Character not found');
 
     const mult = await getBuffService().getExpMultiplier(characterId);
-    const total = Math.floor(amount * mult);
+    // Сезонный праздник. Комментарий выше обещал этот бонус years назад, а
+    // кода не было: умножался только бафф из базы. Теперь умножается и он.
+    const seasonal = seasonalEvent.expMultiplier();
+    const total = Math.floor(amount * mult * seasonal);
 
     // Делегируем единой системе прокачки (прирост статов/навыков при level up)
     const result = await this.leveling.addExperience(character, total, 'experience_gain');
@@ -399,7 +403,14 @@ export class CharacterService {
     };
   }
 
-  /** Начислить золото. Возвращает новый баланс. */
+  /**
+   * Начислить золото. Возвращает новый баланс.
+   *
+   * Сумма приводится к нулю снизу, поэтому метод умеет только ПРИБАВЛЯТЬ.
+   * Расход идёт через spendGold, возврат за неудачную покупку - тоже сюда.
+   * Сезонного бонуса здесь нет намеренно: умножать возврат нельзя, иначе во
+   * время праздника неудачная покупка платила бы сверх.
+   */
   async addGold(characterId: string, amount: number): Promise<number> {
     const row = await this.db.queryOne<{ gold: number }>(
       'UPDATE characters SET gold = gold + $1 WHERE id = $2 RETURNING gold',
@@ -407,6 +418,17 @@ export class CharacterService {
     );
     if (!row) throw new Error('Character not found');
     return Number(row.gold);
+  }
+
+  /**
+   * Начислить золото ЗА НАГРАДУ — с сезонным бонусом.
+   *
+   * Отдельный метод, а не флажок у addGold, потому что через addGold идёт
+   * и возврат за неудачную покупку. Если бы бонус применялся там, то во
+   * время праздника возврат платил бы больше, чем отдано.
+   */
+  async addGoldReward(characterId: string, amount: number): Promise<number> {
+    return this.addGold(characterId, Math.floor(amount * seasonalEvent.goldMultiplier()));
   }
 
   /** Атомарно списать золото. Бросает ошибку, если средств недостаточно. Возвращает остаток. */

@@ -250,7 +250,7 @@ export class FishingSystem {
 
     await this.characters.addItems(characterId, [{ itemId: fish.id, qty: 1 }]).catch(() => {});
     await this.characters.addExperience(characterId, experience).catch(() => null);
-    await this.characters.addGold(characterId, gold).catch(() => {});
+    await this.characters.addGoldReward(characterId, gold).catch(() => {});
     // Задача дня «Рыбак Дня». Раньше задачи дня не засчитывались НИГДЕ
     void new DailyTaskService().updateProgress(characterId, 'fish', 'any').catch(() => null);
 

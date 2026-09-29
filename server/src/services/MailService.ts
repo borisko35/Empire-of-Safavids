@@ -119,7 +119,7 @@ export class MailService {
     );
     if (!deleted) throw new Error('Письмо уже забрано');
 
-    if (gold > 0) await this.characters.addGold(characterId, gold);
+    if (gold > 0) await this.characters.addGoldReward(characterId, gold);
     for (const it of items) await this.characters.addItems(characterId, [it]);
     return { gold, items };
   }

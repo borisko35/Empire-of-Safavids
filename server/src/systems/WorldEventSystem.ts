@@ -105,7 +105,7 @@ export class WorldEventSystem {
     if (this.bosses.size === 0) this.nextEventAt = Date.now() + EVENT_INTERVAL_MS;
 
     // Награда победителю: золото и перо Симурга (легендарный материал)
-    await this.characters.addGold(killerId, 5000).catch(() => {});
+    await this.characters.addGoldReward(killerId, 5000).catch(() => {});
     await this.characters.addItems(killerId, [{ itemId: 'mat_dragon_scale', qty: 1 }]).catch(() => {});
 
     await this.recordKill(bossId, killerId).catch((e) =>

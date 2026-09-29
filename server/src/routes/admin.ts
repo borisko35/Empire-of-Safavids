@@ -23,6 +23,7 @@ import type { Weather } from '../systems/WorldTimeSystem';
 import { playerFunnel, isoDay } from '../services/playerFunnel';
 import { combatLog } from '../services/CombatLogService';
 import { isUuid } from '../utils/uuid';
+import { seasonalEvent, PLANNED_BONUSES } from '../services/SeasonalEventService';
 
 export const adminRouter = Router();
 const adminService = new AdminService();
@@ -123,6 +124,34 @@ adminRouter.post('/weather', adminCheck, asyncHandler(async (req: Request, res: 
   // Сразу рассылаем — иначе клиенты увидят погоду только через минуту
   await sys.broadcastWorldTime();
   return res.json({ success: true, weather: raw });
+}));
+
+// ============================================================
+// POST /api/admin/seasonal-event — включить праздник вручную
+//
+// Зачем нужен переключатель. Праздник по календарю идёт волнами примерно по
+// 36 реальных часов, и ждать нужного дня невозможно: ни показать гостям, ни
+// снять скриншот, ни проверить, работает ли бонус. Здесь включаем нужный
+// праздник принудительно — хоть другим сезоном, хоть зимой.
+//
+// 'auto' — вернуться к календарю. Название праздника проверяется на сервере
+// по данным: неизвестное имя даёт 400, а не тихо ничего не делает.
+// ============================================================
+adminRouter.post('/seasonal-event', adminCheck, asyncHandler(async (req: Request, res: Response) => {
+  const raw = String(req.body?.name ?? 'auto');
+  try {
+    await seasonalEvent.setOverride(raw === 'auto' ? null : raw);
+  } catch (e) {
+    return res.status(400).json({ error: (e as Error).message });
+  }
+  const active = seasonalEvent.getActive();
+  // Список бонусов показываем, а начисляем только exp и золотом: остальное
+  // помечено как запланированное, и обещать его игроку было бы враньём.
+  return res.json({
+    success: true,
+    active,
+    planned: [...PLANNED_BONUSES],
+  });
 }));
 
 // ============================================================

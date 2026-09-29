@@ -52,6 +52,10 @@ function makeHarness(opts: { boat?: boolean; level?: number } = {}): Harness {
     addItems: jest.fn(async (_c: string, list: { itemId: string; qty: number }[]) => { given.push(...list); }),
     addExperience: jest.fn(async (_c: number | string, n: number) => { state.xp += n; return null; }),
     addGold: jest.fn(async (_c: string, n: number) => { state.gold += n; }),
+    // Улов — награда, поэтому идёт через addGoldReward. Подделка обязана
+    // знать про оба метода: иначе проверка падает на «не функция» и
+    // сообщает об этом TypeError, а не о смысле.
+    addGoldReward: jest.fn(async (_c: string, n: number) => { state.gold += n; }),
   };
   fishing.boats = {
     getActiveBoat: jest.fn(async () => (opts.boat

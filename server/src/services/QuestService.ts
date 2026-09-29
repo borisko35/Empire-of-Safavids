@@ -285,7 +285,7 @@ export class QuestService {
     );
 
     const reward = await this.characters.addExperience(characterId, def.rewards.experience).catch(() => null);
-    await this.characters.addGold(characterId, def.rewards.gold).catch(() => {});
+    await this.characters.addGoldReward(characterId, def.rewards.gold).catch(() => {});
     const azens = def.rewards.azens ?? 0;
     const isfahanSilver = def.rewards.isfahanSilver ?? 0;
     const syrianGold = def.rewards.syrianGold ?? 0;

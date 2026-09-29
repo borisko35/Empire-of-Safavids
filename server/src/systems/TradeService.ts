@@ -230,7 +230,7 @@ export class TradeService {
     // Груз должен быть в сумке: сдаём его вместе с наградой
     await this.characters.removeItems(characterId, [{ itemId: def.cargoItemId, qty: def.cargoQty }]).catch(() => {});
 
-    await this.characters.addGold(characterId, def.rewardGold).catch(() => {});
+    await this.characters.addGoldReward(characterId, def.rewardGold).catch(() => {});
     await this.characters.addExperience(characterId, def.rewardExp).catch(() => {});
     const silver = def.rewardSilver ?? 0;
     const syrian = def.rewardSyrian ?? 0;
