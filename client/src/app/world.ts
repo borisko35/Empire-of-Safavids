@@ -34,6 +34,7 @@ import { initTutorial, onTutorialAction, tickTutorial } from './tutorial';
 import { initDeathScreen, hideDeathScreen, isDead } from './deathScreen';
 import { loadAccountLinks } from './accountLinks';
 import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
+import { isCombatErrorCode, COMBAT_ERROR_KEYS } from '../../../shared/combatErrors';
 import { icon, type IconName } from '../ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -639,6 +640,10 @@ export async function enterWorld(character: Character): Promise<void> {
   world3d?.setOnAttack(() => onTutorialAction('attack'));
   // Шаг «осмотритесь» засчитывается на реальном повороте камеры мышью
   world3d?.setOnCamera(() => onTutorialAction('camera'));
+  // Защита: до этого клиент вообще не отправлял блок и уклонение, хотя сервер
+  // их обрабатывал. Теперь ПКМ и двойное нажатие клавиши доходят до сервера.
+  world3d?.setOnBlock(() => startBlock());
+  world3d?.setOnDodge(() => startDodge());
   resetWaterDanger();
   await finishLoading();
   audio.ensureGame();
@@ -990,8 +995,11 @@ function wireSocket(): void {
 
   socket.on('combat:error', ({ message }: { message: string }) => {
     // Шум боя: добивание мёртвой цели — обычная ситуация, не ошибка игрока
-    if (message === 'Target not found') return;
-    toast(message, 'error');
+    if (message === 'Target not found' || message === 'target_not_found') return;
+    // Сервер шлёт код причины, а не текст: раньше приходила английская фраза
+    // ('Dodge is on cooldown') и показывалась дословно посреди русского
+    // интерфейса. Теперь код переводится на язык игрока.
+    toast(isCombatErrorCode(message) ? t(COMBAT_ERROR_KEYS[message]) : message, 'error');
   });
 
   socket.on('combat:visual', (v: { attackerId: string; targetId: string }) => {
@@ -1444,6 +1452,46 @@ function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
     direction: world3d?.moveDir ?? { x: 0, y: 0, z: 1 },
     timestamp: Date.now(),
   });
+}
+
+/**
+ * Защитное действие: блок или уклонение.
+ *
+ * Раньше их нельзя было вызвать вообще. Серверная механика существовала
+ * (2 секунды блока и 1.5 секунды неуязвимости), но клиент отправлял ровно
+ * один вид боевого действия — атаку, — поэтому ПКМ двигал только позу
+ * персонажа на экране, а на сервере защиты не было. То есть обещанная
+ * в плане стойка «Шахский щит» не существовала как механика.
+ *
+ * Цель для защиты не нужна, поэтому и проверки targetId здесь нет.
+ */
+function emitDefensive(actionType: 'dodge' | 'block'): void {
+  if (!me || isDead()) return;
+  socket.emit('combat:action', {
+    characterId: me.id,
+    actionType,
+    position: me.pos,
+    direction: world3d?.moveDir ?? { x: 0, y: 0, z: 1 },
+    timestamp: Date.now(),
+  });
+}
+
+/** Блок: ПКМ. Вызывается из мира при нажатии. */
+function startBlock(): void {
+  if (isDead()) return;
+  emitDefensive('block');
+}
+
+/**
+ * Уклонение: двойное нажатие клавиши направления.
+ *
+ * Клавиша не выделяется под рывок намеренно: WASD и Shift заняты, отдельную
+ * букву игрок всё равно забыл бы. Двойное нажатие - привычный приём в таких
+ * играх, и работает в ту же сторону, куда смотрит персонаж.
+ */
+function startDodge(): void {
+  if (isDead()) return;
+  emitDefensive('dodge');
 }
 
 function basicAttack(): void {

@@ -5,7 +5,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { CombatService } from '../services/CombatService';
-import { EquipmentCache } from '../services/EquipmentCache';
+import { EquipmentCache, DEFAULT_WEAPON } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
@@ -70,6 +70,16 @@ interface DeadState {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Минимальный интервал между обычными ударами, сек*1000.
+ *
+ * Откат держался только на клиенте (0.45 с), а сервер проверял лишь частоту
+ * пакетов (30/с). То есть правкой клиента можно было бить по 30 раз в
+ * секунду. Здесь 380 мс: чуть меньше клиентских 450, чтобы у честного игрока
+ * с дрожащим соединением удар не отбрасывался, но и поток ударов не проходил.
+ */
+const MIN_ATTACK_INTERVAL_MS = 380;
+
 export class GameSocketHandler {
   private static instance: GameSocketHandler | null = null;
 
@@ -121,6 +131,10 @@ export class GameSocketHandler {
   private lastQuestEval = new Map<string, number>();
   // Серия лёгких атак (комбо): characterId -> { count, lastAt }
   private comboChains = new Map<string, { count: number; lastAt: number }>();
+  // Время последнего принятого обычного удара: characterId -> epoch ms.
+  // Откат держал только клиент, поэтому правкой клиента можно было слать
+  // по 30 ударов в секунду - лимит пакетов (30/с) это пропускал.
+  private lastAttackAt = new Map<string, number>();
   // Скакун: characterId -> { mountId, speed } — последняя известная серверу
   // скорость. Кэш, а не источник истины: истина в character_mounts, но
   // античит спрашивает скорость на каждом пакете движения (десятки в
@@ -636,6 +650,11 @@ export class GameSocketHandler {
 
     // Кэшировать позицию в Redis (быстро)
     await this.redis.setPlayerPosition(characterId, data.position).catch(() => {});
+    // ...и рядом в памяти: из неё считается досягаемость удара. Позиция из
+    // Redis была бы точнее, но extra-запрос на каждый удар - лишняя
+    // нагрузка; Redis-версия используется только для цели, у которой
+    // своего кеша в памяти нет.
+    this.defenseStates.setPosition(characterId, data.position);
 
     // В PostgreSQL пишем не чаще раза в 5 секунд (движение генерирует десятки пакетов/сек)
     const now = Date.now();
@@ -755,21 +774,37 @@ export class GameSocketHandler {
   /**
    * Активная защита: dodge (1.5с неуязвимости) и block (2с −60% урона).
    * Тратят стамину, цели не требуют; состояние читает боевой цикл.
+   *
+   * Рывок откатывается: иначе игрок, дергая кнопку, держал бы неуязвимость
+   * непрерывно - стамина успевает восстановиться между нажатиями.
    */
   private async handleDefensiveAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
     if (!socket.characterId) return;
     const character = await this.characterService.getCharacterById(socket.characterId);
     if (!character) return;
 
-    const staminaCost = action.actionType === 'dodge' ? 15 : 10;
-    const ok = await this.characterService.spendResources(character.id, 0, staminaCost);
-    if (!ok) {
-      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Not enough stamina' });
+    const isDodge = action.actionType === 'dodge';
+
+    // Резерв рывка ставится до любого await. Если поставить его после
+    // списания стамины, два быстрых пакета оба пройдут проверку отката (между
+    // проверкой и активацией есть await), оба спишут стамину, а второй
+    // вернёт false - и игрок потеряет ресурсы за отклонённое действие.
+    if (isDodge && !this.defenseStates.activateDodge(character.id)) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'dodge_cooldown' });
       return;
     }
 
-    if (action.actionType === 'dodge') this.defenseStates.activateDodge(character.id);
-    else this.defenseStates.activateBlock(character.id);
+    const staminaCost = isDodge ? 15 : 10;
+    const ok = await this.characterService.spendResources(character.id, 0, staminaCost);
+    if (!ok) {
+      // Резерв не состоялся из-за стамины - откатываем, иначе игрок
+      // ждал бы отката за действие, которого не было.
+      if (isDodge) this.defenseStates.clearDodge(character.id);
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'not_enough_stamina' });
+      return;
+    }
+
+    if (!isDodge) this.defenseStates.activateBlock(character.id);
 
     socket.emit(SERVER_EVENTS.COMBAT_BLOCKED, {
       actionType: action.actionType,
@@ -804,6 +839,22 @@ export class GameSocketHandler {
     }
     if (!action.targetId) return;
 
+    // Откат обычной атаки и досягаемость удара.
+    //
+    // ДО ЭТОГО НИ ОДНОГО ИЗ НИХ НЕ БЫЛО. Откат держал только клиент, а
+    // сервер не проверял расстояние до цели. Правкой клиента можно было
+    // отправлять по 30 ударов в секунду (лимит пакетов это пропускал) и
+    // доставать жертву через полкарты. Теперь и частота, и дальность
+    // считаются на сервере по позициям, а не по тому, что прислал клиент.
+    if (action.actionType === 'attack' && !action.skillId) {
+      const last = this.lastAttackAt.get(socket.characterId) ?? 0;
+      if (Date.now() - last < MIN_ATTACK_INTERVAL_MS) {
+        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'attack_too_fast' });
+        return;
+      }
+      this.lastAttackAt.set(socket.characterId, Date.now());
+    }
+
     try {
       const attacker = await this.withEquipment(
         await this.characterService.getCharacterById(socket.characterId).then(c => c!)
@@ -822,7 +873,7 @@ export class GameSocketHandler {
         ? this.combatService.getSkill(attacker.class, action.skillId)
         : undefined;
       if (action.skillId && !skill) {
-        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Unknown skill' });
+        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'unknown_skill' });
         return;
       }
       if (skill) {
@@ -835,7 +886,7 @@ export class GameSocketHandler {
           return;
         }
         if (!this.checkCooldown(attacker.id, skill.id, skill.cooldown)) {
-          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Skill is on cooldown', skillId: skill.id });
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'skill_cooldown', skillId: skill.id });
           return;
         }
       }
@@ -844,7 +895,31 @@ export class GameSocketHandler {
       if (skill) {
         const ok = await this.characterService.spendResources(attacker.id, skill.manaCost, skill.staminaCost);
         if (!ok) {
-          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Not enough mana or stamina', skillId: skill.id });
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'not_enough_mana', skillId: skill.id });
+          return;
+        }
+      }
+
+      // Оружие в руках задаёт силу и досягаемость удара. Раньше его не было в
+      // бою вообще: урон считался только из характеристик, поэтому шамшир,
+      // сабля и лук били одинаково.
+      const weapon = await this.equipment.getWeapon(attacker.id);
+
+      // Досягаемость. Проверяем по серверным позициям, а не по присланным
+      // клиентом: иначе правкой клиента можно бить через полкарты, указав
+      // свою позицию рядом с жертвой. Монстры - по позиции из ИИ.
+      const reach = weapon?.range ?? DEFAULT_WEAPON.range;
+      const isBasic = action.actionType === 'attack' && !action.skillId;
+      if (isBasic) {
+        let targetPos: { x: number; y: number; z: number } | null = null;
+        if (UUID_RE.test(action.targetId)) {
+          targetPos = await this.redis.getPlayerPosition(action.targetId) as { x: number; y: number; z: number } | null;
+        } else {
+          const ctx = GameLoop.getInstance().getSpawnSystem().getAI().getContext(action.targetId);
+          if (ctx) targetPos = { x: ctx.position.x, y: ctx.position.y, z: ctx.position.z };
+        }
+        if (!this.defenseStates.canReach(attacker.id, reach, targetPos)) {
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'out_of_reach' });
           return;
         }
       }
@@ -868,7 +943,7 @@ export class GameSocketHandler {
         return;
       }
 
-      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Target not found', targetId: action.targetId });
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'target_not_found', targetId: action.targetId });
     } catch (error) {
       logger.error('Combat action error:', error);
     }
@@ -1001,20 +1076,20 @@ export class GameSocketHandler {
 
     // Лечение монстра недопустимо
     if (action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId)) {
-      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Cannot heal a monster' });
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'target_not_found' });
       return;
     }
 
     // Монстр принадлежит другому серверу — атаковать нельзя
     if (monsterCtx.shardId !== socket.shardId) {
-      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'Target is on another game server' });
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'wrong_shard' });
       return;
     }
 
     // Монстры данжа бьют только участники его сессии
     const dungeonSession = this.dungeons.getSessionByMonster(monsterCtx.instanceId);
     if (dungeonSession && !dungeonSession.members.has(attacker.id)) {
-      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { message: 'You are not in this dungeon group' });
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'not_in_group' });
       return;
     }
 

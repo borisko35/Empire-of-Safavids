@@ -1,5 +1,6 @@
 import { Character, CombatAction, CharacterClass } from '../types/game.types';
 import { logger } from '../utils/logger';
+import { DEFAULT_WEAPON, WeaponProfile } from './EquipmentCache';
 
 interface DamageResult {
   damage: number;
@@ -60,9 +61,19 @@ export class CombatService {
    * comboMultiplier — множитель цепочки лёгких атак (каждый третий удар
    * серии бьёт тяжелее). Передаётся сокет-обработчиком, у монстров и PvP
    * он одинаково легитимен: состояние серии считает сервер.
+   *
+   * weapon — оружие «в руках». Раньше его не существовало: урон целиком
+   * считался из характеристик, поэтому шамшир, сабля и лук били одинаково.
+   * Теперь множитель предмета входит в базу удара.
    */
-  calculateDamage(attacker: Character, target: Character, action: CombatAction, comboMultiplier = 1): DamageResult {
-    const baseDamage = this.getBaseDamage(attacker, action) * comboMultiplier;
+  calculateDamage(
+    attacker: Character,
+    target: Character,
+    action: CombatAction,
+    comboMultiplier = 1,
+    weapon: WeaponProfile | null = null
+  ): DamageResult {
+    const baseDamage = this.getBaseDamage(attacker, action, weapon) * comboMultiplier;
     const defense = this.getDefense(target);
 
     // Шанс уклонения
@@ -89,8 +100,9 @@ export class CombatService {
     return { damage: finalDamage, isCritical, isBlocked: false, isDodged: false };
   }
 
-  private getBaseDamage(character: Character, action: CombatAction): number {
-    const statDamage = character.stats.strength * 2 + character.stats.agility;
+  private getBaseDamage(character: Character, action: CombatAction, weapon: WeaponProfile | null = null): number {
+    const weaponDamage = weapon?.damage ?? DEFAULT_WEAPON.damage;
+    const statDamage = (character.stats.strength * 2 + character.stats.agility) * weaponDamage;
 
     if (action.actionType === 'skill' && action.skillId) {
       const skills = CLASS_SKILLS[character.class];
@@ -123,5 +135,17 @@ export class CombatService {
   /** Базовый урон персонажа (до множителей) — используется для лечения и анти-чита */
   getBaseDamageFor(character: Character): number {
     return this.getBaseDamage(character, { actionType: 'attack' } as CombatAction);
+  }
+
+  /**
+   * База анти-чита с учётом оружия.
+   *
+   * Анти-чит сравнивает урон с базой и отбрасывает слишком большой. Если бы
+   * база осталась без множителя оружия, то клинок Шаха (1.25) выглядел бы
+   * как законный урон в 1.25 раза больше базы - и на трёхсотом ударе
+   * сработал бы порог. Поэтому база считается тем же способом, что и урон.
+   */
+  getBaseDamageWithWeapon(character: Character, weapon: WeaponProfile | null): number {
+    return this.getBaseDamage(character, { actionType: 'attack' } as CombatAction, weapon);
   }
 }

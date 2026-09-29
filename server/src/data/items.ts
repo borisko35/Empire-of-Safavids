@@ -15,6 +15,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.COMMON,
     level: 1,
     stats: { strength: 5 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 0.9, speed: 0.45, range: 2.4 },
     description: 'Простой железный меч. Стандартное оружие новобранца.',
     iconPath: 'icons/weapons/iron_sword.png',
     stackable: false,
@@ -29,6 +32,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.RARE,
     level: 20,
     stats: { strength: 28, agility: 10 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.05, speed: 0.42, range: 2.5 },
     description: 'Изогнутая сабля гвардейцев Шаха. Украшена красным конским волосом.',
     iconPath: 'icons/weapons/qizilbash_saber.png',
     stackable: false,
@@ -43,6 +49,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.RARE,
     level: 15,
     stats: { agility: 30, strength: 8 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1, speed: 0.8, range: 2.4 },
     description: 'Составной лук из рога, дерева и сухожилий. Дальность — 80 метров.',
     iconPath: 'icons/weapons/composite_bow.png',
     stackable: false,
@@ -57,6 +66,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.EPIC,
     level: 40,
     stats: { intelligence: 55, charisma: 20 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 0.85, speed: 0.5, range: 2.6 },
     description: 'Посох, вырезанный из священного тростника. Усиливает суфийские заклинания.',
     iconPath: 'icons/weapons/sufi_staff.png',
     stackable: false,
@@ -71,6 +83,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.LEGENDARY,
     level: 80,
     stats: { strength: 120, agility: 60, charisma: 40 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.25, speed: 0.38, range: 2.7 },
     description: 'Легендарный клинок Шаха Аббаса Великого. Говорят, он никогда не знал поражений.',
     iconPath: 'icons/weapons/shah_blade.png',
     stackable: false,
@@ -85,6 +100,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.ARTIFACT,
     level: 100,
     stats: { strength: 200, agility: 100, intelligence: 80, endurance: 60, charisma: 80 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.4, speed: 0.4, range: 2.7 },
     description: 'Меч основателя Сефевидской империи. Артефакт, дарующий силу первого Шаха.',
     iconPath: 'icons/weapons/ismail_sword.png',
     stackable: false,
@@ -589,6 +607,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.LEGENDARY,
     level: 60,
     stats: { strength: 70, agility: 25, intelligence: 10 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.12, speed: 0.36, range: 2.5 },
     description: 'Легендарный меч ассасинов из крепости Аламут. Легко рассекает броню.',
     iconPath: 'icons/weapons/shamshir_alamut.png',
     stackable: false,
@@ -603,6 +624,9 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     rarity: ItemRarity.LEGENDARY,
     level: 55,
     stats: { agility: 65, strength: 20, intelligence: 15 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.05, speed: 0.75, range: 2.4 },
     description: 'Лучший лук в империи. Создан мастерами Исфахана из тиса и сухожилий.',
     iconPath: 'icons/weapons/bow_isfahan.png',
     stackable: false,

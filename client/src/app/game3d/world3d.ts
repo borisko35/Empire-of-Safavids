@@ -54,6 +54,10 @@ const CROUCH_SPEED = 2.2;
 const MOUNT_SPRINT_MULT = 1.4;
 const PLAYER_R = 1.0;   // радиус персонажа для столкновений
 const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
+/** Клавиши, двойное нажатие которых означает рывок: WASD плюс стрелки */
+const DOUBLE_TAP_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']);
+const DODGE_SPEED = 15.0;    // скорость рывка, юниты/сек
+const DODGE_TIME_MS = 220;   // сколько длится сам рывок, мс
 
 // ── Вода ──
 // Глубина считается от НАСТОЯЩЕГО дна (ландшафт) до поверхности воды,
@@ -163,6 +167,19 @@ export class World3D {
    * реакции, а текст шага обещал правую кнопку, которая тут ни при чём.
    */
   private onCamera: (() => void) | null = null;
+  private onBlock: (() => void) | null = null;
+  private onDodge: (() => void) | null = null;
+  /**
+   * Двойные нажатия клавиш направления: клавиша -> время последнего нажатия.
+   * По нему ловится рывок. Пустой набор означает «двойного нажатия не было».
+   */
+  private lastTap = new Map<string, number>();
+  /** Два нажатия этой клавиши за меньше, чем столько, считаются рывком */
+  private static readonly DOUBLE_TAP_MS = 260;
+  /** Скорость рывка по осям мира; гаснет линейно до нуля */
+  private dodgeVx = 0;
+  private dodgeVz = 0;
+  private dodgeUntil = 0;
 
   // Служебное
   private raf = 0;
@@ -475,6 +492,16 @@ export class World3D {
     this.onCamera = cb;
   }
 
+  /** Блок (ПКМ) — раньше менял только позу, сервер о защите не узнавал */
+  setOnBlock(cb: (() => void) | null): void {
+    this.onBlock = cb;
+  }
+
+  /** Уклонение (двойное нажатие клавиши направления) */
+  setOnDodge(cb: (() => void) | null): void {
+    this.onDodge = cb;
+  }
+
   // ── События ввода ────────────────────────────────────────────
   private onResize = () => {
     if (!this.container) return;
@@ -489,7 +516,12 @@ export class World3D {
       return;
     }
     if (e.button === 0) this.tryAttack();
-    if (e.button === 2) this.block = true;
+    if (e.button === 2) {
+      this.block = true;
+      // Сообщаем серверу. Раньше ПКМ менял только позу на экране: сервер о
+      // блоке не узнавал, и весь механический блок был недостижим из игры.
+      this.onBlock?.();
+    }
   };
 
   private onMouseUp = (e: MouseEvent) => {
@@ -524,10 +556,60 @@ export class World3D {
       || el instanceof HTMLSelectElement;
   }
 
+  /**
+   * Рывок по двойному нажатию клавиши направления.
+   *
+   * Клавиши: W A S D и стрелки. Повтор клавиши (keydown при удержании) отсекается
+   * выше - в keys она уже есть, - поэтому двойным нажатием считаются именно
+   * два осознанных нажатия, а не удержание.
+   */
+  private maybeDodge(code: string): void {
+    if (!DOUBLE_TAP_KEYS.has(code)) return;
+    const now = Date.now();
+    const last = this.lastTap.get(code) ?? 0;
+    this.lastTap.set(code, now);
+    if (now - last < World3D.DOUBLE_TAP_MS) {
+      // Второе нажатие сбрасываем, иначе третий раз подряд (удержание
+      // с перебоем) рывнул бы снова через одну пару нажатий.
+      this.lastTap.delete(code);
+      this.onDodge?.();
+      this.applyDodgeImpulse();
+    }
+  }
+
+  /**
+   * Рывок в ту же сторону, куда смотрит персонаж.
+   *
+   * Сервер неуязвимость включает сам (с откатом и тратой стамины), а рывок
+   * здесь — видимое перемещение. Без него персонаж на 1.5 секунды становился
+   * бы неуязвимым, стоя на месте, и это выглядело бы как зависание.
+   *
+   * Скорость рывка не должна ломать античит скорости на сервере: она выше
+   * бега (7.6), но сервер считает скорость по среднему за интервал, а рывок
+   * длится доли секунды и гасится сразу.
+   */
+  private applyDodgeImpulse(): void {
+    const ix = (this.keys.has('KeyD') || this.keys.has('ArrowRight') ? 1 : 0)
+      - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0);
+    const iz = (this.keys.has('KeyW') || this.keys.has('ArrowUp') ? 1 : 0)
+      - (this.keys.has('KeyS') || this.keys.has('ArrowDown') ? 1 : 0);
+    // Без направляющей клавиши — в ту сторону, куда повёрнут персонаж
+    const dx = ix !== 0 || iz !== 0 ? ix : Math.sin(this.yaw);
+    const dz = ix !== 0 || iz !== 0 ? iz : Math.cos(this.yaw);
+    const len = Math.hypot(dx, dz) || 1;
+    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
+    // Тот же поворот, что и у ходьбы: ix/iz задаются в осях камеры
+    this.dodgeVx += ((dx / len) * cos - (dz / len) * sin) * DODGE_SPEED;
+    this.dodgeVz += (-(dx / len) * sin - (dz / len) * cos) * DODGE_SPEED;
+    this.dodgeUntil = Date.now() + DODGE_TIME_MS;
+    audio.whoosh();
+  }
+
   private onKeyDown = (e: KeyboardEvent) => {
     if (this.isTyping()) return;
     if (this.keys.has(e.code)) return;
     this.keys.add(e.code);
+    this.maybeDodge(e.code);
     if (e.code === 'Space' && this.me && this.grounded) {
       e.preventDefault();
       this.vy = JUMP_V;
@@ -1009,6 +1091,27 @@ export class World3D {
         me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
       }
       me.flipped = false;
+    }
+
+    // ── Рывок ──
+    // Скорость гаснет линейно до конца рывка. Рывок применяется и без
+    // нажатых клавиш, поэтому движение считается не «ходьба плюс рывок»,
+    // а отдельным смещением поверх.
+    if (Date.now() < this.dodgeUntil && (this.dodgeVx !== 0 || this.dodgeVz !== 0)) {
+      me.pos.x += this.dodgeVx * dt;
+      me.pos.z += this.dodgeVz * dt;
+      const fall = 1 - Math.min(1, (this.dodgeUntil - Date.now()) / DODGE_TIME_MS);
+      this.dodgeVx *= Math.max(0, fall);
+      this.dodgeVz *= Math.max(0, fall);
+      if (!this.interiors.isInside()) {
+        me.pos.x = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.x));
+        me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
+      }
+      this.lastDir = {
+        x: this.dodgeVx,
+        y: 0,
+        z: this.dodgeVz,
+      };
     }
 
     // Столкновения с постройками — каждый кадр (в т.ч. если затолкало в стену)
