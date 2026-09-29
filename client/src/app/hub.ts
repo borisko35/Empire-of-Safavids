@@ -57,10 +57,10 @@ const GROUPS: HubGroup[] = [
     id: 'social', icon: 'user',
     panels: [
       { id: 'panel-notifications', titleKey: 'hub.notifications', icon: 'chat' },
+      { id: 'panel-referral', titleKey: 'hub.referral', icon: 'user' },
       { id: 'panel-guild', titleKey: 'hub.guild', icon: 'user' },
       { id: 'panel-party', titleKey: 'hub.party', icon: 'user' },
       { id: 'panel-friends', titleKey: 'hub.friends', icon: 'user' },
-      { id: 'panel-referral', titleKey: 'hub.referral', icon: 'user' },
     ],
   },
   {

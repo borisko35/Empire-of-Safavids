@@ -152,7 +152,9 @@ describe('Панель уведомлений видна и в хабе, и в �
     const row = html.slice(html.indexOf('class="hud panel-toggles"'));
     const buttons = (row.slice(0, row.indexOf('</div>')).match(/<button/g) ?? []).length;
     expect({ кнопок: buttons }).toEqual({ кнопок: expect.any(Number) });
-    expect(buttons).toBeLessThanOrEqual(6);
+    // Ряд остаётся коротким; потолок 7 из-за кнопки «Пригласить друга».
+    // Ширина проверяется в panelHub.test.ts — там реальная граница в 46vw.
+    expect(buttons).toBeLessThanOrEqual(7);
     // Ряд остаётся коротким, поэтому уведомления видно, не заходя в меню
     expect(html.indexOf('id="unread-badge"')).toBeGreaterThan(html.indexOf('class="hud panel-toggles"'));
   });

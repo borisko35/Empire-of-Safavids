@@ -102,7 +102,9 @@ describe('Кадр показывает интерфейс такой, како�
     expect({ кнопок_в_разметке_игры: buttons }).toEqual({ кнопок_в_разметке_игры: expect.any(Number) });
     const toggles = /<div class="hud panel-toggles">([\s\S]*?)<\/div>/.exec(read('client/src/app/index.html'))?.[1] ?? '';
     const count = (toggles.match(/data-panel=/g) ?? []).length;
-    expect({ кнопок_в_ряду: count }).toEqual({ кнопок_в_ряду: 6 });
+    // Седьмая кнопка — «Пригласить друга». Ряд не должен снова
+    // разрастаться, поэтому потолок здесь жёсткий, а не «любое число».
+    expect({ кнопок_в_ряду: count }).toEqual({ кнопок_в_ряду: 7 });
   });
 
   it('в ряду есть кнопка задач дня — её видно на кадре', () => {
