@@ -35,10 +35,27 @@ import { PaymentService } from '../services/PaymentService';
 import { PromoService } from '../services/PromoService';
 import { NotificationService } from '../services/NotificationService';
 import { MailService } from '../services/MailService';
-import { PAYMENT_PROVIDERS } from '../services/paymentProviders';
+import { logger } from '../utils/logger';
+import { PAYMENT_PROVIDERS, UNSIGNED_PROVIDERS } from '../services/paymentProviders';
+import {
+  createYooKassaPayment, fetchYooKassaPayment, isYooKassaEnabled, resolveYooKassaNotification,
+} from '../services/payments/yookassa';
 import Joi from 'joi';
 
 export const gameRouter = Router();
+
+/**
+ * Куда провайдер возвращает игрока после оплаты.
+ *
+ * Адрес берётся из настройки PUBLIC_URL, а не из заголовка запроса: игрок
+ * может прийти с чужого домена, и тогда возврат ушёл бы туда, куда он не
+ * собирался. Провайдеру отдаётся наш paymentId — по нему страница чека
+ * понимает, какой платёж проверять.
+ */
+function paymentReturnUrl(req: Request, paymentId: string): string {
+  const base = (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host') ?? ''}`).replace(/\/+$/, '');
+  return `${base}/game/?payment=${encodeURIComponent(paymentId)}`;
+}
 
 // Создаём сервисы лениво-локально там, где нужны
 import { QuestService } from '../services/QuestService';
@@ -482,6 +499,45 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
         value.characterId,
         value.packId ? { packId: value.packId } : { realCurrency: value.realCurrency, amount: value.amount }
       );
+
+      // Счёт у провайдера. Без этого pending-запись осталась бы навсегда
+      // «ожидающей», и игрок ушёл бы со страницы без способа заплатить.
+      //
+      // Если провайдер не настроен, платёж всё равно создан и вернётся его
+      // id: он понадобится, когда ключи появятся. Молча возвращать ошибку
+      // «провайдер недоступен» значило бы, что игрок даже не сможет узнать,
+      // что его заказ ушёл.
+      const provider = String(req.body?.provider ?? 'yookassa').toLowerCase();
+      let checkoutUrl: string | null = null;
+      let providerError: string | null = null;
+
+      if (provider === 'yookassa') {
+        if (!isYooKassaEnabled()) {
+          providerError = 'provider_not_configured';
+        } else {
+          try {
+            const invoice = await createYooKassaPayment({
+              paymentId: payment.id,
+              amount: payment.realAmount.toFixed(2),
+              currency: payment.realCurrency.toUpperCase(),
+              description: `Empire of Safavids — ${value.packId ?? 'AZENS'}`,
+              returnUrl: paymentReturnUrl(req, payment.id),
+              confirmUrl: paymentReturnUrl(req, payment.id),
+              idempotenceKey: `${payment.id}`,
+            }, process.env);
+            checkoutUrl = invoice.confirmation?.confirmation_url ?? null;
+            // id счёта сохраняем сразу: без него возврат после отмены и
+            // разбирательства с поддержкой упираются в «платёжа не найдено»
+            if (invoice.id) await paymentService.attachProviderPaymentId(payment.id, invoice.id);
+          } catch (err) {
+            logger.error(`[Payments] yookassa create failed for ${payment.id}: ${(err as Error).message}`);
+            providerError = 'provider_request_failed';
+          }
+        }
+      } else {
+        providerError = 'unknown_provider';
+      }
+
       return res.status(201).json({
         success: true,
         paymentId: payment.id,
@@ -490,6 +546,10 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
         azensExpected: payment.azensExpected,
         realCurrency: payment.realCurrency,
         realAmount: payment.realAmount,
+        // Куда игрок идёт платить. null означает «счёт не создан», а не
+        // «оплачено»: клиент обязан показать это честно, а не закрыть окно.
+        checkoutUrl,
+        providerError,
       });
     } catch (err) {
       return res.status(400).json({ error: (err as Error).message });
@@ -540,11 +600,90 @@ gameRouter.get('/payments/:paymentId', secureMiddleware,
   })
 );
 
+// POST /api/game/payments/webhook/yookassa — уведомление ЮKassa.
+//
+// ГЛАВНОЕ ОТЛИЧИЕ ОТ ВЕБХУКА С ПОДПИСЬЮ. Тело уведомления здесь — только
+// повод задать вопрос. Из него берётся идентификатор платежа, и сервер
+// переспрашивает у API ЮKassa, каким платёж на самом деле стал. Начисление
+// идёт по ответу API.
+//
+// Почему так: подписи у ЮKassa нет, а маршрут публичен. Если бы мы поверили
+// телу уведомления, достаточно было бы одного POST с
+// { event: 'payment.succeeded', object: { id: 'любой' } }, чтобы напечатать
+// себе AZENS. Одного переспроса достаточно: платежа с выдуманным id у
+// ЮKassa не существует, и запрос вернёт 404.
+//
+// Уведомления приходят чаще, чем платёж меняет состояние: ЮKassa шлёт
+// payment.succeeded и по факту оплаты, и по захвату, а иногда повторно.
+// Повторы не приводят к двойному начислению — completePayment дедуплицирует
+// по provider_payment_id.
+//
+// Решение принимает resolveYooKassaNotification, а не этот маршрут: правило
+// «начислить только по ответу API» проверяется там настоящим запуском. Здесь
+// маршрут лишь превращает результат в код ответа, и потому короткий.
+gameRouter.post('/payments/webhook/yookassa', asyncHandler(async (req: Request, res: Response) => {
+  if (!isYooKassaEnabled()) {
+    // Не 500: без ключей это не сбой, а штатное состояние. ЮKassa будет
+    // повторять уведомление, и на все попытки ответ одинаковый.
+    return res.status(503).json({ error: 'provider_not_configured' });
+  }
+
+  const decision = await resolveYooKassaNotification(
+    req.body,
+    async (id) => {
+      try {
+        return await fetchYooKassaPayment(id, process.env);
+      } catch (err) {
+        if ((err as Error).message === 'yookassa_payment_not_found') return null;
+        throw err;
+      }
+    },
+    async (id) => (await paymentService.findByProviderPaymentId('yookassa', id))?.id ?? null
+  );
+
+  if (decision.action === 'retry') {
+    // 5xx, а не 200: так ЮKassa повторит уведомление, и деньги доедут при
+    // следующей попытке вместо тихой потери.
+    logger.error(`[Payments] yookassa ${decision.reason}`);
+    return res.status(502).json({ error: 'provider_unreachable' });
+  }
+  if (decision.action === 'reject') {
+    logger.warn(`[Payments] yookassa rejected notification: ${decision.reason}`);
+    return res.status(400).json({ error: decision.reason });
+  }
+  if (decision.action === 'ignore' || !decision.event) {
+    // Платёж ещё не решён. Не ошибка и не отказ: начислять нечего, и начисление
+    // придёт, когда статус сменится.
+    return res.json({ success: true, applied: false, status: decision.remoteStatus });
+  }
+
+  const event = decision.event;
+  const result = event.kind === 'refunded'
+    ? await paymentService.reversePayment({
+        provider: 'yookassa', providerPaymentId: event.providerPaymentId,
+        paymentId: event.paymentId, reason: event.failReason,
+      })
+    : await paymentService.completePayment({
+        provider: 'yookassa', providerPaymentId: event.providerPaymentId,
+        paymentId: event.paymentId, succeed: event.kind === 'completed', failReason: event.failReason,
+      });
+
+  if (!result.ok) return res.status(400).json({ error: result.code });
+  return res.json({ success: true, applied: true, deduped: result.deduped ?? false, azens: result.azens });
+}));
+
 // POST /api/game/payments/webhook/:provider — подтверждение провайдера (без auth, по HMAC).
 // Тело: { paymentId, providerPaymentId, status: 'completed' | 'failed', failReason? }
 // Подпись: HMAC-SHA256 hex от сырого тела, заголовок x-payment-signature, секрет PAYMENT_WEBHOOK_SECRET.
 gameRouter.post('/payments/webhook/:provider', asyncHandler(async (req: Request, res: Response) => {
-  const provider = PAYMENT_PROVIDERS[req.params.provider.toLowerCase()];
+  const name = req.params.provider.toLowerCase();
+  // ЮKassa не подписывает уведомления, и доверять присланному нельзя. Если бы
+  // он попал в общий реестр, один POST нарисовал бы AZENS без оплаты: маршрут
+  // выше переспрашивает API, а этот по подписи.
+  if (UNSIGNED_PROVIDERS.includes(name)) {
+    return res.status(400).json({ error: 'provider_requires_api_verification' });
+  }
+  const provider = PAYMENT_PROVIDERS[name];
   if (!provider) return res.status(404).json({ error: 'Unknown payment provider' });
 
   const rawBody = (req as Request & { rawBody?: string }).rawBody ?? '';

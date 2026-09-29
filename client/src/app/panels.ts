@@ -182,7 +182,42 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     statusRow.append(statusLabel);
     box.append(statusRow);
 
-    async function pollPayment(paymentId: string, expected: number): Promise<void> {
+    /**
+ * Что делать с только что созданным платежом.
+ *
+ * Три честных исхода, и каждый показывается по-разному:
+ * 1. Есть адрес оплаты — уводим игрока на страницу провайдера. Только там он
+ *    вводит карту.
+ * 2. Счёт не создан, потому что приём платежей не настроен — говорим прямо.
+ *    Молчаливое «платёж создан» здесь означало бы, что игрок заплатил и ничего
+ *    не получил, а узнал бы об этом через неделю.
+ * 3. Счёт создан, но адреса нет — счёт где-то есть, а найти его нечем; ждём
+ *    уведомление от провайдера и опрашиваем статус.
+ */
+function goToCheckout(created: {
+  paymentId: string; azensExpected: number; checkoutUrl: string | null; providerError: string | null;
+}): void {
+  if (created.providerError === 'provider_not_configured') {
+    statusLabel.textContent = t('wallet.pay_provider_not_ready');
+    toast(t('wallet.pay_provider_not_ready'), 'error');
+    return;
+  }
+  if (created.checkoutUrl) {
+    // Ссылка ведёт на чужой домен, и это ожидаемо: там ввод карты.
+    // Открываем в текущей вкладке, чтобы возврат на сайт был прямым и
+    // paymentId в адресе дожил до проверки после оплаты.
+    window.location.href = created.checkoutUrl;
+    return;
+  }
+  if (created.providerError) {
+    statusLabel.textContent = t('wallet.pay_provider_failed');
+    toast(t('wallet.pay_provider_failed'), 'error');
+    return;
+  }
+  void pollPayment(created.paymentId, created.azensExpected);
+}
+
+async function pollPayment(paymentId: string, expected: number): Promise<void> {
       for (let i = 0; i < 20; i++) {
         await new Promise(r => setTimeout(r, 3000));
         let st: Awaited<ReturnType<typeof api.paymentStatus>>;
@@ -247,7 +282,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
         }));
       }
       toast(t('wallet.pay_created'), 'info');
-      await pollPayment(created.paymentId, created.azensExpected);
+      goToCheckout(created);
     }));
     box.append(top);
 
@@ -273,7 +308,7 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
           }));
         }
         toast(t('wallet.pay_created'), 'info');
-        await pollPayment(created.paymentId, created.azensExpected);
+        goToCheckout(created);
       }));
       box.append(row);
     }

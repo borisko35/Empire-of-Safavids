@@ -1251,6 +1251,8 @@
     "payment_pending": "Payment {id}: {azens} AZENS — awaiting payment",
     "simulate": "Simulate payment",
     "pay_confirmed_sim": "Payment confirmed (simulator)",
+    "pay_provider_failed": "Could not open the payment page. Please try again or contact the administration.",
+    "pay_provider_not_ready": "Card payments are not set up yet. It will be available soon — packs and AZENS can already be bought in the in-game shops.",
     "pay_created": "Payment created — wait for confirmation",
     "pack_pending": "Package {id}: {azens} AZENS — awaiting payment",
     "pay_confirmed_sim_bonus": "Payment confirmed (simulator){bonus}",

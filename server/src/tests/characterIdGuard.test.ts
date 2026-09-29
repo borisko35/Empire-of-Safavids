@@ -123,7 +123,12 @@ describe('Маршруты не путают аккаунт с персонаж�
   it('список служб не пустой', () => {
     // Если бы кто-то переименовал службы, регулярки перестали бы работать
     // молча. Проверяем, что имена реально встречаются
+    // Только файлы .ts: в services/ появилась подпапка payments, и чтение
+    // каталога роняло набор с EISDIR. Фильтр ничего не маскирует — класс в
+    // каталоге всё равно не найдётся, и проверка честно покажет, что искать
+    // переименованные службы больше негде.
     const all = readdirSync(join(repoRoot, 'server', 'src', 'services'))
+      .filter(f => f.endsWith('.ts'))
       .map(f => read(join('server', 'src', 'services', f))).join('\n');
     const found = CHARACTER_SCOPED.filter(s => all.includes(`class ${s}`));
     expect({ найдено: found.length, из: CHARACTER_SCOPED.length })

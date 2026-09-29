@@ -63,9 +63,14 @@ export function hmacProvider(name: string, secretEnvVar: string): PaymentProvide
   };
 }
 
+// Провайдеры, чей вебхук НЕЛЬЗЯ принять по подписи. У ЮKassa уведомление
+// приходит без подписи, и довериться присланному нельзя: подделка одного
+// POST на публичном маршруте напечатала бы AZENS без оплаты. Такие провайдеры
+// обрабатываются отдельным маршрутом, который переспрашивает API по
+// идентификатору платежа. Их отсутствие здесь не ошибка, а защита.
+export const UNSIGNED_PROVIDERS: readonly string[] = ['yookassa'];
+
 // Реестр: имя из URL -> провайдер. Неизвестное имя = 404, деньги не двигаются.
 export const PAYMENT_PROVIDERS: Record<string, PaymentProvider> = {
   default: hmacProvider('default', 'PAYMENT_WEBHOOK_SECRET'),
-  // Пример подключения нового:
-  // yookassa: yookassaProvider(), // src/services/payments/yookassa.ts
 };

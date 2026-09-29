@@ -449,10 +449,18 @@ export const api = {
   paymentRates: () =>
     req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; firstBonus: { multiplier: number; maxBonus: number }; premiumDurations: { days: number; priceAzens: number }[]; simulator: boolean }>('/api/game/payments/rates'),
 
-  paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }) =>
-    req<{ success: boolean; paymentId: string; status: string; packId: string | null; azensExpected: number; realCurrency: string; realAmount: number }>('/api/game/payments/topup', {
+  paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }, provider = 'yookassa') =>
+    req<{
+      success: boolean; paymentId: string; status: string; packId: string | null;
+      azensExpected: number; realCurrency: string; realAmount: number;
+      // Куда идти платить. null = счёт не создан: провайдер не настроен или
+      // его запрос не прошёл. Это не «оплачено» и не «отказано», и клиент
+      // обязан показать именно это, а не радостно закрыть окно.
+      checkoutUrl: string | null;
+      providerError: string | null;
+    }>('/api/game/payments/topup', {
       method: 'POST',
-      body: JSON.stringify({ characterId, ...input }),
+      body: JSON.stringify({ characterId, provider, ...input }),
     }),
 
   paymentStatus: (paymentId: string) =>

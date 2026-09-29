@@ -1251,6 +1251,8 @@
     "payment_pending": "Ödəniş {id}: {azens} AZENS — ödəniş gözləyir",
     "simulate": "Ödənişi simulyasiya et",
     "pay_confirmed_sim": "Ödəniş təsdiqləndi (simulyator)",
+    "pay_provider_failed": "Ödəniş səhifəsini açmaq mümkün olmadı. Yenidən yoxlayın və ya administratora müraciət edin.",
+    "pay_provider_not_ready": "Kart ödənişləri hələ qurulmayıb. Tezliklə işə düşəcək — dəstlər və AZENS artıq oyun mağazalarında alınır.",
     "pay_created": "Ödəniş yaradıldı — təsdiqi gözləyin",
     "pack_pending": "Paket {id}: {azens} AZENS — ödəniş gözləyir",
     "pay_confirmed_sim_bonus": "Ödəniş təsdiqləndi (simulyator){bonus}",

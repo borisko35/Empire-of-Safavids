@@ -8,7 +8,7 @@ import { api } from './api';
 import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
-import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount } from './panels';
+import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop } from './panels';
 import { setHubStaff } from './hub';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
@@ -627,6 +627,11 @@ export async function enterWorld(character: Character): Promise<void> {
   // оставил коня в конюшне. Скорость нужна с первой секунды, а не после
   // первого захода в конюшню
   void loadActiveMount();
+  // Возврат от платёжного провайдера. Провайдер отправляет игрока обратно на
+  // сайт с ?payment=<id>, и без проверки тут он вернулся бы в игру, не зная,
+  // дошли деньги или нет. Платёж отмечается завершённым на сервере, а не
+  // здесь, поэтому клиент только спрашивает и обновляет панель.
+  void resumePaymentFromUrl();
   // Экипировка — тоже сразу: иначе аватар до первого открытия инвентаря
   // ходит с классовым оружием вместо надетого
   void loadInventory();
@@ -1533,6 +1538,55 @@ function startBlock(): void {
 function startDodge(): void {
   if (isDead()) return;
   emitDefensive('dodge');
+}
+
+// ── Возврат от платёжного провайдера ──────────────────────────
+//
+// Живёт здесь, а не в панели кошелька, потому что игрок возвращается на
+// страницу игры, а не в панель: без этой проверки он просто увидел бы вход
+// в игру и не узнал бы, что произошло с деньгами.
+
+/**
+ * Проверить платёж, к которому игрока вернул провайдер.
+ *
+ * Идентификатор берётся из адреса, поэтому проверяется на форму: чужой
+ * параметр не должен уводить на запрос к произвольной строке. Запрос
+ * отправляется только для своего платежа — сервер всё равно сверяет
+ * владельца, но мусор в адресной строке не должен доводить до ошибки.
+ */
+async function resumePaymentFromUrl(): Promise<void> {
+  const id = new URLSearchParams(window.location.search).get('payment');
+  if (!id) return;
+  // Ровно наш формат идентификатора. Подставленная строка отсеется здесь.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
+  if (!session.character) return;
+
+  // Параметр убираем сразу: при следующем F5 он не нужен, а всплывал бы
+  // снова и снова проверял бы один и тот же платёж.
+  window.history.replaceState(null, '', window.location.pathname);
+
+  try {
+    const st = await api.paymentStatus(id);
+    if (st.status === 'completed') {
+      const wallet = await api.wallet(session.character.id);
+      session.character.azens = wallet.azens;
+      session.character.gold = wallet.gold;
+      refreshBars();
+      const bonus = st.bonus > 0 ? ` (+${st.bonus})` : '';
+      toast(`+${st.azensExpected} AZENS${bonus}`, 'success');
+      void loadShop();
+      return;
+    }
+    if (st.status === 'failed') {
+      toast(t('wallet.pay_rejected'), 'error');
+      void loadShop();
+    }
+    // pending: провайдер ещё не прислал уведомление, либо платёж не завершён.
+    // Молчание здесь честнее сообщения об успехе.
+  } catch {
+    // Платёж не найден или сеть моргнула. Игрок сам увидит историю платежей
+    // в кошельке, поэтому тревожить его сообщением об ошибке неверно.
+  }
 }
 
 // ── Смена боевой стойки ────────────────────────────────────────

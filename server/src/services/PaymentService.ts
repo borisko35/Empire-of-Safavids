@@ -104,6 +104,43 @@ export class PaymentService {
   }
 
   /**
+   * Запомнить идентификатор счёта у провайдера.
+   *
+   * Пишется сразу при создании счёта, а не при успешной оплате. Разница
+   * видна на отмене: если игрок оплатил и тут же нажал «вернуть деньги»,
+   * найти платёж по нашей записи не получится, а по референсу провайдера —
+   * получится. В поддержке без этого отвечали бы «платежа не видим».
+   *
+   * Поле не перезаписывается: повторный вызов с другим значением означал бы
+   * двойной счёт, и подмена идентификатора дала бы возможность начислить AZENS
+   * по чужому платежу.
+   */
+  async attachProviderPaymentId(paymentId: string, providerPaymentId: string): Promise<void> {
+    await this.db.query(
+      `UPDATE payments SET provider_payment_id = $2, updated_at = NOW()
+        WHERE id = $1 AND provider_payment_id IS NULL`,
+      [paymentId, providerPaymentId]
+    );
+  }
+
+  /**
+   * Найти платёж по референсу провайдера.
+   *
+   * Нужен вебхуку: уведомление может прийти без наших метаданных, и тогда
+   * единственный способ узнать, о каком платеже речь, — этот поиск.
+   */
+  async findByProviderPaymentId(
+    provider: string,
+    providerPaymentId: string
+  ): Promise<PendingPayment | null> {
+    const row = await this.db.queryOne<Record<string, unknown>>(
+      'SELECT * FROM payments WHERE provider = $1 AND provider_payment_id = $2',
+      [provider, providerPaymentId]
+    );
+    return row ? this.mapRow(row) : null;
+  }
+
+  /**
    * Завершить платёж (вебхук провайдера / симулятор).
    * Единственное место, где AZENS падает на баланс.
    */
