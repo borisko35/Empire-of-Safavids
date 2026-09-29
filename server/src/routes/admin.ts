@@ -21,6 +21,8 @@ import { DatabaseService } from '../services/DatabaseService';
 import { GameLoop } from '../systems/GameLoop';
 import type { Weather } from '../systems/WorldTimeSystem';
 import { playerFunnel, isoDay } from '../services/playerFunnel';
+import { combatLog } from '../services/CombatLogService';
+import { isUuid } from '../utils/uuid';
 
 export const adminRouter = Router();
 const adminService = new AdminService();
@@ -248,6 +250,28 @@ adminRouter.get('/funnel', adminCheck, asyncHandler(async (req: Request, res: Re
   ]);
 
   return res.json({ funnel, retention, active, sessionStartSince, eventSince });
+}));
+
+// ============================================================
+// GET /api/admin/combat-log - история боёв персонажа
+//
+// Ответ на вопрос «он убил меня нечестно». Возвращает и построчную историю
+// ударов, и сводку: нанёс, получил, по каким навыкам, по каким целям.
+//
+// ПОЧЕМУ ПРОВЕРКА ФОРМАТА. Колонка target_id имеет тип UUID. Если в
+// characterId придёт мусор, Postgres ответит ошибкой приведения типа, и
+// владелец увидит 500 там, где человек опечатался. Поэтому мусор
+// отбрасывается здесь, с кодом 400.
+// ============================================================
+adminRouter.get('/combat-log', adminCheck, asyncHandler(async (req: Request, res: Response) => {
+  const characterId = String(req.query.characterId ?? '');
+  if (!isUuid(characterId)) {
+    return res.status(400).json({ error: 'characterId должен быть UUID' });
+  }
+  // Срок тоже приводим к числу сами: из строки вроде «abc» получать
+  // «за abc дней» нельзя, иначе Postgres ответит ошибкой приведения
+  const days = Math.min(90, Math.max(1, Number(req.query.days) || 7));
+  return res.json(await combatLog.getForCharacter(characterId, days));
 }));
 
 // ============================================================

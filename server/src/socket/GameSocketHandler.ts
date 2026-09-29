@@ -27,6 +27,7 @@ import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ChatModerationService } from '../services/ChatModerationService';
 import { analytics } from '../services/AnalyticsService';
+import { combatLog, buildCombatLogEntry } from '../services/CombatLogService';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
@@ -928,6 +929,23 @@ export class GameSocketHandler {
     // Применяем урон к цели (персистентно)
     const applied = await this.characterService.applyDamage(target.id, result.damage);
 
+    // Журнал боёв. Каждый удар между игроками пишется целиком: это и есть
+    // материал для разбора споров «он меня убил нечестно». Раньше таблица
+    // combat_logs существовала со всей схемой, но не записывал никто -
+    // вопрос «что было в бою» был не на что.
+    //
+    // void, а не await: запись не должна задерживать удар. Сама запись
+    // ошибки глотает внутри (сервис), так что необработанного отказа здесь
+    // не бывает.
+    void combatLog.record(buildCombatLogEntry({
+      attackerId: attacker.id,
+      target: { kind: 'player', id: target.id, name: target.name },
+      skillId: action.skillId,
+      damage: result.damage,
+      isCritical: result.isCritical,
+      region: socket.region ?? 'unknown',
+    }));
+
     socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
       attackerId: attacker.id, targetId: target.id, ...result, targetHp: applied.hp, targetMaxHp: applied.maxHp,
     });
@@ -1029,6 +1047,25 @@ export class GameSocketHandler {
 
     const ai = GameLoop.getInstance().getSpawnSystem().getAI();
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
+
+    // Журнал боёв по монстрам. Обычный мусор не пишется - решение принимает
+    // buildCombatLogEntry, он же возвращает null, если писать нечего.
+    void combatLog.record(buildCombatLogEntry({
+      attackerId: attacker.id,
+      target: {
+        kind: 'monster',
+        // У монстра нет своего UUID: идентификатор инстанса такой
+        // (mob_bandit_scout_1756500000000_a3f9x), поэтому в колонку
+        // target_id он бы и не поместился
+        instanceId: monsterCtx.instanceId,
+        name: monsterCtx.definition.nameRu,
+        monsterType: monsterCtx.definition.type,
+      },
+      skillId: action.skillId,
+      damage: result.damage,
+      isCritical: result.isCritical,
+      region: socket.region ?? 'unknown',
+    }));
 
     socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
       attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result,
