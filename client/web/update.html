@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Empire of Safavids — большое обновление</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --lapis:#12294a; --lapis-2:#1b3a63; --turq:#2aa39a; --gold:#e0b04a;
+  --ivory:#f4ecd8; --ruby:#a63d4a; --muted:#b9c4d6;
+  --bg:var(--lapis); --card:var(--lapis-2); --text:var(--ivory);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 'Nunito Sans',system-ui,sans-serif}
+.wrap{max-width:820px;margin:0 auto;padding:40px 20px 64px}
+h1,h2,.num{font-family:'Cormorant Garamond',Georgia,serif}
+h1{font-size:clamp(2.1rem,6vw,3.4rem);line-height:1.1;margin:0 0 14px;color:var(--gold)}
+.lead{max-width:60ch;margin:0 0 28px;color:var(--muted)}
+.lead strong{color:var(--ivory)}
+
+/* обратный отсчёт */
+.timer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:0 0 12px}
+.unit{background:var(--card);border:2px solid var(--gold);border-radius:14px;padding:14px 6px;text-align:center}
+.num{display:block;font-size:clamp(2rem,8vw,3.2rem);line-height:1;font-weight:700;color:var(--ivory);font-variant-numeric:tabular-nums}
+.unit small{color:var(--muted);font-size:.85rem}
+.status{margin:0 0 36px;color:var(--muted);min-height:1.6em}
+.status.live{color:var(--turq);font-weight:700}
+
+/* фильтры */
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.chip{font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;padding:8px 16px;border-radius:999px;border:2px solid var(--turq);background:transparent;color:var(--ivory)}
+.chip[aria-pressed="true"]{background:var(--turq);color:#08201f}
+.chip:hover{border-color:var(--gold)}
+.tools{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 14px;color:var(--muted);font-size:.95rem}
+.link{font:inherit;background:none;border:0;color:var(--gold);cursor:pointer;text-decoration:underline;padding:4px}
+
+/* карточки */
+.list{display:grid;gap:10px}
+details{background:var(--card);border-left:5px solid var(--turq);border-radius:10px}
+details[data-cat="fix"]{border-left-color:var(--ruby)}
+details[data-cat="arena"]{border-left-color:var(--gold)}
+details[hidden]{display:none}
+summary{cursor:pointer;list-style:none;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;font-weight:700}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-size:1.5rem;line-height:1;color:var(--gold);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+.body{padding:0 18px 16px;color:var(--muted)}
+.body p{margin:0 0 8px}
+.body ul{margin:0;padding-left:20px}
+.body li{margin:4px 0}
+.body b{color:var(--ivory)}
+
+/* подтверждение */
+.notify{margin-top:36px;padding:20px;border:2px dashed var(--gold);border-radius:14px;text-align:center}
+.notify p{margin:0 0 14px}
+.btn{font:inherit;font-weight:700;cursor:pointer;padding:12px 26px;border-radius:10px;border:0;background:var(--gold);color:#2a1e00}
+.btn[aria-pressed="true"]{background:var(--turq);color:#08201f}
+.btn:hover{filter:brightness(1.08)}
+.outro{margin-top:28px;font-family:'Cormorant Garamond',Georgia,serif;font-size:1.5rem;text-align:center;color:var(--gold)}
+
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+@media (max-width:480px){.tools{flex-direction:column;align-items:flex-start}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <h1>Большое обновление Empire of Safavids</h1>
+  <p class="lead"><strong>Всем игрокам, внимание!</strong> Завтра ночью, в 00:00, в игре произойдёт крупное изменение и обновление. Ниже — всё, что вас ждёт. Нажимайте на карточки, чтобы узнать подробности.</p>
+
+  <div class="timer" role="timer" aria-live="off">
+    <div class="unit"><span class="num" id="d">0</span><small>дней</small></div>
+    <div class="unit"><span class="num" id="h">00</span><small>часов</small></div>
+    <div class="unit"><span class="num" id="m">00</span><small>минут</small></div>
+    <div class="unit"><span class="num" id="s">00</span><small>секунд</small></div>
+  </div>
+  <p class="status" id="status">До начала обновления</p>
+
+  <div class="filters" role="group" aria-label="Фильтр по разделам">
+    <button class="chip" data-f="all" aria-pressed="true">Всё</button>
+    <button class="chip" data-f="vocab" aria-pressed="false">Словарь</button>
+    <button class="chip" data-f="fix" aria-pressed="false">Исправления</button>
+    <button class="chip" data-f="dungeon" aria-pressed="false">Данжи</button>
+    <button class="chip" data-f="arena" aria-pressed="false">Арена</button>
+    <button class="chip" data-f="world" aria-pressed="false">Новые земли</button>
+  </div>
+
+  <div class="tools">
+    <span id="count">Показано: 9</span>
+    <button class="link" id="toggleAll" type="button">Раскрыть все</button>
+  </div>
+
+  <div class="list" id="list">
+
+    <details data-cat="vocab">
+      <summary>Словарь игры теперь можно менять</summary>
+      <div class="body"><p>Словарь игры изменится: все слова, слоги и предложения можно будет изменять по своему желанию.</p></div>
+    </details>
+
+    <details data-cat="fix">
+      <summary>Исправлены баги данжей и группы</summary>
+      <div class="body"><p>Ошибки, связанные с данжами и группой, будут исправлены.</p></div>
+    </details>
+
+    <details data-cat="fix">
+      <summary>Исправлены баги приглашения друзей</summary>
+      <div class="body"><p>Баги и ошибки, связанные с приглашением друзей в игру, будут исправлены.</p></div>
+    </details>
+
+    <details data-cat="dungeon">
+      <summary>Объявления о победах и поражениях</summary>
+      <div class="body"><p>После победы над врагами и боссами в игре будут видны объявления о победах или поражениях.</p></div>
+    </details>
+
+    <details data-cat="dungeon">
+      <summary>В данжи — группой до 10 человек</summary>
+      <div class="body"><p>Раньше в данжи ходили группой из 5 человек. Теперь можно собрать группу и из <b>10 человек</b>.</p></div>
+    </details>
+
+    <details data-cat="dungeon">
+      <summary>Боссы появляются в своих комнатах</summary>
+      <div class="body"><p>Теперь боссы в данжах будут появляться только в своих комнатах и по уровневому значению.</p></div>
+    </details>
+
+    <details data-cat="arena">
+      <summary>Таблица топ-10 победителей арены</summary>
+      <div class="body"><p>В игре появится таблица лучших десяти победителей арены. Попробуйте занять в ней место.</p></div>
+    </details>
+
+    <details data-cat="arena">
+      <summary>Новые форматы боёв на арене</summary>
+      <div class="body">
+        <p>В арене можно будет биться командами:</p>
+        <ul><li><b>5 на 5</b></li><li><b>16 на 16</b></li><li><b>30 на 30</b></li></ul>
+      </div>
+    </details>
+
+    <details data-cat="world">
+      <summary>Новые локации и территории</summary>
+      <div class="body">
+        <p>В игру добавятся новые локации и территории:</p>
+        <ul>
+          <li>новые враги и мобы;</li>
+          <li>новые данжи с боссами;</li>
+          <li>дикие и уличные животные.</li>
+        </ul>
+        <p style="margin-top:8px">Они будут заполнены городами, деревнями, областями, дорогами и многим другим.</p>
+      </div>
+    </details>
+
+  </div>
+
+  <section class="notify">
+    <p>Отметьте, что вы не пропустите обновление — так проще не забыть.</p>
+    <button class="btn" id="ready" type="button" aria-pressed="false">Я буду в игре</button>
+  </section>
+
+  <p class="outro">Игроки, не пропустите эти изменения и обновления!</p>
+</main>
+
+<script>
+(function(){
+  // Время начала обновления. Измените дату при необходимости (формат ГГГГ-ММ-ДДTЧЧ:ММ:СС).
+  var TARGET = new Date('2026-10-01T00:00:00');
+
+  var el = {d:d, h:h, m:m, s:s, status:status};
+  function pad(n){return n<10 ? '0'+n : ''+n}
+  function tick(){
+    var diff = TARGET - new Date();
+    if(diff <= 0){
+      el.d.textContent='0'; el.h.textContent=el.m.textContent=el.s.textContent='00';
+      el.status.textContent='Обновление началось. Заходите в игру!';
+      el.status.className='status live';
+      return false;
+    }
+    var t = Math.floor(diff/1000);
+    el.d.textContent = Math.floor(t/86400);
+    el.h.textContent = pad(Math.floor(t%86400/3600));
+    el.m.textContent = pad(Math.floor(t%3600/60));
+    el.s.textContent = pad(t%60);
+    return true;
+  }
+  if(tick()){ var iv = setInterval(function(){ if(!tick()) clearInterval(iv); }, 1000); }
+
+  // Фильтры
+  var chips = document.querySelectorAll('.chip');
+  var cards = document.querySelectorAll('#list details');
+  var counter = document.getElementById('count');
+  chips.forEach(function(c){
+    c.addEventListener('click', function(){
+      chips.forEach(function(x){ x.setAttribute('aria-pressed', x===c ? 'true' : 'false'); });
+      var f = c.dataset.f, n = 0;
+      cards.forEach(function(card){
+        var show = f==='all' || card.dataset.cat===f;
+        card.hidden = !show;
+        if(show) n++;
+      });
+      counter.textContent = 'Показано: ' + n;
+    });
+  });
+
+  // Раскрыть / свернуть все
+  var toggle = document.getElementById('toggleAll'), opened = false;
+  toggle.addEventListener('click', function(){
+    opened = !opened;
+    cards.forEach(function(card){ if(!card.hidden) card.open = opened; });
+    toggle.textContent = opened ? 'Свернуть все' : 'Раскрыть все';
+  });
+
+  // Кнопка «Я буду в игре»
+  var ready = document.getElementById('ready');
+  ready.addEventListener('click', function(){
+    var on = ready.getAttribute('aria-pressed') !== 'true';
+    ready.setAttribute('aria-pressed', on);
+    ready.textContent = on ? 'Отлично, ждём вас в игре!' : 'Я буду в игре';
+  });
+})();
+</script>
+</body>
+</html>

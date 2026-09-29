@@ -543,7 +543,11 @@
     "panels_title": "Panellər",
     "ss_city": "Təbrizin səhəri: şəhər, bazar və canlı sakinlər",
     "ss_tasks": "Gündəlik tapşırıqlar: bu gün nə etmək və nə qalıb",
-    "ss_worldmap": "Dünya xəritəsi: düşərgələr, karvanSaraylar və qalalar"
+    "ss_worldmap": "Dünya xəritəsi: düşərgələr, karvanSaraylar və qalalar",
+    "news_update_t": "Böyük yeniləmə — 1 oktyabr",
+    "news_update_d": "Gecə saat 00:00-də böyük yeniləmə gəlir: yeni yerlər, bosslu zindanlar, arenada komanda döyüşləri və düzəlişlər. Nənin dəyişəcəyinə bax.",
+    "news_update_link": "Yeniləmə haqqında",
+    "update_title": "Yeniləmə"
   },
   "common": {
     "loading": "Yüklənir…",
