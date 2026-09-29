@@ -297,6 +297,19 @@ async function renderSiteContent() {
       time.textContent = item.date;
       card.append(time);
     }
+    // Ссылка внутри новости. Без неё объявление об обновлении было бы
+    // строчкой текста, на которую нельзя перейти: на страницу с
+    // подробностями, в игру или в раздел. Адрес приходит из CMS, поэтому
+    // проверяем его - иначе в разметку попадёт что угодно, включая
+    // javascript:.
+    const href = typeof item.link === 'string' ? item.link.trim() : '';
+    if (href && (href.startsWith('/') || href.startsWith('https://'))) {
+      const a = document.createElement('a');
+      a.className = 'btn btn-gold';
+      a.href = href;
+      a.textContent = pickL10n(item.linkText, lang) || '→';
+      card.append(a);
+    }
     grid.append(card);
   }
 }
