@@ -12,6 +12,8 @@ import { seasonalEvent } from './SeasonalEventService';
 import type { WalletCurrency } from '../utils/economy';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 import { isCombatStance, type CombatStance } from '../systems/CombatStance';
+import { professionOf } from './ProfessionService';
+import { professionBonuses } from '../systems/ProfessionBonuses';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -244,7 +246,12 @@ export class CharacterService {
     // Сезонный праздник. Комментарий выше обещал этот бонус years назад, а
     // кода не было: умножался только бафф из базы. Теперь умножается и он.
     const seasonal = seasonalEvent.expMultiplier();
-    const total = Math.floor(amount * mult * seasonal);
+    // Бонус профессии «Исследователь». Раньше описание обещало «открывает
+    // секретные локации» — такой системы в игре нет, и обещание было пустым.
+    // Теперь обещает опыт, и он считается здесь же, а не в описании.
+    const prof = await professionOf(characterId);
+    const profExp = professionBonuses(prof?.id ?? null, prof?.level ?? 0).experience;
+    const total = Math.floor(amount * mult * seasonal * profExp);
 
     // Делегируем единой системе прокачки (прирост статов/навыков при level up)
     const result = await this.leveling.addExperience(character, total, 'experience_gain');
@@ -859,12 +866,22 @@ export class CharacterService {
     await this.removeItems(characterId, [{ itemId, qty: 1 }]);
     const buff = buffId ? await getBuffService().grant(characterId, buffId) : null;
 
+    // Бонус профессии «Травник»: восстановление от зелий и��насток сильнее.
+    // Описание обещало «зелья действуют на 20% сильнее», и обещание было
+    // ни с чем не связано. Множитель применяется к самому эффекту, а не к
+    // величине запаса сверху: итог всё равно обрезается по максимуму, так
+    // что «более сильное зелье» и «то же зелье при полном здоровье» - это
+    // одно и то же.
+    const prof = await professionOf(characterId);
+    const potionMult = professionBonuses(prof?.id ?? null, prof?.level ?? 0).potion;
+    const healed = (v: number): number => Math.max(1, Math.round(v * potionMult));
+
     const sets: string[] = [];
     const params: number[] = [];
     let i = 2; // $1 = characterId
-    if (effect?.hp)      { sets.push(`hp = LEAST(max_hp, hp + $${i})`);          params.push(effect.hp); i++; }
-    if (effect?.mana)    { sets.push(`mana = LEAST(max_mana, mana + $${i})`);    params.push(effect.mana); i++; }
-    if (effect?.stamina) { sets.push(`stamina = LEAST(max_stamina, stamina + $${i})`); params.push(effect.stamina); i++; }
+    if (effect?.hp)      { sets.push(`hp = LEAST(max_hp, hp + ${i})`);          params.push(healed(effect.hp)); i++; }
+    if (effect?.mana)    { sets.push(`mana = LEAST(max_mana, mana + ${i})`);    params.push(healed(effect.mana)); i++; }
+    if (effect?.stamina) { sets.push(`stamina = LEAST(max_stamina, stamina + ${i})`); params.push(healed(effect.stamina)); i++; }
     // Предмет без мгновенного восстановления: трогаем только отметку времени
     if (!sets.length) {
       await this.db.query('UPDATE characters SET updated_at = NOW() WHERE id = $1', [characterId]);

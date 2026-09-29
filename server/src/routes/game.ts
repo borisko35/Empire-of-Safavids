@@ -32,6 +32,8 @@ import { PvPService } from '../services/PvPService';
 import { EndGameService } from '../services/EndGameService';
 import { PremiumSystem, CURRENT_SEASON, BATTLE_PASS_TIERS } from '../systems/PremiumSystem';
 import { PaymentService } from '../services/PaymentService';
+import { professionOf } from '../services/ProfessionService';
+import { professionBonuses } from '../systems/ProfessionBonuses';
 import { PromoService } from '../services/PromoService';
 import { NotificationService } from '../services/NotificationService';
 import { MailService } from '../services/MailService';
@@ -288,7 +290,16 @@ gameRouter.post('/shops/:shopId/buy', secureMiddleware, requireCharacterOwnershi
       }
     }
 
-    const totalCost = entry.price * value.quantity;
+    // Скидка профессии «Торговец». Раньше описание обещало «скидка 10% на все
+    // покупки», и цена считалась ровно как в каталоге: обещание было пустым
+    // текстом. Скидка не опускает цену ниже половины, иначе на высоких
+    // уровнях покупка стала бы бесплатной.
+    //
+    // Округление вниз: цена должна быть целой, а округление вверх при скидке
+    // в 1% на дешёвом товаре означало бы «скидку» ценой в золото.
+    const prof = await professionOf(value.characterId);
+    const priceMult = professionBonuses(prof?.id ?? null, prof?.level ?? 0).price;
+    const totalCost = Math.max(1, Math.floor(entry.price * value.quantity * priceMult));
     let gold: number | undefined;
     let azens: number | undefined;
     let silver: number | undefined;

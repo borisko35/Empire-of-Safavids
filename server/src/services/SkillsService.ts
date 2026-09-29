@@ -61,12 +61,12 @@ const SKILLS: SkillDef[] = [
 ];
 
 const PROFESSIONS: ProfessionDef[] = [
-  { id: 'warrior', name: 'warrior', nameRu: 'Воин', description: 'Мастер ближнего боя. Увеличивает урон оружием на 15%.', icon: 'sword', level: 1, xp: 0 },
-  { id: 'archer', name: 'archer', nameRu: 'Лучник', description: 'Мастер дальнего боя. Увеличивает точность на 20%.', icon: 'bow', level: 1, xp: 0 },
-  { id: 'merchant', name: 'merchant', nameRu: 'Торговец', description: 'Скидка 10% на все покупки.', icon: 'coins', level: 1, xp: 0 },
-  { id: 'herbalist', name: 'herbalist', nameRu: 'Травник', description: 'Зелья действуют на 20% сильнее.', icon: 'leaf', level: 1, xp: 0 },
-  { id: 'blacksmith', name: 'blacksmith', nameRu: 'Кузнец', description: 'Возможность улучшать оружие и броню.', icon: 'hammer', level: 1, xp: 0 },
-  { id: 'explorer', name: 'explorer', nameRu: 'Исследователь', description: 'Открывает секретные локации.', icon: 'compass', level: 1, xp: 0 },
+  { id: 'warrior', name: 'warrior', nameRu: 'Воин', description: 'Мастер ближнего боя. Урон оружием +2% за уровень профессии.', icon: 'sword', level: 1, xp: 0 },
+  { id: 'archer', name: 'archer', nameRu: 'Лучник', description: 'Мастер дальнего боя. Урон +1.6% за уровень профессии.', icon: 'bow', level: 1, xp: 0 },
+  { id: 'merchant', name: 'merchant', nameRu: 'Торговец', description: 'Скидка 1% на покупки за уровень профессии, не ниже половины цены.', icon: 'coins', level: 1, xp: 0 },
+  { id: 'herbalist', name: 'herbalist', nameRu: 'Травник', description: 'Зелья и настойки сильнее на 2.4% за уровень профессии.', icon: 'leaf', level: 1, xp: 0 },
+  { id: 'blacksmith', name: 'blacksmith', nameRu: 'Кузнец', description: 'Улучшение вещей дешевле на 1.2% за уровень профессии.', icon: 'hammer', level: 1, xp: 0 },
+  { id: 'explorer', name: 'explorer', nameRu: 'Исследователь', description: 'Опыт из заданий и убийств +1.6% за уровень профессии.', icon: 'compass', level: 1, xp: 0 },
 ];
 
 /**

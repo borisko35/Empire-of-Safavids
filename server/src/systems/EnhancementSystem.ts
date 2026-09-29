@@ -7,6 +7,8 @@ import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
 import { ITEMS_DATABASE } from '../data/items';
 import { ItemType } from '../types/game.types';
+import { professionOf } from '../services/ProfessionService';
+import { professionBonuses } from './ProfessionBonuses';
 
 export type EnhancementResult = 'success' | 'fail' | 'downgrade' | 'destroy';
 
@@ -59,6 +61,9 @@ export class EnhancementSystem {
    * downgrade — в +(N−1), destroy — уничтожает экземпляр.
    */
   async enhance(characterId: string, itemId: string): Promise<EnhancementOutcome> {
+    // Стоимость улучшения снижается профессией «Кузнец». Считается здесь,
+    // а не в маршруте: единственное место, где золото реально списывается,
+    // иначе скидка существовала бы только на словах.
     const def = ITEMS_DATABASE[itemId];
     if (!def) throw new Error('Item not found');
     if (def.type !== ItemType.WEAPON && def.type !== ItemType.ARMOR && def.type !== ItemType.ACCESSORY) {
@@ -84,7 +89,12 @@ export class EnhancementSystem {
       const charRow = await client.query(
         'SELECT gold FROM characters WHERE id = $1 FOR UPDATE', [characterId]
       );
-      if (charRow.rows[0].gold < rate.goldCost) throw new Error('Insufficient gold');
+      const prof = await professionOf(characterId);
+const costMult = professionBonuses(prof?.id ?? null, prof?.level ?? 0).enhanceCost;
+// Округление вниз и минимум в 1: скидка не должна превращать улучшение
+// в бесплатное, иначе на высоких уровнях кузнец ломал бы игру.
+const goldCost = Math.max(1, Math.floor(rate.goldCost * costMult));
+if (charRow.rows[0].gold < goldCost) throw new Error('Insufficient gold');
 
       // Проверяем материалы
       const matRow = await client.query(
@@ -96,7 +106,7 @@ export class EnhancementSystem {
       }
 
       // Списываем ресурсы
-      await client.query('UPDATE characters SET gold = gold - $1 WHERE id = $2', [rate.goldCost, characterId]);
+      await client.query('UPDATE characters SET gold = gold - $1 WHERE id = $2', [goldCost, characterId]);
       await this.consumeMaterials(client, characterId, rate.materialId, rate.materialQty);
 
       // Бросаем кубик

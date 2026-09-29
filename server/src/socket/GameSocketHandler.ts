@@ -22,7 +22,9 @@ import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
 import { skillsService } from '../services/SkillsService';
-import { STANCES, isCombatStance, type CombatStance, type StanceProfile } from '../systems/CombatStance';
+import { professionBonuses } from '../systems/ProfessionBonuses';
+import { professionOf } from '../services/ProfessionService';
+import { STANCES, isCombatStance, type CombatStance } from '../systems/CombatStance';
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { PartySystem } from '../systems/PartySystem';
@@ -1002,6 +1004,14 @@ export class GameSocketHandler {
         }
       }
 
+      // Бонус профессии «Воин» или «Лучник» на урон. Раньше обещание
+      // «увеличивает урон на 15%» висело в панели и не было связано ни с
+      // одной строкой расчёта. Множитель входит в тот же продукт, что и
+      // стойка, и оба проверяются числами.
+      const prof = await professionOf(attacker.id);
+      const profDamage = professionBonuses(prof?.id ?? null, prof?.level ?? 0).damage;
+      const totalDamageScale = stance.damage * profDamage;
+
       // Досягаемость. Проверяем по серверным позициям, а не по присланным
       // клиентом: иначе правкой клиента можно бить через полкарты, указав
       // свою позицию рядом с жертвой. Монстры - по позиции из ИИ.
@@ -1028,7 +1038,7 @@ export class GameSocketHandler {
         const targetRow = await this.characterService.getCharacterById(action.targetId);
         if (targetRow) {
           const target = await this.withEquipment(targetRow);
-          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult, stance, weapon);
+          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult, weapon, totalDamageScale);
           return;
         }
       }
@@ -1036,7 +1046,7 @@ export class GameSocketHandler {
       // Цель — монстр?
       const monsterCtx = GameLoop.getInstance().getSpawnSystem().getAI().getContext(action.targetId);
       if (monsterCtx) {
-        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult, stance);
+        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult, totalDamageScale);
         return;
       }
 
@@ -1053,8 +1063,11 @@ export class GameSocketHandler {
     target: Character,
     action: CombatAction,
     comboMult = 1,
-    stance: StanceProfile = STANCES.balanced,
-    weapon: WeaponProfile | null = null
+    weapon: WeaponProfile | null = null,
+    // Стойка и профессия вместе: продукт считается в handleCombatAction,
+    // где известны обе, и сюда приходит уже готовым. Отдельный множитель
+    // профессии означал бы, что о нём забывают в одной из двух ветвей боя.
+    damageScale = 1,
   ): Promise<void> {
     // Мёртвая цель не принимает урон. Без проверки добавленный по сети удар
     // снова «убивал» бы труп, заново ставил состояние смерти и перезапускал
@@ -1125,7 +1138,7 @@ export class GameSocketHandler {
       return;
     }
 
-    const result = this.combatService.calculateDamage(attacker, target, action, comboMult, weapon, stance.damage);
+    const result = this.combatService.calculateDamage(attacker, target, action, comboMult, weapon, damageScale);
     // Временный бонус «+5% к урону» (кебаб). Множитель, а не стат:
     // бонус не должен попадать в панель характеристик и не трогать броню.
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
@@ -1212,7 +1225,10 @@ export class GameSocketHandler {
     monsterCtx: AIContext,
     action: CombatAction,
     comboMult = 1,
-    stance: StanceProfile = STANCES.balanced
+    // Тот же совмещённый множитель, что и в PvP: стойка и профессия
+    // складываются в один продукт, иначе одна из ветвей боя считала бы урон
+    // по своим правилам.
+    damageScale = 1
   ): Promise<void> {
     if (monsterCtx.state === 'dead') return;
 
@@ -1257,7 +1273,7 @@ export class GameSocketHandler {
     // «Шахский щит» влияли бы на PvP, но не на PvE, то есть стойка работала бы
     // только в одной из двух боевых ситуаций.
     const weapon = await this.equipment.getWeapon(attacker.id);
-    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult, weapon, stance.damage);
+    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult, weapon, damageScale);
     // Тот же бонус «+5% к урону», что и в PvP-ударе
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
     result.damage = Math.floor(result.damage * dmgBuff);
