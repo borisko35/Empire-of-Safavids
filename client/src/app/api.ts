@@ -226,6 +226,12 @@ export const api = {
       method: 'POST', body: JSON.stringify({ name: newName }),
     }),
 
+  // Стойка читается, а не меняется: запись идёт через сокет, где сервер
+  // проверяет скакуна для конной стрельбы. Второй путь записи разошёлся бы
+  // с этим и обошёл бы проверку.
+  characterStance: (characterId: string) =>
+    req<{ stance: string }>(`/api/characters/${characterId}/stance`),
+
   getSkills: (characterId: string) =>
     req<{ skills: any[] }>(`/api/skills?characterId=${characterId}`),
 

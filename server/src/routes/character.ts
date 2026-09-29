@@ -31,6 +31,25 @@ const createCharacterSchema = Joi.object({
   referralCode: Joi.string().trim().uppercase().allow('', null).max(16).default(''),
 });
 
+// GET /api/characters/:id/stance — какая стойка сохранена у персонажа.
+//
+// ТОЛЬКО ЧТЕНИЕ. Смену стойки принимает сокет (combat:stance): там же
+// проверяется скакун для конной стрельбы. Второй путь записи означал бы, что
+// стойку можно поменять в обход проверки, и две двери к одному значению
+// разошлись бы.
+//
+// Маршрут нужен клиенту при входе: стойка живёт в базе, поэтому сервер обязан
+// назвать её. Иначе панель показывала бы «Обычный бой» игроку, который вчера
+// выбрал «Танец серпа» и ударит по панели на полстолетия.
+characterRouter.get('/:id/stance', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const character = await characterService.getCharacterById(req.params.id);
+  if (!character) return res.status(404).json({ error: 'Character not found' });
+  // Владелец и только он: стойка влияет на урон, и чужая стойка была бы
+  // способом смотреть чужое состояние боя
+  if (character.userId !== req.userId) return res.status(403).json({ error: 'Access denied' });
+  return res.json({ stance: await characterService.getStance(character.id) });
+}));
+
 // GET /api/characters — список персонажей пользователя
 characterRouter.get('/', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const characters = await characterService.getCharactersByUser(req.userId!);
