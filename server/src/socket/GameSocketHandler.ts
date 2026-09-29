@@ -5,7 +5,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { CombatService } from '../services/CombatService';
-import { EquipmentCache, DEFAULT_WEAPON } from '../services/EquipmentCache';
+import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
@@ -21,6 +21,7 @@ import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
+import { STANCES, isCombatStance, type CombatStance, type StanceProfile } from '../systems/CombatStance';
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { PartySystem } from '../systems/PartySystem';
@@ -78,6 +79,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * секунду. Здесь 380 мс: чуть меньше клиентских 450, чтобы у честного игрока
  * с дрожащим соединением удар не отбрасывался, но и поток ударов не проходил.
  */
+/** Стамина за рывок. Вынесена константой: её читает и щит, и рывок, и она
+ * должна быть одна на оба, иначе щит и рывок разойдутся по цене. */
+const DODGE_STAMINA_COST = 15;
+
 const MIN_ATTACK_INTERVAL_MS = 380;
 
 export class GameSocketHandler {
@@ -257,6 +262,11 @@ export class GameSocketHandler {
       // Боевые действия
       socket.on(SOCKET_EVENTS.COMBAT_ACTION, async (action: CombatAction) => {
         await this.handleCombatAction(socket, action);
+      });
+
+      // Смена боевой стойки
+      socket.on(SOCKET_EVENTS.COMBAT_STANCE, async (data: { stance?: string }) => {
+        await this.handleStanceChange(socket, data);
       });
 
       // Решение после смерти: возродиться в городе или на месте.
@@ -794,7 +804,11 @@ export class GameSocketHandler {
       return;
     }
 
-    const staminaCost = isDodge ? 15 : 10;
+    // Стоимость щита зависит от стойки: у «Шахского щита» он почти бесплатный,
+    // у «Танца серпа» дорогой. Раньше стоимость была одна на всех, то есть
+    // обещание «оборонительный стиль» было бы пустым словом.
+    const stance = await this.getStance(character.id);
+    const staminaCost = isDodge ? DODGE_STAMINA_COST : STANCES[stance].blockStamina;
     const ok = await this.characterService.spendResources(character.id, 0, staminaCost);
     if (!ok) {
       // Резерв не состоялся из-за стамины - откатываем, иначе игрок
@@ -812,8 +826,13 @@ export class GameSocketHandler {
     });
   }
 
-  /** Множитель серии лёгких атак: каждый третий удар серии бьёт в 1.5× */
-  private comboMultiplier(characterId: string, action: CombatAction): number {
+  /**
+   * Множитель серии лёгких атак: каждый третий удар серии бьёт в 1.5×.
+   *
+   * Стоимость серии меняется стойкой: у «Танца серпа» третий удар бьёт в 2.25
+   * (1.5 серии × 1.5 стойки) — это и есть смысл агрессивного стиля.
+   */
+  private comboMultiplier(characterId: string, action: CombatAction, comboScale = 1): number {
     if (action.actionType !== 'attack' || action.skillId) return 1;
     const now = Date.now();
     const chain = this.comboChains.get(characterId);
@@ -823,7 +842,49 @@ export class GameSocketHandler {
     }
     chain.count++;
     chain.lastAt = now;
-    return chain.count % 3 === 0 ? 1.5 : 1;
+    return chain.count % 3 === 0 ? 1.5 * comboScale : 1;
+  }
+
+  /**
+   * Стойка персонажа.
+   *
+   * Читается из базы. Неизвестное значение и ошибка базы дают обычный бой,
+   * а не падение боевого пути: стойка не должна быть причиной, по которой
+   * не работает удар.
+   */
+  private async getStance(characterId: string): Promise<CombatStance> {
+    const row = await this.characterService.getStance(characterId).catch(() => 'balanced' as CombatStance);
+    return isCombatStance(row) ? row : 'balanced';
+  }
+
+  /**
+   * Смена боевой стойки.
+   *
+   * Смена мгновенная, но не бесплатная: конная стрельба требует скакуна, и
+   * без него запрос отклоняется с кодом, а стойка остаётся прежней. Иначе
+   * игрок выбрал бы «конную стрельбу» пешком и просто получил бы дальний бой.
+   *
+   * Ответ всегда содержит фактически применённую стойку: если просили
+   * неизвестную, придёт balanced, и клиент покажет честное значение.
+   */
+  private async handleStanceChange(socket: AuthenticatedSocket, data: { stance?: string }): Promise<void> {
+    if (!socket.characterId) return;
+    const requested = data?.stance ?? 'balanced';
+    if (!isCombatStance(requested)) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'unknown_stance' });
+      socket.emit(SOCKET_EVENTS.COMBAT_STANCE, { stance: await this.getStance(socket.characterId) });
+      return;
+    }
+    if (STANCES[requested].requiresMount) {
+      const mount = await this.mounts.getActiveMount(socket.characterId).catch(() => null);
+      if (!mount) {
+        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'stance_needs_mount' });
+        socket.emit(SOCKET_EVENTS.COMBAT_STANCE, { stance: await this.getStance(socket.characterId) });
+        return;
+      }
+    }
+    const applied = await this.characterService.setStance(socket.characterId, requested);
+    socket.emit(SOCKET_EVENTS.COMBAT_STANCE, { stance: applied });
   }
 
   private async handleCombatAction(socket: AuthenticatedSocket, action: CombatAction): Promise<void> {
@@ -905,10 +966,23 @@ export class GameSocketHandler {
       // сабля и лук били одинаково.
       const weapon = await this.equipment.getWeapon(attacker.id);
 
+      // Стойка определяет урон, скорость и досягаемость. Конная стрельба
+      // пешком недоступна: без проверки скакуна это был бы просто «дальний
+      // бой», доступный каждому.
+      const stanceId = await this.getStance(attacker.id);
+      const stance = STANCES[stanceId];
+      if (stance.requiresMount) {
+        const mount = await this.mounts.getActiveMount(attacker.id).catch(() => null);
+        if (!mount) {
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'stance_needs_mount' });
+          return;
+        }
+      }
+
       // Досягаемость. Проверяем по серверным позициям, а не по присланным
       // клиентом: иначе правкой клиента можно бить через полкарты, указав
       // свою позицию рядом с жертвой. Монстры - по позиции из ИИ.
-      const reach = weapon?.range ?? DEFAULT_WEAPON.range;
+      const reach = (weapon?.range ?? DEFAULT_WEAPON.range) * stance.reach;
       const isBasic = action.actionType === 'attack' && !action.skillId;
       if (isBasic) {
         let targetPos: { x: number; y: number; z: number } | null = null;
@@ -924,14 +998,14 @@ export class GameSocketHandler {
         }
       }
 
-      const comboMult = this.comboMultiplier(attacker.id, action);
+      const comboMult = this.comboMultiplier(attacker.id, action, stance.combo);
 
       // Цель — игрок? (id монстров не UUID — сразу ищем ИИ-контекст)
       if (UUID_RE.test(action.targetId)) {
         const targetRow = await this.characterService.getCharacterById(action.targetId);
         if (targetRow) {
           const target = await this.withEquipment(targetRow);
-          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult);
+          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult, stance, weapon);
           return;
         }
       }
@@ -939,7 +1013,7 @@ export class GameSocketHandler {
       // Цель — монстр?
       const monsterCtx = GameLoop.getInstance().getSpawnSystem().getAI().getContext(action.targetId);
       if (monsterCtx) {
-        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult);
+        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult, stance);
         return;
       }
 
@@ -955,7 +1029,9 @@ export class GameSocketHandler {
     attacker: Character,
     target: Character,
     action: CombatAction,
-    comboMult = 1
+    comboMult = 1,
+    stance: StanceProfile = STANCES.balanced,
+    weapon: WeaponProfile | null = null
   ): Promise<void> {
     // Мёртвая цель не принимает урон. Без проверки добавленный по сети удар
     // снова «убивал» бы труп, заново ставил состояние смерти и перезапускал
@@ -980,8 +1056,45 @@ export class GameSocketHandler {
       return;
     }
 
+    // Стойка цели определяет, насколько её щит держит. Без этого «Шахский щит»
+    // и «Танец серпа» держали бы урон одинаково, то есть выбор стойки ничего
+    // бы не значил в защите.
+    const targetStance = STANCES[await this.getStance(target.id)];
+
+    // Парирование: удар в первые миллисекунды щита гасится полностью, а
+    // часть урона возвращается атакующему. Проверяется по времени начала
+    // блока, отдельного действия нет.
+    const reflect = this.defenseStates.getParryReflect(target.id);
+    if (reflect > 0) {
+      const raw = this.combatService.calculateDamage(attacker, target, action, comboMult);
+      const returned = Math.max(1, Math.floor(raw.damage * reflect));
+      const appliedToAttacker = await this.characterService.applyDamage(attacker.id, returned);
+      socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
+        attackerId: attacker.id, targetId: target.id, damage: 0,
+        isCritical: false, isBlocked: true, isDodged: false, isParried: true, reflected: returned,
+      });
+      this.activePlayers.get(target.id)?.emit(SOCKET_EVENTS.COMBAT_RESULT, {
+        attackerId: attacker.id, targetId: target.id, damage: 0,
+        isCritical: false, isBlocked: true, isDodged: false, isParried: true, reflected: returned,
+      });
+      // Отражённый урон идёт и в журнал: парирование - такой же бой, как и
+      // остальные удары, и прятать его от статистики неправильно.
+      // void, а не await, как и остальные записи: журнал не должен
+      // задерживать ответ по удару.
+      void combatLog.record(buildCombatLogEntry({
+        attackerId: attacker.id,
+        target: { kind: 'player', id: target.id, name: target.name },
+        skillId: action.skillId,
+        damage: 0,
+        isCritical: false,
+        region: socket.region ?? 'unknown',
+      }));
+      void appliedToAttacker;
+      return;
+    }
+
     // Активная защита цели поглощает/отменяет удар
-    const defenseMult = this.defenseStates.getIncomingMultiplier(target.id);
+    const defenseMult = this.defenseStates.getIncomingMultiplier(target.id, Date.now(), targetStance.blockReduction);
     if (defenseMult === 0) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
         attackerId: attacker.id, targetId: target.id, damage: 0, isCritical: false, isBlocked: false, isDodged: true,
@@ -989,7 +1102,7 @@ export class GameSocketHandler {
       return;
     }
 
-    const result = this.combatService.calculateDamage(attacker, target, action, comboMult);
+    const result = this.combatService.calculateDamage(attacker, target, action, comboMult, weapon, stance.damage);
     // Временный бонус «+5% к урону» (кебаб). Множитель, а не стат:
     // бонус не должен попадать в панель характеристик и не трогать броню.
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
@@ -1070,7 +1183,8 @@ export class GameSocketHandler {
     attacker: Character,
     monsterCtx: AIContext,
     action: CombatAction,
-    comboMult = 1
+    comboMult = 1,
+    stance: StanceProfile = STANCES.balanced
   ): Promise<void> {
     if (monsterCtx.state === 'dead') return;
 
@@ -1111,7 +1225,11 @@ export class GameSocketHandler {
       maxHp: monsterCtx.maxHp,
     } as unknown as Character;
 
-    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult);
+    // Оружие и стойка передаются так же, как в PvP: без этого «Танец серпа» и
+    // «Шахский щит» влияли бы на PvP, но не на PvE, то есть стойка работала бы
+    // только в одной из двух боевых ситуаций.
+    const weapon = await this.equipment.getWeapon(attacker.id);
+    const result = this.combatService.calculateDamage(attacker, monsterAsCharacter, action, comboMult, weapon, stance.damage);
     // Тот же бонус «+5% к урону», что и в PvP-ударе
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
     result.damage = Math.floor(result.damage * dmgBuff);

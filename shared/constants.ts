@@ -103,6 +103,8 @@ export const SOCKET_EVENTS = {
   COMBAT_VISUAL: 'combat:visual',
   COMBAT_HEAL: 'combat:heal',
   COMBAT_ERROR: 'combat:error',
+  /** Выбор боевой стойки: клиент шлёт, сервер проверяет и сохраняет */
+  COMBAT_STANCE: 'combat:stance',
 
   // Chat
   CHAT_MESSAGE: 'chat:message',

@@ -16,6 +16,7 @@ import { loadMediaPanel } from './media';
 // строк, умела три вещи из десяти и не позволяла вступить в чужую гильдию
 import { loadGuild } from './guild';
 import { RARITY_COLORS } from '../ui/icons';
+import { getStance, STANCES, STANCE_ORDER } from './stance';
 
 // Простой словарь имен предметов для магазина (itemId -> ключ перевода)
 const SHOP_ITEM_NAMES: Record<string, string> = {
@@ -3277,11 +3278,54 @@ export async function loadCharacterPanel(): Promise<void> {
     `<div class="stat-divider"></div>` +
     `<div class="stat-caption">${t('panels.char_attributes')}</div>` + attrs +
     `<div class="stat-divider"></div>` +
+    stancePickerHtml() +
+    `<div class="stat-divider"></div>` +
     `<div class="stat-caption">${t('panels.char_currency')}</div>` +
     statRow(t('panels.char_gold'), `${ch.gold}`) +
     statRow(t('panels.char_azens'), `${ch.azens ?? 0}`) +
     (ch.isfahanSilver ? statRow(t('panels.char_silver'), `${ch.isfahanSilver}`) : '') +
-    (ch.syrianGold ? statRow(t('panels.char_syrian'), `${ch.syrianGold}`) : '');
+    (ch.syrianGold ? statRow(t('panels.char_syrian'), `${ch.syrianGold}`) : '') +
+    stanceSwitchScript();
+}
+
+/**
+ * Переключатель боевой стойки в панели персонажа.
+ *
+ * Показывает все стойки, включая недоступные, но недоступные — приглушены и
+ * подписаны. Скрывать их нельзя: игрок должен видеть, что такой стиль есть и
+ * что для него нужен скакун, иначе «конная стрельба» выглядит как
+ * несуществующая.
+ */
+function stancePickerHtml(): string {
+  const active = getStance();
+  const mounted = (session.mount?.speed ?? 0) > 0;
+  const rows = STANCE_ORDER.map((s) => {
+    const info = STANCES[s];
+    const locked = info.requiresMount && !mounted;
+    const on = s === active;
+    return (
+      `<button class="stance-row${on ? ' on' : ''}${locked ? ' locked' : ''}" data-stance="${s}"${locked ? ' disabled' : ''}>` +
+      `<span class="stance-name">${t(`world.stance_${s}`)}</span>` +
+      `<span class="stance-hint">${t(`world.stance_${s}_hint`)}</span>` +
+      '</button>'
+    );
+  }).join('');
+  return (
+    `<div class="stat-caption">${t('world.stance_title')}</div>` +
+    `<div class="stance-list">${rows}</div>`
+  );
+}
+
+/** Навешивание обработчиков на стойки. Скриптом, чтобы панель перерисовывалась. */
+function stanceSwitchScript(): string {
+  return (
+    '<script>(function(){' +
+    'var box=document.querySelector(".stance-list");if(!box)return;' +
+    'box.addEventListener("click",function(e){' +
+    'var b=e.target.closest("[data-stance]");if(!b||b.disabled)return;' +
+    'if(window.requestStance)window.requestStance(b.getAttribute("data-stance"));' +
+    '});})();</script>'
+  );
 }
 
 /** Порог опыта для следующего уровня (приблизительная кривая) */

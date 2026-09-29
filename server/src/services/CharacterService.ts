@@ -11,6 +11,7 @@ import { analytics } from './AnalyticsService';
 import { seasonalEvent } from './SeasonalEventService';
 import type { WalletCurrency } from '../utils/economy';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
+import { isCombatStance, type CombatStance } from '../systems/CombatStance';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -255,6 +256,43 @@ export class CharacterService {
       'UPDATE characters SET position = $1, updated_at = NOW() WHERE id = $2',
       [JSON.stringify(position), characterId]
     );
+  }
+
+  // ============================================================
+  // Боевая стойка
+  // ============================================================
+
+  /**
+   * Текущая стойка персонажа.
+   *
+   * Строка из базы может оказаться чем угодно, если её правили вручную или
+   * база отстала от миграции. Поэтому незнакомое значение заменяется обычным
+   * боем прямо здесь: стойка не должна быть причиной, по которой не работает
+   * удар. Валидация в базе (CHECK) - вторая линия, а не единственная.
+   */
+  async getStance(characterId: string): Promise<CombatStance> {
+    const rows = await this.db.query<{ combat_stance: string }>(
+      'SELECT combat_stance FROM characters WHERE id = $1',
+      [characterId]
+    );
+    const value = rows[0]?.combat_stance ?? 'balanced';
+    return isCombatStance(value) ? value : 'balanced';
+  }
+
+  /**
+   * Переключить стойку.
+   *
+   * Возвращает фактически применённую стойку: если просили неизвестную, applied
+   * будет 'balanced', и вызывающий код покажет честное значение, а не то,
+   * о котором просили.
+   */
+  async setStance(characterId: string, stance: string): Promise<CombatStance> {
+    if (!isCombatStance(stance)) return this.getStance(characterId);
+    await this.db.query(
+      'UPDATE characters SET combat_stance = $1, updated_at = NOW() WHERE id = $2',
+      [stance, characterId]
+    );
+    return stance;
   }
 
   // ============================================================

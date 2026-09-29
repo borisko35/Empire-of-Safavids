@@ -15,7 +15,9 @@ export type CombatErrorCode =
   | 'unknown_skill'
   | 'target_not_found'
   | 'wrong_shard'
-  | 'not_in_group';
+  | 'not_in_group'
+  | 'stance_needs_mount'
+  | 'unknown_stance';
 
 export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   attack_too_fast: 'world.combat_error_attack_too_fast',
@@ -31,6 +33,9 @@ export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   // group') и показывались игроку по-английски.
   wrong_shard: 'world.combat_error_wrong_shard',
   not_in_group: 'world.combat_error_not_in_group',
+  // Стойки
+  stance_needs_mount: 'world.combat_error_stance_needs_mount',
+  unknown_stance: 'world.combat_error_stance_unknown',
 };
 
 /** Известен ли серверу этот код (неизвестные коды показываем как есть) */

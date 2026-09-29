@@ -959,6 +959,20 @@ class AudioEngine {
     this.tone(160, t, 0.16, 'square', 0.10, 70);
     this.noise(t, 0.12, 'lowpass', 1400, 0.14);
   }
+  /**
+   * Парирование: металлический лязг.
+   *
+   * Отдельный звук, а не переиспользованный blocked: парирование — это
+   * успех игрока, и оно должно звучать иначе, чем обычный блок. Иначе
+   * игрок не услышит, что поймал удар в окно.
+   */
+  parry(): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.tone(2400, t, 0.22, 'triangle', 0.11, 1500);
+    this.tone(3200, t + 0.02, 0.16, 'sine', 0.06, 2100);
+    this.noise(t, 0.14, 'highpass', 4200, 0.07);
+  }
   blocked(): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;

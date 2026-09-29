@@ -35,6 +35,7 @@ import { initDeathScreen, hideDeathScreen, isDead } from './deathScreen';
 import { loadAccountLinks } from './accountLinks';
 import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
 import { isCombatErrorCode, COMBAT_ERROR_KEYS } from '../../../shared/combatErrors';
+import { setStance, isStance, getStance, STANCES, STANCE_ORDER } from './stance';
 import { icon, type IconName } from '../ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -913,13 +914,20 @@ function wireSocket(): void {
   });
 
   // ── Бой ──
-  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; targetHp?: number; targetMaxHp?: number }) => {
+  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
     const target = world.monsters.get(r.targetId) ?? world.players.get(r.targetId);
     if (!attacker || !target) return;
     if (r.attackerId === me?.id) {
-      if (r.isDodged) {
+      if (r.isParried) {
+        // Цель парировала: наш удар вернулся. Показываем это честно, а то
+        // выглядит так, будто удар просто исчез.
+        world.addFloater(attacker.pos.x, attacker.pos.z - 1, t('world.parried_by_target'), '#8fe3c8', true);
+        if (r.reflected) {
+          world.addFloater(attacker.pos.x + 1, attacker.pos.z - 1, `-${r.reflected}`, '#8fe3c8', true);
+        }
+      } else if (r.isDodged) {
         world.addFloater(target.pos.x, target.pos.z - 1, t('world.dodge'), '#cfe3f0');
       } else {
         world.addEffect('slash', attacker.pos.x, attacker.pos.z, target.pos.x, target.pos.z, r.isCritical ? '#F4D26C' : '#e8e2d2');
@@ -937,18 +945,47 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; hp: number; maxHp: number }) => {
+  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number }) => {
     session.hp = r.hp;
     session.maxHp = r.maxHp;
     if (world && me) {
-      if (r.isDodged) world.addFloater(me.pos.x, me.pos.z - 1, t('world.dodge'), '#cfe3f0');
-      else world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
+      if (r.isParried) {
+        // Парирование: урона нет, а по атакующему прилетело отражение.
+        // Показываем и то, и другое, иначе выглядит так, будто удар просто
+        // потерялся.
+        world.addFloater(me.pos.x, me.pos.z - 1, t('world.parry_success'), '#8fe3c8', true);
+        if (r.reflected) {
+          world.addFloater(me.pos.x + 1, me.pos.z - 1, `+${r.reflected}`, '#8fe3c8', true);
+        }
+        audio.parry();
+      } else if (r.isDodged) {
+        world.addFloater(me.pos.x, me.pos.z - 1, t('world.dodge'), '#cfe3f0');
+      } else {
+        world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
+        audio.hit();
+      }
     }
-    audio.hit();
-    refreshBars();
+    if (!r.isParried) refreshBars();
     // Полоса здоровья на экране арены
     onPvpMyHpChanged(r.hp);
   });
+
+  // Смена боевой стойки. Сервер подтверждает фактически применённую стойку,
+  // а не запрошенную: если конная стрельба отклонена без скакуна, придёт
+  // прежняя, и мышкой покажется верное значение.
+  socket.on('combat:stance', (d: { stance: string }) => {
+    if (d.stance && isStance(d.stance)) setStance(d.stance);
+  });
+
+  /**
+   * Запрос смены стойки.
+   *
+   * Сначала проверяем скакуна сами: конная стрельба без коня отклоняется
+   * сервером, но ждать ответа ради заведомо известного отказа - значит
+   * переключать стойку «вслепую» и показывать неверное состояние.
+   */
+  // Функции смены стойки живут на уровне модуля: их зовёт и сокет, и
+  // горячая клавиша, а wireSocket и wireInput - разные функции.
 
   // ТУТ БЫЛА ДЫРА В ОТЗЫВЕ. Сервер после успешного блока или уклонения
   // подтверждает это событием combat:defense, но клиент его не слушал
@@ -1204,6 +1241,10 @@ function wireInput(): void {
       togglePanel('panel-quests-j');
     } else if (e.code === getBind('inventory')) {
       togglePanel('panel-inventory');
+    } else if (e.code === 'KeyR') {
+      // Смена боевой стойки по кругу. Конная стрельба пешком пропускается:
+      // иначе каждое второе нажатие упиралось бы в отказ сервера.
+      cycleStance();
     } else if (/^Digit[1-4]$/.test(e.code)) {
       const idx = Number(e.code.slice(5)) - 1;
       const skill = session.skills[idx];
@@ -1492,6 +1533,48 @@ function startBlock(): void {
 function startDodge(): void {
   if (isDead()) return;
   emitDefensive('dodge');
+}
+
+// ── Смена боевой стойки ────────────────────────────────────────
+//
+// Функции на уровне модуля: их зовёт и подписка на сокет (подтверждение), и
+// горячая клавиша в wireInput, а это разные функции.
+
+/**
+ * Запрос смены стойки.
+ *
+ * Скакуна проверяем сами: конная стрельба без коня отклоняется сервером, но
+ * ждать ответа ради заведомо известного отказа — значит переключать стойку
+ * «вслепую» и показывать неверное состояние.
+ */
+function requestStance(stance: string): void {
+  if (isDead()) return;
+  if (!isStance(stance)) return;
+  // Признак активного скакуна: скорость больше нуля ровно у верхом
+  // (loadActiveMount пишет её в session.mount)
+  if (STANCES[stance].requiresMount && (session.mount?.speed ?? 0) <= 0) {
+    // Тот же ключ, что и у серверного кода отказа: игрок видит одну и ту же
+    // формулировку и на своей стороне, и по ответу сервера. Своего ключа
+    // «stance_needs_mount» тут не заведено намеренно.
+    toast(t(`world.${COMBAT_ERROR_KEYS.stance_needs_mount.replace('world.', '')}`), 'error');
+    return;
+  }
+  socket.emit('combat:stance', { stance });
+}
+
+/**
+ * Переключение стойки клавишей R.
+ *
+ * Отдельная клавиша на стойку не выделяется: стиль переключают часто и на
+ * ходу, а свободных букв, которые игрок не забудет, в игре уже нет. Порядок
+ * идёт по кругу, а конная стрельба пешком пропускается — иначе каждое второе
+ * нажатие упиралось бы в отказ сервера.
+ */
+function cycleStance(): void {
+  if (isDead()) return;
+  const order = STANCE_ORDER.filter(s => !STANCES[s].requiresMount || (session.mount?.speed ?? 0) > 0);
+  const i = order.indexOf(getStance());
+  requestStance(order[(i + 1) % order.length] ?? 'balanced');
 }
 
 function basicAttack(): void {

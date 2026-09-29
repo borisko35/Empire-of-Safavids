@@ -41,6 +41,18 @@ const DODGE_COOLDOWN_MS = 800;
  */
 const REACH_TOLERANCE = 0.8;
 
+/**
+ * Окно парирования и отражение.
+ *
+ * Парирование - первые миллисекунды блока: игрок жмёт щит за мгновение до
+ * удара, удар гасится полностью, а атакующего отбрасывает. Отдельного действия
+ * нет, только щит и отклик, - иначе «парирование» было бы ещё одной кнопкой
+ * вместо тайминга.
+ */
+const PARRY_WINDOW_MS = 260;
+/** Доля отражённого урона: парирование не просто гасит, а возвращает */
+const PARRY_REFLECT = 0.35;
+
 function freshState(): DefenseState {
   return { dodgeUntil: 0, blockUntil: 0, dodgeStartedAt: 0, blockStartedAt: 0 };
 }
@@ -147,13 +159,37 @@ export class DefenseStates {
     return (this.states.get(characterId)?.blockUntil ?? 0) > now;
   }
 
-  /** Множитель входящего урона (1 — без изменений, 0 — промах) */
-  getIncomingMultiplier(characterId: string, now = Date.now()): number {
+  /**
+   * Множитель входящего урона (1 — без изменений, 0 — промах).
+   *
+   * blockReduction передаётся из стойки: у «Танца серпа» щит держит четверть
+   * урона, у «Шахского щита» — почти всё. Без этого аргумента стойка была бы
+   * только множителем урона, а обещание «оборонительный стиль» - пустым.
+   */
+  getIncomingMultiplier(characterId: string, now = Date.now(), blockReduction = BLOCK_REDUCTION): number {
     const st = this.states.get(characterId);
     if (!st) return 1;
     if (st.dodgeUntil > now) return 0;
-    if (st.blockUntil > now) return 1 - BLOCK_REDUCTION;
+    if (st.blockUntil > now) return 1 - blockReduction;
     return 1;
+  }
+
+  /**
+   * Парирование: удар попал в первые миллисекунды щита?
+   *
+   * Возвращает долю урона, которую надо отразить. Ноль - значит не парировано.
+   * Проверяется по времени начала блока, а не по отдельному действию.
+   */
+  getParryReflect(characterId: string, now = Date.now()): number {
+    const st = this.states.get(characterId);
+    if (!st) return 0;
+    if (st.dodgeUntil > now) return 0;
+    if (st.blockUntil <= now) return 0;
+    // Окно считается от начала блока: игрок должен поднять щит прямо перед
+    // ударом. Удар через две секунды после поднятия щита - это уже блок, а
+    // не парирование, иначе щик держал бы щит постоянно.
+    if (st.blockStartedAt === 0 || now - st.blockStartedAt > PARRY_WINDOW_MS) return 0;
+    return PARRY_REFLECT;
   }
 
   cleanup(characterId: string): void {

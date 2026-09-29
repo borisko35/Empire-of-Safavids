@@ -71,9 +71,10 @@ export class CombatService {
     target: Character,
     action: CombatAction,
     comboMultiplier = 1,
-    weapon: WeaponProfile | null = null
+    weapon: WeaponProfile | null = null,
+    stanceDamage = 1
   ): DamageResult {
-    const baseDamage = this.getBaseDamage(attacker, action, weapon) * comboMultiplier;
+    const baseDamage = this.getBaseDamage(attacker, action, weapon) * comboMultiplier * stanceDamage;
     const defense = this.getDefense(target);
 
     // Шанс уклонения
