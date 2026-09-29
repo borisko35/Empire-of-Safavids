@@ -45,6 +45,8 @@ import { GameLoop } from '../systems/GameLoop';
 import { migrate } from '../database/migrate';
 import { GAME_VERSION } from '../../../shared/constants';
 import { requestLogger } from '../middleware/requestLogger';
+import { metricsMiddleware } from '../middleware/metrics';
+import { metrics } from '../metrics';
 import { errorHandler, notFoundHandler, badJsonHandler } from '../middleware/errorHandler';
 
 const PORT = process.env.PORT || 3000;
@@ -126,6 +128,21 @@ app.use(badJsonHandler);
 // Логирование запросов
 app.use(requestLogger);
 
+// Метрики для Prometheus. Ставится до маршрутов, иначе middleware увидит
+// только те запросы, что до него дошли, - то есть почти none.
+app.use(metricsMiddleware);
+
+// ── /metrics ────────────────────────────────────────────────────
+// Адрес, который уже давно прописан в tools/monitoring/prometheus.yml.
+// Открыт наружу намеренно, но отдаёт только сводные числа: сколько запросов,
+// с какой скоростью, сколько игроков онлайн. Ни имён, ни идентификаторов
+// персонажей там нет - подпись из пользовательского ввода к тому же
+// наводнит метрики мусором.
+app.get('/metrics', (_req, res) => {
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+  res.send(metrics.render());
+});
+
 // ── REST API маршруты ────────────────────────────────────
 app.use('/api/auth', authRouter);
 app.use('/api/characters', characterRouter);
@@ -200,6 +217,17 @@ const io = new SocketIOServer(httpServer, {
 
 const gameSocketHandler = new GameSocketHandler(io);
 gameSocketHandler.initialize();
+
+// Игроки онлайн — единственная метрика, ради которой владельцу и нужен
+// мониторинг в первую очередь. Считается в момент снятия метрик, а не на
+// каждом входе и выходе: иначе пришлось бы поддерживать счётчик, который
+// разъедется при первом же перезапуске сокета.
+metrics.registerGaugeProvider(() => ({
+  name: 'eos_players_online',
+  help: 'Игроков в игре сейчас',
+  labels: {},
+  value: gameSocketHandler.getOnlineCount(),
+}));
 
 // Запуск сервера
 async function bootstrap() {

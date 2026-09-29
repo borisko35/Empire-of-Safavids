@@ -139,6 +139,19 @@ export class GameSocketHandler {
     else this.io.emit(SERVER_EVENTS.WORLD_EVENT, payload);
   }
 
+  /**
+   * Сколько игроков сейчас в игре.
+   *
+   * Единственный способ узнать это снаружи: карта подключённых сокетов
+   * приватная, а владельцу это число нужно постоянно - ради него и
+   * затевался мониторинг. Считается в момент обращения к /metrics, а не
+   * на каждом входе и выходе: счётчик, который надо поддерживать вручную,
+   * разъезжается при первом же переподключении сокета.
+   */
+  getOnlineCount(): number {
+    return this.activePlayers.size;
+  }
+
   constructor(io: SocketIOServer) {
     this.io = io;
     GameSocketHandler.instance = this;
