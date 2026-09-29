@@ -9,6 +9,7 @@ import { ReferralService } from './ReferralService';
 import { logger } from '../utils/logger';
 import { analytics } from './AnalyticsService';
 import { seasonalEvent } from './SeasonalEventService';
+import type { WalletCurrency } from '../utils/economy';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
@@ -429,6 +430,29 @@ export class CharacterService {
    */
   async addGoldReward(characterId: string, amount: number): Promise<number> {
     return this.addGold(characterId, Math.floor(amount * seasonalEvent.goldMultiplier()));
+  }
+
+  /**
+   * Вернуть потраченное - в той же валюте, в которой тратили.
+   *
+   * ПОЧЕМУ ЭТО НЕ «ПРОСТО ВЕРНУТЬ В ЗОЛОТО». Маршрут покупки списывает
+   * цену из кошелька, который указал магазин, и при неудачной выдаче
+   * возвращал сумму через addGold - то есть всегда золотом. Сегодня все
+   * лодки продаются за золото, поэтому расхождение не проявлялось. Но
+   * стоит положить лодку в магазин за азены - и покупка «платит азенами,
+   * а возвращает золото»: премиальная валюта превращается в золото, то
+   * есть покупка становится обменом валюты, а не покупкой.
+   *
+   * Возврат идёт через add*, а не через addGoldReward: это не награда, и
+   * сезонный бонус к возврату отношения не имеет.
+   */
+  async refund(characterId: string, wallet: WalletCurrency, amount: number): Promise<void> {
+    const value = Math.max(0, Math.floor(amount));
+    if (value === 0) return;
+    if (wallet === 'azens') { await this.addAzens(characterId, value); return; }
+    if (wallet === 'silver') { await this.addSilver(characterId, value); return; }
+    if (wallet === 'syrian') { await this.addSyrianGold(characterId, value); return; }
+    await this.addGold(characterId, value);
   }
 
   /** Атомарно списать золото. Бросает ошибку, если средств недостаточно. Возвращает остаток. */

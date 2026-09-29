@@ -33,9 +33,29 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseBonuses, PLANNED_BONUSES, SeasonalEventService } from '../services/SeasonalEventService';
 import { SEASONAL_EVENTS, worldTimeAt, seasonOf, GAME_EPOCH_MS } from '../systems/WorldTimeSystem';
+import { stripComments } from './helpers/stripCode';
 
 const repoRoot = join(__dirname, '..', '..', '..');
 const read = (p: string): string => readFileSync(join(repoRoot, p), 'utf-8');
+
+/**
+ * Тело метода purchase из BoatSystem: от объявления до следующего метода
+ * или конца класса. Нужно, чтобы проверка смотрела на сам метод, а не на
+ * весь хвост файла, где деньги трогаются законно.
+ *
+ * Комментарии отбрасываются обязательно: в объяснении, почему строка
+ * удалена, она упомянута как раз в виде `addGold(characterId, -def.price)`,
+ * и проверка находила саму себя. Это тот же класс, что и закомментированная
+ * строка миграции, которую нашли сегодня.
+ */
+function purchaseBody(source: string): string {
+  const code = stripComments(source);
+  const start = code.indexOf('async purchase');
+  if (start < 0) return '';
+  const rest = code.slice(start + 1);
+  const next = rest.search(/\n  (?:async |private |public |get |set )/);
+  return next < 0 ? rest : rest.slice(0, next);
+}
 
 describe('Праздник действует, а не просто называется', () => {
   const redis = mockRedis;
@@ -327,14 +347,40 @@ describe('Бонус доходит до награды и не достаёт �
     expect({ без_бонуса: left }).toEqual({ без_бонуса: [] });
   });
 
-  it('покупка лодки не превратилась в источник бонуса', () => {
-    // Строка с addGold(id, -цена) - это не награда, и бонус к ней не
-    // должен прикасаться. Заодно видно, что метод не переименован.
-    expect(/addGold\(characterId, -def\.price\)/.test(read('server/src/systems/BoatSystem.ts'))).toBe(true);
+  it('покупка лодки не стала ни источником бонуса, ни своим списанием', () => {
+    // Раньше в BoatSystem.purchase стояло addGold(characterId, -def.price):
+    // addGold приводит сумму к нулю снизу, поэтому из отрицательной цены
+    // получался ноль. Строка выглядела как списание и ничего не списывала -
+    // а читающий purchase считал, что лодка оплачена здесь.
+    //
+    // Настоящее списание делает маршрут. Поэтому в теле purchase не должно
+    // быть НИ addGold, НИ addGoldReward, НИ spendGold: деньги трогает
+    // вызывающий.
+    //
+    // Смотрим ТОЛЬКО тело purchase. Первая версия проверки брала всё после
+    // первого вхождения 'async purchase' - то есть весь остаток файла, где
+    // деньги трогаются законно (ремонт, заправка), и проверка падала на
+    // своём же исправлении.
+    const boat = read('server/src/systems/BoatSystem.ts');
+    const body = purchaseBody(boat);
+    expect({
+      тело_найдено: body.length > 0,
+      не_трогает_деньги: !/addGold\(|addGoldReward\(|spendGold\(/.test(body),
+      // Контракт ищем по исходнику, а не по очищенному от комментариев куску:
+      // сам контракт и есть комментарий, и очистка его съедает.
+      контракт_зафиксирован: /ДЕНЬГИ ЗДЕСЬ НЕ СПИСЫВАЮТСЯ/.test(boat),
+      списание_в_маршруте: /characterService\.spendGold\(value\.characterId, totalCost\)/.test(routes),
+    }).toEqual({ тело_найдено: true, не_трогает_деньги: true, контракт_зафиксирован: true, списание_в_маршруте: true });
   });
 
-  it('возврат за неудачную покупку остался на addGold', () => {
-    expect(/characterService\.addGold\(value\.characterId, totalCost\)/.test(routes)).toBe(true);
+  it('возврат за неудачную покупку идёт в той же валюте, что и оплата', () => {
+    // Возврат золотом за азены превращал бы покупку в обмен валюты.
+    // Сегодня все лодки за золото и расхождения не видно - поэтому проверка
+    // смотрит на код возврата, а не на результат.
+    expect({
+      в_маршруте_через_refund: /characterService\.refund\(value\.characterId, walletCurrency, totalCost\)/.test(routes),
+      напрямую_золотом_нет: !/addGold\(value\.characterId, totalCost\)/.test(routes),
+    }).toEqual({ в_маршруте_через_refund: true, напрямую_золотом_нет: true });
   });
 
   it('бонус не начисляется дважды', () => {

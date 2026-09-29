@@ -304,13 +304,25 @@ gameRouter.post('/shops/:shopId/buy', secureMiddleware, requireCharacterOwnershi
     if (entry.kind === 'boat' || value.itemId.startsWith('boat_')) {
       const def = BOATS[value.itemId];
       if (!def) return res.status(400).json({ error: 'Boat definition not found' });
+      // Лодка одна, а цена считается как price * quantity. С quantity = 3
+      // игрок отдавал бы три цены и получал одну лодку: переплата без
+      // пользы. Раньше это проходило молча, потому что ветка лодок идёт
+      // мимо обычных товаров и количество там никто не проверял.
+      if (value.quantity > 1) {
+        return res.status(400).json({ error: 'Лодка покупается по одной' });
+      }
       let boat;
       try {
         boat = await boatSystem.purchase(value.characterId, value.itemId);
       } catch (err) {
-        // Золото уже списано на общей ветке выше — возвращаем, иначе
-        // игрок теряет деньги на «уже куплено» и «нужен уровень»
-        await characterService.addGold(value.characterId, totalCost).catch(() => {});
+        // Деньги списаны на общей ветке выше — возвращаем, иначе игрок
+        // теряет их на «уже куплено» и «нужен уровень».
+        //
+        // Возврат идёт в той же валюте, в которой шла оплата. Возврат
+        // золотом за азены превращал бы покупку в обмен валюты: сейчас все
+        // лодки за золото и расхождения не видно, но стоит положить лодку
+        // в премиальный магазин - и игрок получит золото за азены.
+        await characterService.refund(value.characterId, walletCurrency, totalCost).catch(() => {});
         return res.status(400).json({ error: (err as Error).message });
       }
       return res.status(201).json({
