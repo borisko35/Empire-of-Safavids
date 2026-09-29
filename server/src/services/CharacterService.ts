@@ -7,6 +7,7 @@ import { ITEMS_DATABASE } from '../data/items';
 import { getBuffService, ITEM_BUFFS, type ActiveBuff } from './BuffService';
 import { ReferralService } from './ReferralService';
 import { logger } from '../utils/logger';
+import { analytics } from './AnalyticsService';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
@@ -115,6 +116,17 @@ export class CharacterService {
     } catch (err) {
       logger.warn(`[Referral] не удалось засчитать приглашение: ${(err as Error).message}`);
     }
+
+    // Шаг воронки «зашёл → завёл персонажа». Событие character_created
+    // было в списке AnalyticsEvent, но его не писал никто — из-за чего
+    // воронку посчитать было нечем: без него неизвестно, сколько людей
+    // дошло до игры, а сколько застряло на экране входа.
+    analytics.track(
+      'character_created',
+      { class: characterClass, serverId },
+      userId,
+      character.id,
+    );
 
     return character;
   }

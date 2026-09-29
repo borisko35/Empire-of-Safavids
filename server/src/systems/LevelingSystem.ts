@@ -5,6 +5,7 @@
 import { Character, CharacterStats, CharacterClass } from '../types/game.types';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
+import { analytics } from '../services/AnalyticsService';
 
 export interface LevelUpResult {
   leveledUp: boolean;
@@ -162,6 +163,17 @@ export class LevelingSystem {
       });
 
       logger.info(`Level up: ${character.name} ${oldLevel} → ${newLevel} (${source})${awakened ? ' — AWAKENED' : ''}`);
+
+      // Событие level_up тоже было в списке, но не писалось. С ним
+      // видно, до какого уровня доходит новичок и где поток рвётся: по
+      // одному characters.level этого не узнать, там лежит текущий уровень
+      // всех, кто остался в базе, без времени и без порядка.
+      analytics.track(
+        'level_up',
+        { from: oldLevel, to: newLevel, source, awakened },
+        character.userId,
+        character.id,
+      );
     } else {
       await this.db.query(
         'UPDATE characters SET experience = $1, updated_at = NOW() WHERE id = $2',

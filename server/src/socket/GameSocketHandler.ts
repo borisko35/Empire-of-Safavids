@@ -26,6 +26,7 @@ import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ChatModerationService } from '../services/ChatModerationService';
+import { analytics } from '../services/AnalyticsService';
 import { Character, CombatAction, Region } from '../types/game.types';
 import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
@@ -510,6 +511,23 @@ export class GameSocketHandler {
       }
 
       socket.emit(SOCKET_EVENTS.AUTH_SUCCESS, { character });
+      // Игрок реально вошёл в мир. До этого события в аналитику попадали
+      // только входы через форму, а токен живёт 30 дней: заход на второй
+      // день не писал НИЧЕГО, и удержание по таким данным было нулём у
+      // всех, кто не перезаходил с логина. Отмечаем здесь — после того, как
+      // клиенту ушёл AUTH_SUCCESS, то есть вход состоялся.
+      analytics.track(
+        'session_start',
+        { region: character.region, serverId: character.serverId, level: character.level },
+        userId,
+        character.id,
+      );
+
+      // Игрок реально вошёл в мир. До этого события в аналитику попадали
+      // только входы через форму, а токен живёт 30 дней: заход на второй
+      // день не писал НИЧЕГО, и удержание по таким данным было нулём у
+      // всех, кто не перезаходил с логина. Отмечаем здесь — после того, как
+      // клиенту ушёл AUTH_SUCCESS, то есть вход состоялся.
 
       // Время и погода сразу при входе. Раньше они приходили только общим
       // вещанием раз в минуту, поэтому игрок до минуты видел «ясно» и бурю,

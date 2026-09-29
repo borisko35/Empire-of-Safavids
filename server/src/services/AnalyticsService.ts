@@ -14,7 +14,12 @@ export type AnalyticsEvent =
   // Воронка гостевого входа: guest_login — сколько людей начали играть
   // без регистрации, guest_claimed — сколько из них оставили аккаунт.
   // Конверсия второго в первое и есть главная метрика новой фичи.
-  | 'guest_login' | 'guest_claimed';
+  | 'guest_login' | 'guest_claimed'
+  // session_start — игрок ВОШЁЛ В МИР, а не нажал «Войти». Это единственное
+  // событие, по которому честно считаются активные игроки: player_login
+  // срабатывает только на форме входа, а токен живёт 30 дней, так что
+  // обычный заход на следующий день не оставлял в аналитике ничего.
+  | 'session_start';
 
 export class AnalyticsService {
   private db = DatabaseService.getInstance();
@@ -41,12 +46,34 @@ export class AnalyticsService {
     }
   }
 
+  /**
+   * Активные ИГРОКИ за день: те, кто заходил в мир.
+   *
+   * Именно эта величина отвечает на вопрос «сколько нас было в игре», и
+   * только она годится для удержания. getDailyActiveUsers() ниже считает
+   * другое (входы через форму) и не должна называться DAU.
+   */
+  async getDailyActivePlayers(date: Date): Promise<number> {
+    const row = await this.db.queryOne<{ count: string }>(
+      `SELECT COUNT(DISTINCT user_id) as count FROM analytics_events WHERE event='session_start' AND DATE(timestamp)=DATE($1)`,
+      [date]
+    );
+    return parseInt(row?.count ?? '0', 10);
+  }
+
+  /**
+   * Входы через форму. ВНИМАНИЕ: это не DAU.
+   *
+   * Сессия в Redis живёт 30 дней, поэтому игрок, зашедший в игру на второй
+   * день, не вызывает player_login вообще. Метрика показывает, сколько раз
+   * открыли экран входа, а не сколько играли.
+   */
   async getDailyActiveUsers(date: Date): Promise<number> {
     const row = await this.db.queryOne<{ count: string }>(
       `SELECT COUNT(DISTINCT user_id) as count FROM analytics_events WHERE event='player_login' AND DATE(timestamp)=DATE($1)`,
       [date]
     );
-    return parseInt(row?.count ?? '0');
+    return parseInt(row?.count ?? '0', 10);
   }
 
   async getMonthlyActiveUsers(year: number, month: number): Promise<number> {
@@ -54,7 +81,7 @@ export class AnalyticsService {
       `SELECT COUNT(DISTINCT user_id) as count FROM analytics_events WHERE event='player_login' AND EXTRACT(YEAR FROM timestamp)=$1 AND EXTRACT(MONTH FROM timestamp)=$2`,
       [year, month]
     );
-    return parseInt(row?.count ?? '0');
+    return parseInt(row?.count ?? '0', 10);
   }
 
   async getClassPopularity(): Promise<{ class: string; count: number }[]> {
