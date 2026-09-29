@@ -96,10 +96,18 @@ async function boot(): Promise<void> {
 async function enterAsGuestFromLink(): Promise<boolean> {
   const url = new URL(window.location.href);
   if (url.searchParams.get('guest') !== '1') return false;
-  if (session.token) return false;
 
+  // Адрес чистим ДО проверки сессии, а не после. Параметр свою работу уже
+  // сделал, и держать его дальше незачем: оставленная ссылка — это мина на
+  // мине. Игрок, у которого сессия уже есть, уходит к персонажам с
+  // «?guest=1» в строке; стоит ему выйти из аккаунта (или истечь токену) и
+  // нажать F5 — и он получит нового гостя, вместо того чтобы увидеть
+  // экран входа. Нашли это на живом проде, а не в коде.
   url.searchParams.delete('guest');
   window.history.replaceState({}, '', url.toString());
+
+  // Вошедшего игрока не трогаем: он и так идёт к персонажам
+  if (session.token) return false;
 
   try {
     await enterAsGuest();
