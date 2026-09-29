@@ -17,8 +17,10 @@ import { GAME_SERVERS } from '../../../shared/constants';
 import { Region } from '../types/game.types';
 import { CharacterService } from '../services/CharacterService';
 import { RedisService } from '../services/RedisService';
+import { DatabaseService } from '../services/DatabaseService';
 import { GameLoop } from '../systems/GameLoop';
 import type { Weather } from '../systems/WorldTimeSystem';
+import { playerFunnel, isoDay } from '../services/playerFunnel';
 
 export const adminRouter = Router();
 const adminService = new AdminService();
@@ -202,6 +204,50 @@ adminRouter.get('/online-players', adminCheck, asyncHandler(async (_req: Request
     }
   }
   return res.json({ players, total: players.length });
+}));
+
+// ============================================================
+// GET /api/admin/funnel - воронка новичка, удержание D1/D7/D30, кривая активных
+//
+// Всё, что нужно владельцу, чтобы видеть, где отваливаются люди: сколько
+// зашли, сколько завели персонажа, сколько дошло до 5/10/20 уровня и сколько
+// вернулось на 1-й, 7-й и 30-й день. Молодая когорта отдаёт null там, где
+// день ещё не наступил: «ещё не могло вернуться» и «не вернулось» —
+// разные вещи, и путать их нельзя.
+//
+// days — размер когорты в днях (по умолчанию 30), limit — сколько дней
+// кривой активных игроков (по умолчанию столько же).
+// ============================================================
+adminRouter.get('/funnel', adminCheck, asyncHandler(async (req: Request, res: Response) => {
+  const days = Math.min(180, Math.max(1, Number(req.query.days) || 30));
+  const limit = Math.min(180, Math.max(1, Number(req.query.limit) || days));
+  const sinceRows = await DatabaseService.getInstance().query<{ event: string; since: string }>(
+    `SELECT event, MIN(DATE(timestamp))::text AS since
+     FROM analytics_events
+     WHERE event IN ('session_start','guest_login','player_login','character_created','level_up')
+     GROUP BY event`,
+  );
+  // С какого дня в аналитике вообще есть вход в мир. Когорты раньше этой
+  // даты собраны без него, и по ним возвраты занижены — отчёт помечает их
+  // флагом full, чтобы цифры не выдавали за точные.
+  const sessionStartSince =
+    sinceRows.find(r => r.event === 'session_start')?.since ?? isoDay(new Date());
+  // Когда появилось каждое событие. Отсутствие события здесь означает, что
+  // соответствующий шаг воронки будет нулём не из-за игроков, а из-за
+  // того, что событие тогда ещё не писали. Без этой карты отчёт врёт.
+  const eventSince: Record<string, string | null> = {
+    session_start: null, guest_login: null, player_login: null,
+    character_created: null, level_up: null,
+  };
+  for (const r of sinceRows) eventSince[r.event] = r.since;
+
+  const [funnel, retention, active] = await Promise.all([
+    playerFunnel.getFunnel(days, new Date()),
+    playerFunnel.getRetention(days, new Date(), sessionStartSince),
+    playerFunnel.getActiveSeries(limit, new Date()),
+  ]);
+
+  return res.json({ funnel, retention, active, sessionStartSince, eventSince });
 }));
 
 // ============================================================
