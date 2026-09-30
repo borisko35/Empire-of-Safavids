@@ -110,22 +110,35 @@ export type AchievementMeasure = AchievementCounter | AchievementState;
  * И берутся только status = 'accepted': отправленное приглашение, на
  * которое ещё не ответили, другом не является.
  */
+/**
+ * ПСЕВДОНИМ `AS n` ОБЯЗАТЕЛЕН.
+ *
+ * getStates читает row?.n. Запрос `SELECT count(*)` без псевдонима отдаёт
+ * столбец с именем 'count', и row.n был undefined - то есть ноль. Все
+ * состояния молча показывали ноль всегда, и достижения по ним не выдавались
+ * никому.
+ *
+ * На живом сервере это не выдало себя: у тестового персонажа не было ни
+ * друга, ни гильдии, ни посещений, и ноль совпадал с базой. Проверка
+ * «панель совпадает с базой» проходила именно потому, что обе стороны были
+ * нулём. Это тот случай, когда сломанная выборка неотличима от рабочей.
+ */
 export const STATE_SOURCE: Record<AchievementState, string> = {
-  has_friend: `SELECT count(*) FROM friends
+  has_friend: `SELECT count(*) AS n FROM friends
                 WHERE user_id = (SELECT user_id FROM characters WHERE id = $1)
                   AND status = 'accepted'`,
-  in_guild: 'SELECT count(*) FROM guild_members WHERE character_id = $1',
+  in_guild: 'SELECT count(*) AS n FROM guild_members WHERE character_id = $1',
 
   // Посещённые регионы. Читаются из region_visits, а НЕ из characters.region:
   // в characters.region лежит ТЕКУЩИЙ регион, и у нового персонажа он по
   // умолчанию равен 'tabriz'. Проверка по нему выдала бы «Посетить
   // Тебриз» бесплатно при регистрации.
-  regions_visited: 'SELECT count(*) FROM region_visits WHERE character_id = $1',
+  regions_visited: 'SELECT count(*) AS n FROM region_visits WHERE character_id = $1',
 
   // Тебриз отдельно, а не «регион посещён» с параметром: условие не принимает
   // значений из данных, и подставлять имя региона в SQL было бы подстановкой
   // чужого имени мимо typecheck. Имя региона написано здесь один раз.
-  visited_tabriz: `SELECT count(*) FROM region_visits
+  visited_tabriz: `SELECT count(*) AS n FROM region_visits
                     WHERE character_id = $1 AND region = 'tabriz'`,
 };
 
