@@ -106,6 +106,13 @@
      До этой строки на сайте не было ни того, ни другого: LICENSE лежал в
      корне репозитория, а игрок его не видит. Три языка - страница и так
      переключается между ними. -->
+<!-- Собранный ролик. Черновик публикации прямо запрещал постить ссылку на
+     трейлер, пока он не собран: страница, которую надо смотреть глазами и
+     записывать, - это не то же самое, что видео, и человек почувствует себя
+     обманутым. Ролик собран tools/build-trailer.sh, лежит в assets/ и весит
+     около трёх мегабайт. В связку для itch.io он НЕ входит намеренно: там
+     нужна страница, а не файл. -->
+<p class="hint vid" id="vid"><span data-vid="ru">Ролик целиком: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 секунды</a></span><span data-vid="en">The full video: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 seconds</a></span><span data-vid="az">Tam videosu: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 saniyə</a></span></p>
 <p class="hint lic" id="lic"><span data-lic="ru">Свободное программное обеспечение: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="en">Free software: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="az">Azad proqram təminatı: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span></p>
 
 <script>
@@ -245,6 +252,9 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
     document.querySelectorAll('[data-lic]').forEach((s) => {
       s.style.display = s.dataset.lic === lang ? '' : 'none';
     });
+    document.querySelectorAll('[data-vid]').forEach((s) => {
+      s.style.display = s.dataset.vid === lang ? '' : 'none';
+    });
     idx = -1;
     render();
   });
@@ -252,6 +262,9 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
 document.querySelector('[data-lang="ru"]').classList.add('on');
 document.querySelectorAll('[data-lic]').forEach((s) => {
   s.style.display = s.dataset.lic === 'ru' ? '' : 'none';
+});
+document.querySelectorAll('[data-vid]').forEach((s) => {
+  s.style.display = s.dataset.vid === 'ru' ? '' : 'none';
 });
 
 document.addEventListener('keydown', (e) => {

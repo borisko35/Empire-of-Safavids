@@ -98,3 +98,7 @@ tools/trailer-subdir-site/
 # Сам архив уже закрыт строкой *.zip выше.
 tools/itch-bundle/
 tools/itch-unpack/
+
+# Сегменты и ролики, которые собирает tools/build-trailer.sh.
+# Промежуточные файлы и пересборка - в репозитории им не место.
+tools/trailer-out/

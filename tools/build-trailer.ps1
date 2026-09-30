@@ -66,6 +66,18 @@ foreach ($s in $segments) {
   $frames = $s.dur * $FPS
   $seg = Join-Path $out ("seg{0:d2}.mp4" -f $i)
 
+  # НАЕЗД ЧЕРЕЗ НОМЕР КАДРА, А НЕ ДИАПАЗОНОМ.
+  # Раньше здесь стояло zoompan=z='1.0->1.12'. ffmpeg так не умеет:
+  #   [Parsed_zoompan_2] Undefined constant or missing '(' in '>1.12'
+  #   Failed to configure output pad
+  # Сборщик ни разу не запускали — ffmpeg не было в системе, — и ошибка
+  # осталась незамеченной. Правильный диапазон выражается через номер кадра:
+  # z='НАЧАЛО+(КОНЕЦ-НАЧАЛО)*on/(КАДРОВ-1)'. on считается с нуля, поэтому
+  # делитель — (frames-1), иначе наезд не доходит до задуманного.
+  $z1 = [regex]::Match($s.zoom, '^([\d.]+)').Groups[1].Value
+  $z2 = [regex]::Match($s.zoom, '([\d.]+)$').Groups[1].Value
+  $zoom = "z='$z1+($z2-$z1)*on/$($frames - 1)'"
+
   $text = ''
   if ($s.title) {
     $text = ",drawtext=fontfile=${font}:text='$($s.title)':fontcolor=${cream}:" +
@@ -81,30 +93,41 @@ foreach ($s in $segments) {
     '-y', '-loop', '1', '-i', $s.img,
     '-vf',
     "scale=${W}:${H}:force_original_aspect_ratio=increase," +
-    "crop=${W}:${H},zoompan=z='$($s.zoom)':d=${frames}:s=${W}x${H}:fps=${FPS}$text",
+    "crop=${W}:${H},zoompan=$zoom:d=${frames}:s=${W}x${H}:fps=${FPS}$text",
     '-t', $s.dur, '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', $seg
   )
   & ffmpeg @args 2>$null
-  if (-not (Test-Path $seg)) { throw "Сегмент $i не собрался" }
+  # Проверяется РАЗМЕР, а не наличие файла. ffmpeg создаёт выходной файл и
+  # только потом падает на фильтре, так что «файл существует» означает
+  # «что-то осталось на диске» - при сломанной сборке это 0 байт.
+  if (-not (Test-Path $seg) -or (Get-Item $seg).Length -eq 0) { throw "Сегмент $i не собрался" }
   $segFiles += $seg
 }
 
-# Склейка наложением: fadeout одного и fadein следующего внахлёст
+# Склейка наложением: fadeout одного и fadein следующего внахлёст.
+# ВХОДЫ адресуются как [0:v], [1:v] и так далее. Метки v0..vN ffmpeg не
+# создаёт сам, и без явной адресации он отвечает «Invalid stream specifier».
+# Промежуточные метки названы xN, чтобы не путались со входами. Отдаётся
+# последняя метка напрямую: «;[xN][vout]» - это список меток, а не фильтр,
+# а «;[xN]null[vout]» - у null вход должен быть подписан.
 $inputs = @()
 $segFiles | ForEach-Object { $inputs += @('-i', $_) }
 $total = ($segments | Measure-Object -Property dur -Sum).Sum
-$xfade = "xfade=transition=fade:duration=0.6:offset=0"
+$xfade = ''
 $acc = $segments[0].dur
+$prev = '[0:v]'
 for ($k = 1; $k -lt $segFiles.Count; $k++) {
-  $offset = $acc - 0.6
-  $xfade += "[v$($k-1)][v$k]xfade=transition=fade:duration=0.6:offset=$offset[v$k];"
+  $xfade += "${prev}[${k}:v]xfade=transition=fade:duration=0.6:offset=$($acc - 0.6)[x$k];"
+  $prev = "[x$k]"
   $acc += $segments[$k].dur - 0.6
 }
-$xfade = $xfade.TrimEnd(';') + "[vout]"
+$xfade = $xfade.TrimEnd(';')
+$final = "[x$($segFiles.Count - 1)]"
 
 $hor = Join-Path $out 'trailer-1920x1080.mp4'
-& ffmpeg -y @inputs -filter_complex $xfade -map '[vout]' `
+& ffmpeg -y @inputs -filter_complex $xfade -map $final `
   -c:v libx264 -pix_fmt yuv420p -r $FPS $hor 2>$null
+if (-not (Test-Path $hor) -or (Get-Item $hor).Length -eq 0) { throw 'Горизонтальный ролик не собрался' }
 
 # Вертикальная версия 1080x1920: обрезка по центру, текст крупнее
 $short = Join-Path $out 'trailer-vertical-1080x1920.mp4'
@@ -116,6 +139,29 @@ $vf = "scale=1080:1920:force_original_aspect_ratio=increase," +
       "x=(w-text_w)/2:y=880"
 & ffmpeg -y -loop 1 -i (Join-Path $shots 'combat.png') -t 10 -vf $vf `
   -c:v libx264 -pix_fmt yuv420p -r $FPS $short 2>$null
+if (-not (Test-Path $short) -or (Get-Item $short).Length -eq 0) { throw 'Вертикальный ролик не собрался' }
+
+# Проверка: ролик не только собрался, но и читается целиком. mp4 может
+# оказаться битым на середине, и без полного декодирования это не видно.
+$bad = 0
+foreach ($f in @($hor, $short)) {
+  $name = Split-Path $f -Leaf
+  $probe = & ffprobe -v error -select_streams v:0 -show_entries stream=width,height,codec_name `
+    -show_entries format=duration -of default=nw=1:nk=1 $f 2>$null
+  if (-not $probe) { Write-Host "  НЕТ  $name: ffprobe не отдал данных" -ForegroundColor Red; $bad++; continue }
+  $errs = (& ffmpeg -v error -i $f -f null - 2>&1 | Measure-Object).Count
+  if ($errs -ne 0) { $bad++ }
+  $size = [math]::Round((Get-Item $f).Length / 1MB, 1)
+  Write-Host ("  {0}  {1}  ошибок декодирования: {2}  {3} МБ" -f $name, ($probe -join ' '), $errs, $size)
+}
+if ($bad -ne 0) {
+  Write-Host ''
+  Write-Host "Плохих: $bad"
+  Write-Host 'RESULT: FAIL' -ForegroundColor Red
+  exit 1
+}
+Write-Host 'Плохих: 0'
+Write-Host 'RESULT: PASS' -ForegroundColor Green
 
 Write-Host ''
 Write-Host "Готово. Файлы в $out :" -ForegroundColor Green
