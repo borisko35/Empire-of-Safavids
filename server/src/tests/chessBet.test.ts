@@ -341,11 +341,50 @@ describe('Сдача не возвращает ставку', () => {
       query: jest.fn(async (sql: string) => { запросы.push(sql); return []; }),
       queryOne: jest.fn(async (sql: string) => { запросы.push(sql); return { game_id: 'g' }; }),
     };
-    await service.resign('game-1', CHAR);
+    const r = await service.resign('game-1', CHAR);
     expect({
+      закрыла: r.ok,
       помечает_отказом: запросы.some(q => /SET status = 'resigned'/.test(q)),
       золото_не_трогаем: !запросы.some(q => /characters SET gold/.test(q)),
-    }).toEqual({ помечает_отказом: true, золото_не_трогаем: true });
+    }).toEqual({ закрыла: true, помечает_отказом: true, золото_не_трогаем: true });
+  });
+
+  it('повторная сдача говорит, что уже закрыто, а не «закрыто»', async () => {
+    // ОШИБКА, НАЙДЕННАЯ НА БОЕВОМ СЕРВЕРЕ. Метод спрашивал «есть ли
+    // партия в статусе resigned» и получал «да» даже при повторной сдаче:
+    // партия действительно была отказана, но не этим вызовом. Игрок видел
+    // «закрыто», как будто его запрос что-то сделал.
+    //
+    // Денег тут не входит, поэтому ложь стоила не золота. Но в следующей
+    // правке, где по нему решают, показывать ли сообщение, стоила бы.
+    const service = new ChessBetService();
+    let обновлений = 0;
+    (service as unknown as { db: unknown }).db = {
+      query: jest.fn(async () => []),
+      queryOne: jest.fn(async (sql: string) => {
+        if (/UPDATE chess_games/.test(sql)) { обновлений++; return null; }  // партия уже отказана
+        return null;
+      }),
+    };
+    const r = await service.resign('game-1', CHAR);
+    expect({
+      закрыла: r.ok,
+      уже_была: r.alreadyClosed,
+      // Отдельного SELECT «а есть ли она resigned» быть не должно: именно
+      // он давал ложное «закрыто».
+      без_запроса_о_существовании: обновлений === 1,
+    }).toEqual({ закрыла: false, уже_была: true, без_запроса_о_существовании: true });
+  });
+
+  it('отказ закрывает партию возвратом строки, а не догадкой', () => {
+    // Возврат строки - единственное доказательство, что UPDATE что-то
+    // изменил. Без него «закрыто» остаётся догадкой.
+    const сервис = читать('server/src/services/ChessBetService.ts');
+    const блок = сервис.slice(сервис.indexOf('async resign'), сервис.indexOf('\n  }', сервис.indexOf('async resign')));
+    expect({
+      возвращает_строку: /RETURNING game_id/.test(блок),
+      нет_отдельного_select: !/SELECT game_id FROM chess_games/.test(блок),
+    }).toEqual({ возвращает_строку: true, нет_отдельного_select: true });
   });
 });
 

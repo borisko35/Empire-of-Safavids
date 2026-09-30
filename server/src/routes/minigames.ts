@@ -218,7 +218,7 @@ router.post('/resign', authMiddleware, async (req, res) => {
   if (!gameId) { res.status(400).json({ error: 'gameId is required' }); return; }
   const итог = await bets.resign(gameId, персонаж);
   chess.deleteGame(gameId);
-  res.json({ success: true, closed: итог.ok, betLost: true });
+  res.json({ success: true, closed: итог.ok, alreadyClosed: итог.alreadyClosed, betLost: итог.ok });
 });
 
 export default router;

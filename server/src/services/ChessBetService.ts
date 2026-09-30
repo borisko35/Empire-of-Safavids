@@ -164,20 +164,23 @@ export class ChessBetService {
    * Партия помечается отказом, и повторный запрос на выплату по ней
    * ничего не даст: статус уже не playing.
    */
-  async resign(gameId: string, characterId: string): Promise<{ ok: boolean }> {
-    const r = await this.db.query(
+  async resign(gameId: string, characterId: string): Promise<{ ok: boolean; alreadyClosed: boolean }> {
+    // RETURNING вместо отдельного SELECT. Предыдущая версия спрашивала
+    // «есть ли партия в статусе resigned» - и получала «да» даже при
+    // повторной сдаче, потому что партия действительно была отказана, но
+    // не этим вызовом. Ответ врал: игрок видел «закрыто», как будто его
+    // запрос что-то сделал.
+    //
+    // Денег тут не входит, поэтому ложный ответ не стоил золота. Но он
+    // стоил бы в следующей правке, где по нему решают, показывать ли
+    // сообщение.
+    const закрыли = await this.db.queryOne<{ game_id: string }>(
       `UPDATE chess_games SET status = 'resigned', finished_at = NOW()
-        WHERE game_id = $1 AND character_id = $2 AND status = 'playing'`,
+        WHERE game_id = $1 AND character_id = $2 AND status = 'playing'
+      RETURNING game_id`,
       [gameId, characterId],
     );
-    // query не сообщает, сколько строк затронуто в этом драйвере, поэтому
-    // считаем факт отказа отдельным вопросом: игрок должен знать, что его
-    // партия закрыта, а не молчать.
-    const есть = await this.db.queryOne<{ game_id: string }>(
-      'SELECT game_id FROM chess_games WHERE game_id = $1 AND character_id = $2 AND status = $3',
-      [gameId, characterId, 'resigned'],
-    );
-    return { ok: !!есть, ...(r ? {} : {}) };
+    return { ok: !!закрыли, alreadyClosed: !закрыли };
   }
 
   /**
