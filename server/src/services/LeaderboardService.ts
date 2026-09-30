@@ -98,10 +98,21 @@ export class LeaderboardService {
       if (!val) continue;
       const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
       values.push(Math.floor(val));
-      const ph = `$${values.length}`;
+      // Плейсхолдер счётчика сдвинут на единицу: $1 в этом запросе -
+      // character_id, то есть UUID персонажа, и счётчик он не примет
+      // («column "poetry_completed" is of type integer but expression is
+      // of type uuid»).
+      //
+      // ПОЧЕМУ ЭТО БЫЛО НЕ ЗАМЕТНО. Ошибка возникала только на ветке
+      // DO UPDATE, то есть когда строка рейтинга уже есть. Первое
+      // событие создавало строку через VALUES и проходило, все
+      // последующие падали. На боевом сервере в рейтинге было НОЛЬ
+      // убийств при работающей вкладке «Убийства»: счётчик «работал»
+      // ровно один раз на персонажа, а остальное молча глотал catch.
+      const ph = `$${values.length + 1}`;
       cols.push(col);
       // Именно сложение, а не присваивание — ради этого метод отдельный
-      fields.push(`${col} = ${ph}`);
+      fields.push(`${col} = leaderboard.${col} + ${ph}`);
     }
 
     if (cols.length === 0) return;
