@@ -125,6 +125,55 @@ router.post('/deposit-gold', authMiddleware, async (req: any, res) => {
 });
 
 /**
+ * Покупка уровня гильдейского навыка.
+ *
+ * ЧТО БЫЛО. GuildService.upgradeSkill был написан целиком: проверял право
+ * manageTreasury, считал цену, не давал в долг и сбрасывал кэш бонусов. И
+ * не вызывался НИГДЕ - маршрута не было. Три навыка имели настоящие
+ * эффекты (опыт, золото, скорость крафта), и ни один нельзя было купить.
+ *
+ * Это тот же класс поломки, что был со складом: depositItem тоже был
+ * единственным писателем в guild_bank и тоже не вызывался, пока не
+ * появился маршрут. Метод без маршрута выглядит работающей функцией и
+ * молчит.
+ *
+ * ПРАВО. Качает уровень, а не деньги: деньги идут из котла гильдии. Но
+ * решение тратит котло��вое золото, поэтому право то же, что и у вывода
+ * средств, - manageTreasury. Сделать это может офицер с соответствующим
+ * правом, а не рядовой участник.
+ */
+router.post('/skills/upgrade', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = await ownCharacterId(req);
+    if (!characterId) { res.status(403).json({ error: 'characterId is required' }); return; }
+    const { skillId, levels } = req.body ?? {};
+    if (!skillId) { res.status(400).json({ error: 'skillId is required' }); return; }
+
+    const data = await guilds.getGuildByCharacter(characterId);
+    if (!data) { res.status(400).json({ error: 'Not in a guild' }); return; }
+
+    const result = await guilds.upgradeSkill(data.guild.id, characterId, skillId, levels);
+    res.json({ success: true, ...result });
+  } catch (err) {
+    // Ошибки сервиса названы словами и осмысленны, а не тексты ради текста:
+    // клиенту нужно отличить «нет права» от «нет золота», иначе он
+    // покажет одно и то же на все случаи.
+    const code = (err as Error).message;
+    const статус: Record<string, number> = {
+      NOT_A_MEMBER: 403,
+      SKILLS_FORBIDDEN: 403,
+      // Навык без точки применения - это не ошибка игрока, а наша недоработка.
+      // Отдаём 409, а не 400: так в логах видно, что дело в сервере.
+      SKILL_UNAVAILABLE: 409,
+      SKILL_UNKNOWN: 404,
+      SKILL_MAXED: 400,
+      NOT_ENOUGH_GUILD_GOLD: 400,
+    };
+    res.status(статус[code] ?? 400).json({ error: code });
+  }
+});
+
+/**
  * Склад гильдии: вклад и выдача предметов.
  *
  * ЧТО БЫЛО. GuildService.depositItem был единственным писателем в таблицу
