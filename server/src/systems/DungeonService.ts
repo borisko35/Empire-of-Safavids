@@ -284,11 +284,11 @@ export class DungeonService {
         requiredBossIds: new Set(),
         killedBossIds: new Set(),
         startedAt: new Date(row.started_at).getTime(),
-      // Смерти ДО перезапуска восстановить нельзя: в базе их нет, и
-      // специальной таблицы для них тоже нет. Сессия продолжается с
-      // нуля, и заход, в котором игрок умер до перезапуска, может быть
-      // засчитан как безсмертный. Это известная дыра, а не замысел.
-      deaths: new Map(),
+      // Смерти ДО перезапуска читаются из таблицы. Раньше здесь стояло
+      // «смерти восстановить нельзя, это дыра»: память умирала вместе с
+      // сервером, и заход, в котором игрок умер до рестарта,
+      // засчитывался как безсмертный.
+      deaths: await this.loadDeaths(row.id),
       };
       session.members.add(row.leader_id);
       this.spawnSessionMonsters(session, def);
@@ -499,6 +499,53 @@ export class DungeonService {
     const session = this.sessions.get(sessionId);
     if (!session) return;
     session.deaths.set(characterId, (session.deaths.get(characterId) ?? 0) + 1);
+
+    // Продолжение счётчика в базу - чтобы смерть пережила перезапуск.
+    //
+    // Без этого память обнулялась вместе с сервером, и заход, в котором
+    // игрок умер ДО рестарта, засчитывался как безсмертный: достижение
+    // выдавалось за то, чего не было.
+    //
+    // Ошибка НЕ поднимается: recordDeath зовётся из боевого тика, и
+    // исключение здесь означало бы, что тик встал из-за счётчика
+    // достижения. Пишем в журнал и идём дальше - незаписанная смерть
+    // лучше остановленного боя у всех.
+    void this.db.query(
+      `INSERT INTO dungeon_deaths (session_id, character_id, deaths, updated_at)
+       VALUES ($1, $2, 1, NOW())
+       ON CONFLICT (session_id, character_id) DO UPDATE
+         SET deaths = dungeon_deaths.deaths + 1, updated_at = NOW()`,
+      [sessionId, characterId],
+    ).catch((e: unknown) => {
+      logger.error('[Dungeon] смерть не записана в базу:', (e as Error).message);
+    });
+  }
+
+  /**
+   * Прочитать смерти участников сессии из базы.
+   *
+   * Нужна для восстановления после перезапуска: без неё сессия начинала
+   * считать с нуля, и заход, в котором игрок умер ДО рестарта, выглядел
+   * безсмертным.
+   *
+   * Ошибка чтения возвращает пустую карту, а не выдуманные нули: пустая
+   * карта означает «смертей не нашли», и это честно для сессии, в которой
+   * никто не умер. Если база недоступна, это уже видно по другим
+   * запросам восстановления, и молчаливый ноль здесь был бы враньём.
+   */
+  private async loadDeaths(sessionId: string): Promise<Map<string, number>> {
+    const карта = new Map<string, number>();
+    const строки = await this.db.query<{ character_id: string; deaths: number }>(
+      'SELECT character_id, deaths FROM dungeon_deaths WHERE session_id = $1',
+      [sessionId],
+    ).catch((e: unknown) => {
+      logger.error('[Dungeon] смерти сессии не прочитаны:', (e as Error).message);
+      return [] as { character_id: string; deaths: number }[];
+    });
+    for (const строка of строки) {
+      карта.set(строка.character_id, Number(строка.deaths) || 0);
+    }
+    return карта;
   }
 
   /** Сколько раз персонаж умер за эту сессию. */
