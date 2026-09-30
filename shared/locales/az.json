@@ -527,9 +527,6 @@
     "news_6_d": "Saytda top-10 oyunçu və moderatorlar üçün onlayn monitorinq.",
     "news_6_t": "Reytinq və admin paneli",
     "news_title": "İmperiya xəbərləri",
-    "news_update_d": "Gecə saat 00:00-də böyük yeniləmə gəlir: yeni yerlər, bosslu zindanlar, arenada komanda döyüşləri və düzəlişlər. Nənin dəyişəcəyinə bax.",
-    "news_update_link": "Yeniləmə haqqında",
-    "news_update_t": "Böyük yeniləmə — 1 oktyabr",
     "page_feedback": "Geribildirim — Empire of Safavids",
     "page_forum": "Forum — Empire of Safavids",
     "page_index": "Empire of Safavids — Action MMORPG | Səfəvi İmparatorluğu",
@@ -584,8 +581,7 @@
     "tasks_title": "Gündəlik tapşırıqlar",
     "tower_start": "İşə başla",
     "tower_title": "Sonsuz Qala",
-    "twitter_desc": "Xəbərlər və yeniləmələr",
-    "update_title": "Yeniləmə"
+    "twitter_desc": "Xəbərlər və yeniləmələr"
   },
   "common": {
     "loading": "Yüklənir…",

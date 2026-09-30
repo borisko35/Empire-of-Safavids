@@ -527,9 +527,6 @@
     "news_6_d": "Top-10 players on the site and online monitoring for moderators.",
     "news_6_t": "Ratings and admin panel",
     "news_title": "Empire News",
-    "news_update_d": "A large update arrives at midnight: new locations, dungeons with bosses, team fights in the arena, and a batch of fixes. See exactly what is changing.",
-    "news_update_link": "Update details",
-    "news_update_t": "Major update — October 1",
     "page_feedback": "Feedback — Empire of Safavids",
     "page_forum": "Forum — Empire of Safavids",
     "page_index": "Empire of Safavids — Action MMORPG | Safavid Empire",
@@ -584,8 +581,7 @@
     "tasks_title": "Daily Tasks",
     "tower_start": "Start run",
     "tower_title": "Endless Tower",
-    "twitter_desc": "News and updates",
-    "update_title": "Update"
+    "twitter_desc": "News and updates"
   },
   "common": {
     "loading": "Loading…",

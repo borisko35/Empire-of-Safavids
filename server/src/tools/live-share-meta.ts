@@ -22,7 +22,7 @@ function must(условие: unknown, причина: string): void {
 // случайно.
 export {};
 
-const СТРАНИЦЫ = ['/', '/trailer.html', '/forum.html', '/feedback.html', '/update.html'];
+const СТРАНИЦЫ = ['/', '/trailer.html', '/forum.html', '/feedback.html'];
 
 // Адреса перебираются: у клиента нет опубликованных портов, он доступен
 // только по имени внутри сети compose.
