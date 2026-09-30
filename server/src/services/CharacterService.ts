@@ -368,7 +368,7 @@ export class CharacterService {
   async recalcMaxHp(characterId: string, multiplier: number): Promise<void> {
     const множитель = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
     await this.db.query(
-      'UPDATE characters SET max_hp = GREATEST(1, ROUND(base_max_hp * $2)), updated_at = NOW() WHERE id = $1',
+      'UPDATE characters SET max_hp = GREATEST(1, ROUND(base_max_hp * $2::numeric)), updated_at = NOW() WHERE id = $1',
       [characterId, множитель],
     ).catch((e: unknown) => {
       // Ошибка не поднимается: потеря бонуса лучше упавшего вызова из
