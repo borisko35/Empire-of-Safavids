@@ -90,6 +90,10 @@ export class LeaderboardService {
     poetryCompleted?: number;
     /** Победы в шахматах. Начисляются за выплаченную выплату. */
     chessWins?: number;
+    /** Пройденные подземелья. */
+    dungeonsCleared?: number;
+    /** Скрафченные предметы. Начисляются за УСПЕШНЫЙ крафт. */
+    itemsCrafted?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];

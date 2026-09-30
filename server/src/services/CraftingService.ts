@@ -3,6 +3,10 @@
 // ============================================================
 
 import { DatabaseService } from './DatabaseService';
+// Счётчик скрафченных предметов для достижения. Общая таблица
+// leaderboard, а не своя: свой счётчик - третье место учёта, где его
+// легко забыть внести в список достижений.
+import { LeaderboardService } from './LeaderboardService';
 import { logger } from '../utils/logger';
 import { CRAFTING_RECIPES, CraftingCategory, canCraft } from '../data/crafting';
 import { v4 as uuidv4 } from 'uuid';
@@ -193,6 +197,26 @@ export class CraftingService {
     });
 
     logger.info(`Crafting ${success ? 'succeeded' : 'failed'}: ${recipe.resultItemId} for ${job.character_id}`);
+
+    // Счётчик достижения растёт ТОЛЬКО за успешный крафт и ТОЛЬКО после
+    // завершения транзакции.
+    //
+    // ПОЧЕМУ ПОСЛЕ, А НЕ ВНУТРИ ЧЕРЕЗ client.query. Свой вызов increment
+    // открыл бы другое соединение в обход транзакции: при откате крафта
+    // предмет и опыт исчезли бы, а счётчик остался бы. Ровно та ошибка,
+    // о которой предупреждает комментарий выше про опыт ремесла.
+    //
+    // ПОЧЕМУ НЕ ЗА НЕУДАЧНЫЙ КРАФТ. Предмет не выдан, деньги за него не
+    // заплачены. Считать попытку было бы достижением «скрафтить»,
+    // которого игрок не выполнил.
+    if (success) {
+      // Ошибка здесь не поднимается: предмет уже в инвентаре, и ронять
+      // маршрут из-за счётчика - значит показать игроку ошибку на
+      // честно выданный предмет.
+      await new LeaderboardService().increment(job.character_id, { itemsCrafted: 1 })
+        .catch(err => logger.error('[Craft] счётчик предметов не вырос:', (err as Error).message));
+    }
+
     return { success, itemId: recipe.resultItemId, quantity: success ? recipe.resultQuantity : 0 };
   }
 

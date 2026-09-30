@@ -145,7 +145,8 @@ describe('Условие достижения настоящее', () => {
     }
     // Зафиксировано руками: новый счётчик обязан сломать эту проверку.
     expect(Object.keys(COUNTER_COLUMN).sort()).toEqual([
-      'chess_wins', 'monsters_killed', 'parries', 'poetry_completed', 'pvp_wins', 'quests_completed',
+      'chess_wins', 'dungeons_cleared', 'items_crafted',
+      'monsters_killed', 'parries', 'poetry_completed', 'pvp_wins', 'quests_completed',
     ]);
   });
 
@@ -240,7 +241,10 @@ describe('Выдача сверяется с условием, а не с про
     const { service, запросы } = подменить({ без_строки_рейтинга: true });
     return service.getCounters(CHAR).then(c => {
       expect({ счётчики: c }).toEqual({
-        счётчики: { chess_wins: 0, monsters_killed: 0, parries: 0, poetry_completed: 0, pvp_wins: 0, quests_completed: 0 },
+        счётчики: {
+          chess_wins: 0, dungeons_cleared: 0, items_crafted: 0,
+          monsters_killed: 0, parries: 0, poetry_completed: 0, pvp_wins: 0, quests_completed: 0,
+        },
       });
     }).then(() => {
       expect({ спросил_лидерборд: запросы.some(q => /FROM leaderboard/.test(q)) })
@@ -285,9 +289,20 @@ describe('Прогресс в панели честный', () => {
     // Ноль рядом с «Скрафтить 50 предметов» выглядит как «не крафтил».
     // Настоящий ноль растёт, этот - нет. Панель по null пишет
     // «пока не считается», и это правда.
+    //
+    // Пример берётся ИЗ ДАННЫХ, а не зашивается. Первый вариант проверки
+    // брал ach_craft_master - и когда тому завели настоящий счётчик
+    // предметов, проверка стала проверять противоположное: у достижения
+    // с условием current обязан быть числом, а не null. Зашитый пример
+    // молча меняет смысл проверки вслед за данными.
+    const безУсловия = ACHIEVEMENTS.find(a => !a.condition);
+    // Если бы условия появились у всех, проверять было бы нечего - и она
+    // должна сказать это прямо, а не проходить на пустом обходе.
+    expect({ есть_хоть_одно_без_условия: !!безУсловия }).toEqual({ есть_хоть_одно_без_условия: true });
     const { service } = подменить({ счётчики: { parries: 7 } });
-    const p = await service.getProgress(CHAR, 'ach_craft_master');
-    expect(p).toEqual({ unlocked: false, current: null, need: null, counted: false });
+    const p = await service.getProgress(CHAR, безУсловия!.id);
+    expect({ id: безУсловия!.id, ...p })
+      .toEqual({ id: безУсловия!.id, unlocked: false, current: null, need: null, counted: false });
   });
 
   it('неизвестное достижение не ломает панель', async () => {
@@ -391,7 +406,8 @@ describe('Проверка не пустая', () => {
     // Было 9 и 12, стало 10 и 11, потом 12 и 9: «Шахматный Гений» получил
     // счётчик побед, а «Дружелюбный» и «Член Гильдии» - условие по
     // состоянию, которое пересчитывается из своих таблиц.
-    expect({ с_условием, без }).toEqual({ с_условием: 12, без: 9 });
+    // Стало 15 и 6: подземелья и крафт получили настоящие счётчики.
+    expect({ с_условием, без }).toEqual({ с_условием: 15, без: 6 });
   });
 
   it('счётчик парирований — не единственный, кто ссылается на лидерборд', () => {
@@ -404,7 +420,7 @@ describe('Проверка не пустая', () => {
     // подстраивается сама, не напомнит ничего.
     //
     // Было 5, стало 6: добавлен chess_wins под «Шахматный Гений».
-    expect({ использований }).toEqual({ использований: 6 });
+    expect({ использований }).toEqual({ использований: 8 });
   });
 
   it('список счётчиков не растёт в обход схемы', () => {

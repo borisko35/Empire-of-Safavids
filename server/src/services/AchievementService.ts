@@ -71,7 +71,9 @@ export type AchievementCounter =
   | 'pvp_wins'
   | 'quests_completed'
   | 'poetry_completed'
-  | 'chess_wins';
+  | 'chess_wins'
+  | 'dungeons_cleared'
+  | 'items_crafted';
 
 /**
  * Условия, которые не счётчик, а состояние.
@@ -121,6 +123,8 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   quests_completed: 'quests_completed',
   poetry_completed: 'poetry_completed',
   chess_wins: 'chess_wins',
+  dungeons_cleared: 'dungeons_cleared',
+  items_crafted: 'items_crafted',
 };
 
 /**
@@ -190,7 +194,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: 'exploration', icon: '🌍', reward_gold: 1000, reward_experience: 2000, reward_title: 'Странник Миров', hidden: false },
   { id: 'ach_dungeon_first', title: 'Dungeon Delver', title_ru: 'Исследователь Подземелий',
     description: 'Complete your first dungeon', description_ru: 'Пройти первое подземелье',
-    category: 'exploration', icon: '🏰', reward_gold: 200, reward_experience: 400, hidden: false },
+    category: 'exploration', icon: '🏰', reward_gold: 200, reward_experience: 400, hidden: false,
+    condition: { counter: 'dungeons_cleared', need: 1 } },
 
   // ── СОЦИАЛЬНОЕ ───────────────────────────────────────
   { id: 'ach_first_friend', title: 'Friendly', title_ru: 'Дружелюбный',
@@ -209,10 +214,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // ── КРАФТ / ТОРГОВЛЯ ─────────────────────────────────
   { id: 'ach_first_craft', title: 'Apprentice Crafter', title_ru: 'Ученик Кузнеца',
     description: 'Craft your first item', description_ru: 'Скрафтить первый предмет',
-    category: 'crafting', icon: '🔨', reward_gold: 50, reward_experience: 50, hidden: false },
+    category: 'crafting', icon: '🔨', reward_gold: 50, reward_experience: 50, hidden: false,
+    condition: { counter: 'items_crafted', need: 1 } },
   { id: 'ach_craft_master', title: 'Master Crafter', title_ru: 'Мастер Крафта',
     description: 'Craft 50 items', description_ru: 'Скрафтить 50 предметов',
-    category: 'crafting', icon: '⚒️', reward_gold: 500, reward_experience: 1000, reward_title: 'Мастер Ремесла', hidden: false },
+    category: 'crafting', icon: '⚒️', reward_gold: 500, reward_experience: 1000, reward_title: 'Мастер Ремесла', hidden: false,
+    condition: { counter: 'items_crafted', need: 50 } },
   { id: 'ach_trader', title: 'Silk Road Trader', title_ru: 'Торговец Шёлкового Пути',
     description: 'Complete 10 trade contracts', description_ru: 'Выполнить 10 торговых контрактов',
     category: 'crafting', icon: '💰', reward_gold: 300, reward_experience: 500, hidden: false },

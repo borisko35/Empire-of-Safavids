@@ -15,6 +15,9 @@ import { DatabaseService } from '../services/DatabaseService';
 import { grantReputation } from './ReputationGrants';
 import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
+// Счётчик пройденных подземелий для достижения. Общая таблица
+// leaderboard - там же убийства, парирования, стихи и шахматы.
+import { LeaderboardService } from '../services/LeaderboardService';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -405,6 +408,19 @@ export class DungeonService {
       [killerId, session.dungeonId, totalMonsters, session.killedBossIds.size, durationSec]
     ).catch((e) => logger.warn(`[Dungeon] не удалось записать историю: ${e}`));
     await this.closeSessionInDb(session.id, 'completed');
+
+    // Счётчик достижения «пройти первое подземелье». Раньше он не
+    // существовал, и достижение значилось «пока не считается», хотя
+    // подземелья в игре работают.
+    //
+    // ПОСЛЕ closeSessionInDb, А НЕ ДО НЕЁ. Если запись подземелья не
+    // прошла, подземелье не засчитано, и расти счётчику не от чего.
+    //
+    // Ошибка не поднимается: награда и опыт уже выданы, и ронять
+    // прохождение из-за счётчика - значит отнять у игрока то, что он
+    // честно заработал.
+    await new LeaderboardService().increment(killerId, { dungeonsCleared: 1 })
+      .catch((e) => logger.warn(`[Dungeon] счётчик прохождений не вырос: ${e}`));
 
     this.disposeSession(session);
     return info;
