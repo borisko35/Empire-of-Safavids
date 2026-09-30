@@ -1,4 +1,13 @@
 {
+  "debuffs": {
+    "stun": "Stun",
+    "slow": "Slow",
+    "bleed": "Bleeding",
+    "poison": "Poison",
+    "fear": "Fear",
+    "stunned_hint": "You are stunned and cannot attack"
+  },
+
   "meta": {
     "name": "English",
     "code": "en"
@@ -207,7 +216,7 @@
     "combat_error_not_in_group": "You are not in this dungeon group",
     "combat_error_stance_needs_mount": "This stance is only available on horseback",
     "combat_error_skill_not_active": "This skill is not activated: it works on its own",
-    "combat_error_skill_no_effect": "The skill has no effect — contact the administration",
+    "combat_error_stunned": "You are stunned and cannot attack",
     "combat_error_stance_unknown": "No such stance",
     "stance_title": "Combat style",
     "stance_balanced": "Standard",

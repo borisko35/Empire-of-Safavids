@@ -20,6 +20,9 @@ import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { AuctionService } from '../services/AuctionService';
+import { DebuffService } from '../services/DebuffService';
+import { debuffPlan, isWorthApplying } from './MonsterEffects';
+import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
 import { logger } from '../utils/logger';
 
@@ -31,6 +34,11 @@ const KARMA_DECAY_EVERY = 3600; // распад кармы раз в час
 // что погрешность в пять минут на возврат вещи никто не заметит, а запрос
 // будет один на сервер вместо тысячи
 const AUCTION_SWEEP_EVERY = 300;
+// Урон со временем тикает раз в 2 секунды: ровно с периодом яда, самого
+// медленного из эффектов. Тикать чаще нечего - сумма за все секунды не
+// должна зависеть от частоты проверки, а тик кровотечения раз в секунду
+// добрал бы свою долю на следующем проходе.
+const DEBUFF_TICK_EVERY = 2;
 
 export class GameLoop {
   private static instance: GameLoop;
@@ -39,6 +47,7 @@ export class GameLoop {
   private karmaSystem = new KarmaSystem();
   private worldTime = new WorldTimeSystem();
   private characters = new CharacterService();
+  private debuffService = new DebuffService();
   private redis = RedisService.getInstance();
   private defenseStates = DefenseStates.getInstance();
   private equipment = EquipmentCache.getInstance();
@@ -159,6 +168,12 @@ export class GameLoop {
       if (this.tickCount % AUCTION_SWEEP_EVERY === 0) {
         this.auctionSweep().catch((e) => logger.error('[GameLoop] auctionSweep rejected:', e));
       }
+
+      // Урон со временем: кровотечение и яд. Отдельный проход раз в
+      // DEBUFF_TICK_EVERY секунд по всем, кто онлайн.
+      if (this.tickCount % DEBUFF_TICK_EVERY === 0) {
+        this.tickDebuffs().catch((e) => logger.error('[GameLoop] tickDebuffs rejected:', e));
+      }
     } catch (error) {
       logger.error('[GameLoop] Tick error:', error);
     }
@@ -250,6 +265,20 @@ export class GameLoop {
 
       const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
       if (!applied) continue;
+
+      // Эффект из данных монстра. Раньше `effect` и `effectDuration` были
+      // объявлены у одиннадцати способностей и не читались нигде: монстр
+      // бил числом и забывал, что у него написано. «Землетрясение» с
+      // остановкой на 5 секунд выглядело как обычный удар.
+      //
+      // Пропускаем при уклонении: если удара не было, отравления быть не
+      // должно - иначе монстр мог бы отравить игрока, стоявшего вне
+      // досягаемости, и игрок уходил бы с ядом, которого не видел.
+      const план = !isDodged ? debuffPlan(this.monsterSkill(atk)) : null;
+      if (план && isWorthApplying(план.durationMs)) {
+        await this.debuffService.apply(target.id, план, atk.instanceId);
+      }
+
       await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_HIT(atk.shardId, atk.region), {
         characterId: target.id,
         instanceId: atk.instanceId,
@@ -260,10 +289,88 @@ export class GameLoop {
         isDodged,
         isBlocked: !isDodged && defenseMult < 1,
         died: applied.died,
+        // Имя эффекта едет вместе с ударом, а не отдельным сообщением:
+        // клиенту нужно показать иконку в тот же миг, что и число урона.
+        // Отдельный пакет пришёл бы на секунду позже и затерялся бы при
+        // большой серии ударов.
+        debuff: план && isWorthApplying(план.durationMs)
+          ? { id: план.debuffId, kind: план.kind, durationMs: план.durationMs }
+          : null,
       }).catch(() => {});
     }
     } catch (error) {
       logger.error('[GameLoop] tickAI error:', error);
+    }
+  }
+
+  /**
+   * Способность монстра, которой он бил, - или заглушка для удара с руки.
+   *
+   * Заглушка нужна, потому что `debuffPlan` спрашивает `effect` и
+   * `effectDuration` у настоящего описания. Удару с руки эффекта не
+   * полагается, и пустая заглушка честнее, чем искать способность по
+   * несуществующему id и получать первую попавшуюся.
+   */
+  private monsterSkill(atk: { skillId?: string; instanceId: string }): Pick<
+    MonsterSkill, 'id' | 'damage' | 'effect' | 'effectDuration'
+  > {
+    const ctx = this.spawnSystem.getAI().getContext(atk.instanceId);
+    const найденная = atk.skillId ? ctx?.definition.skills.find(s => s.id === atk.skillId) : undefined;
+    if (найденная) return найденная;
+    const ударСРуки = Math.max(3, Math.round((ctx?.definition.strength ?? 1) * 1.6));
+    return { id: atk.skillId ?? 'monster_melee', damage: ударСРуки, effect: undefined, effectDuration: undefined };
+  }
+
+  /**
+   * Начислить урон со временем всем, у кого есть эффекты.
+   *
+   * Кто именно поражён, решает база: игрок с одним монстром в 20 шагах и
+   * игрок в центре(Isfahan) за полем отличаются только наличием строки в
+   * character_debuffs. Список онлайн-игроков берётся у Redis - это тот же
+   * список, по которому уже идут респавн и распад кармы.
+   *
+   * Порядок важен: сначала списание урона, потом вещание остатка. Если
+   * разошлись, игрок увидит иконку яда и через секунду умрёт, не
+   * успев понять, от чего. Обратный порядок лучше не читается: игрок
+   * видит, что яд кончился, и умирает от его последнего тика.
+   */
+  private async tickDebuffs(): Promise<void> {
+    const сейчас = Date.now();
+    for (const shardId of this.spawnSystem.getActiveShards()) {
+      for (const region of Object.values(Region)) {
+        const ids = await this.redis.getPlayersInRegion(shardId, region).catch(() => [] as string[]);
+        for (const id of ids) {
+          const итог = await this.debuffService.settle(id, сейчас);
+          if (!итог.debuffs.length && итог.damage === 0) continue;
+
+          let hp = 0;
+          let maxHp = 0;
+          let умер = false;
+          if (итог.damage > 0) {
+            const нанесено = await this.characters.applyDamage(id, итог.damage).catch(() => null);
+            if (нанесено) {
+              hp = нанесено.hp;
+              maxHp = нанесено.maxHp;
+              умер = нанесено.died;
+            }
+          }
+          await this.redis.publish(REDIS_CHANNELS.REGION_DEBUFF_TICK(shardId, region), {
+            characterId: id,
+            damage: итог.damage,
+            hp,
+            maxHp,
+            died: умер,
+            debuffs: итог.debuffs.map(d => ({
+              id: d.debuffId, kind: d.kind,
+              // Сколько секунд осталось, а не абсолютное время: клиенту
+              // нужен обратный отсчёт, и присылать ему epoch - значит
+              // заставлять клиент вычитать из своих часов.
+              secondsLeft: Math.max(0, Math.round((d.expiresAt - сейчас) / 1000)),
+              magnitude: d.magnitude,
+            })),
+          }).catch(() => {});
+        }
+      }
     }
   }
 

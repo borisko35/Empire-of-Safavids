@@ -100,6 +100,9 @@ export const SOCKET_EVENTS = {
   COMBAT_ACTION: 'combat:action',
   COMBAT_RESULT: 'combat:result',
   COMBAT_HIT: 'combat:hit',
+  // Урон со временем и список эффектов, висящих на игроке. Отдельное
+  // событие от combat:hit: там удар, здесь то, что длится секунды.
+  DEBUFF_TICK: 'combat:debuff_tick',
   COMBAT_VISUAL: 'combat:visual',
   COMBAT_HEAL: 'combat:heal',
   COMBAT_ERROR: 'combat:error',
@@ -312,6 +315,10 @@ export const REDIS_CHANNELS = {
   REGION_NOTIFICATION: (shardId: string, region: string) => `region:${shardId}:${region}:notification`,
   REGION_MONSTER_KILLED: (shardId: string, region: string) => `region:${shardId}:${region}:monster_killed`,
   REGION_MONSTER_HIT: (shardId: string, region: string) => `region:${shardId}:${region}:monster_hit`, // монстр ударил игрока
+  // Урон со временем и список того, что сейчас висит на игроке. Отдельный
+  // канал от monster_hit: тот приходит в момент удара, а этот - на
+  // проходе раз в две секунды и несёт остаток эффектов, а не удар.
+  REGION_DEBUFF_TICK: (shardId: string, region: string) => `region:${shardId}:${region}:debuff_tick`,
 } as const;
 
 // ============================================================

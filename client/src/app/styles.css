@@ -2278,3 +2278,31 @@ body[data-display="windowed"] #screen-world::after {
   color: var(--cream-dim);
   white-space: nowrap;
 }
+
+/* Эффекты монстров: иконки с обратным отсчётом и метка оглушения. */
+#debuff-bar {
+  position: fixed;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 40;
+  pointer-events: none;
+}
+#debuff-bar .debuff-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(18, 14, 10, 0.82);
+  border: 1px solid;
+  border-radius: 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+#debuff-bar .debuff-icon { font-size: 15px; }
+#debuff-bar .debuff-name { font-weight: 600; }
+/* Секунды отдельным классом: обратный отсчёт меняется каждую секунду,
+   и не должен дёргать ширину всей полоски вместе с подписью. */
+#debuff-bar .debuff-time { opacity: 0.75; font-variant-numeric: tabular-nums; }

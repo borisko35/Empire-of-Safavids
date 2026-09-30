@@ -1,4 +1,13 @@
 {
+  "debuffs": {
+    "stun": "Оглушение",
+    "slow": "Замедление",
+    "bleed": "Кровотечение",
+    "poison": "Отравление",
+    "fear": "Страх",
+    "stunned_hint": "Вы оглушены и не можете бить"
+  },
+
   "meta": {
     "name": "Русский",
     "code": "ru"
@@ -207,7 +216,7 @@
     "combat_error_not_enough_mana": "Не хватает маны",
     "combat_error_stance_needs_mount": "Эта стойка доступна только верхом",
     "combat_error_skill_not_active": "Этот навык не включается: он работает сам по себе",
-    "combat_error_skill_no_effect": "У навыка нет эффекта — обратитесь к администрации",
+    "combat_error_stunned": "Игрок оглушён и не может бить",
     "combat_error_stance_unknown": "Такой стойки нет",
     "stance_title": "Боевой стиль",
     "stance_balanced": "Обычный бой",

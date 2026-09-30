@@ -35,6 +35,7 @@ import { initDeathScreen, hideDeathScreen, isDead } from './deathScreen';
 import { loadAccountLinks } from './accountLinks';
 import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
 import { isCombatErrorCode, COMBAT_ERROR_KEYS } from '../../../shared/combatErrors';
+import { setActiveDebuffs, addDebuff, clearDebuffs, isStunnedNow } from './debuffs';
 import { setStance, isStance, getStance, STANCES, STANCE_ORDER } from './stance';
 import { icon, type IconName } from '../ui/icons';
 
@@ -704,6 +705,11 @@ export function leaveWorld(): void {
   hideDeathScreen();
   // Бонусы остаются в игре, но их таймер в HUD должен перестать тикать
   clearBuffs();
+  // Эффекты монстров снимаем при выходе из мира по той же причине:
+  // иначе иконка оглушения пережила бы выход в выбор персонажа, и
+  // игрок вернулся бы в игру с пометкой «оглушён», хотя бить можно.
+  // В базе эффекты снимает сервер по своему счёту; здесь - наш список.
+  clearDebuffs();
   world3d?.dispose();
   world3d = null;
   world = null; me = null;
@@ -967,7 +973,31 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number }) => {
+  // Урон со временем и то, что сейчас висит на игроке.
+  //
+  // Отдельный пакет от combat:hit: там удар, здесь то, что длится
+  // секунды. Приходит раз в две секунды с полным списком, а не
+  // накопительными событиями - иначе пропущенный пакет оставлял бы
+  // на экране иконку яда, которого уже нет.
+  socket.on('combat:debuff_tick', (r: {
+    damage: number; hp: number; maxHp: number;
+    debuffs: { id: string; kind: string; secondsLeft: number; magnitude: number }[];
+  }) => {
+    setActiveDebuffs(r.debuffs ?? []);
+    if (r.hp > 0 || r.maxHp > 0) {
+      session.hp = r.hp;
+      session.maxHp = r.maxHp;
+      refreshBars();
+      onPvpMyHpChanged(r.hp);
+    }
+    if (r.damage > 0 && world && me) {
+      // Число от тика помечаем: игрок должен отличить яд от удара, иначе
+      // он решит, что монстр бьёт чаще, чем настроено в данных.
+      world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#c98fd0', true);
+    }
+  });
+
+  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number; debuff?: { id: string; kind: string; durationMs: number } | null }) => {
     session.hp = r.hp;
     session.maxHp = r.maxHp;
     if (world && me) {
@@ -985,6 +1015,21 @@ function wireSocket(): void {
       } else {
         world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
         audio.hit();
+        // Эффект приезжает вместе с ударом, а не отдельным пакетом:
+        // иконка должна появиться в тот же миг, что и число урона.
+        // Отдельное сообщение пришло бы на секунду позже и затерялось бы
+        // в серии ударов.
+        if (r.debuff) {
+          // Добавление одного эффекта, а не замена всего списка: полный
+          // список приходит отдельным пакетом раз в две секунды, а
+          // иконка должна появиться в тот же миг, что и число урона.
+          addDebuff({
+            id: r.debuff.id,
+            kind: r.debuff.kind,
+            secondsLeft: Math.max(1, Math.round(r.debuff.durationMs / 1000)),
+            magnitude: 0,
+          });
+        }
       }
     }
     if (!r.isParried) refreshBars();
@@ -1510,6 +1555,14 @@ function emitCombat(actionType: 'attack' | 'skill', skillId?: string): void {
   // Мёртвый не атакует. Раньше удары улетали на сервер сразу после
   // смерти и применялись к цели сразу после респавна.
   if (isDead()) return;
+  // Оглушённый не атакует. Проверка на сервере всё равно есть и она
+  // главная; эта нужна, чтобы игрок не ждал ответа на клик, который
+  // сервер отвергнет, и не думал, что игра зависла. Текст берётся из
+  // словаря, потому что сервер присылает код, а не фразу.
+  if (isStunnedNow()) {
+    toast(t('debuffs.stunned_hint'), 'error');
+    return;
+  }
   if (!world.targetId) {
     toast(t('world.attack_hint'), 'info');
     return;

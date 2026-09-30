@@ -1,4 +1,13 @@
 {
+  "debuffs": {
+    "stun": "Keyic",
+    "slow": "Yavaşlama",
+    "bleed": "Qanama",
+    "poison": "Zəhərlənmə",
+    "fear": "Qorxu",
+    "stunned_hint": "Xəbərdar deyilsiniz və hücum edə bilməzsiniz"
+  },
+
   "meta": {
     "name": "Azərbaycanca",
     "code": "az"
@@ -207,7 +216,7 @@
     "combat_error_not_in_group": "Siz bu zindanın qrupundasınız deyil",
     "combat_error_stance_needs_mount": "Bu mövqe yalnız atda mümkündür",
     "combat_error_skill_not_active": "Bu bacarıq aktivləşmir: özü işləyir",
-    "combat_error_skill_no_effect": "Bacarıqda təsir yoxdur — administratora müraciət edin",
+    "combat_error_stunned": "Xəbərdar deyilsiniz və hücum edə bilməzsiniz",
     "combat_error_stance_unknown": "Belə mövqe yoxdur",
     "stance_title": "Döyüş üslubu",
     "stance_balanced": "Adi döyüş",

@@ -5,6 +5,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { AchievementService } from '../services/AchievementService';
+import { DebuffService } from '../services/DebuffService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
@@ -109,6 +110,12 @@ export class GameSocketHandler {
    * не синглтон из маршрутов, потому что у сервиса своё подключение к базе.
    */
   private achievements = new AchievementService();
+  /**
+   * Эффекты монстров. Нужны в бою: оглушение закрывает удары, замедление
+   * тянет откат. Отдельный экземпляр по той же причине, что у достижений: у
+   * сервиса своё подключение к базе.
+   */
+  private debuffs = new DebuffService();
   private combatService = new CombatService();
   private antiCheat = new AntiCheatSystem();
   private karmaSystem = new KarmaSystem();
@@ -425,6 +432,20 @@ export class GameSocketHandler {
             attackerId: String(msg.instanceId),
             targetId: String(msg.characterId),
             actionType: 'attack',
+          });
+          if (msg.died) this.handleDeathById(String(msg.characterId)).catch(() => {});
+        });
+        // Урон со временем и остаток эффектов. Персональный пакет: игроку
+        // нужны его собственные иконки и его собственное здоровье, а
+        // соседям по региону - ничего. В комнату региона это не шлём.
+        await this.redis.subscribe(REDIS_CHANNELS.REGION_DEBUFF_TICK(shardId, region), (msg: Record<string, unknown>) => {
+          const socket = this.activePlayers.get(String(msg.characterId));
+          if (!socket) return;
+          socket.emit(SOCKET_EVENTS.DEBUFF_TICK, {
+            damage: Number(msg.damage ?? 0),
+            hp: Number(msg.hp ?? 0),
+            maxHp: Number(msg.maxHp ?? 0),
+            debuffs: (Array.isArray(msg.debuffs) ? msg.debuffs : []) as unknown[],
           });
           if (msg.died) this.handleDeathById(String(msg.characterId)).catch(() => {});
         });
@@ -989,6 +1010,20 @@ export class GameSocketHandler {
     // держать боевые пакеты в очереди и применить их сразу после респавна.
     if (this.deadPlayers.has(socket.characterId)) return;
 
+    // Оглушение. Монстры с эффектом stun объявляли его в данных с самого
+    // начала, и не читался ни один: удары с оглушением ничем не
+    // отличались от обычных. Теперь оглушённый не может бить, уклоняться
+    // и ставить щит - ровно то, что обещает название эффекта.
+    //
+    // Проверка до всего остального, включая проверку частоты пакетов:
+    // иначе игрок под оглушением мог бы слать боевые пакеты и получать
+    // отказ по частоте - ошибку про спам вместо ошибки про оглушение.
+    const оглушён = await this.debuffs.isStunned(socket.characterId).catch(() => false);
+    if (оглушён) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'stunned' });
+      return;
+    }
+
     // Защитные действия выполняются без цели
     if (action.actionType === 'dodge' || action.actionType === 'block') {
       await this.handleDefensiveAction(socket, action);
@@ -1004,8 +1039,16 @@ export class GameSocketHandler {
     // доставать жертву через полкарты. Теперь и частота, и дальность
     // считаются на сервере по позициям, а не по тому, что прислал клиент.
     if (action.actionType === 'attack' && !action.skillId) {
+      // Замедление от эффекта монстра тянет откат удара. Чем сильнее
+      // замедление, тем реже игрок может бить - иначе «Топтание» было бы
+      // пустой иконкой, которая ничего не меняет в бою.
+      //
+      // Ошибка базы читается как «не замедлён»: пропустить один удар
+      // игроку честнее, чем заблокировать бой из-за сбоя чтения.
+      const скорость = await this.debuffs.speedMultiplier(socket.characterId).catch(() => 1);
+      const откат = Math.round(MIN_ATTACK_INTERVAL_MS / Math.max(0.2, Math.min(1, скорость)));
       const last = this.lastAttackAt.get(socket.characterId) ?? 0;
-      if (Date.now() - last < MIN_ATTACK_INTERVAL_MS) {
+      if (Date.now() - last < откат) {
         socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'attack_too_fast' });
         return;
       }

@@ -19,7 +19,11 @@ export type CombatErrorCode =
   | 'stance_needs_mount'
   | 'unknown_stance'
   | 'skill_not_active'
-  | 'skill_no_effect';
+  | 'skill_no_effect'
+  // Оглушение. Монстры с эффектом stun объявляли его в данных и не
+  // применяли: игрок, оглушённый «Тараном» на 2 секунды, продолжал бить
+  // как ни в чём не бывало. Теперь удары не проходят.
+  | 'stunned';
 
 export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   attack_too_fast: 'world.combat_error_attack_too_fast',
@@ -40,6 +44,7 @@ export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   unknown_stance: 'world.combat_error_stance_unknown',
   // Активный навык профессии
   skill_not_active: 'world.combat_error_skill_not_active',
+  stunned: 'world.combat_error_stunned',
   skill_no_effect: 'world.combat_error_skill_no_effect',
 };
 
