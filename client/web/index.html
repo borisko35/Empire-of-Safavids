@@ -18,14 +18,31 @@
        Telegram, VK) относительный /assets/... не открывают и показывают
        превью без картинки -->
   <meta property="og:image" content="https://www.game.eos-gameonline.com/assets/og-screenshot.png">
+  <!-- Размеры и тип картинки. Скраперы не открывают её, пока не решат, что
+       она того стоит: без явных width/height Telegram и Facebook иногда
+       резервируют под картинку пустое место, и превью получается с полосой.
+       Размеры настоящие - 1200x630 это ровно то, что просят площадки
+       (summary_large_image), и файл таким и сделан. -->
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/png">
+  <!-- alt: превью читают и люди, и машины. Без него картинка в ленте
+       выглядит безымянной, а при чтении с экрана - просто пустой. -->
+  <meta property="og:image:alt" content="Кадр игры Empire of Safavids: персонаж на фоне исторической Персии">
   <meta property="og:url" content="https://www.game.eos-gameonline.com/">
   <meta property="og:locale" content="ru_RU">
+  <!-- Игра переведена на три языка, и площадка должна знать про все три:
+       иначе англоязычному репосту предложат русский вариант как
+       единственный. -->
+  <meta property="og:locale:alternate" content="en_GB">
+  <meta property="og:locale:alternate" content="az_AZ">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Empire of Safavids — Action MMORPG">
   <meta name="twitter:description" content="Бесплатная историческая Action MMORPG по мотивам Сефевидской империи">
   <meta name="twitter:image" content="https://www.game.eos-gameonline.com/assets/og-screenshot.png">
+  <meta name="twitter:image:alt" content="Кадр игры Empire of Safavids: персонаж на фоне исторической Персии">
 
   <!-- Structured Data -->
   <script type="application/ld+json">
