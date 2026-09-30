@@ -103,7 +103,10 @@ const закрыто = await psql(
 console.log('закрыто старых партий:', закрыто);
 
 console.log('\n=== 2. Открываем настоящую партию через API (золото закладывается) ===');
-const start = await api('POST', '/api/chess/start', { betGold: СТАВКА }, token);
+// characterId обязателен: маршрут берёт персонажа из тела запроса и
+// проверяет, что он принадлежит вошедшему. Без него ответ 400
+// characterId is required. Первая версия скрипта его не слала.
+const start = await api('POST', '/api/chess/start', { betGold: СТАВКА, characterId: id }, token);
 if (start.status !== 200) {
   console.log('FAIL  партия не открылась', start.status, JSON.stringify(start.json));
   await db.end(); process.exit(1);
