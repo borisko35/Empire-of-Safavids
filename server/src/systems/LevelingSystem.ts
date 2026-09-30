@@ -1,3 +1,5 @@
+import { GuildService } from '../services/GuildService';
+import { CharacterService } from '../services/CharacterService';
 // ============================================================
 // Система прокачки и прогрессии — Empire of Safavids
 // ============================================================
@@ -141,11 +143,14 @@ export class LevelingSystem {
           `UPDATE characters SET
             experience = $1, level = $2,
             stats = $3::jsonb,
-            max_hp = max_hp + $4,
             -- База растёт тем же приростом. Поведение не меняется: обе
             -- колонки идут в ногу, и max_hp пока равно base_max_hp.
             -- Смысл разделения - в следующем шаге, где max_hp станет
             -- base_max_hp плюс бонус гильдии, и снять бонус будет от чего.
+            -- max_hp в этой транзакции НЕ участвует: он выводится из
+            -- base_max_hp и множителя гильдии пересчётом ПОСЛЕ. Раньше
+            -- здесь стояло max_hp = max_hp + $4, и бонус оставался бы в
+            -- старой пропорции.
             base_max_hp = base_max_hp + $4,
             max_mana = max_mana + $5,
             updated_at = NOW()
@@ -166,6 +171,12 @@ export class LevelingSystem {
           );
         }
       });
+
+      // Пересчёт ПОСЛЕ транзакции: он читает уже обновлённую базу.
+      // Множитель берётся отдельным запросом ДО боя, а не внутри
+      // транзакции - чтобы запрос за уровнями навыка не держал её открытой.
+      const множитель = await new GuildService().hpMultiplierFor(character.id).catch(() => 1);
+      await new CharacterService().recalcMaxHp(character.id, множитель);
 
       logger.info(`Level up: ${character.name} ${oldLevel} → ${newLevel} (${source})${awakened ? ' — AWAKENED' : ''}`);
 

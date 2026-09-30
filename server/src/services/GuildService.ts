@@ -13,6 +13,7 @@ import {
   guildBonuses, isSkillWired, maxLevel, upgradeCost, type GuildBonuses,
 } from '../systems/GuildBonuses';
 import { logger } from '../utils/logger';
+import { CharacterService } from './CharacterService';
 
 export interface Guild {
   id: string; name: string; tag: string; leader_id: string;
@@ -141,6 +142,13 @@ export class GuildService {
       [guildId, charId]
     );
     await this.addLog(guildId, 'member_joined', charId);
+
+    // Бонус гильдии появился: запас здоровья пересчитывается ПОСЛЕ записи
+    // в guild_members. Раньше - значит множитель прочитается для гильдии,
+    // в которой персонажа ещё нет, и бонус не применится до следующего
+    // повода. Персонаж увидел бы «вошёл» и ту же прочность.
+    const множитель = guildBonuses(await this.getSkillLevels(guildId)).hp;
+    await new CharacterService().recalcMaxHp(charId, множитель).catch(() => {});
   }
 
   /**
@@ -173,6 +181,22 @@ export class GuildService {
    * гильдию сиротой: назначить нового главу было нечем, а маршрут /rank такую
    * возможность и не давал.
    */
+  /**
+   * Множитель запаса здоровья для персонажа. 1 - если не в гильдии.
+   *
+   * Нужен всем, кто пересчитывает здоровье: левелингу, входу, выходу и
+   * покупке навыка. Ошибка чтения даёт 1, то есть «без бонуса»: показать
+   * игроку несуществующий запас здоровья хуже, чем не показать бонус.
+   */
+  async hpMultiplierFor(characterId: string): Promise<number> {
+    const строка = await this.db.queryOne<{ guild_id: string }>(
+      'SELECT guild_id FROM guild_members WHERE character_id = $1', [characterId],
+    ).catch(() => null);
+    if (!строка) return 1;
+    const уровни = await this.getSkillLevels(строка.guild_id).catch(() => ({}));
+    return guildBonuses(уровни).hp;
+  }
+
   async leaveGuild(guildId: string, charId: string): Promise<void> {
     const guild = await this.getGuild(guildId);
     if (!guild) throw new Error('GUILD_NOT_FOUND');
@@ -184,6 +208,10 @@ export class GuildService {
     );
     await this.addLog(guildId, 'member_left', charId);
     if (wasLeader) await this.promoteSuccessor(guildId);
+    // Бонус гильдии снят: персонаж вышел, значит здоровье пересчитывается
+    // БЕЗ него. Если это забыть, игрок уйдёт из гильдии с гильдейским
+    // запасом - навсегда, пока не пересчитает что-нибудь другое.
+    await new CharacterService().recalcMaxHp(charId, 1).catch(() => {});
   }
 
   /**
@@ -409,6 +437,14 @@ export class GuildService {
     // записи дал бы окно, в котором опыт начисляется по старому уровню
     // при уже новом золоте в котле.
     кэшБонусов.delete(guildId);
+
+    // Куплен уровень НАВЫКА hp_boost - здоровье пересчитывается. Только
+    // для этого навыка: остальные не трогают запас здоровья, и лишний
+    // пересчёт на каждой покупке опыта был бы пустой записью в базу.
+    if (skillId === 'guild_hp_boost') {
+      const множитель = guildBonuses(await this.getSkillLevels(guildId)).hp;
+      await new CharacterService().recalcMaxHp(actorId, множитель).catch(() => {});
+    }
     logger.info(`[Guild] ${guildId} skill ${skillId} -> ${новый} за ${стоимость}`);
     return { level: новый, cost: стоимость };
   }

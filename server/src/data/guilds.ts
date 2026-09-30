@@ -102,7 +102,7 @@ export const GUILD_SKILLS: GuildSkill[] = [
     id: 'guild_hp_boost',
     name: 'Warrior\'s Endurance',
     nameRu: 'Выносливость Воина',
-    description: '+100 HP за каждый уровень',
+    description: '+5% к максимальному здоровью за каждый уровень',
     maxLevel: 10,
     costPerLevel: 8000,
     effect: 'max_hp_bonus',

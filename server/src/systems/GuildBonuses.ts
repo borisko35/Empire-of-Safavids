@@ -25,7 +25,7 @@ export type GuildSkillEffect =
  * Закрытый список. Навык, эффект которого сюда не входит, покупаться не
  * может - иначе гильдия платила бы золотом за пустоту.
  */
-export const WIRED_EFFECTS: readonly GuildSkillEffect[] = ['exp_multiplier', 'gold_multiplier', 'craft_speed'];
+export const WIRED_EFFECTS: readonly GuildSkillEffect[] = ['exp_multiplier', 'gold_multiplier', 'craft_speed', 'max_hp_bonus'];
 
 /** Множители за один уровень навыка. Берутся из описания в данных. */
 export const PER_LEVEL = {
@@ -36,6 +36,13 @@ export const PER_LEVEL = {
   // как 1 - срез. Складывать 0.05 десять раз и брать 1 минус остаток
   // означало бы одно и то же, но знак читался бы неверно.
   craft_speed: 0.05,
+  // Здоровье - ПРОЦЕНТ, а не фиксированное число. В данных было +100 HP за
+  // уровень: новичок получал +357…+500% здоровья, ветеран к 60 уровню
+  // всего +68%. Бонус был перевёрнут - чем дальше, тем меньше.
+  //
+  // Процент ведёт себя как два соседних навыка: +2% опыта и +3% золота со
+  // временем не тают. Здоровье должно вести себя так же.
+  max_hp_bonus: 0.05,
 } as const;
 
 /**
@@ -65,6 +72,8 @@ export interface GuildBonuses {
   gold: number;
   /** Множитель ВРЕМЕНИ крафта. 1 - без бонуса, меньше 1 - быстрее. */
   craft: number;
+  /** Множитель ЗАПАСА здоровья. 1 - без бонуса, больше 1 - крепче. */
+  hp: number;
   /** id навыков, за которые нельзя заплатить: точка применения не подключена. */
   unavailable: string[];
 }
@@ -86,6 +95,7 @@ export function guildBonuses(levels: Record<string, number>): GuildBonuses {
   let exp = 1;
   let gold = 1;
   let craft = 1;
+  let hp = 1;
   const unavailable: string[] = [];
 
   for (const skill of GUILD_SKILLS) {
@@ -108,9 +118,12 @@ export function guildBonuses(levels: Record<string, number>): GuildBonuses {
     if (effect === 'craft_speed') {
       craft = Math.max(MIN_CRAFT_SPEED, 1 - потолок * PER_LEVEL.craft_speed);
     }
+    // Множитель здоровья больше единицы, потолок здесь не нужен: при
+    // значении в потолке потолок уже применён выше.
+    if (effect === 'max_hp_bonus') hp += потолок * PER_LEVEL.max_hp_bonus;
   }
 
-  return { exp, gold, craft, unavailable };
+  return { exp, gold, craft, hp, unavailable };
 }
 
 /** Можно ли купить этот навык: он есть в справочнике и за него есть точка применения. */

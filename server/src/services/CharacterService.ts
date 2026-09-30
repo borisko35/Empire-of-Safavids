@@ -349,6 +349,34 @@ export class CharacterService {
     return row?.hp ?? 0;
   }
 
+  /**
+   * Пересчитать запас здоровья с учётом бонуса гильдии.
+   *
+   * ПОЧЕМУ МЕНЯЕТСЯ КОЛОНКА, А НЕ ЧТЕНИЕ. max_hp читает бой: applyDamage
+   * возвращает его вместе с уроном. Если бонус считать при каждом чтении,
+   * в горячий путь попадёт запрос в базу за уровнями навыка - то есть
+   * запрос на каждый удар каждого игрока. Поэтому колонка пересчитывается
+   * при изменениях, а бой читает готовое число, как и раньше.
+   *
+   * Схема: max_hp = base_max_hp * множитель. GREATEST(1, ...) - решает
+   * две вещи: округление не может дать ноль, а отрицательный множитель
+   * (мусор в данных) не сделает персонажа бессмертным и не сломает бой.
+   *
+   * Текущий hp не трогается: игрок не должен терять здоровье от того, что
+   * кто-то в его гильдии купил навык.
+   */
+  async recalcMaxHp(characterId: string, multiplier: number): Promise<void> {
+    const множитель = Number.isFinite(multiplier) && multiplier > 0 ? multiplier : 1;
+    await this.db.query(
+      'UPDATE characters SET max_hp = GREATEST(1, ROUND(base_max_hp * $2)), updated_at = NOW() WHERE id = $1',
+      [characterId, множитель],
+    ).catch((e: unknown) => {
+      // Ошибка не поднимается: потеря бонуса лучше упавшего вызова из
+      // левелинга или покупки навыка. Причина - в журнал.
+      logger.error('[Character] запас здоровья не пересчитан:', (e as Error).message);
+    });
+  }
+
   async applyDamage(characterId: string, damage: number): Promise<{ hp: number; maxHp: number; died: boolean }> {
     const row = await this.db.queryOne<{ hp: number; max_hp: number }>(
       'UPDATE characters SET hp = GREATEST(0, hp - $1), updated_at = NOW() WHERE id = $2 RETURNING hp, max_hp',

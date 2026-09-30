@@ -25,7 +25,7 @@ describe('Навык подключён и покупается', () => {
     expect({ есть: isSkillWired('guild_craft_speed') }).toEqual({ есть: true });
   });
 
-  it('три эффекта подключены из пяти навыков', () => {
+  it('четыре эффекта подключены из пяти навыков', () => {
     // Было два. Число зафиксировано руками как ловушка: новый навык без
     // точки применения обязан сломать эту проверку.
     const подключены = GUILD_SKILLS.filter(s => isSkillWired(s.id)).map(s => s.id);
@@ -34,9 +34,12 @@ describe('Навык подключён и покупается', () => {
       подключены,
       неподключены: GUILD_SKILLS.filter(s => !isSkillWired(s.id)).map(s => s.id),
     }).toEqual({
-      подключено: 3,
-      подключены: ['guild_exp_boost', 'guild_gold_boost', 'guild_craft_speed'],
-      неподключены: ['guild_hp_boost', 'guild_siege_power'],
+      подключено: 4,
+      // Порядок - как в справочнике GUILD_SKILLS, а не как удобнее
+      // перечислить. Список фильтруется по исходному порядку данных, и
+      // перестановка в проверке означала бы расхождение с ним.
+      подключены: ['guild_exp_boost', 'guild_gold_boost', 'guild_hp_boost', 'guild_craft_speed'],
+      неподключены: ['guild_siege_power'],
     });
   });
 
@@ -179,7 +182,7 @@ describe('Подключено в настоящем месте', () => {
 });
 
 describe('Число подключённых эффектов', () => {
-  it('три', () => {
-    expect({ эффектов: WIRED_EFFECTS.length }).toEqual({ эффектов: 3 });
+  it('четыре', () => {
+    expect({ эффектов: WIRED_EFFECTS.length }).toEqual({ эффектов: 4 });
   });
 });
