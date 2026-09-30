@@ -11,6 +11,9 @@ import { Vector3 } from '../types/game.types';
 import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
 import { DatabaseService } from '../services/DatabaseService';
+// Счётчик побед над мировыми боссами для достижения. Общая таблица
+// leaderboard - там же убийства, парирования, стихи, шахматы, крафт.
+import { LeaderboardService } from '../services/LeaderboardService';
 import { logger } from '../utils/logger';
 
 // Расписание: первое событие через 10 минут после старта сервера,
@@ -110,6 +113,16 @@ export class WorldEventSystem {
 
     await this.recordKill(bossId, killerId).catch((e) =>
       logger.warn(`[WorldEvent] не удалось записать убийство босса: ${e}`));
+
+    // Счётчик достижения. Раньше считать было нечем, и достижение
+    // значилось «пока не считается», хотя система мировых боссов
+    // работала - я ошибся, приняв отсутствие счётчика за отсутствие
+    // боссов.
+    //
+    // ПОСЛЕ записи победы и ПОСЛЕ выплаты. Порядок тот же, что у шахмат
+    // и торговли: сначала деньги, потом счётчик.
+    await new LeaderboardService().increment(killerId, { worldBossKills: 1 })
+      .catch(e => logger.warn(`[WorldEvent] счётчик побед над боссами не вырос: ${e}`));
 
     this.announce({ status: 'defeated', killerId, shardId });
     logger.info(`[WorldEvent] Boss ${bossId} defeated by ${killerId} on ${shardId}`);

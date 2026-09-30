@@ -96,6 +96,8 @@ export class LeaderboardService {
     itemsCrafted?: number;
     /** Выполненные торговые контракты. Начисляются за сданный груз. */
     tradesCompleted?: number;
+    /** Победы над мировыми боссами. */
+    worldBossKills?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];

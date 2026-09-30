@@ -74,7 +74,8 @@ export type AchievementCounter =
   | 'chess_wins'
   | 'dungeons_cleared'
   | 'items_crafted'
-  | 'trades_completed';
+  | 'trades_completed'
+  | 'world_boss_kills';
 
 /**
  * Условия, которые не счётчик, а состояние.
@@ -127,6 +128,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   dungeons_cleared: 'dungeons_cleared',
   items_crafted: 'items_crafted',
   trades_completed: 'trades_completed',
+  world_boss_kills: 'world_boss_kills',
 };
 
 /**
@@ -188,14 +190,19 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: 'Perform 10 perfect blocks', description_ru: 'Выполнить 10 идеальных блоков',
     category: 'combat', icon: '🛡️', reward_gold: 200, reward_experience: 300, hidden: false,
     condition: { counter: 'parries', need: 10 } },
-  // СИСТЕМЫ НЕТ. В игре есть только комнаты боссов внутри подземелий
-  // (isBossRoom, bossId в data/dungeons.ts). Мирового босса, которого
-  // можно убить, не существует, и накапливать его убийства не из чего.
-  // Выдать это достижение нечем, а выдать «за компанию» - значит раздать
-  // золото без повода.
+  // РАНЬШЕ Я НАПИСАЛ ЗДЕСЬ, ЧТО СИСТЕМЫ НЕТ. ЭТО БЫЛО НЕПРАВДОЙ.
+  // Поиск вёлся по двум файлам (data/dungeons.ts и systems/DungeonService.ts),
+  // а вывод делался по всему проекту. На деле мировые боссы есть и работают:
+  // WorldEventSystem создаётся в GameLoop, init/start/loadSchedule
+  // вызываются, спавны Симурга и Рустама заданы в SpawnSystem, победы
+  // пишутся в world_boss_kills (миграция 002, колонка character_id
+  // добавлена в 041), зал славы их читает.
+  //
+  // Отсутствие счётчика не значит отсутствие боссов.
   { id: 'ach_boss_slayer', title: 'Boss Slayer', title_ru: 'Убийца Боссов',
     description: 'Kill your first world boss', description_ru: 'Убить первого мирового босса',
-    category: 'combat', icon: '🐉', reward_gold: 2000, reward_experience: 5000, reward_title: 'Охотник на Драконов', hidden: false },
+    category: 'combat', icon: '👑', reward_gold: 1000, reward_experience: 1000, reward_title: 'Охотник на Боссов', hidden: false,
+    condition: { counter: 'world_boss_kills', need: 1 } },
 
   // ── ИССЛЕДОВАНИЕ ─────────────────────────────────────
   // Регионы, подземелья и друзья: счётчиков нет, выдать нечем.

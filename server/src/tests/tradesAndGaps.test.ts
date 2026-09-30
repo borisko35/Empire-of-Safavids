@@ -63,13 +63,12 @@ describe('Контракты считаются', () => {
   });
 });
 
-describe('Пять оставшихся: у каждого своя причина', () => {
-  it('их ровно пять, и ни одно не выдаётся', () => {
+describe('Четыре оставшихся: у каждого своя причина', () => {
+  it('их ровно четыре, и ни одно не выдаётся', () => {
     // Число зафиксировано руками: новое достижение без условия обязано
     // сломать эту проверку.
     expect({ без_условия: БЕЗ_УСЛОВИЯ.map(a => a.id).sort() }).toEqual({
       без_условия: [
-        'ach_boss_slayer',
         'ach_combo_5',
         'ach_explorer_all',
         'ach_explorer_tabriz',
@@ -78,19 +77,60 @@ describe('Пять оставшихся: у каждого своя причин
     });
   });
 
-  it('мирового босса в игре нет, и обещание это невыполнимо', () => {
-    // В данных подземелий есть только комнаты боссов (isBossRoom, bossId).
-    // Мирового босса, которого можно убить, не существует, и счётчик его
-    // убийств накапливать было бы не из чего.
-    const данж = читать('server/src/data/dungeons.ts');
-    const естьБосс = /isBossRoom: true/.test(данж);
-    const естьМировой = /world_boss|worldBoss|isWorldBoss/i.test(
-      читать('server/src/data/dungeons.ts') + читать('server/src/systems/DungeonService.ts'));
+  it('мировой босс в игре ЕСТЬ, и счётчик его убийств заведён', () => {
+    // ПРЕДЫДУЩАЯ ПРОВЕРКА ГОВОРИЛА ОБРАТНОЕ И ОШИБАЛАСЬ.
+    // Она искала только в data/dungeons.ts и systems/DungeonService.ts, не
+    // нашла там босса - и заключила, что его нет в игре. Проверка проходила
+    // именно потому, что смотрела не туда.
+    //
+    // Теперь ищем по-настоящему и требуем, чтобы система была ЖИВОЙ, а не
+    // просто объявленной: если WorldEventSystem есть в файлах, но не
+    // создаётся и не крутится, мировой босс снова окажется несуществующим
+    // - только теперь уже по-настоящему.
+    const боссы = читать('server/src/data/monsters.ts');
+    const мир = читать('server/src/systems/WorldEventSystem.ts');
+    const цикл = читать('server/src/systems/GameLoop.ts');
+    const счётчик = читать('server/src/services/LeaderboardService.ts');
+
     expect({
-      комнаты_боссов_есть: естьБосс,
-      мирового_босса_нет: !естьМировой,
-    }).toEqual({ комнаты_боссов_есть: true, мирового_босса_нет: true });
+      боссы_объявлены: /world_boss_simurgh/.test(боссы) && /world_boss_rustam_reborn/.test(боссы),
+      система_есть: /class WorldEventSystem/.test(мир),
+      система_создаётся: /WorldEventSystem\.getInstance\(\)\.init/.test(цикл),
+      система_запускается: /WorldEventSystem\.getInstance\(\)\.start/.test(цикл),
+      расписание_читается: /loadSchedule\(\)/.test(цикл),
+      победа_пишется: /world_boss_kills/.test(мир),
+      счётчик_заведён: /worldBossKills\?: number/.test(счётчик),
+    }).toEqual({
+      боссы_объявлены: true, система_есть: true, система_создаётся: true,
+      система_запускается: true, расписание_читается: true,
+      победа_пишется: true, счётчик_заведён: true,
+    });
   });
+
+  it('достижение об убийстве мирового босса смотрит на этот счётчик', () => {
+    const def = ACHIEVEMENTS.find(a => a.id === 'ach_boss_slayer')!;
+    expect({
+      условие: def.condition,
+      ни_одной_победы: isEarned(def, { world_boss_kills: 0 }),
+      одна_победа: isEarned(def, { world_boss_kills: 1 }),
+    }).toEqual({ условие: { counter: 'world_boss_kills', need: 1 }, ни_одной_победы: false, одна_победа: true });
+  });
+
+  it('счётчик побед над боссами реально начисляется при убийстве', () => {
+    // ЭТОЙ ПРОВЕРКИ СНАЧАЛА НЕ БЫЛО. Поломка «убрать начисление из
+    // onBossDefeated» не роняла ничего: предыдущая проверка требовала лишь
+    // самого ключа в LeaderboardService, а он оставался на месте, даже
+    // когда число никто не писал. Ключ в списке и начисление по факту -
+    // разные вещи, и проверять надо обе.
+    const мир = читать('server/src/systems/WorldEventSystem.ts');
+    const вПобеде = мир.slice(мир.indexOf('async onBossDefeated'), мир.indexOf('async loadSchedule'));
+    expect({
+      начисляется: /increment\(killerId, \{ worldBossKills: 1 \}\)/.test(вПобеде),
+      после_записи_победы: /recordKill[\s\S]*increment\(killerId/.test(вПобеде),
+      ошибка_не_поднимается: /\.catch\(e => logger\.warn/.test(вПобеде),
+    }).toEqual({ начисляется: true, после_записи_победы: true, ошибка_не_поднимается: true });
+  });
+
 
   it('«посетить Тебриз» нельзя проверить регионом: он стоит по умолчанию', () => {
     // ЛОВУШКА, ЗАРАБОТАВШАЯ БЫ ПРАВО. У нового персонажа регион равен
@@ -142,7 +182,7 @@ describe('Правило «нет условия = не выдаётся» де�
       const всё = {
         monsters_killed: 99999, parries: 99999, pvp_wins: 99999,
         quests_completed: 99999, poetry_completed: 99999, chess_wins: 99999,
-        dungeons_cleared: 99999, items_crafted: 99999, trades_completed: 99999,
+        dungeons_cleared: 99999, items_crafted: 99999, trades_completed: 99999, world_boss_kills: 99999,
         has_friend: 99, in_guild: 99,
       };
       expect({ id: def.id, выдано: isEarned(def, всё) }).toEqual({ id: def.id, выдано: false });
@@ -177,7 +217,6 @@ describe('Правило «нет условия = не выдаётся» де�
     // содержания.
     expect({ причины }).toEqual({
       причины: [
-        { id: 'ach_boss_slayer', своя_причина: true },
         { id: 'ach_combo_5', своя_причина: true },
         { id: 'ach_explorer_all', своя_причина: true },
         { id: 'ach_explorer_tabriz', своя_причина: true },
