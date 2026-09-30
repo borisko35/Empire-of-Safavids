@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # Сборка трейлера Empire of Safavids
 # ============================================================
 # Требуется ffmpeg в PATH. Сценарий — tools/trailer-storyboard.md
@@ -31,7 +31,7 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
 foreach ($f in @('bg-history.png','og-screenshot.png')) {
   if (-not (Test-Path (Join-Path $assets $f))) { throw "Нет кадра: $f" }
 }
-foreach ($f in @('isfahan.png','combat.png','dungeon.png','simurgh.png')) {
+foreach ($f in @('city.png','combat.png','worldmap.png','tasks.png')) {
   if (-not (Test-Path (Join-Path $shots $f))) { throw "Нет кадра: screenshots/$f" }
 }
 if (-not (Test-Path $font)) { throw "Нет шрифта segoeui.ttf" }
@@ -42,14 +42,14 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $segments = @(
   @{ img = (Join-Path $assets 'bg-history.png');    dur = 6; zoom = '1.0->1.12'; z = 'center';
      title = 'Империя Сефевидов'; sub = '1501-1736' },
-  @{ img = (Join-Path $shots 'isfahan.png');       dur = 7; zoom = '1.05->1.14'; z = 'center';
+  @{ img = (Join-Path $shots 'city.png');           dur = 7; zoom = '1.05->1.14'; z = 'center';
      title = 'Семь регионов Персии'; sub = '' },
   @{ img = (Join-Path $shots 'combat.png');         dur = 8; zoom = '1.06->1.15'; z = 'center';
      title = 'Бой. Ловкость. PvP'; sub = '' },
-  @{ img = (Join-Path $shots 'dungeon.png');        dur = 7; zoom = '1.04->1.13'; z = 'center';
-     title = 'Подземелья и мировые боссы'; sub = '' },
-  @{ img = (Join-Path $shots 'simurgh.png');        dur = 8; zoom = '1.08->1.16'; z = 'center';
-     title = 'Пять классов. Один ты.'; sub = '' },
+  @{ img = (Join-Path $shots 'worldmap.png');       dur = 7; zoom = '1.04->1.13'; z = 'center';
+     title = 'Карта мира'; sub = 'форты, лагеря, караван-саиды' },
+  @{ img = (Join-Path $shots 'tasks.png');          dur = 8; zoom = '1.08->1.16'; z = 'center';
+     title = 'Задания каждый день'; sub = 'и что за них дают' },
   @{ img = (Join-Path $assets 'og-screenshot.png'); dur = 9; zoom = '1.0->1.06';  z = 'center';
      title = 'Бесплатно. В браузере.'; sub = 'www.game.eos-gameonline.com' },
   @{ img = (Join-Path $assets 'bg-history.png');    dur = 3; zoom = '1.12->1.0'; z = 'center';
