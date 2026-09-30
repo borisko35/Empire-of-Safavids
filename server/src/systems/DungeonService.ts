@@ -310,11 +310,22 @@ export class DungeonService {
  * один на всех.
  */
   async attemptsLeft(characterId: string, dungeonId: string): Promise<number> {
+    // Ошибку запроса НЕ глотаем. queryOne возвращает null, когда строки
+    // просто нет - это честный «попыток не использовано». Ошибку он
+    // БРОСАЕТ, и раньше catch превращал её в то же самое число свободных
+    // попыток: игрок видел «осталось 3», нажимал «Войти» и получал 500.
+    // «Не знаю, сколько попыток» и «попыток не было» - разные вещи.
+    //
+    // Причина логируется и поднимается дальше: отказ придёт на настоящей
+    // причине, а не на выдуманной.
     const row = await this.db.queryOne<{ attempts: number }>(
       `SELECT attempts FROM dungeon_attempts
        WHERE character_id = $1 AND dungeon_id = $2 AND reset_date = CURRENT_DATE`,
       [characterId, dungeonId]
-    ).catch(() => null);
+    ).catch((e: unknown) => {
+      logger.error('[Dungeon] не удалось прочитать число попыток:', (e as Error).message);
+      throw new Error('DUNGEON_ATTEMPTS_UNREADABLE');
+    });
     return Math.max(0, DUNGEON_ATTEMPTS_PER_DAY - (Number(row?.attempts) || 0));
   }
 

@@ -25,11 +25,22 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   });
 
   const isDev = process.env.NODE_ENV !== 'production';
+
+  // Ошибка СЕРВЕРА не показывается игроку. Настоящее сообщение уже в
+  // журнале строкой выше; в теле ответа оно было сырым SQL - «column
+  // reference \"reset_date\" is ambiguous» уходило игроку вместе с именем
+  // таблицы и колонки.
+  //
+  // Ошибка КЛИЕНТА (4xx) не трогается: её message написан руками и по
+  // нему клиент рисует подсказку. Убирать его - значит сломать интерфейс
+  // там, где он работает.
+  const виднаИгроку = statusCode < 500;
+
   res.status(statusCode).json({
     success: false,
     code,
-    message,
-    ...(isDev && { stack: err.stack }),
+    message: виднаИгроку ? message : 'Внутренняя ошибка. Попробуйте позже.',
+    ...(виднаИгроку && isDev && { stack: err.stack }),
   });
 };
 
