@@ -25,13 +25,28 @@ export type GuildSkillEffect =
  * Закрытый список. Навык, эффект которого сюда не входит, покупаться не
  * может - иначе гильдия платила бы золотом за пустоту.
  */
-export const WIRED_EFFECTS: readonly GuildSkillEffect[] = ['exp_multiplier', 'gold_multiplier'];
+export const WIRED_EFFECTS: readonly GuildSkillEffect[] = ['exp_multiplier', 'gold_multiplier', 'craft_speed'];
 
 /** Множители за один уровень навыка. Берутся из описания в данных. */
 export const PER_LEVEL = {
   exp_multiplier: 0.02,
   gold_multiplier: 0.03,
+  // Скорость крафта - это УМЕНЬШЕНИЕ времени, а не множитель сверху.
+  // Поэтому здесь доля срезаемого, а положительный множитель получается
+  // как 1 - срез. Складывать 0.05 десять раз и брать 1 минус остаток
+  // означало бы одно и то же, но знак читался бы неверно.
+  craft_speed: 0.05,
 } as const;
+
+/**
+ * Нижняя граница скорости крафта.
+ *
+ * Навык описан как «-5% за уровень», максимум 10 уровней - это -50%, и
+ * время не обнуляется никогда. Нижняя граница страховка: если когда-нибудь
+ * появится уровень выше десятого или накопится ошибка, рецепт не станет
+ * мгновенным, а останется хотя бы секундным.
+ */
+export const MIN_CRAFT_SPEED = 0.1;
 
 /** Сколько стоит уровень: стоимость из справочника, а не выдуманная. */
 export function costPerLevel(skillId: string): number {
@@ -48,6 +63,8 @@ export interface GuildBonuses {
   exp: number;
   /** Множитель золота с монстров. 1 - без бонуса. */
   gold: number;
+  /** Множитель ВРЕМЕНИ крафта. 1 - без бонуса, меньше 1 - быстрее. */
+  craft: number;
   /** id навыков, за которые нельзя заплатить: точка применения не подключена. */
   unavailable: string[];
 }
@@ -68,6 +85,7 @@ export interface GuildBonuses {
 export function guildBonuses(levels: Record<string, number>): GuildBonuses {
   let exp = 1;
   let gold = 1;
+  let craft = 1;
   const unavailable: string[] = [];
 
   for (const skill of GUILD_SKILLS) {
@@ -85,9 +103,14 @@ export function guildBonuses(levels: Record<string, number>): GuildBonuses {
     const потолок = Math.min(level, skill.maxLevel);
     if (effect === 'exp_multiplier') exp += потолок * PER_LEVEL.exp_multiplier;
     if (effect === 'gold_multiplier') gold += потолок * PER_LEVEL.gold_multiplier;
+    // Время крафта уменьшается, поэтому множитель меньше единицы, и
+    // результат зажимается снизу: рецепт не должен стать мгновенным.
+    if (effect === 'craft_speed') {
+      craft = Math.max(MIN_CRAFT_SPEED, 1 - потолок * PER_LEVEL.craft_speed);
+    }
   }
 
-  return { exp, gold, unavailable };
+  return { exp, gold, craft, unavailable };
 }
 
 /** Можно ли купить этот навык: он есть в справочнике и за него есть точка применения. */

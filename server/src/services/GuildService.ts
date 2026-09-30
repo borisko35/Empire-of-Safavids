@@ -10,7 +10,7 @@ import { ITEMS_DATABASE } from '../data/items';
 // правда о том, кто кого может назначить, была в двух местах.
 import { getGuildRankPermissions, canPromote, GUILD_SKILLS, type GuildRank } from '../data/guilds';
 import {
-  guildBonuses, isSkillWired, maxLevel, upgradeCost,
+  guildBonuses, isSkillWired, maxLevel, upgradeCost, type GuildBonuses,
 } from '../systems/GuildBonuses';
 import { logger } from '../utils/logger';
 
@@ -44,7 +44,7 @@ export interface GuildBankItem {
  * а покупка чистит кэш сама. Появится другой путь изменения - чистить
  * надо и там, иначе кэш разойдётся с базой.
  */
-const кэшБонусов = new Map<string, { exp: number; gold: number; unavailable: string[] }>();
+const кэшБонусов = new Map<string, GuildBonuses>();
 
 /** Сброс кэша. Для проверок: два набора подставляют разные уровни одной гильдии. */
 export function сбросКэшаГильдий(): void {
@@ -314,7 +314,7 @@ export class GuildService {
    * (например, админская команда), кэш надо чистить и там - иначе бонус
    * разъедутся с тем, что в базе.
    */
-  async getBonuses(characterId: string): Promise<{ exp: number; gold: number; unavailable: string[] }> {
+  async getBonuses(characterId: string): Promise<GuildBonuses> {
     const строка = await this.db.queryOne<{ guild_id: string }>(
       'SELECT guild_id FROM guild_members WHERE character_id = $1 LIMIT 1',
       [characterId],

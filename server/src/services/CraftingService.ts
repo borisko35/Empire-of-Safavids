@@ -7,6 +7,10 @@ import { DatabaseService } from './DatabaseService';
 // leaderboard, а не своя: свой счётчик - третье место учёта, где его
 // легко забыть внести в список достижений.
 import { LeaderboardService } from './LeaderboardService';
+// Навыки гильдии: «Мастер ремесла» уменьшает время крафта. Отдельный
+// сервис от счётчика, потому что это другой вопрос - не «сколько раз
+// случилось», а «быстрее ли выходит».
+import { GuildService } from './GuildService';
 import { logger } from '../utils/logger';
 import { CRAFTING_RECIPES, CraftingCategory, canCraft } from '../data/crafting';
 import { v4 as uuidv4 } from 'uuid';
@@ -101,12 +105,30 @@ export class CraftingService {
       throw new Error(`Missing materials: ${missing.map(m => `${m.itemId} (need ${m.required}, have ${m.have})`).join(', ')}`);
     }
 
+    // Навык гильдии «Мастер ремесла»: -5% к времени крафта за уровень.
+    //
+    // Множитель берётся ОТДЕЛЬНЫМ вызовом и подстрахован catch: getBonuses
+    // ходит в базу, и отказ базы не должен срывать начало крафта. Игрок без
+    // гильдии получает обычное время, и это правильное поведение.
+    let множительКрафта = 1;
+    try {
+      множительКрафта = (await new GuildService().getBonuses(characterId)).craft;
+    } catch (err) {
+      logger.warn('[Craft] бонус гильдии недоступен:', (err as Error).message);
+    }
+    if (!Number.isFinite(множительКрафта) || множительКрафта <= 0) множительКрафта = 1;
+
     const job: CraftingJob = {
       id: uuidv4(),
       characterId,
       recipeId,
       startedAt: new Date(),
-      completesAt: new Date(Date.now() + recipe.craftingTime * 1000),
+      // Навык гильдии «Мастер ремесла»: -5% к времени крафта за уровень.
+      //
+      // Множитель берётся ОТДЕЛЬНЫМ вызовом и в try/catch: getBonuses ходит
+      // в базу, и отказ базы не должен срывать начало крафта. Игрок без
+      // гильдии получает обычное время - это и есть правильное поведение.
+      completesAt: new Date(Date.now() + recipe.craftingTime * 1000 * множительКрафта),
       status: 'in_progress',
     };
 
