@@ -18,9 +18,15 @@
 // победы, минуя ходы, и честно говорит об этом в выводе.
 //
 // ЗАПУСК (из каталога server/, внутри контейнера):
-//   npx tsx tools/smoke-test-chess-win.ts
+//   npx tsx src/tools/smoke-test-chess-win.ts
+//
+// ПОЧЕМУ ФАЙЛ ЛЕЖИТ В src/, А НЕ В tools/. Dockerfile копирует в образ
+// только server/src: всё, что лежит рядом, в контейнер не попадает вовсе.
+// Первая версия скрипта жила в server/tools/ и на бою падала с
+// ERR_MODULE_NOT_FOUND - модуль не был найден не потому, что был плох,
+// а потому, что его физически не было в контейнере.
 import { createRequire } from 'node:module';
-import { ChessBetService } from '../src/services/ChessBetService';
+import { ChessBetService } from '../services/ChessBetService';
 const require = createRequire(import.meta.url);
 const { Client } = require('pg');
 
