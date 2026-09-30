@@ -169,6 +169,22 @@
       </div>
     </section>
 
+    <!-- Награда за переход по ссылке партнёра
+         Ссылка ведёт В ИГРУ, а не напрямую на партнёрский сайт. Идентификатор
+         игрока подставляет сервер, и подставить его в статической странице
+         нечем: раньше здесь стоял литерал «?userid=PLAYER_ID», и все игроки
+         уходили к партнёру с одним и тем же sub-id. Такой поток партнёрский
+         счёт считает невалидным.
+
+         Почему не в блоке объявления: баннер ставит текст через textContent,
+         и HTML в нём показывался бы игроку вместе с угловыми скобками.
+         Настоящая разметка живёт здесь, в файле. -->
+    <section class="section" id="reward">
+      <h2 class="section-title"><span data-icon="star8" data-icon-size="22"></span>&nbsp;<span data-i18n="site.reward_title"></span></h2>
+      <p data-i18n="site.reward_body"></p>
+      <a class="btn btn-gold" href="/game/" data-i18n="site.reward_btn"></a>
+    </section>
+
     <!-- Голосование на BrowserMMORPG -->
     <section class="section" id="bmmorpg">
       <div class="bmmorc" data-id="1854" data-theme="classic" data-accent="#2563eb" data-title="#111827" data-text="#111827" data-bg="#ffffff" data-btnbg="#ffffff" data-btntxt="#111827"></div>
