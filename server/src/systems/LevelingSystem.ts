@@ -142,6 +142,11 @@ export class LevelingSystem {
             experience = $1, level = $2,
             stats = $3::jsonb,
             max_hp = max_hp + $4,
+            -- База растёт тем же приростом. Поведение не меняется: обе
+            -- колонки идут в ногу, и max_hp пока равно base_max_hp.
+            -- Смысл разделения - в следующем шаге, где max_hp станет
+            -- base_max_hp плюс бонус гильдии, и снять бонус будет от чего.
+            base_max_hp = base_max_hp + $4,
             max_mana = max_mana + $5,
             updated_at = NOW()
            WHERE id = $6`,

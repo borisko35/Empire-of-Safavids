@@ -101,13 +101,18 @@ export class CharacterService {
 
     await this.db.query(
       `INSERT INTO characters
-        (id, user_id, name, class, level, experience, stats, hp, max_hp,
+        (id, user_id, name, class, level, experience, stats, hp, max_hp, base_max_hp,
          mana, max_mana, stamina, max_stamina, position, region, server_id, gold, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
       [
         character.id, character.userId, character.name, character.class,
         character.level, character.experience, JSON.stringify(character.stats),
-        character.hp, character.maxHp, character.mana, character.maxMana,
+        character.hp, character.maxHp,
+        // Позиция 10 - base_max_hp, ровно по плейсхолдеру $10. На своём
+        // месте, а не в конце списка: плейсхолдеры нумеруются по позиции,
+        // и значение на чужом месте молча кладёт одно поле в другое.
+        character.maxHp,
+        character.mana, character.maxMana,
         character.stamina, character.maxStamina, JSON.stringify(character.position),
         character.region, character.serverId, character.gold, character.createdAt, character.updatedAt,
       ]
