@@ -153,7 +153,15 @@ router.post('/finish', authMiddleware, async (req: any, res) => {
       // всё равно упрётся в already_claimed, так что доплатить счётчик
       // можно будет только вручную. Это лучше, чем отнимать награду за
       // сбой записи счётчика.
-      logger.error('[Poetry] счётчик стихов не записан:', (err as Error).message);
+      // Диагностика без домыслов. Сообщение выбросившегося может быть
+      // пустым - выбросить можно что угодно, и строка «счётчик не
+      // записан:» с пустотой после не говорит ничего. Поэтому пишем
+      // ещё и имя конструктора: Error с пустым message и голый объект
+      // выглядят в логе одинаково.
+      const причина = err instanceof Error
+        ? `${err.name}: ${err.message}`
+        : `не Error, а ${Object.prototype.toString.call(err)} ${JSON.stringify(err)}`;
+      logger.error(`[Poetry] счётчик стихов не записан (${причина})`);
       res.json({
         success: true,
         reward: забрано.reward,
