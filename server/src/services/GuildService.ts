@@ -5,6 +5,10 @@
 import { DatabaseService } from './DatabaseService';
 import { RedisService } from './RedisService';
 import { ITEMS_DATABASE } from '../data/items';
+// Правила рангов берём из справочника, а не пишем свои. Раньше файл с ними
+// не импортировался вообще, и сервис решал по своим спискам - значит,
+// правда о том, кто кого может назначить, была в двух местах.
+import { getGuildRankPermissions, canPromote, type GuildRank } from '../data/guilds';
 import { logger } from '../utils/logger';
 
 export interface Guild {
@@ -202,7 +206,11 @@ export class GuildService {
    * себе.
    */
   async setRank(guildId: string, actorId: string, charId: string, rank: string): Promise<void> {
-    const GUILD_RANKS = ['leader', 'officer', 'veteran', 'member'];
+    // Тип массива - string[], а не GuildRank[]: ранг приходит из тела запроса
+    // и является произвольной строкой, и проверка «есть ли такой ранг» должна
+    // быть проверкой строки. С GuildRank[] пришлось бы приводить тип, и
+    // список перестал бы выглядеть проверкой.
+    const GUILD_RANKS: string[] = ['leader', 'officer', 'veteran', 'member', 'recruit'];
     if (!GUILD_RANKS.includes(rank)) throw new Error('RANK_INVALID');
     if (actorId === charId) throw new Error('RANK_SELF');
     const guild = await this.getGuild(guildId);
@@ -212,6 +220,34 @@ export class GuildService {
       // Передача прав — это leave плюс назначение, одним UPDATE не обойтись
       throw new Error('RANK_TRANSFER_UNSUPPORTED');
     }
+
+    // ПРАВА НАЗНАЧАТЕЛЯ. Раньше этой проверки не было вовсе: setRank
+    // смотрел, что ранг существует, что назначают не себя и что не лидера -
+    // и этого хватало. Любой участник гильдии, включая новобранца, мог
+    // сделать кого угодно офицером. Проверки прав ждали на фронте или не
+    // ждали нигде, и маршрут её не требовал.
+    //
+    // Правила берём из data/guilds.ts - там они написаны, хотя им никто
+    // не пользовался. Два источника прав о рангов были бы двумя
+    // правдами: исправленный здесь список рангов разошёлся бы с
+    // getGuildRankPermissions.
+    const актер = await this.getMemberRank(guildId, actorId);
+    if (!актер) throw new Error('NOT_A_MEMBER');
+    // Право называется promote в data/guilds.ts - там так оно и записано.
+    // Первая версия правки искала can_manage_ranks, которого в справочнике
+    // нет, и проверка прав молча отказывала бы всем, включая лидера.
+    const права = getGuildRankPermissions(актер.rank);
+    if (!права?.promote) throw new Error('RANKS_FORBIDDEN');
+
+    const текущий = await this.getMemberRank(guildId, charId);
+    if (!текущий) throw new Error('MEMBER_NOT_FOUND');
+    // Понижать и повышать можно только тех, кто ниже тебя по рангу.
+    // Иначе офицер разжаловал бы ветерана, а новобранец - офицера.
+    if (!canPromote(актер.rank, текущий.rank)) throw new Error('RANK_OUT_OF_REACH');
+    // И нельзя выдать ранг выше или равный своему: иначе офицер сделал бы
+    // второго офицера, а canPromote на этом не останавливает.
+    if (!canPromote(актер.rank, rank as GuildRank)) throw new Error('RANK_OUT_OF_REACH');
+
     // RETURNING, потому что db.query отдаёт строки, а не rowCount: без него
     // нельзя отличить «ранг назначен» от «такого участника нет» — оба случая
     // молча проходят, и игрок думает, что назначил, а ничего не изменилось
@@ -220,6 +256,20 @@ export class GuildService {
       [rank, guildId, charId]
     );
     if (res.length === 0) throw new Error('MEMBER_NOT_FOUND');
+  }
+
+  /**
+   * Ранг участника или null, если его нет в гильдии.
+   *
+   * Отдельный метод, а не разбор результата getMembers: вызывающий должен
+   * знать ранг одного человека, а тянуть весь список ради одного ранг��.
+   */
+  private async getMemberRank(guildId: string, characterId: string): Promise<{ rank: GuildRank } | null> {
+    const row = await this.db.queryOne<{ rank: GuildRank }>(
+      'SELECT rank FROM guild_members WHERE guild_id = $1 AND character_id = $2',
+      [guildId, characterId],
+    );
+    return row ? { rank: row.rank } : null;
   }
 
   async addContribution(guildId: string, charId: string, points: number): Promise<void> {
