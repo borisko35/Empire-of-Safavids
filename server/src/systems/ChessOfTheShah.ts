@@ -295,6 +295,35 @@ export class ChessOfTheShah {
     return this.games.get(gameId);
   }
 
+  /**
+   * Вернуть партию в память движка из сохранённого состояния.
+   *
+   * ЗАЧЕМ. Движок держит доску в Map процесса, и после перезапуска Map
+   * пуст: игрок с живой партией и заложенной ставкой получал 404 и молча
+   * терял деньги. Состояние лежит в базе, и этот метод кладёт его обратно.
+   *
+   * Поле gameId восстанавливается из переданного, а не из state: там его
+   * может не быть, а Map ключуется именно им.
+   */
+  restore(state: ChessGameState & { gameId?: string }): ChessGameState | null {
+    if (!state?.board || !Array.isArray(state.board)) return null;
+    const gameId = state.gameId ?? `chess_${state.whitePlayerId ?? 'unknown'}_${Date.now()}`;
+    const restored: ChessGameState = {
+      gameId,
+      board: state.board,
+      turn: state.turn ?? 'white',
+      whiteKing: state.whiteKing ?? { row: 5, col: 2 },
+      blackKing: state.blackKing ?? { row: 0, col: 2 },
+      moveHistory: state.moveHistory ?? [],
+      status: state.status ?? 'playing',
+      betGold: Number(state.betGold ?? 0),
+      whitePlayerId: state.whitePlayerId ?? '',
+    };
+    this.games.set(gameId, restored);
+    logger.info(`[Chess] Game ${gameId} restored, bet: ${restored.betGold} gold`);
+    return restored;
+  }
+
   /** Удалить игру */
   deleteGame(gameId: string): void {
     this.games.delete(gameId);
