@@ -102,3 +102,7 @@ tools/itch-unpack/
 # Сегменты и ролики, которые собирает tools/build-trailer.sh.
 # Промежуточные файлы и пересборка - в репозитории им не место.
 tools/trailer-out/
+
+# Инструкция по публикации: генерируется tools/build-publish-instructions.js
+# под имя владельца itch.io, поэтому в репозитории ей не место.
+tools/publish-instructions.md
