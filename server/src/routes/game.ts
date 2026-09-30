@@ -50,6 +50,32 @@ import Joi from 'joi';
 export const gameRouter = Router();
 
 /**
+ * Схема тела POST /payments/topup.
+ *
+ * ПОЧЕМУ ОНА ВЫНЕСЕНА. Раз запрос проверяется прямо в маршруте, единственный
+ * способ доказать, что он не отвергает собственные запросы клиента, - это
+ * прогнать настоящую схему. Копия схемы в проверке ничего не доказывает: она
+ * живёт своей жизнью и остаётся зелёной, когда настоящая поломана. Раньше
+ * ровно это и произошло - поле provider было в клиенте, но не в схеме, и
+ * каждый клик «Купить» отвечал 400.
+ *
+ * Поле provider обязано быть здесь: клиент шлёт его всегда (api.ts), а
+ * схема без allowUnknown отбрасывает тело целиком. Значение берётся из
+ * проверенного value, а не из req.body - иначе в маршрут проходит то, что
+ * проверка не видела.
+ */
+export const topupSchema = Joi.object({
+  characterId: Joi.string().uuid().required(),
+  packId: Joi.string().max(32).optional(),
+  realCurrency: Joi.string().valid(...Object.keys(AZENS_CONVERSION_RATES)).optional(),
+  amount: Joi.number().positive().max(1000000).optional(),
+  provider: Joi.string().trim().lowercase().max(32).optional(),
+}).xor('packId', 'realCurrency').with('realCurrency', 'amount');
+
+/** Провайдер по умолчанию, если клиент поле не прислал. */
+export const DEFAULT_PAYMENT_PROVIDER = 'yookassa';
+
+/**
  * Куда провайдер возвращает игрока после оплаты.
  *
  * Адрес берётся из настройки PUBLIC_URL, а не из заголовка запроса: игрок
@@ -495,13 +521,7 @@ gameRouter.get('/payments/rates', (_req: Request, res: Response) => {
 // вебхук провайдера (POST /payments/webhook/:provider) после реальной оплаты.
 gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    const schema = Joi.object({
-      characterId: Joi.string().uuid().required(),
-      packId: Joi.string().max(32).optional(),
-      realCurrency: Joi.string().valid(...Object.keys(AZENS_CONVERSION_RATES)).optional(),
-      amount: Joi.number().positive().max(1000000).optional(),
-    }).xor('packId', 'realCurrency').with('realCurrency', 'amount');
-    const { error, value } = schema.validate(req.body);
+    const { error, value } = topupSchema.validate(req.body);
     if (error) return res.status(400).json({ error: error.details[0].message });
 
     const character = await characterService.getCharacterById(value.characterId);
@@ -521,7 +541,9 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
       // id: он понадобится, когда ключи появятся. Молча возвращать ошибку
       // «провайдер недоступен» значило бы, что игрок даже не сможет узнать,
       // что его заказ ушёл.
-      const provider = String(req.body?.provider ?? 'yookassa').toLowerCase();
+      // Из проверенного value, а не из req.body. Схема приводит регистр и
+      // обрезает пробелы; сырое тело этим свойствам не обязано.
+      const provider = String(value.provider ?? DEFAULT_PAYMENT_PROVIDER);
       let checkoutUrl: string | null = null;
       let providerError: string | null = null;
 
