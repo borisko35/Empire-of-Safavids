@@ -84,6 +84,8 @@ export class LeaderboardService {
     monstersKilled?: number;
     questsCompleted?: number;
     playtimeSeconds?: number;
+    /** Парирования. Засчитываются защитнику, не атакующему. */
+    parries?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];

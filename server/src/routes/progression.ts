@@ -32,8 +32,20 @@ router.get('/achievements', authMiddleware, async (req: any, res) => {
   const all = await achievements.getAll();
   const unlocked = await achievements.getUnlocked(characterId);
   const unlockedIds = new Set(unlocked.map(a => a.id));
+  // Прогресс по каждому достижению. Без него панель рисовала бы рядом с
+  // названием «Убить 10 монстров» серую строку без единой цифры, и
+  // игрок не отличил бы «ещё не убил» от «это вообще не считается».
+  const counters = await achievements.getCounters(characterId);
   res.json({
-    achievements: all.map(a => ({ ...a, unlocked: unlockedIds.has(a.id) })),
+    achievements: all.map(a => ({
+      ...a,
+      unlocked: unlockedIds.has(a.id),
+      // null, а не 0: у достижения без условия счётчика нет, и ноль был бы
+      // правдоподобной ложью. Панель по null пишет «пока не считается».
+      current: a.condition ? Number(counters[a.condition.counter] ?? 0) : null,
+      need: a.condition ? a.condition.need : null,
+      counted: !!a.condition,
+    })),
     total: all.length,
     unlockedCount: unlocked.length,
   });

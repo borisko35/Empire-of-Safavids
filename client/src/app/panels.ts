@@ -2012,9 +2012,17 @@ async function loadAchievements(): Promise<void> {
       const icon = a.icon ?? '★';
       const name = en ? a.title : a.title_ru;
       const desc = en ? a.description : a.description_ru;
+      // Прогресс. Для достижения со счётчиком - «7 / 10», и цифра растёт
+      // по мере игры. Для достижения без счётчика - «пока не считается»:
+      // там нет колонки в базе, и ноль был бы правдоподобной ложью -
+      // рядом с «Скрафтить 50 предметов» игрок решил бы, что не крафтил.
+      const progress = a.counted && a.need
+        ? `${Math.min(a.current ?? 0, a.need)} / ${a.need}`
+        : t('achievements.not_counted');
       row.innerHTML = `<span style="font-size:18px;">${icon}</span>` +
         `<span class="friend-name">${name ?? ''}</span>` +
         `<span class="friend-info">${desc ?? ''}</span>` +
+        `<span class="lb-value">${progress}</span>` +
         (a.reward_gold ? `<span class="lb-value">◉${a.reward_gold}</span>` : '');
       box.append(row);
     }

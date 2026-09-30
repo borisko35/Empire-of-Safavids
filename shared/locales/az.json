@@ -1338,7 +1338,8 @@
   "achievements": {
     "stats": "Açılıb: {done} / {total}",
     "coming": "Yeni nailiyyətlər tezliklə gəlir",
-    "unavailable": "Nailiyyətlər mövcud deyil"
+    "unavailable": "Nailiyyətlər mövcud deyil",
+    "not_counted": "hələ sayılmır"
   },
   "tasks": {
     "unavailable": "Tapşırıqlar mövcud deyil"

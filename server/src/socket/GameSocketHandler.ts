@@ -4,6 +4,7 @@ import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { LeaderboardService } from '../services/LeaderboardService';
+import { AchievementService } from '../services/AchievementService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
@@ -102,6 +103,12 @@ export class GameSocketHandler {
    * показывал «пока нет данных».
    */
   private leaderboardService = new LeaderboardService();
+  /**
+   * Достижения проверяются из боя, а не из панели: панель может и не быть
+   * открыта, а десятое парирование происходит в бою. Отдельный экземпляр,
+   * не синглтон из маршрутов, потому что у сервиса своё подключение к базе.
+   */
+  private achievements = new AchievementService();
   private combatService = new CombatService();
   private antiCheat = new AntiCheatSystem();
   private karmaSystem = new KarmaSystem();
@@ -1194,6 +1201,17 @@ export class GameSocketHandler {
         isCritical: false,
         region: socket.region ?? 'unknown',
       }));
+      // Парирование засчитывается защитнику: это его достижение, а не
+      // атакующего. Отсюда и достижение «Идеальный Блок», и счётчик,
+      // на который оно смотрит.
+      //
+      // void, а не await: счётчик и проверка достижений - награда за бой,
+      // а не условие боя. Если база мигнёт, игрок не должен за это
+      // расплачиваться самим парированием.
+      void this.leaderboardService
+        .increment(target.id, { parries: 1 })
+        .then(() => this.achievements.checkAll(target.id))
+        .catch((e: unknown) => logger.warn('[Combat] счётчик парирований:', (e as Error).message));
       void appliedToAttacker;
       return;
     }
@@ -1419,6 +1437,11 @@ export class GameSocketHandler {
       // начала, и её не писал никто. Через increment, потому что тик
       // регенерации раз в 5 секунд перезаписывает строку рейтинга целиком.
       void this.leaderboardService.increment(attacker.id, { monstersKilled: 1 })
+        // Счётчик накопился - проверяем достижения. Именно здесь, а не в
+        // панели: «Первая Кровь» выдаётся за первое убийство, а панель
+        // могли и не открыть. Цепочкой, потому что счётчик копится
+        // сложением и на момент проверки уже должен лежать в базе.
+        .then(() => this.achievements.checkAll(attacker.id))
         .catch((error) => logger.debug('Leaderboard kills skipped:', error));
       void grantReputation(attacker.id, 'monsterKill', (faction, rankRu) => {
         socket.emit(SERVER_EVENTS.NOTIFICATION, {

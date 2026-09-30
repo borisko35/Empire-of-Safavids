@@ -1338,7 +1338,8 @@
   "achievements": {
     "stats": "Разблокировано: {done} / {total}",
     "coming": "Достижения скоро появятся",
-    "unavailable": "Достижения недоступны"
+    "unavailable": "Достижения недоступны",
+    "not_counted": "пока не считается"
   },
   "tasks": {
     "unavailable": "Задачи недоступны"

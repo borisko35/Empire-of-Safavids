@@ -67,9 +67,17 @@ function makeDeps(): {
         unlockedFor.push(charId);
         return [{ id: 'ach_first_blood' }];
       },
+      /**
+       * Счётчики. Маршрут зовёт их, чтобы отдать прогресс по строке.
+       * Без этого метода маршрут падал бы с «getCounters is not a function» -
+       * и проверка панели падала бы, ничего не говоря о панели.
+       */
+      async getCounters() {
+        return { monsters_killed: 0, parries: 0, pvp_wins: 0, quests_completed: 0 };
+      },
       async getProgress(charId: string, achId: string) {
         progressFor.push(`${charId}:${achId}`);
-        return { unlocked: true };
+        return { unlocked: true, current: 0, need: 1, counted: true };
       },
     },
     // Проверка принадлежности: тот же запрос, что у других панелей
@@ -168,14 +176,37 @@ describe('Строка достижения: поля клиента есть в
 
   it('ни одно поле клиента не отдаётся undefined', async () => {
     // Настоящий сервис: определения достижений лежат в модуле и базу не
-    // трогают, поэтому это ровно тот набор, что уйдёт игроку в JSON
+    // трогают, поэтому это ровно тот набор, что уйдёт игроку в JSON.
     const defs = await new AchievementService().getAll();
     expect(defs.length).toBeGreaterThan(10);
 
-    // Настоящий ответ сервера: определение плюс флаг, который добавляет маршрут
-    const payload: Record<string, unknown> = { ...defs[0], unlocked: false };
+    // Настоящий ответ сервера, а не собранный руками.
+    //
+    // ТУТ БЫЛА ПОДМЕНА: payload склеивался как {...defs[0], unlocked: false}.
+    // Маршрут добавляет в каждую строку ещё current, need и counted, и в
+    // подмене их не было - проверка видела только определение, а не ответ.
+    // Ровно так она пропустила бы поле, которое панель читает, а маршрут
+    // не отдаёт. Теперь ответ берётся из res.body настоящего маршрута.
+    const { deps } = makeDeps();
+    (deps.achievements as { getAll: () => Promise<unknown> }).getAll = async () => defs;
+    (deps.achievements as { getCounters?: unknown }).getCounters =
+      async () => ({ monsters_killed: 3, parries: 0, pvp_wins: 0, quests_completed: 0 });
+    const handler = buildRouteRunner(routes, "'/achievements'", deps) as (
+      req: Req, res: FakeRes,
+    ) => Promise<void> | void;
+    const res = makeRes();
+    await handler({ query: { characterId: 'CHAR-OWN' }, userId: 'USER-1' }, res);
+    expect(res.statusCode).toBe(200);
+
+    const body = res.body as { achievements: Record<string, unknown>[] };
+    const payload = body.achievements[0];
+
     const keys = [...new Set([...rowBlock.matchAll(/\ba\.([a-zA-Z_]\w*)/g)].map((m) => m[1]))];
+    expect({ полей_у_клиента: keys.length }).toEqual({ полей_у_клиента: expect.any(Number) });
     for (const key of keys) {
+      // Не 'undefined', а именно наличие: отсутствующее поле в ответе и
+      // поле со значением undefined одинаково рисуют в панели пустоту,
+      // но первое - поломка сервера, второе - поломка сериализации.
       expect({ key, есть: key in payload }).toEqual({ key, есть: true });
     }
   });

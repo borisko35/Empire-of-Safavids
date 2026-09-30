@@ -1338,7 +1338,8 @@
   "achievements": {
     "stats": "Unlocked: {done} / {total}",
     "coming": "Achievements are coming soon",
-    "unavailable": "Achievements are unavailable"
+    "unavailable": "Achievements are unavailable",
+    "not_counted": "not tracked yet"
   },
   "tasks": {
     "unavailable": "Quests are unavailable"
