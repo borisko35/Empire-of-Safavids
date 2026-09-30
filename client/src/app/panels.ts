@@ -3812,12 +3812,20 @@ export async function loadSkills(): Promise<void> {
       skillsBox.innerHTML = `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
     }
     if (profId) {
-      const { skills: avail } = await api.getProfessionSkills(profId);
-      const known = new Set(skills.map(s => s.id));
-      // Порог - уровень самого персонажа, а не выдуманное тридцатое:
-      // иначе панель предлагала навык, который сервер всё равно не даст.
-      const myLevel = session.character?.level ?? 0;
-      const available = avail.filter(s => !known.has(s.id) && s.level <= myLevel);
+      // Список берётся у сервера, а не с фильтром на клиенте.
+      //
+      // Почему так. Панель спрашивала /professions/:id/skills - список вообще
+      // всех навыков профессии, без персонажа, и отсекала недоступные сама,
+      // по закешированному уровню. Две беды: игрок, взявший уровень в бою,
+      // не видел новый навык до перезагрузки, а расхождение с сервером
+      // показало бы кнопку, которая не сработает. Свойство или отказ при
+      // ошибке базы отдавали 0, и панель молча прятала всё.
+      //
+      // Теперь единственный источник правды - сервер, который и уровень
+      // персонажа знает, и навык выдаёт по тому же правилу. Расхождение
+      // между кнопкой и сервером невозможно по построению: кнопка рисуется
+      // из ответа того же кода, который потом откажет.
+      const { skills: available } = await api.getAvailableSkills(charId, profId);
       availBox.innerHTML = available.length
         ? available.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
         : '';
