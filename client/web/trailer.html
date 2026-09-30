@@ -101,6 +101,13 @@
   Если нужно записать — включай и снимай экран. Клавиша «пробел» — пауза.
 </p>
 
+<!-- Лицензия. GPL-3.0 требует, чтобы текст лицензии передавался вместе с
+     программой, а «свободное программное обеспечение» было сказано вслух.
+     До этой строки на сайте не было ни того, ни другого: LICENSE лежал в
+     корне репозитория, а игрок его не видит. Три языка - страница и так
+     переключается между ними. -->
+<p class="hint lic" id="lic"><span data-lic="ru">Свободное программное обеспечение: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="en">Free software: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="az">Azad proqram təminatı: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span></p>
+
 <script>
 // Сценарий: tools/trailer-storyboard.md
 // Пути к кадрам ОТНОСИТЕЛЬНЫЕ, без ведущей косой черты.
@@ -234,11 +241,18 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
     lang = b.dataset.lang;
     document.documentElement.lang = lang;
     playB.textContent = SCRIPT[lang].play;
+    // Строки лицензии: оставляем только текущий язык.
+    document.querySelectorAll('[data-lic]').forEach((s) => {
+      s.style.display = s.dataset.lic === lang ? '' : 'none';
+    });
     idx = -1;
     render();
   });
 });
 document.querySelector('[data-lang="ru"]').classList.add('on');
+document.querySelectorAll('[data-lic]').forEach((s) => {
+  s.style.display = s.dataset.lic === 'ru' ? '' : 'none';
+});
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); playing ? stop() : start(); }
