@@ -73,7 +73,8 @@ export type AchievementCounter =
   | 'poetry_completed'
   | 'chess_wins'
   | 'dungeons_cleared'
-  | 'items_crafted';
+  | 'items_crafted'
+  | 'trades_completed';
 
 /**
  * Условия, которые не счётчик, а состояние.
@@ -125,6 +126,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   chess_wins: 'chess_wins',
   dungeons_cleared: 'dungeons_cleared',
   items_crafted: 'items_crafted',
+  trades_completed: 'trades_completed',
 };
 
 /**
@@ -173,6 +175,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     condition: { counter: 'monsters_killed', need: 1000 } },
   // Комбо и боссы: счётчиков нет. Пока их нет, выдать нечего, и
   // достижение остаётся недостижимым - честнее, чем выдать за 100 золота.
+  // НЕ СЧИТАЕТСЯ. Цепочка ударов живёт в памяти (comboChains в
+  // GameSocketHandler) и её длина - это МАКСИМУМ за окно, а не сумма.
+  // Две серии по три удара дали бы сложением шесть, а «комбо из 5» - это
+  // одна серия длиной пять. Счётчик-максимум в increment не умеет и был
+  // бы отдельной сущностью со своим правилом записи: записи могли бы
+  // расходиться, и тогда счётчик врал бы сам себе.
   { id: 'ach_combo_5', title: 'Combo Master', title_ru: 'Мастер Комбо',
     description: 'Land a 5-hit combo', description_ru: 'Нанести комбо из 5 ударов',
     category: 'combat', icon: '🔥', reward_gold: 100, reward_experience: 150, hidden: false },
@@ -180,15 +188,28 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: 'Perform 10 perfect blocks', description_ru: 'Выполнить 10 идеальных блоков',
     category: 'combat', icon: '🛡️', reward_gold: 200, reward_experience: 300, hidden: false,
     condition: { counter: 'parries', need: 10 } },
+  // СИСТЕМЫ НЕТ. В игре есть только комнаты боссов внутри подземелий
+  // (isBossRoom, bossId в data/dungeons.ts). Мирового босса, которого
+  // можно убить, не существует, и накапливать его убийства не из чего.
+  // Выдать это достижение нечем, а выдать «за компанию» - значит раздать
+  // золото без повода.
   { id: 'ach_boss_slayer', title: 'Boss Slayer', title_ru: 'Убийца Боссов',
     description: 'Kill your first world boss', description_ru: 'Убить первого мирового босса',
     category: 'combat', icon: '🐉', reward_gold: 2000, reward_experience: 5000, reward_title: 'Охотник на Драконов', hidden: false },
 
   // ── ИССЛЕДОВАНИЕ ─────────────────────────────────────
   // Регионы, подземелья и друзья: счётчиков нет, выдать нечем.
+  // ЛОВУШКА, КОТОРАЯ ЕЩЁ НЕ ЗАМКНУТА. Регион стоит по умолчанию ровно
+  // в «tabriz» (миграция 001), поэтому проверка characters.region =
+  // «tabriz» была бы верной с момента регистрации, и достижение
+  // выдавалось бы бесплатно, никто никуда не сходив. Чтобы условие было
+  // честным, нужен список посещений - отдельная таблица. Её нет.
   { id: 'ach_explorer_tabriz', title: 'Discoverer of Tabriz', title_ru: 'Первооткрыватель Тебриза',
     description: 'Visit Tabriz', description_ru: 'Посетить Тебриз',
     category: 'exploration', icon: '🗺️', reward_gold: 50, reward_experience: 50, hidden: false },
+  // НЕ СЧИТАЕТСЯ. Нужен список посещённых регионов, а не текущий
+  // регион: «посетить все семь» нельзя вывести из одного столбца, в
+  // котором лежит только то, где персонаж сейчас.
   { id: 'ach_explorer_all', title: 'Master of Maps', title_ru: 'Повелитель Карт',
     description: 'Visit all 7 regions', description_ru: 'Посетить все 7 регионов',
     category: 'exploration', icon: '🌍', reward_gold: 1000, reward_experience: 2000, reward_title: 'Странник Миров', hidden: false },
@@ -222,7 +243,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     condition: { counter: 'items_crafted', need: 50 } },
   { id: 'ach_trader', title: 'Silk Road Trader', title_ru: 'Торговец Шёлкового Пути',
     description: 'Complete 10 trade contracts', description_ru: 'Выполнить 10 торговых контрактов',
-    category: 'crafting', icon: '💰', reward_gold: 300, reward_experience: 500, hidden: false },
+    category: 'crafting', icon: '💰', reward_gold: 300, reward_experience: 500, hidden: false,
+    // Число 10 взято из описания «выполнить 10 торговых контрактов».
+    condition: { counter: 'trades_completed', need: 10 } },
 
   // ── КВЕСТЫ ───────────────────────────────────────────
   { id: 'ach_quest_10', title: 'Adventurer', title_ru: 'Авантюрист',
@@ -246,6 +269,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: 'Complete all poetry challenges', description_ru: 'Выполнить все поэтические задания',
     category: 'minigames', icon: '📜', reward_gold: 1000, reward_experience: 1000, reward_title: 'Поэт Шираза', hidden: true,
     condition: { counter: 'poetry_completed', need: POETRY_TOTAL } },
+  // НЕ ИЗМЕРИМО. В DungeonService нет ни счётчика смертей, ни поля в
+  // сессии: подземелье просто закрывается. Условие потребовало бы начать
+  // считать смерти в каждой сессии подземелья - это правка в системе
+  // подземелий, а не достижение.
   { id: 'ach_no_death', title: 'Untouchable', title_ru: 'Неприкосновенный',
     description: 'Complete a dungeon without dying', description_ru: 'Пройти подземелье без смертей',
     category: 'combat', icon: '✨', reward_gold: 1000, reward_experience: 2000, reward_title: 'Неприкосновенный', hidden: true },

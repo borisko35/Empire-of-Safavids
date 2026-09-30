@@ -12,6 +12,9 @@ import { DatabaseService } from '../services/DatabaseService';
 import { ITEMS_DATABASE } from '../data/items';
 import { RedisService } from '../services/RedisService';
 import { grantReputation } from './ReputationGrants';
+// Счётчик выполненных контрактов для достижения. Общая таблица
+// leaderboard - там же убийства, парирования, стихи, шахматы, крафт.
+import { LeaderboardService } from '../services/LeaderboardService';
 import { logger } from '../utils/logger';
 
 export interface TradeContractDef {
@@ -247,6 +250,16 @@ export class TradeService {
     // начислится: после сдачи статус становится 'delivered', и getActive
     // возвращает null, поэтому повторный deliver отсекается строкой выше.
     void grantReputation(characterId, 'tradeDone');
+
+    // Счётчик достижения. Начисляется ТОЛЬКО здесь, где груз сдан и
+    // награда выдана: принять контракт - ещё не выполнить его.
+    //
+    // ПОСЛЕ выплат. Если бы счётчик рос, а выплата упала, контракт был бы
+    // засчитан, а денег не было бы. Порядок «сначала награда, потом
+    // счётчик» означает, что счётчик считает выполненное.
+    await new LeaderboardService().increment(characterId, { tradesCompleted: 1 })
+      .catch(err => logger.error('[Trade] счётчик контрактов не вырос:', (err as Error).message));
+
     return { ok: true, gold: def.rewardGold, exp: def.rewardExp, silver, syrian, contract: def };
   }
 

@@ -94,6 +94,8 @@ export class LeaderboardService {
     dungeonsCleared?: number;
     /** Скрафченные предметы. Начисляются за УСПЕШНЫЙ крафт. */
     itemsCrafted?: number;
+    /** Выполненные торговые контракты. Начисляются за сданный груз. */
+    tradesCompleted?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];
