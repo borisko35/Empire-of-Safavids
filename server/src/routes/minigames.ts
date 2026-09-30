@@ -68,6 +68,29 @@ router.post('/start', authMiddleware, async (req: any, res) => {
     const персонаж = await свойПерсонаж(req, res);
     if (!персонаж) return;
     const betGold = normalizeBet(req.body?.betGold);
+
+    // Одна партия на персонажа. Каждая со своим залогом, так что деньги
+    // не задваивались бы, - но панель рисует одну доску, и выигрыш за
+    // вторую партию пришёл бы «из ниоткуда». Вместо новой партии отдаём
+    // ту, что уже идёт: игрок её и так видит, и кнопка «начать» должна
+    // его туда возвращать, а не заставлять заново ставить.
+    const ужеИдёт = await bets.findPlaying(персонаж);
+    if (ужеИдёт) {
+      if (ужеИдёт.state) восстановить(ужеИдёт.state);
+      res.status(409).json({
+        error: 'game_in_progress',
+        game: {
+          gameId: ужеИдёт.gameId,
+          betGold: ужеИдёт.betGold,
+          board: ужеИдёт.state?.board ?? null,
+          turn: ужеИдёт.state?.turn ?? 'white',
+          status: ужеИдёт.state?.status ?? 'playing',
+          moveCount: ужеИдёт.state?.moveHistory?.length ?? 0,
+        },
+      });
+      return;
+    }
+
     const game = chess.startGame(персонаж, betGold);
 
     const открытие = await bets.open(game.gameId, персонаж, betGold, game);
