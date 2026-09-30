@@ -18,7 +18,11 @@
 --
 -- ЗАЩИТА ОТ ПОВТОРОГО ЗАПУСКА. Фильтр выбирает по ссылке, поэтому хоть
 -- десять раз применённая миграция не упадёт на «nothing to delete».
-BEGIN;
+--
+-- БЕЗ СОБСТВЕННЫХ BEGIN/COMMIT. Их оборачивает migrate.ts: он открывает
+-- транзакцию, выполняет файл и откатывает при ошибке. Собственные
+-- BEGIN/COMMIT внутри миграции закрывают его транзакцию раньше времени,
+-- и его ROLLBACK откатывает уже не то.
 
 UPDATE site_content
 SET value = jsonb_set(
@@ -41,5 +45,3 @@ WHERE key = 'news'
     FROM jsonb_array_elements(value->'items') AS item
     WHERE COALESCE(item->>'link', '') = '/update.html'
   );
-
-COMMIT;
