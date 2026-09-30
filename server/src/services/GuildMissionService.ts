@@ -234,15 +234,19 @@ export class GuildMissionService {
       await this.db.query(
         `INSERT INTO guild_mission_progress
            (mission_row, objective_index, character_id, progress)
-         VALUES ($1, $2, $3, LEAST($4, $5))
+         VALUES ($1, $2, $3, LEAST($4::int, $5::int))
          ON CONFLICT (mission_row, objective_index,
                       COALESCE(character_id, '00000000-0000-0000-0000-000000000000'::uuid))
          DO UPDATE SET progress = LEAST(
-           guild_mission_progress.progress + $4, $5), updated_at = NOW()`,
+           guild_mission_progress.progress + $4::int, $5::int), updated_at = NOW()`,
         [строка.row_id, objectiveIndex, characterId, Math.floor(добавить), Number(цель.required) || 0],
       );
     } catch (e) {
-      logger.warn('[GuildMissions] прогресс не записан:', (e as Error).message);
+      // Печатается не только message: у ошибки Postgres смысл в code
+      // (42804 - несовпадение типа), и по одному тексту причина не читалась.
+      const ошибка = e as { message?: string; code?: string };
+      logger.warn('[GuildMissions] прогресс не записан:',
+        `${ошибка.code ?? 'без кода'} ${ошибка.message ?? 'без сообщения'}`);
     }
   }
 
