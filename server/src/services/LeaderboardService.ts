@@ -88,6 +88,8 @@ export class LeaderboardService {
     parries?: number;
     /** Собранные стихотворения. Начисляются за верно собранное. */
     poetryCompleted?: number;
+    /** Победы в шахматах. Начисляются за выплаченную выплату. */
+    chessWins?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];

@@ -57,7 +57,8 @@ export type AchievementCounter =
   | 'parries'
   | 'pvp_wins'
   | 'quests_completed'
-  | 'poetry_completed';
+  | 'poetry_completed'
+  | 'chess_wins';
 
 /** Счётчик -> колонка таблицы leaderboard. Больше ниоткуда. */
 export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
@@ -66,6 +67,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   pvp_wins: 'pvp_wins',
   quests_completed: 'quests_completed',
   poetry_completed: 'poetry_completed',
+  chess_wins: 'chess_wins',
 };
 
 /**
@@ -167,7 +169,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // ── СЕКРЕТНЫЕ ────────────────────────────────────────
   { id: 'ach_chess_master', title: 'Chess Master', title_ru: 'Шахматный Гений',
     description: 'Win 10 chess games', description_ru: 'Выиграть 10 шахматных партий',
-    category: 'minigames', icon: '♟️', reward_gold: 500, reward_experience: 500, reward_title: 'Шахматный Гений', hidden: true },
+    category: 'minigames', icon: '♟️', reward_gold: 500, reward_experience: 500, reward_title: 'Шахматный Гений', hidden: true,
+    // Число 10 взято из описания, а не выдумано: «выиграть 10 шахматных
+    // партий» было написано и раньше, но условия не было - пункт значился
+    // как «пока не считается».
+    condition: { counter: 'chess_wins', need: 10 } },
   { id: 'ach_poet', title: 'Poet of Shiraz', title_ru: 'Поэт Шираза',
     description: 'Complete all poetry challenges', description_ru: 'Выполнить все поэтические задания',
     category: 'minigames', icon: '📜', reward_gold: 1000, reward_experience: 1000, reward_title: 'Поэт Шираза', hidden: true,
