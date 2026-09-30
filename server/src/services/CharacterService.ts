@@ -12,6 +12,10 @@ import { seasonalEvent } from './SeasonalEventService';
 import type { WalletCurrency } from '../utils/economy';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 import { isCombatStance, type CombatStance } from '../systems/CombatStance';
+// Навыки гильдии. Импорт здесь, а не только в маршрутах: бонус к опыту
+// считается в addExperience, и он должен попадать в ту же цепочку, что бафф,
+// сезонный праздник и бонус профессии.
+import { GuildService } from './GuildService';
 import { professionOf } from './ProfessionService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
 
@@ -251,7 +255,21 @@ export class CharacterService {
     // Теперь обещает опыт, и он считается здесь же, а не в описании.
     const prof = await professionOf(characterId);
     const profExp = professionBonuses(prof?.id ?? null, prof?.level ?? 0).experience;
-    const total = Math.floor(amount * mult * seasonal * profExp);
+    // Навык гильдии «Благословение Учёного». До этого в data/guilds.ts был
+    // объявлен навык с описанием «+2% к опыту за каждый уровень», и он не
+    // существовал нигде. Теперь бонус гильдии входит в ту же цепочку.
+    //
+    // Ошибка не роняет начисление опыта: если гильдия недоступна, игрок
+    // получает опыт без бонуса, а не остаётся без опыта вообще. Отлов
+    // ошибки здесь не маскировка - бонус не должен быть причиной потери
+    // опыта, иначе отказ базы был бы наказан игроку дважды.
+    let guildExp = 1;
+    try {
+      guildExp = (await new GuildService().getBonuses(characterId)).exp;
+    } catch {
+      guildExp = 1;
+    }
+    const total = Math.floor(amount * mult * seasonal * profExp * guildExp);
 
     // Делегируем единой системе прокачки (прирост статов/навыков при level up)
     const result = await this.leveling.addExperience(character, total, 'experience_gain');

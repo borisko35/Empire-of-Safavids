@@ -8,7 +8,10 @@ import { ITEMS_DATABASE } from '../data/items';
 // Правила рангов берём из справочника, а не пишем свои. Раньше файл с ними
 // не импортировался вообще, и сервис решал по своим спискам - значит,
 // правда о том, кто кого может назначить, была в двух местах.
-import { getGuildRankPermissions, canPromote, type GuildRank } from '../data/guilds';
+import { getGuildRankPermissions, canPromote, GUILD_SKILLS, type GuildRank } from '../data/guilds';
+import {
+  guildBonuses, isSkillWired, maxLevel, upgradeCost,
+} from '../systems/GuildBonuses';
 import { logger } from '../utils/logger';
 
 export interface Guild {
@@ -28,9 +31,30 @@ export interface GuildBankItem {
   deposited_by: string; deposited_at: string; nameRu: string;
 }
 
+/**
+ * Кэш бонусов гильдии: гильдия -> посчитанные бонусы.
+ *
+ * ПОЧЕМУ ОН НЕ ПОЛЯ ЭКЗЕМПЛЯРА. Сервис создают в трёх местах: маршрут
+ * гильдий, маршрут игры и проверки. Если бы кэш жил в экземпляре, у каждого
+ * была бы своя копия, и кэширование не давало бы ничего: опыт начисляет
+ * один экземпляр, а покупка навыка чистит кэш другого, и после покупки
+ * бонус мог бы остаться прежним.
+ *
+ * Устаревания по времени нет намеренно: бонус меняется только покупкой,
+ * а покупка чистит кэш сама. Появится другой путь изменения - чистить
+ * надо и там, иначе кэш разойдётся с базой.
+ */
+const кэшБонусов = new Map<string, { exp: number; gold: number; unavailable: string[] }>();
+
+/** Сброс кэша. Для проверок: два набора подставляют разные уровни одной гильдии. */
+export function сбросКэшаГильдий(): void {
+  кэшБонусов.clear();
+}
+
 export class GuildService {
   private db = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
+
 
   async createGuild(name: string, tag: string, leaderId: string, desc: string): Promise<Guild> {
     // Проверяем, не состоит ли уже в гильдии
@@ -270,6 +294,117 @@ export class GuildService {
       [guildId, characterId],
     );
     return row ? { rank: row.rank } : null;
+  }
+
+  /**
+   * Бонусы гильдии для персонажа.
+   *
+   * Берутся по персонажу, а не по гильдии из сессии: персонаж может
+   * состоять в гильдии или не состоять, и проверка «есть ли» здесь же.
+   * Пустой результат - не ошибка, а «бонусов нет».
+   *
+   * ЗАЧЕМ КЭШ ПО ГИЛЬДИИ, А НЕ ПО ПЕРСОНАЖУ. Опыт начисляется на каждом
+   * убитом монстре, и без кэша каждое убийство читало бы все навыки
+   * гильдии из базы. Кэш хранится по гильдии, а не по персонажу, потому
+   * что сбрасывать его умеет только покупка навыка - она знает свою
+   * гильдию. По персонажу пришлось бы искать всех участников.
+   *
+   * Устаревание по времени НЕ добавлено намеренно: бонус измениться может
+   * только покупкой, а покупка чистит кэш сама. Если бы появился иной путь
+   * (например, админская команда), кэш надо чистить и там - иначе бонус
+   * разъедутся с тем, что в базе.
+   */
+  async getBonuses(characterId: string): Promise<{ exp: number; gold: number; unavailable: string[] }> {
+    const строка = await this.db.queryOne<{ guild_id: string }>(
+      'SELECT guild_id FROM guild_members WHERE character_id = $1 LIMIT 1',
+      [characterId],
+    );
+    if (!строка) return guildBonuses({});
+    const вКэше = кэшБонусов.get(строка.guild_id);
+    if (вКэше) return вКэше;
+    const бонусы = guildBonuses(await this.getSkillLevels(строка.guild_id));
+    кэшБонусов.set(строка.guild_id, бонусы);
+    return бонусы;
+  }
+
+  /** Уровни навыков гильдии. */
+  async getSkillLevels(guildId: string): Promise<Record<string, number>> {
+    const rows = await this.db.query<{ skill_id: string; level: number }>(
+      'SELECT skill_id, level FROM guild_skills WHERE guild_id = $1',
+      [guildId],
+    );
+    const out: Record<string, number> = {};
+    for (const r of rows) out[r.skill_id] = Number(r.level ?? 0);
+    return out;
+  }
+
+  /**
+   * Купить уровни навыка за золото гильдии.
+   *
+   * Четыре отказа, и каждый со своим смыслом: не хватает золота, такой
+   * навык неизвестен, потолок уже взят, а за этот навык нельзя платить -
+   * точка применения не подключена. Последний отказ главный: раньше
+   * навыков не существовало вовсе, а если бы они появились вместе с ценой
+   * и без применения, гильдия платила бы за пустоту.
+   *
+   * Право покупать - право promote из справочника рангов: назначать ранги и
+   * вкладывать золото гильдии дело одного круга людей.
+   */
+  async upgradeSkill(guildId: string, actorId: string, skillId: string, levels: number): Promise<{ level: number; cost: number }> {
+    if (!isSkillWired(skillId)) throw new Error('SKILL_UNAVAILABLE');
+    const сколько = Math.max(1, Math.floor(Number(levels) || 1));
+    const стоимость = upgradeCost(skillId, сколько);
+    if (стоимость <= 0) throw new Error('SKILL_UNKNOWN');
+
+    const актер = await this.getMemberRank(guildId, actorId);
+    if (!актер) throw new Error('NOT_A_MEMBER');
+    const права = getGuildRankPermissions(актер.rank);
+    // Право manageTreasury, а не promote: вкладывают золото, а не назначают.
+    if (!права?.manageTreasury) throw new Error('SKILLS_FORBIDDEN');
+
+    const текущий = await this.db.queryOne<{ level: number }>(
+      'SELECT level FROM guild_skills WHERE guild_id = $1 AND skill_id = $2',
+      [guildId, skillId],
+    );
+    const потолок = maxLevel(skillId);
+    const новый = Number(текущий?.level ?? 0) + сколько;
+    if (новый > потолок) throw new Error('SKILL_MAXED');
+
+    // Списание золота и запись уровня - одним UPDATE по таблице guilds
+    // плюс upsert навыка. Сначала списание: если запись навыка упадёт,
+    // золото уже списано, и игрок потеряет его молча.
+    //
+    // Порядок именно такой, а не наоборот: если бы уровень записался
+    // раньше списания, неудачное списание оставило бы бонус бесплатно.
+    //
+    // Проверка WHERE gold >= стоимость - обязательна: без неё гильдия могла
+    // бы купить навык в долг, и отрицательное золото котла осталось бы
+    // незамеченным.
+    const списание = await this.db.query<{ gold: number }>(
+      'UPDATE guilds SET gold = gold - $1 WHERE id = $2 AND gold >= $1 RETURNING gold',
+      [стоимость, guildId],
+    );
+    if (списание.length === 0) throw new Error('NOT_ENOUGH_GUILD_GOLD');
+
+    await this.db.query(
+      `INSERT INTO guild_skills (guild_id, skill_id, level, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (guild_id, skill_id) DO UPDATE SET level = EXCLUDED.level, updated_at = NOW()`,
+      [guildId, skillId, новый],
+    );
+    // Кэш бонусов этой гильдии сбрасывается ПОСЛЕ записи уровня. Сброс до
+    // записи дал бы окно, в котором опыт начисляется по старому уровню
+    // при уже новом золоте в котле.
+    кэшБонусов.delete(guildId);
+    logger.info(`[Guild] ${guildId} skill ${skillId} -> ${новый} за ${стоимость}`);
+    return { level: новый, cost: стоимость };
+  }
+
+  /** Навыки, за которые платить нельзя: точка применения не подключена. */
+  get unwiredSkillIds(): string[] {
+    // Список из справочника, а не зашитый: новый навык без точки применения
+    // должен попасть сюда сам, иначе он молча стал бы продаваться.
+    return GUILD_SKILLS.filter(s => !isSkillWired(s.id)).map(s => s.id);
   }
 
   async addContribution(guildId: string, charId: string, points: number): Promise<void> {

@@ -3,6 +3,10 @@ import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
+// Навыки гильдии: бонус к золоту с монстра считается здесь, на месте
+// выпадения, потому что золото начисляется в трёх разных системах - боёв,
+// подземелиях и рыбалке, - и каждая считает своё.
+import { GuildService } from '../services/GuildService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { AchievementService } from '../services/AchievementService';
 import { DebuffService } from '../services/DebuffService';
@@ -1494,7 +1498,21 @@ export class GameSocketHandler {
         });
       });
 
-      const gold = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
+      const золотоБазовое = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
+      // Навык гильдии «Удача Торговца»: +3% к золоту с монстров за уровень.
+      // До этого навык был объявлен в data/guilds.ts и не существовал.
+      //
+      // Порядок важен: множитель применяется ДО округления вниз. Если бы
+      // округлили базовое число, а потом умножили, бонус в 3% на мелких
+      // монетах терялся бы целиком, и игрок заплатил бы за навык в пустоту.
+      let золото = золотоБазовое;
+      try {
+        const бонусы = await new GuildService().getBonuses(attacker.id);
+        золото = Math.floor(золотоБазовое * бонусы.gold);
+      } catch {
+        золото = золотоБазовое;
+      }
+      const gold = золото;
       await this.characterService.addGoldReward(attacker.id, gold).catch(() => {});
 
       const loot: { itemId: string; nameRu: string; qty: number }[] = [];
