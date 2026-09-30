@@ -1728,14 +1728,47 @@ async function loadPoetry(): Promise<void> {
               const res = await api.poetrySelect(data.gameId, idx);
               renderOptions();
               if (res.isComplete) {
-                if (res.isCorrect) {
-                  resultEl.className = 'poetry-result correct';
-                  resultEl.textContent = t('poetry.correct') + challenge.reward.gold + ' ' + t('common.gold');
-                  optionsEl.querySelectorAll('.poetry-line').forEach(l => l.classList.add('correct'));
-                } else {
+                optionsEl.querySelectorAll('.poetry-line').forEach(l => l.classList.add(res.isCorrect ? 'correct' : 'wrong'));
+                if (!res.isCorrect) {
                   resultEl.className = 'poetry-result wrong';
                   resultEl.textContent = t('site.poetry_wrong');
-                  optionsEl.querySelectorAll('.poetry-line').forEach(l => l.classList.add('wrong'));
+                  return;
+                }
+                // Награду забираем у сервера, а не показываем из своих
+                // данных. Панель знала challenge.reward.gold из собственной
+                // копии каталога и показывала число, которого никто не
+                // платил: маршрута завершения не было вовсе.
+                //
+                // Теперь маршрут есть, и показывается то, что сервер
+                // начислил на самом деле. Если сервер по какой-то причине
+                // не заплатил, игрок увидит это, а не правдоподобное число.
+                resultEl.className = 'poetry-result correct';
+                resultEl.textContent = t('poetry.correct');
+                try {
+                  const charId = cid();
+                  const finish = charId ? await api.poetryFinish(charId, data.gameId) : null;
+                  if (finish?.reward) {
+                    resultEl.textContent = t('poetry.correct')
+                      + `${finish.reward.gold} ${t('common.gold')}`
+                      + ` · ${finish.reward.experience} ${t('world.exp')}`;
+                    // Золото на сервере изменилось - полосы обязаны это показать.
+                    // session.character.gold, а не session.gold: так обновляют
+                    // все прочие места, и отдельное поле было бы вторым
+                    // источником правды о кошельке.
+                    if (session.character && typeof finish.gold === 'number') {
+                      session.character.gold = finish.gold;
+                    }
+                    refreshBars();
+                  }
+                  for (const id of finish?.achievements ?? []) {
+                    toast(t('notifications.achievement_unlocked'), 'success');
+                    void id;
+                  }
+                } catch (err) {
+                  // Стих собран верно, а награда не пришла. Говорим прямо:
+                  // молчание выглядело бы так, будто всё в порядке.
+                  resultEl.textContent = t('poetry.correct') + ' — ' + t('poetry.reward_failed');
+                  toast(t('poetry.reward_failed'), 'error');
                 }
               }
             } catch (err) { toast((err as Error).message, 'error'); }

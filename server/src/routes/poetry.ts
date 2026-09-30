@@ -5,9 +5,18 @@
 import { Router } from 'express';
 import { getPoetryGame, POETRY_CHALLENGES } from '../systems/PoetryOfHafiz';
 import { authMiddleware } from '../middleware/auth';
+import { DatabaseService } from '../services/DatabaseService';
+import { LeaderboardService } from '../services/LeaderboardService';
+import { AchievementService } from '../services/AchievementService';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const poetry = getPoetryGame();
+// Свои экземпляры, а не синглтоны из маршрутов: у каждого сервиса своё
+// подключение к базе, и взятие чужого молча связало бы два маршрута.
+const db = DatabaseService.getInstance();
+const leaderboard = new LeaderboardService();
+const achievements = new AchievementService();
 
 // Список доступных стихотворений
 router.get('/challenges', authMiddleware, (_req, res) => {
@@ -78,6 +87,85 @@ router.post('/undo', authMiddleware, (req, res) => {
 router.post('/quit', authMiddleware, (req, res) => {
   poetry.deleteGame(req.body.gameId);
   res.json({ success: true });
+});
+
+// ── Забрать награду за стихотворение ───────────────────────────
+// Раньше маршрута завершения не было вовсе. Маршрут /select доводил игру
+// до isComplete, панель показывала «сложено правильно» - и всё. Награды в
+// данных стояли (50, 150 и 500 золота по сложности), но до кошелька не
+// доходили: игра просто заканчивалась.
+//
+// Платит только за ВЕРНО собранное и только ОДИН раз: повторный запрос
+// с тем же gameId возвращает alreadyClaimed, а не ещё одну выплату.
+router.post('/finish', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = String(req.body?.characterId ?? '');
+    const { gameId } = req.body ?? {};
+    if (!characterId || !gameId) {
+      res.status(400).json({ error: 'characterId and gameId are required' });
+      return;
+    }
+    // Проверка владения: без неё один вошедший забрал бы награду за
+    // чужую игру, зная её gameId.
+    const свой = await db.queryOne<{ id: string }>(
+      'SELECT id FROM characters WHERE id = $1 AND user_id = $2', [characterId, req.userId],
+    );
+    if (!свой) { res.status(404).json({ error: 'character_not_found' }); return; }
+
+    const игра = poetry.getResult(gameId);
+    if (!игра) { res.status(404).json({ error: 'game_not_found' }); return; }
+    // Здесь различаем четыре отказа. «Ничего не пришло» после верно
+    // собранного стиха - это обман, и игрок должен знать, что именно
+    // произошло: не собрал, собрал неверно или уже забрал.
+    if (игра.rewarded) { res.status(409).json({ error: 'already_claimed' }); return; }
+    if (!игра.isComplete) { res.status(400).json({ error: 'not_complete' }); return; }
+    if (!игра.isCorrect) { res.status(400).json({ error: 'not_correct' }); return; }
+
+    // claimReward сам ставит флаг. Ставить его ДО начисления нельзя: сбой
+    // оплаты оставил бы игрока без награды и без права повторить.
+    const забрано = poetry.claimReward(gameId);
+    if (!забрано) { res.status(409).json({ error: 'already_claimed' }); return; }
+
+    // Оплата и счётчик - одним UPDATE. Разными запросами был бы зазор,
+    // в котором награда начислена, а счётчик нет: достижение «Поэт
+    // Шираза» осталось бы несчитанным навсегда.
+    const оплата = await db.queryOne<{ gold: number; experience: number }>(
+      `UPDATE characters
+          SET gold = gold + $1, experience = experience + $2
+        WHERE id = $3
+      RETURNING gold, experience`,
+      [забрано.reward.gold, забрано.reward.experience, characterId],
+    );
+
+    try {
+      await leaderboard.increment(characterId, { poetryCompleted: 1 });
+      const новые = await achievements.checkAll(characterId);
+      res.json({
+        success: true,
+        reward: забрано.reward,
+        gold: Number(оплата?.gold ?? 0),
+        experience: Number(оплата?.experience ?? 0),
+        achievements: новые,
+      });
+    } catch (err) {
+      // Золото начислено, а счётчик или достижение не записались. Игрок
+      // получил своё - сообщаем об этом и не отбираем: повторный запрос
+      // всё равно упрётся в already_claimed, так что доплатить счётчик
+      // можно будет только вручную. Это лучше, чем отнимать награду за
+      // сбой записи счётчика.
+      logger.error('[Poetry] счётчик стихов не записан:', (err as Error).message);
+      res.json({
+        success: true,
+        reward: забрано.reward,
+        gold: Number(оплата?.gold ?? 0),
+        experience: Number(оплата?.experience ?? 0),
+        achievements: [],
+        counterSaved: false,
+      });
+    }
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 });
 
 export default router;

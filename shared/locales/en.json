@@ -1160,6 +1160,8 @@
     "mail": "Mail"
   },
   "notifications": {
+    "achievement_unlocked": "Achievement unlocked",
+
     "title": "Notifications",
     "empty": "No notifications yet",
     "read_all": "Mark all as read"
@@ -1317,6 +1319,7 @@
     "start_error": "Failed to start the game"
   },
   "poetry": {
+    "reward_failed": "reward was not granted",
     "unavailable": "Poems are temporarily unavailable",
     "choose": "Choose a poem to assemble:",
     "lines": "{n} lines",

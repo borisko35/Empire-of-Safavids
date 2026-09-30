@@ -12,6 +12,17 @@ export interface PoetryLine {
   textRu: string;
 }
 
+/**
+ * Награда за стихотворение. Отдельный тип, а не строчка в объекте:
+ * маршрут завершения возвращает её клиенту, и тип должен совпадать с
+ * тем, что лежит в данных.
+ */
+export interface PoetryReward {
+  gold: number;
+  experience: number;
+  title?: string;
+}
+
 export interface PoetryChallenge {
   id: string;
   title: string;
@@ -19,7 +30,7 @@ export interface PoetryChallenge {
   lines: PoetryLine[];          // Правильный порядок
   options: PoetryLine[];        // Все строки (вперемешку + лишние)
   difficulty: 'easy' | 'medium' | 'hard';
-  reward: { gold: number; experience: number; title?: string };
+  reward: PoetryReward;
 }
 
 export interface PoetryGameState {
@@ -33,6 +44,8 @@ export interface PoetryGameState {
   order: number[];
   isComplete: boolean;
   isCorrect: boolean;
+  /** Награда уже забрана. Ставится только после успешной выплаты. */
+  rewarded: boolean;
 }
 
 export const POETRY_CHALLENGES: PoetryChallenge[] = [
@@ -175,6 +188,7 @@ export class PoetryOfHafiz {
       order,
       isComplete: false,
       isCorrect: false,
+      rewarded: false,
     };
 
     this.games.set(gameId, state);
@@ -213,6 +227,38 @@ export class PoetryOfHafiz {
       const line = challenge.options[game.order[optionIndex]];
       return line?.text === challenge.lines[step].text;
     });
+  }
+
+  /**
+   * Забрать награду за игру.
+   *
+   * ВОЗВРАЩАЕТ НАГРАДУ, А НЕ ФЛАГ. Раньше маршрута завершения не было
+   * вовсе: игра доходила до конца, игрок видел, что сложил стихотворение,
+   * и не получал ничего. Награды в данных стояли - 50, 150 и 500 золота.
+   *
+   * null - это отказ, а не ошибка, и отказов тут четыре, каждый со своим
+   * смыслом: игра не найдена, стихотворение не собрано, собрано неверно,
+   * награда уже забрана. Игрок должен различать их - «ничего не пришло»
+   * после верно собранного стиха это обман.
+   */
+  claimReward(gameId: string): { reward: PoetryReward; challengeId: string; difficulty: PoetryChallenge['difficulty'] } | null {
+    const game = this.games.get(gameId);
+    if (!game) return null;
+    if (!game.isComplete) return null;
+    // Неверно собранное не оплачивается. Иначе перебором вариантов
+    // можно было бы собрать что угодно и получить золото за это.
+    if (!game.isCorrect) return null;
+    // Флаг в самой игре, а не в базе: повторный запрос /finish вернул бы
+    // null. Игра живёт в памяти процесса, поэтому после перезапуска её
+    // нет - и платить за неё тоже нечего, то есть повторной выплаты
+    // после перезапуска случиться не может.
+    if (game.rewarded) return null;
+
+    const challenge = POETRY_CHALLENGES.find(c => c.id === game.challengeId);
+    if (!challenge) return null;
+
+    game.rewarded = true;
+    return { reward: challenge.reward, challengeId: challenge.id, difficulty: challenge.difficulty };
   }
 
   /** Получить результат */

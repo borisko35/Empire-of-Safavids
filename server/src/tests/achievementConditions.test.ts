@@ -129,7 +129,10 @@ describe('Условие достижения настоящее', () => {
       expect({ id: def.id, колонка_из_списка: col === def.condition.counter })
         .toEqual({ id: def.id, колонка_из_списка: true });
     }
-    expect(Object.keys(COUNTER_COLUMN).sort()).toEqual(['monsters_killed', 'parries', 'pvp_wins', 'quests_completed']);
+    // Зафиксировано руками: новый счётчик обязан сломать эту проверку.
+    expect(Object.keys(COUNTER_COLUMN).sort()).toEqual([
+      'monsters_killed', 'parries', 'poetry_completed', 'pvp_wins', 'quests_completed',
+    ]);
   });
 
   it('у счётчика парирований есть колонка в базе', () => {
@@ -159,12 +162,21 @@ describe('Условие достижения настоящее', () => {
     }).toEqual({ правит_не_combat_logs: true, не_создаёт_таблицу: true });
   });
 
-  it('у leaderboard в миграции 014 есть те счётчики, на которые смотрят достижения', () => {
+  it('у leaderboard есть все счётчики, на которые смотрят достижения', () => {
     // Условие смотрит на колонку, которой может не быть. Имена берутся
-    // из схемы, а не выдумываются.
-    const схема = читать('database/migrations/014_friends_leaderboard_tutorial.sql');
-    const нужные = [...new Set(Object.values(COUNTER_COLUMN))].filter(c => c !== 'parries');
-    const отсутствуют = нужные.filter(c => !new RegExp(`\\b${c}\\b`).test(схема));
+    // из СХЕМЫ, а не выдумываются.
+    //
+    // Ищем по ВСЕМ миграциям, а не по 014-й. Первая версия смотрела
+    // только на 014, где таблица leaderboard создаётся, - и сломалась на
+    // первом же счётчике, добавленном позже миграцией. Позже добавлять
+    // колонки не запрещено, и это нормальный путь: заводить новый счётчик
+    // в новой миграции правильнее, чем дописывать старую.
+    const все = readdirSync(join(корень, 'database', 'migrations'))
+      .filter(f => f.endsWith('.sql'))
+      .map(f => читать(join('database', 'migrations', f)))
+      .join('\n');
+    const нужные = Object.values(COUNTER_COLUMN);
+    const отсутствуют = нужные.filter(c => !new RegExp(`\\b${c}\\b`).test(все));
     expect({ отсутствуют }).toEqual({ отсутствуют: [] });
   });
 });
@@ -214,7 +226,7 @@ describe('Выдача сверяется с условием, а не с про
     const { service, запросы } = подменить({ без_строки_рейтинга: true });
     return service.getCounters(CHAR).then(c => {
       expect({ счётчики: c }).toEqual({
-        счётчики: { monsters_killed: 0, parries: 0, pvp_wins: 0, quests_completed: 0 },
+        счётчики: { monsters_killed: 0, parries: 0, poetry_completed: 0, pvp_wins: 0, quests_completed: 0 },
       });
     }).then(() => {
       expect({ спросил_лидерборд: запросы.some(q => /FROM leaderboard/.test(q)) })
@@ -356,15 +368,23 @@ describe('Проверка не пустая', () => {
     expect({ всего: ACHIEVEMENTS.length, с_условием, без }).toEqual({
       всего: ACHIEVEMENTS.length, с_условием: expect.any(Number), без: expect.any(Number),
     });
-    // 21 достижение, из них 8 за реальными счётчиками. Раньше счётчика
+    // 21 достижение, из них 9 за реальными счётчиками. Раньше счётчика
     // не было ни у одного, и все 21 были недостижимы.
-    expect({ с_условием, без }).toEqual({ с_условием: 8, без: 13 });
+    //
+    // Числа зафиксированы: новое достижение без условия или с условием
+    // обязано сломать эту проверку, чтобы решение было осознанным.
+    expect({ с_условием, без }).toEqual({ с_условием: 9, без: 12 });
   });
 
   it('счётчик парирований — не единственный, кто ссылается на лидерборд', () => {
     // Иначе проверка «leaderboard покрыт» обслуживала бы одно поле.
     const использований = Object.values(COUNTER_COLUMN).length;
-    expect({ использований }).toEqual({ использований: 4 });
+    //
+    // Число зафиксировано руками. Новый счётчик обязан сломать эту
+    // проверку: значит придётся подумать, есть ли на него колонка в базе
+    // и достижение, которое на него смотрит. Проверка, которая
+    // подстраивается сама, не напомнит ничего.
+    expect({ использований }).toEqual({ использований: 5 });
   });
 
   it('список счётчиков не растёт в обход схемы', () => {

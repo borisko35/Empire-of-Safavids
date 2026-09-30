@@ -3,6 +3,7 @@
 // ============================================================
 
 import { DatabaseService } from './DatabaseService';
+import { POETRY_CHALLENGES } from '../systems/PoetryOfHafiz';
 import { logger } from '../utils/logger';
 
 export interface AchievementDef {
@@ -34,6 +35,16 @@ export interface AchievementDef {
 }
 
 /**
+ * Сколько стихотворений в игре вообще.
+ *
+ * Порог достижения «Поэт Шираза» берётся отсюда, а не пишется руками.
+ * Написать «20» отдельно от числа стихов - значит через год получить
+ * достижение, которое либо недостижимо, либо выдастся само, когда
+ * стихотворений окажется меньше.
+ */
+export const POETRY_TOTAL = POETRY_CHALLENGES.length;
+
+/**
  * Счётчики, на которые смотрят достижения.
  *
  * ЗАКРЫТЫЙ СПИСОК, А НЕ СТРОКА. Имя колонки приходит из кода, и если бы
@@ -45,7 +56,8 @@ export type AchievementCounter =
   | 'monsters_killed'
   | 'parries'
   | 'pvp_wins'
-  | 'quests_completed';
+  | 'quests_completed'
+  | 'poetry_completed';
 
 /** Счётчик -> колонка таблицы leaderboard. Больше ниоткуда. */
 export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
@@ -53,6 +65,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   parries: 'parries',
   pvp_wins: 'pvp_wins',
   quests_completed: 'quests_completed',
+  poetry_completed: 'poetry_completed',
 };
 
 /**
@@ -157,7 +170,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: 'minigames', icon: '♟️', reward_gold: 500, reward_experience: 500, reward_title: 'Шахматный Гений', hidden: true },
   { id: 'ach_poet', title: 'Poet of Shiraz', title_ru: 'Поэт Шираза',
     description: 'Complete all poetry challenges', description_ru: 'Выполнить все поэтические задания',
-    category: 'minigames', icon: '📜', reward_gold: 1000, reward_experience: 1000, reward_title: 'Поэт Шираза', hidden: true },
+    category: 'minigames', icon: '📜', reward_gold: 1000, reward_experience: 1000, reward_title: 'Поэт Шираза', hidden: true,
+    condition: { counter: 'poetry_completed', need: POETRY_TOTAL } },
   { id: 'ach_no_death', title: 'Untouchable', title_ru: 'Неприкосновенный',
     description: 'Complete a dungeon without dying', description_ru: 'Пройти подземелье без смертей',
     category: 'combat', icon: '✨', reward_gold: 1000, reward_experience: 2000, reward_title: 'Неприкосновенный', hidden: true },

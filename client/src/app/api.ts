@@ -781,6 +781,12 @@ export const api = {
   poetryUndo: (gameId: string) =>
     req<{ selectedCount: number }>('/api/poetry/undo', { method: 'POST', body: JSON.stringify({ gameId }) }),
 
+  // Забрать награду за верно собранное стихотворение. Персонаж обязателен:
+  // награда идёт в кошелёк ПЕРСОНАЖА, а не аккаунта.
+  poetryFinish: (characterId: string, gameId: string) =>
+    req<{ success: boolean; reward: { gold: number; experience: number; title?: string }; gold: number; experience: number; achievements: string[]; counterSaved?: boolean }>(
+      '/api/poetry/finish', { method: 'POST', body: JSON.stringify({ characterId, gameId }) }),
+
   poetryQuit: (gameId: string) =>
     req<{ success: boolean }>('/api/poetry/quit', { method: 'POST', body: JSON.stringify({ gameId }) }),
 

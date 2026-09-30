@@ -1160,6 +1160,8 @@
     "mail": "Məktub"
   },
   "notifications": {
+    "achievement_unlocked": "Nailiyyət alındı",
+
     "title": "Bildirişlər",
     "empty": "Hələ bildiriş yoxdur",
     "read_all": "Hamısını oxunmuş işarələ"
@@ -1317,6 +1319,7 @@
     "start_error": "Oyunu başlatmaq mümkün olmadı"
   },
   "poetry": {
+    "reward_failed": "mükafiqat verilmədi",
     "unavailable": "Şeirlər müvəqqət mövcud deyil",
     "choose": "Yığmaq üçün şeir seçin:",
     "lines": "{n} sətir",

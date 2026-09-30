@@ -86,6 +86,8 @@ export class LeaderboardService {
     playtimeSeconds?: number;
     /** Парирования. Засчитываются защитнику, не атакующему. */
     parries?: number;
+    /** Собранные стихотворения. Начисляются за верно собранное. */
+    poetryCompleted?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];
