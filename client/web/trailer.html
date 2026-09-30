@@ -103,42 +103,62 @@
 
 <script>
 // Сценарий: tools/trailer-storyboard.md
-const SHOTS = '/assets/screenshots/';
+// Пути к кадрам ОТНОСИТЕЛЬНЫЕ, без ведущей косой черты.
+//
+// Страница целиком лежит в одном файле: внешних стилей и скриптов у неё
+// нет вовсе. Именно поэтому её можно выложить куда угодно одним файлом -
+// на itch.io, в iframe, в Discord, хоть на флешку.
+//
+// Абсолютный путь '/assets/bg-history.png' при этом ломает всё. На нашем
+// домене он работает случайно: страница лежит в корне, и корень совпадает
+// с началом сайта. Стоит открыть её по адресу с подкаталогом -
+// https://vlas.itch.io/empire/ - и браузер пойдёт за
+// https://vlas.itch.io/assets/bg-history.png, то есть мимо. Пять сцен из
+// семи станут пустыми, и снаружи это выглядит как «игра сломалась».
+//
+// Относительный путь assets/bg-history.png считается от адреса самой
+// страницы, поэтому встаёт и в корне, и в любом подкаталоге.
+//
+// ВНИМАНИЕ: og:image и twitter:image остаются абсолютными - там так надо.
+// Скрапер, который собирает карточку для Discord, Telegram или Reddit,
+// запрашивает их со своего сервера и не имеет понятия, откуда пришла
+// страница. Относительный путь в og:image не работает нигде.
+const SHOTS = 'assets/screenshots/';
 const SCRIPT = {
   ru: {
     play: 'Смотреть',
     scenes: [
-      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Империя Сефевидов', sub: '1501 — 1736' },
+      { img: 'assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Империя Сефевидов', sub: '1501 — 1736' },
       { img: SHOTS + 'city.png',               dur: 7000, zoom: 1.14, pan: true,  title: 'Семь регионов Персии', sub: '' },
       { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Бой. Ловкость. PvP', sub: '' },
       { img: SHOTS + 'worldmap.png',           dur: 7000, zoom: 1.13, pan: true,  title: 'Карта мира', sub: 'форты, лагеря, караван-саиды' },
       { img: SHOTS + 'tasks.png',              dur: 8000, zoom: 1.16, pan: false, title: 'Задания каждый день', sub: 'и что за них дают' },
-      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Бесплатно. В браузере.', sub: 'game.eos-gameonline.com' },
-      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+      { img: 'assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Бесплатно. В браузере.', sub: 'game.eos-gameonline.com' },
+      { img: 'assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
     ],
   },
   en: {
     play: 'Play',
     scenes: [
-      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Empire of Safavids', sub: '1501 — 1736' },
+      { img: 'assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Empire of Safavids', sub: '1501 — 1736' },
       { img: SHOTS + 'city.png',               dur: 7000, zoom: 1.14, pan: true,  title: 'Seven regions of Persia', sub: '' },
       { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Fight. Skill. PvP', sub: '' },
       { img: SHOTS + 'worldmap.png',           dur: 7000, zoom: 1.13, pan: true,  title: 'World map', sub: 'forts, camps, caravanserais' },
       { img: SHOTS + 'tasks.png',              dur: 8000, zoom: 1.16, pan: false, title: 'Daily tasks', sub: 'and what they pay out' },
-      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Free. In your browser.', sub: 'game.eos-gameonline.com' },
-      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+      { img: 'assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Free. In your browser.', sub: 'game.eos-gameonline.com' },
+      { img: 'assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
     ],
   },
   az: {
     play: 'Bax',
     scenes: [
-      { img: '/assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Səfəvi İmperiyası', sub: '1501 — 1736' },
+      { img: 'assets/bg-history.png',        dur: 6000, zoom: 1.12, pan: false, title: 'Səfəvi İmperiyası', sub: '1501 — 1736' },
       { img: SHOTS + 'city.png',               dur: 7000, zoom: 1.14, pan: true,  title: 'Persanın yeddi regionu', sub: '' },
       { img: SHOTS + 'combat.png',             dur: 8000, zoom: 1.15, pan: false, title: 'Döyüş. Bacarıq. PvP', sub: '' },
       { img: SHOTS + 'worldmap.png',           dur: 7000, zoom: 1.13, pan: true,  title: 'Dünya xəritəsi', sub: 'qalalar, düşərgələr, karvansaraylar' },
       { img: SHOTS + 'tasks.png',              dur: 8000, zoom: 1.16, pan: false, title: 'Gündəlik tapşırıqlar', sub: 'və nə verirlər' },
-      { img: '/assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Pulsuz. Brauzerdə.', sub: 'game.eos-gameonline.com' },
-      { img: '/assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
+      { img: 'assets/og-screenshot.png',      dur: 9000, zoom: 1.06, pan: false, title: 'Pulsuz. Brauzerdə.', sub: 'game.eos-gameonline.com' },
+      { img: 'assets/bg-history.png',        dur: 3000, zoom: 1.00, pan: false, title: '', sub: '' },
     ],
   },
 };
