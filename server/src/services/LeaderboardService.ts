@@ -80,6 +80,29 @@ export class LeaderboardService {
    * Здесь `col = leaderboard.col + $n`. Строка рейтинга может ещё не
    * существовать — тогда она создаётся, и накопленное не теряется.
    */
+  /**
+   * Записать достигнутое комбо.
+   *
+   * ОТДЕЛЬНО ОТ increment, И ЭТО НЕ УПРОЩЕНИЕ. increment складывает, а здесь
+   * нужен МАКСИМУМ: длина цепочки - это одна серия подряд, и две серии по
+   * три удара дали бы сложением шесть. Сложение здесь превратило бы
+   * достижение «комбо из 5» в «соверши 5 ударов, не обязательно подряд».
+   *
+   * GREATEST, а не присваивание: повторное достижение порога не должно
+   * ни затирать прежний рекорд, ни складываться с ним.
+   */
+  async recordCombo(characterId: string, chain: number): Promise<void> {
+    if (!chain) return;
+    await this.db.query(
+      `INSERT INTO leaderboard (character_id, combo_best, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (character_id) DO UPDATE
+         SET combo_best = GREATEST(leaderboard.combo_best, EXCLUDED.combo_best),
+             updated_at = NOW()`,
+      [characterId, Math.floor(chain)],
+    );
+  }
+
   async increment(characterId: string, counters: {
     monstersKilled?: number;
     questsCompleted?: number;

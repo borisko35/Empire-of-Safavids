@@ -63,13 +63,12 @@ describe('Контракты считаются', () => {
   });
 });
 
-describe('Два оставшихся: у каждого своя причина', () => {
-  it('их ровно два, и ни одно не выдаётся', () => {
+describe('Одно оставшееся: у него своя причина', () => {
+  it('оно ровно одно, и оно не выдаётся', () => {
     // Число зафиксировано руками: новое достижение без условия обязано
     // сломать эту проверку.
     expect({ без_условия: БЕЗ_УСЛОВИЯ.map(a => a.id).sort() }).toEqual({
       без_условия: [
-        'ach_combo_5',
         'ach_no_death',
       ],
     });
@@ -145,21 +144,6 @@ describe('Два оставшихся: у каждого своя причина
       .toEqual({ регион_по_умолчанию_tabriz: true, таблицы_посещений_нет: true });
   });
 
-  it('комбо считается, но это максимум, а не накопительный счётчик', () => {
-    // Цепочка ударов живёт в памяти (comboChains) и её длина - максимум
-    // за окно, а не сумма. Сложение для неё не годится: две серии по три
-    // удара дали бы шесть, а «комбо из 5» - это одна серия длиной пять.
-    // Для этого нужен счётчик-максимум, а его в increment нет и он был бы
-    // отдельной сущностью с собственным правилом записи.
-    const код = читать('server/src/socket/GameSocketHandler.ts');
-    const вПамяти = /comboChains = new Map<string, \{ count: number; lastAt: number \}>/.test(код);
-    const цепочка = /comboMultiplier/.test(код);
-    expect({
-      цепочка_в_памяти: вПамяти,
-      считается_на_месте: цепочка,
-      в_лидерборде_нет: !/combo/i.test(читать('server/src/services/LeaderboardService.ts')),
-    }).toEqual({ цепочка_в_памяти: true, считается_на_месте: true, в_лидерборде_нет: true });
-  });
 
   it('смертей в подземелье не считают, и «без смертей» измерить нечем', () => {
     // В DungeonService нет ни счётчика смертей, ни поля в сессии: подземелье
@@ -180,7 +164,8 @@ describe('Правило «нет условия = не выдаётся» де�
       const всё = {
         monsters_killed: 99999, parries: 99999, pvp_wins: 99999,
         quests_completed: 99999, poetry_completed: 99999, chess_wins: 99999,
-        dungeons_cleared: 99999, items_crafted: 99999, trades_completed: 99999, world_boss_kills: 99999,
+        combo_best: 99999, dungeons_cleared: 99999, items_crafted: 99999,
+        trades_completed: 99999, world_boss_kills: 99999,
         has_friend: 99, in_guild: 99, regions_visited: 99, visited_tabriz: 99,
       };
       expect({ id: def.id, выдано: isEarned(def, всё) }).toEqual({ id: def.id, выдано: false });
@@ -215,7 +200,6 @@ describe('Правило «нет условия = не выдаётся» де�
     // содержания.
     expect({ причины }).toEqual({
       причины: [
-        { id: 'ach_combo_5', своя_причина: true },
         { id: 'ach_no_death', своя_причина: true },
       ],
     });

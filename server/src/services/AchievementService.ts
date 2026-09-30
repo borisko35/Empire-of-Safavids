@@ -75,7 +75,8 @@ export type AchievementCounter =
   | 'dungeons_cleared'
   | 'items_crafted'
   | 'trades_completed'
-  | 'world_boss_kills';
+  | 'world_boss_kills'
+  | 'combo_best';
 
 /**
  * Условия, которые не счётчик, а состояние.
@@ -154,6 +155,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   items_crafted: 'items_crafted',
   trades_completed: 'trades_completed',
   world_boss_kills: 'world_boss_kills',
+  combo_best: 'combo_best',
 };
 
 /**
@@ -200,17 +202,20 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     description: 'Kill 1000 monsters', description_ru: 'Убить 1000 монстров',
     category: 'combat', icon: '👑', reward_gold: 5000, reward_experience: 10000, reward_title: 'Легенда Боя', hidden: false,
     condition: { counter: 'monsters_killed', need: 1000 } },
-  // Комбо и боссы: счётчиков нет. Пока их нет, выдать нечего, и
-  // достижение остаётся недостижимым - честнее, чем выдать за 100 золота.
-  // НЕ СЧИТАЕТСЯ. Цепочка ударов живёт в памяти (comboChains в
-  // GameSocketHandler) и её длина - это МАКСИМУМ за окно, а не сумма.
-  // Две серии по три удара дали бы сложением шесть, а «комбо из 5» - это
-  // одна серия длиной пять. Счётчик-максимум в increment не умеет и был
-  // бы отдельной сущностью со своим правилом записи: записи могли бы
-  // расходиться, и тогда счётчик врал бы сам себе.
+  // Комбо. РАНЬШЕ ЗДЕСЬ СТОЯЛО, ЧТО ИЗМЕРИТЬ НЕЧЕМ. Измерить можно, и нужно
+  // было отдельной сущностью, а не через increment: длина цепочки - это
+  // ОДНА серия подряд, а не сумма. Сложение дало бы «две серии по три
+  // удара = шесть», и «комбо из 5» закрыл бы тот, кто прыгал с места на
+  // место.
+  //
+  // Поэтому combo_best пишется через GREATEST и только в момент
+  // пересечения порога: одна запись на серию, а не на каждый удар.
   { id: 'ach_combo_5', title: 'Combo Master', title_ru: 'Мастер Комбо',
     description: 'Land a 5-hit combo', description_ru: 'Нанести комбо из 5 ударов',
-    category: 'combat', icon: '🔥', reward_gold: 100, reward_experience: 150, hidden: false },
+    category: 'combat', icon: '🔥', reward_gold: 100, reward_experience: 150, hidden: false,
+    // Порог 5 - тот же, что в GameSocketHandler.COMBO_THRESHOLD. Проверка
+    // сверяет их друг с другом, иначе запись и условие разойдутся.
+    condition: { counter: 'combo_best', need: 5 } },
   { id: 'ach_perfect_block', title: 'Perfect Block', title_ru: 'Идеальный Блок',
     description: 'Perform 10 perfect blocks', description_ru: 'Выполнить 10 идеальных блоков',
     category: 'combat', icon: '🛡️', reward_gold: 200, reward_experience: 300, hidden: false,

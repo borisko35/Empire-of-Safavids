@@ -156,6 +156,17 @@ export class GameSocketHandler {
   private lastPositionPersist = new Map<string, number>();
   private lastQuestEval = new Map<string, number>();
   // Серия лёгких атак (комбо): characterId -> { count, lastAt }
+  /**
+   * Порог достижения «Мастер Комбо».
+   *
+   * Объявлен один раз и используется и в записи, и в условии достижения.
+   * Раньше порог был написан только в описании достижения («комбо из 5
+   * ударов»), а кода, который его проверял, не существовало. Две цифры в
+   * двух местах - это ровно то, из-за чего описание перестаёт совпадать с
+   * выдачей.
+   */
+  static readonly COMBO_THRESHOLD = 5;
+
   private comboChains = new Map<string, { count: number; lastAt: number }>();
   // Время последнего принятого обычного удара: characterId -> epoch ms.
   // Откат держал только клиент, поэтому правкой клиента можно было слать
@@ -882,6 +893,23 @@ export class GameSocketHandler {
     }
     chain.count++;
     chain.lastAt = now;
+
+    // Отметка достижения «комбо из 5». Пишется РОВНО ОДИН РАЗ на цепочку -
+    // в момент пересечения порога, - а не на каждый удар.
+    //
+    // Почему так: comboMultiplier зовётся на каждом ударе, и запись в базу на
+    // каждом ударе сделала бы самый горячий путь игры самым тяжёлым. Письмо
+    // при chain.count === 5 даёт одну запись на серию, а GREATEST в базе не
+    // даёт рекорду ни упасть, ни сложиться.
+    //
+    // Ошибка не роняет удар: игрок бьёт, а запись - его достижение.
+    // Незаписанное достижение лучше, чем не нанесённый удар.
+    if (chain.count === GameSocketHandler.COMBO_THRESHOLD) {
+      void this.leaderboardService
+        .recordCombo(characterId, chain.count)
+        .catch(err => logger.error('[Combo] рекорд не записан:', (err as Error).message));
+    }
+
     return chain.count % 3 === 0 ? 1.5 * comboScale : 1;
   }
 

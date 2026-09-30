@@ -148,7 +148,7 @@ describe('Условие достижения настоящее', () => {
       // Список отсортирован: trades_completed стоит ПОСЛЕДНИМ, потому что
       // проверка вызывает .sort(). Поставив его третьим, я получил
       // расхождение в одну строку, не связанное ни с чем по делу.
-      'chess_wins', 'dungeons_cleared', 'items_crafted',
+      'chess_wins', 'combo_best', 'dungeons_cleared', 'items_crafted',
       'monsters_killed', 'parries', 'poetry_completed', 'pvp_wins', 'quests_completed',
       'trades_completed', 'world_boss_kills',
     ]);
@@ -246,8 +246,8 @@ describe('Выдача сверяется с условием, а не с про
     return service.getCounters(CHAR).then(c => {
       expect({ счётчики: c }).toEqual({
         счётчики: {
-          chess_wins: 0, dungeons_cleared: 0, items_crafted: 0, trades_completed: 0,
-          world_boss_kills: 0,
+          chess_wins: 0, combo_best: 0, dungeons_cleared: 0, items_crafted: 0,
+          trades_completed: 0, world_boss_kills: 0,
           monsters_killed: 0, parries: 0, poetry_completed: 0, pvp_wins: 0, quests_completed: 0,
         },
       });
@@ -414,7 +414,8 @@ describe('Проверка не пустая', () => {
     // Стало 17 и 4: мировой босс оказался не выдумкой, а рабочей
     // системой, и «Убить первого мирового босса» стало достижимым.
     // Стало 19 и 2: посещения регионов закрыли два достижения.
-    expect({ с_условием, без }).toEqual({ с_условием: 19, без: 2 });
+    // Стало 20 и 1: комбо получило настоящее условие.
+    expect({ с_условием, без }).toEqual({ с_условием: 20, без: 1 });
   });
 
   it('счётчик парирований — не единственный, кто ссылается на лидерборд', () => {
@@ -428,7 +429,8 @@ describe('Проверка не пустая', () => {
     //
     // Было 5, стало 6: добавлен chess_wins под «Шахматный Гений».
     // Стало 10: добавлен world_boss_kills.
-    expect({ использований }).toEqual({ использований: 10 });
+    // Стало 11: добавлен combo_best.
+    expect({ использований }).toEqual({ использований: 11 });
   });
 
   it('список счётчиков не растёт в обход схемы', () => {
