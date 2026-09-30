@@ -63,15 +63,13 @@ describe('Контракты считаются', () => {
   });
 });
 
-describe('Четыре оставшихся: у каждого своя причина', () => {
-  it('их ровно четыре, и ни одно не выдаётся', () => {
+describe('Два оставшихся: у каждого своя причина', () => {
+  it('их ровно два, и ни одно не выдаётся', () => {
     // Число зафиксировано руками: новое достижение без условия обязано
     // сломать эту проверку.
     expect({ без_условия: БЕЗ_УСЛОВИЯ.map(a => a.id).sort() }).toEqual({
       без_условия: [
         'ach_combo_5',
-        'ach_explorer_all',
-        'ach_explorer_tabriz',
         'ach_no_death',
       ],
     });
@@ -183,7 +181,7 @@ describe('Правило «нет условия = не выдаётся» де�
         monsters_killed: 99999, parries: 99999, pvp_wins: 99999,
         quests_completed: 99999, poetry_completed: 99999, chess_wins: 99999,
         dungeons_cleared: 99999, items_crafted: 99999, trades_completed: 99999, world_boss_kills: 99999,
-        has_friend: 99, in_guild: 99,
+        has_friend: 99, in_guild: 99, regions_visited: 99, visited_tabriz: 99,
       };
       expect({ id: def.id, выдано: isEarned(def, всё) }).toEqual({ id: def.id, выдано: false });
     }
@@ -218,8 +216,6 @@ describe('Правило «нет условия = не выдаётся» де�
     expect({ причины }).toEqual({
       причины: [
         { id: 'ach_combo_5', своя_причина: true },
-        { id: 'ach_explorer_all', своя_причина: true },
-        { id: 'ach_explorer_tabriz', своя_причина: true },
         { id: 'ach_no_death', своя_причина: true },
       ],
     });

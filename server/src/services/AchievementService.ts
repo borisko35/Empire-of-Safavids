@@ -93,7 +93,7 @@ export type AchievementCounter =
  * которого не было: оно читается из таблиц, где строки заводятся самими
  * этими событиями.
  */
-export type AchievementState = 'has_friend' | 'in_guild';
+export type AchievementState = 'has_friend' | 'in_guild' | 'regions_visited' | 'visited_tabriz';
 
 /** Всё, чем измеряется выполнение условия. */
 export type AchievementMeasure = AchievementCounter | AchievementState;
@@ -115,6 +115,18 @@ export const STATE_SOURCE: Record<AchievementState, string> = {
                 WHERE user_id = (SELECT user_id FROM characters WHERE id = $1)
                   AND status = 'accepted'`,
   in_guild: 'SELECT count(*) FROM guild_members WHERE character_id = $1',
+
+  // Посещённые регионы. Читаются из region_visits, а НЕ из characters.region:
+  // в characters.region лежит ТЕКУЩИЙ регион, и у нового персонажа он по
+  // умолчанию равен 'tabriz'. Проверка по нему выдала бы «Посетить
+  // Тебриз» бесплатно при регистрации.
+  regions_visited: 'SELECT count(*) FROM region_visits WHERE character_id = $1',
+
+  // Тебриз отдельно, а не «регион посещён» с параметром: условие не принимает
+  // значений из данных, и подставлять имя региона в SQL было бы подстановкой
+  // чужого имени мимо typecheck. Имя региона написано здесь один раз.
+  visited_tabriz: `SELECT count(*) FROM region_visits
+                    WHERE character_id = $1 AND region = 'tabriz'`,
 };
 
 /** Счётчик -> колонка таблицы leaderboard. Больше ниоткуда. */
@@ -213,13 +225,21 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // честным, нужен список посещений - отдельная таблица. Её нет.
   { id: 'ach_explorer_tabriz', title: 'Discoverer of Tabriz', title_ru: 'Первооткрыватель Тебриза',
     description: 'Visit Tabriz', description_ru: 'Посетить Тебриз',
-    category: 'exploration', icon: '🗺️', reward_gold: 50, reward_experience: 50, hidden: false },
-  // НЕ СЧИТАЕТСЯ. Нужен список посещённых регионов, а не текущий
-  // регион: «посетить все семь» нельзя вывести из одного столбца, в
-  // котором лежит только то, где персонаж сейчас.
+    category: 'exploration', icon: '🗺️', reward_gold: 50, reward_experience: 50, hidden: false,
+    // Читается из region_visits, а НЕ из characters.region: там лежит
+    // ТЕКУЩИЙ регион, и у нового персонажа он по умолчанию ровно 'tabriz'
+    // (миграция 001). Проверка по нему была бы верной с момента
+    // регистрации, и достижение выдавалось бы бесплатно, никто никуда
+    // не сходив. Ловушка была замечена до того, как сработала.
+    condition: { state: 'visited_tabriz', need: 1 } },
   { id: 'ach_explorer_all', title: 'Master of Maps', title_ru: 'Повелитель Карт',
     description: 'Visit all 7 regions', description_ru: 'Посетить все 7 регионов',
-    category: 'exploration', icon: '🌍', reward_gold: 1000, reward_experience: 2000, reward_title: 'Странник Миров', hidden: false },
+    category: 'exploration', icon: '🌍', reward_gold: 1000, reward_experience: 2000, reward_title: 'Странник Миров', hidden: false,
+    // Число 7 - это ровно те регионы, что перечислены в enum Region.
+    // Оно зашито руками, и проверка сверяет его со списком: при появлении
+    // восьмого региона порог обязан измениться, иначе «все 7» останется
+    // достижимым, не покрывая новую землю.
+    condition: { state: 'regions_visited', need: 7 } },
   { id: 'ach_dungeon_first', title: 'Dungeon Delver', title_ru: 'Исследователь Подземелий',
     description: 'Complete your first dungeon', description_ru: 'Пройти первое подземелье',
     category: 'exploration', icon: '🏰', reward_gold: 200, reward_experience: 400, hidden: false,

@@ -113,6 +113,12 @@ export class CharacterService {
       ]
     );
 
+    // Стартовый регион считается посещённым. Персонаж стоит в нём, значит
+    // он там и был: иначе «Посетить Тебриз» оказалось бы недостижимым для
+    // тех, кто ещё ни разу не путешествовал, хотя Тебриц - их стартовый
+    // город.
+    await this.recordRegionVisit(character.id, character.region);
+
     // Приглашение друга засчитывается здесь, а не при регистрации:
     // золото лежит в characters.gold, и на момент регистрации аккаунта
     // персонажа ещё нет. Ошибка начисления не должна помешать игроку
@@ -637,6 +643,35 @@ export class CharacterService {
     if (Number(row.azens) < 0) throw new Error('AZENS debt: top up to continue');
   }
 
+  /**
+   * Отметить, что персонаж побывал в регионе.
+   *
+   * Зачем отдельная таблица посещений, если есть characters.region: там лежит
+   * ТЕКУЩИЙ регион, а достижениям нужен весь пройденный путь. Из одного
+   * столбца «где персонаж сейчас» нельзя вывести ни «посетил Тебриз», ни
+   * «посетил все семь» - в нём лежит только одна точка маршрута.
+   *
+   * ON CONFLICT DO NOTHING, а не DO UPDATE со счётчиком приходов: повторный
+   * приход в тот же город не должен ни плодить строки, ни требовать записи.
+   * Строка означает «здесь был», а не «сколько раз ходил».
+   *
+   * Ошибка не поднимается. Если запись не легла, персонаж всё равно
+   * оказался в регионе, и ронять путешествие из-за отметки значило бы
+   * наказать игрока за то, что он просто куда-то дошёл.
+   */
+  private async recordRegionVisit(characterId: string, region: Region): Promise<void> {
+    try {
+      await this.db.query(
+        `INSERT INTO region_visits (character_id, region)
+         VALUES ($1, $2)
+         ON CONFLICT (character_id, region) DO NOTHING`,
+        [characterId, region],
+      );
+    } catch (err) {
+      logger.warn(`[Regions] не удалось отметить посещение ${region}: ${(err as Error).message}`);
+    }
+  }
+
   /** Сменить регион персонажа (путешествие). Возвращает обновлённого персонажа. */
   async updateRegion(characterId: string, region: Region): Promise<Character | null> {
     const row = await this.db.queryOne<{ id: string }>(
@@ -644,6 +679,10 @@ export class CharacterService {
       [characterId, region]
     );
     if (!row) return null;
+    // Отметка посещения: сменить регион и забыть об этом нельзя, иначе
+    // история путешествий не накапливалась бы и достижения по регионам
+    // остались бы недостижимыми навсегда.
+    await this.recordRegionVisit(characterId, region);
     return this.getCharacterById(characterId);
   }
 

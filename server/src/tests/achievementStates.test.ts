@@ -47,6 +47,14 @@ function подменить(состояния: Partial<Record<AchievementState,
       if (/FROM guild_members/.test(sql)) {
         return { n: состояния.in_guild ?? 0 };
       }
+      if (/FROM region_visits/.test(sql)) {
+        // Оба запроса по регионам идут в одну таблицу, различаются условием.
+        // Ответ по региону обязан зависеть от самого региона, иначе подмена
+        // не отличала бы «посетил Тебриж» от «посетил Исфахан».
+        return /region = 'tabriz'/.test(sql)
+          ? { n: состояния.visited_tabriz ?? 0 }
+          : { n: состояния.regions_visited ?? 0 };
+      }
       if (/FROM leaderboard/.test(sql)) return {};
       if (/FROM character_achievements/.test(sql)) return null;
       // Персонаж должен достаться по тому самому идентификатору, который
@@ -62,8 +70,12 @@ function подменить(состояния: Partial<Record<AchievementState,
 
 describe('Состояние читается из своей таблицы', () => {
   it('друг и гильдия приходят разными числами, а не одним нулём', async () => {
-    const { service } = подменить({ has_friend: 3, in_guild: 1 });
-    expect(await service.getStates(ЧАР)).toEqual({ has_friend: 3, in_guild: 1 });
+    const { service } = подменить({
+      has_friend: 3, in_guild: 1, regions_visited: 2, visited_tabriz: 1,
+    });
+    expect(await service.getStates(ЧАР)).toEqual({
+      has_friend: 3, in_guild: 1, regions_visited: 2, visited_tabriz: 1,
+    });
   });
 
   it('нет ни друга, ни гильдии - это ноль, а не ошибка', async () => {
@@ -71,7 +83,9 @@ describe('Состояние читается из своей таблицы', (
     // положение дел. Отказ базы здесь был бы поводом не выдать
     // достижение, а тишина в базе - поводом не выдать.
     const { service } = подменить({});
-    expect(await service.getStates(ЧАР)).toEqual({ has_friend: 0, in_guild: 0 });
+    expect(await service.getStates(ЧАР)).toEqual({
+      has_friend: 0, in_guild: 0, regions_visited: 0, visited_tabriz: 0,
+    });
   });
 
   it('у каждого состояния есть запрос в закрытом списке', () => {
@@ -81,7 +95,27 @@ describe('Состояние читается из своей таблицы', (
       состояний: Object.keys(STATE_SOURCE).length,
       все_с_запросом: Object.values(STATE_SOURCE).every(q => q.trim().length > 0),
       все_с_таблицей: Object.values(STATE_SOURCE).every(q => /FROM/.test(q)),
-    }).toEqual({ состояний: 2, все_с_запросом: true, все_с_таблицей: true });
+    }).toEqual({ состояний: 4, все_с_запросом: true, все_с_таблицей: true });
+
+    // Ни одно состояние не читает текущий регион персонажа.
+    //
+    // characters.region лежит по умолчанию ровно в 'tabriz' у каждого нового
+    // персонажа. Состояние, читающее его, было бы правдивым нулём для всех и
+    // сразу, и «Посетить Тебриз» выдавалось бы бесплатно.
+    // Запрещён не сам факт упоминания characters, а ЧТЕНИЕ ИМЕННО РЕГИОНА.
+    //
+    // Первая версия запрещала любое 'FROM characters', и ругалась на
+    // has_friend: его запрос ходит в characters подзапросом - чтобы найти
+    // ВЛАДЕЛЬЦА персонажа по account_id, - и региона там не касается.
+    //
+    // Ловушка же про другое: characters.region лежит по умолчанию ровно в
+    // 'tabriz' у каждого нового персонажа. Состояние, читающее эту колонку,
+    // было бы правдивым нулём для всех и сразу.
+    const читаетРегион = Object.entries(STATE_SOURCE)
+      .filter(([, q]) => /FROM characters/i.test(q) && /\bregion\b/i.test(q))
+      .map(([k]) => k);
+    expect({ читают_текущий_регион: читаетРегион })
+      .toEqual({ читают_текущий_регион: [] });
   });
 
   it('состояние не путано со счётчиком и не лежит в leaderboard', () => {
