@@ -19,6 +19,7 @@ import { logger } from '../utils/logger';
 // leaderboard - там же убийства, парирования, стихи и шахматы.
 import { LeaderboardService } from '../services/LeaderboardService';
 import { v4 as uuidv4 } from 'uuid';
+import { guildMissionService } from '../services/GuildMissionService';
 
 /**
  * Сколько раз в день персонаж может войти в данж.
@@ -228,6 +229,18 @@ export class DungeonService {
        WHERE id = $1 AND status = 'active'`,
       [sessionId, status]
     ).catch((e) => logger.warn(`[Dungeon] не удалось закрыть сессию ${sessionId}: ${e}`));
+
+    // Прогресс гильдейских заданий - ТОЛЬКО при completed. abandoned
+    // означает, что игрок вышел сам, и засчитывать такой заход было бы
+    // выполнением задания десятью выходами из подземелья.
+    if (status === 'completed') {
+      const сессия = await this.db.queryOne<{ dungeon_id: string; leader_id: string }>(
+        'SELECT dungeon_id, leader_id FROM dungeon_sessions WHERE id = $1', [sessionId],
+      ).catch(() => null);
+      if (сессия?.leader_id) {
+        void guildMissionService.onDungeonCompleted(сессия.leader_id, сессия.dungeon_id);
+      }
+    }
   }
 
   /**

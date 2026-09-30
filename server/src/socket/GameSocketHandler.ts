@@ -46,6 +46,7 @@ import {
   DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType,
 } from '../../../shared/constants';
 import { isDeepWater } from '../utils/spawn';
+import { guildMissionService } from '../services/GuildMissionService';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -1584,6 +1585,12 @@ export class GameSocketHandler {
         logger.debug('Quest recordKill failed:', e);
         return [];
       });
+
+      // Прогресс гильдейских заданий. void, а не await: это горячая точка
+      // (каждый удар каждого игрока), и ожидание запроса в базу за
+      // гильдией поставило бы бой на паузу. Ошибка внутри onKill ловится
+      // и пишется в журнал сама.
+      void guildMissionService.onKill(attacker.id, def.id);
       const evaluated = await this.questService.evaluateQuests(attacker.id).catch((e: unknown) => {
         logger.debug('Quest evaluate failed:', e);
         return [];

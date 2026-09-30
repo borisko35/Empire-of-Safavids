@@ -11,6 +11,7 @@ import { authMiddleware } from '../middleware/auth';
 import { getGuildRankPermissions } from '../data/guilds';
 import { GUILD_SKILLS } from '../data/guilds';
 import { isSkillWired, upgradeCost } from '../systems/GuildBonuses';
+import { guildMissionService } from '../services/GuildMissionService';
 
 const router = Router();
 const guilds = new GuildService();
@@ -283,6 +284,77 @@ router.post('/kick', authMiddleware, async (req: any, res) => {
     }
     await guilds.removeMember(data.guild.id, req.body.targetId);
     res.json({ success: true });
+  } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
+
+/**
+ * Гильдейские задания: список, взятие, получение награды.
+ *
+ * Гильдия проверяется по персонажу запроса, а не по guildId из тела:
+ * иначе можно было бы указать чужую гильдию и забрать её награду.
+ *
+ * Коды отказов отдаются кодом HTTP, а не всегда 400: «не хватает
+ * участников» и «задача не выполнена» клиент рисует по-разному, и одна
+ * надпись на все случаи выглядела бы как поломка.
+ */
+const МИССИИ_КОДЫ: Record<string, number> = {
+  MISSION_UNKNOWN: 404,
+  MISSION_NOT_ACTIVE: 404,
+  MISSION_NOT_DONE: 409,
+  MISSION_ALREADY_ACTIVE: 409,
+  MISSION_ALREADY_CLAIMED: 409,
+  MISSION_ON_COOLDOWN: 409,
+  MISSION_NEEDS_MEMBERS: 409,
+};
+
+router.get('/missions', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = await ownCharacterId(req);
+    if (!characterId) { res.json({ missions: [] }); return; }
+    const data = await guilds.getGuildByCharacter(characterId);
+    if (!data) { res.json({ missions: [] }); return; }
+    const missions = await guildMissionService.list(data.guild.id);
+    res.json({ missions });
+  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
+});
+
+router.post('/missions/start', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = await ownCharacterId(req);
+    if (!characterId) { res.status(403).json({ error: 'characterId is required' }); return; }
+    const data = await guilds.getGuildByCharacter(characterId);
+    if (!data) { res.status(400).json({ error: 'Not in a guild' }); return; }
+    // Взять задание может глава или офицер: рядовому участнику задание
+    // назначает командир, а не он сам.
+    if (!['leader', 'officer'].includes(data.rank)) {
+      res.status(403).json({ error: 'MISSION_NO_PERMISSION' }); return;
+    }
+    const результат = await guildMissionService.start(
+      data.guild.id, String(req.body?.missionId ?? ''), characterId);
+    if (!результат.ok) {
+      res.status(МИССИИ_КОДЫ[результат.code] ?? 400).json({ error: результат.code });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
+
+router.post('/missions/claim', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = await ownCharacterId(req);
+    if (!characterId) { res.status(403).json({ error: 'characterId is required' }); return; }
+    const data = await guilds.getGuildByCharacter(characterId);
+    if (!data) { res.status(400).json({ error: 'Not in a guild' }); return; }
+    if (!['leader', 'officer'].includes(data.rank)) {
+      res.status(403).json({ error: 'MISSION_NO_PERMISSION' }); return;
+    }
+    const результат = await guildMissionService.claim(
+      data.guild.id, String(req.body?.missionId ?? ''), characterId);
+    if (!результат.ok) {
+      res.status(МИССИИ_КОДЫ[результат.code] ?? 400).json({ error: результат.code });
+      return;
+    }
+    res.json({ success: true, rewards: результат.rewards });
   } catch (err) { res.status(400).json({ error: (err as Error).message }); }
 });
 

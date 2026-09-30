@@ -18,6 +18,7 @@ import { isCombatStance, type CombatStance } from '../systems/CombatStance';
 import { GuildService } from './GuildService';
 import { professionOf } from './ProfessionService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
+import { guildMissionService } from './GuildMissionService';
 
 const BASE_STATS: Record<CharacterClass, CharacterStats> = {
   [CharacterClass.QIZILBASH]: {
@@ -742,6 +743,10 @@ export class CharacterService {
          DO UPDATE SET quantity = character_items.quantity + EXCLUDED.quantity`,
         [characterId, it.itemId, Math.max(1, Math.floor(it.qty)), enhancement]
       );
+      // Прогресс гильдейских заданий типа «собрать». void: addItems зовут
+      // десять мест, включая выдачу наград, и ожидание не должно
+      // становиться частью выдачи.
+      void guildMissionService.onItemGained(characterId, it.itemId, Math.max(1, Math.floor(it.qty)));
     }
   }
 
