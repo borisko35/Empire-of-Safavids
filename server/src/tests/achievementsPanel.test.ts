@@ -75,6 +75,22 @@ function makeDeps(): {
       async getCounters() {
         return { monsters_killed: 0, parries: 0, pvp_wins: 0, quests_completed: 0 };
       },
+      /**
+       * Счётчики И состояния вместе - то, чем измеряется условие.
+       * Маршрут перешёл на getMeasures, когда у части достижений
+       * появились условия по состоянию (друг, гильдия), которых в
+       * leaderboard нет. Подмена повторяет настоящее поведение:
+       * состояний нет, пока их не завели.
+       *
+       * Без этого метода маршрут падал бы с «getMeasures is not a
+       * function» - и проверка панели падала бы, ничего не говоря о панели.
+       */
+      async getMeasures() {
+        return {
+          monsters_killed: 0, parries: 0, pvp_wins: 0, quests_completed: 0,
+          has_friend: 0, in_guild: 0,
+        };
+      },
       async getProgress(charId: string, achId: string) {
         progressFor.push(`${charId}:${achId}`);
         return { unlocked: true, current: 0, need: 1, counted: true };
@@ -189,8 +205,15 @@ describe('Строка достижения: поля клиента есть в
     // не отдаёт. Теперь ответ берётся из res.body настоящего маршрута.
     const { deps } = makeDeps();
     (deps.achievements as { getAll: () => Promise<unknown> }).getAll = async () => defs;
-    (deps.achievements as { getCounters?: unknown }).getCounters =
-      async () => ({ monsters_killed: 3, parries: 0, pvp_wins: 0, quests_completed: 0 });
+    (deps.achievements as { getMeasures?: unknown }).getMeasures =
+      // Счётчик задан ненулевым, чтобы панель показала прогресс, а не ноль
+      // по умолчанию. Состояния тоже заданы: иначе проверка «ни одно поле
+      // клиента не отдаётся undefined» прошла бы на нулях и ничего бы не
+      // сказала о прогрессе по состоянию.
+      async () => ({
+        monsters_killed: 3, parries: 0, pvp_wins: 0, quests_completed: 0,
+        has_friend: 1, in_guild: 1,
+      });
     const handler = buildRouteRunner(routes, "'/achievements'", deps) as (
       req: Req, res: FakeRes,
     ) => Promise<void> | void;

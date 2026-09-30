@@ -35,17 +35,26 @@ router.get('/achievements', authMiddleware, async (req: any, res) => {
   // Прогресс по каждому достижению. Без него панель рисовала бы рядом с
   // названием «Убить 10 монстров» серую строку без единой цифры, и
   // игрок не отличил бы «ещё не убил» от «это вообще не считается».
-  const counters = await achievements.getCounters(characterId);
+  // Счётчики и состояния в одном пространстве. Панели всё равно, откуда
+  // взялось число: убийства из leaderboard, а наличие друга - из таблицы
+  // friends. Ключ выбирается по виду условия, потому что condition.counter
+  // у условия-состояния не существует.
+  const measures = await achievements.getMeasures(characterId);
   res.json({
-    achievements: all.map(a => ({
-      ...a,
-      unlocked: unlockedIds.has(a.id),
-      // null, а не 0: у достижения без условия счётчика нет, и ноль был бы
-      // правдоподобной ложью. Панель по null пишет «пока не считается».
-      current: a.condition ? Number(counters[a.condition.counter] ?? 0) : null,
-      need: a.condition ? a.condition.need : null,
-      counted: !!a.condition,
-    })),
+    achievements: all.map(a => {
+      const ключ = !a.condition ? null
+        : ('counter' in a.condition ? a.condition.counter : a.condition.state);
+      return {
+        ...a,
+        unlocked: unlockedIds.has(a.id),
+        // null, а не 0: у достижения без условия измерить нечего, и ноль
+        // был бы правдоподобной ложью. Панель по null пишет «пока не
+        // считается».
+        current: ключ ? Number(measures[ключ] ?? 0) : null,
+        need: a.condition ? a.condition.need : null,
+        counted: !!a.condition,
+      };
+    }),
     total: all.length,
     unlockedCount: unlocked.length,
   });

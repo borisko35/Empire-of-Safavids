@@ -31,7 +31,20 @@ export interface AchievementDef {
    * нечем. Такое достижение честно помечается как несчитанное, а не
    * выдаётся за выполненное.
    */
-  condition?: { counter: AchievementCounter; need: number };
+  /**
+   * Условие выдачи.
+   *
+   * Два вида, а не один: счётчик копится событиями и лежит в
+   * leaderboard, состояние пересчитывается из своей таблицы. Смешивать
+   * их в одном поле означало бы, что любое условие можно случайно
+   * измерить не тем способом.
+   *
+   * ПОЧЕМУ ОБЯЗАТЕЛЬНОЕ ПОЛЕ, А НЕ НЕОБЯЗАТЕЛЬНОЕ. Достижение без
+   * условия выдать нечем, и checkAndUnlock отказывает. Такое достижение
+   * честно остаётся недостижимым, и панель пишет «пока не считается».
+   */
+  condition?: { counter: AchievementCounter; need: number }
+             | { state: AchievementState; need: number };
 }
 
 /**
@@ -60,6 +73,46 @@ export type AchievementCounter =
   | 'poetry_completed'
   | 'chess_wins';
 
+/**
+ * Условия, которые не счётчик, а состояние.
+ *
+ * ЗАЧЕМ ОТДЕЛЬНО ОТ СЧЁТЧИКОВ. Счётчик копится сложением в момент
+ * события: убил монстра - плюс один, и число живёт в leaderboard. А
+ * «есть друг» и «состоишь в гильдии» - не накопительные числа, а признак
+ * текущего положения дел. Они не растут и не убывают при событии, их
+ * надо пересчитывать. Считать их тем же счётчиком значило бы завести в
+ * leaderboard колонку «друзей», которую кто-то должен был бы честно
+ * уменьшать при удалении друга - а удаление друга происходит одним
+ * DELETE, и минус в счётчике не был бы записан.
+ *
+ * ЧТО ТУТ НЕ МОЖЕТ СЛУЧИТЬСЯ. Состояние нельзя накрутить событием,
+ * которого не было: оно читается из таблиц, где строки заводятся самими
+ * этими событиями.
+ */
+export type AchievementState = 'has_friend' | 'in_guild';
+
+/** Всё, чем измеряется выполнение условия. */
+export type AchievementMeasure = AchievementCounter | AchievementState;
+
+/**
+ * Состояние -> запрос, который его считает. Больше ниоткуда.
+ *
+ * Имена таблиц и колонок здесь, а не в местах использования: подстановка
+ * произвольного имени прошла бы мимо typecheck, а именно тут имя колонки
+ * и должно быть написано один раз.
+ *
+ * Про has_friend. Друзья в базе привязаны к АККАУНТУ (users.id), а не к
+ * персонажу, поэтому состояние достаёт владельца персонажа подзапросом.
+ * И берутся только status = 'accepted': отправленное приглашение, на
+ * которое ещё не ответили, другом не является.
+ */
+export const STATE_SOURCE: Record<AchievementState, string> = {
+  has_friend: `SELECT count(*) FROM friends
+                WHERE user_id = (SELECT user_id FROM characters WHERE id = $1)
+                  AND status = 'accepted'`,
+  in_guild: 'SELECT count(*) FROM guild_members WHERE character_id = $1',
+};
+
 /** Счётчик -> колонка таблицы leaderboard. Больше ниоткуда. */
 export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   monsters_killed: 'monsters_killed',
@@ -77,14 +130,20 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
  * Условие «меньше либо равно» вместо «меньше» или «строго больше»
  * не видно ни в описании достижения, ни в панели, а стоит одного
  * достижения на ровно нужном счётчике.
+ *
+ * Счётчики и состояния приходят в одном объекте: и то и другое - числа,
+ * и isEarned не должна знать, откуда взялось число. Иначе проверка была бы
+ * не чистой функцией, а половиной базы.
  */
 export function isEarned(
   def: AchievementDef,
-  counters: Partial<Record<AchievementCounter, number>>,
+  measures: Partial<Record<AchievementMeasure, number>>,
 ): boolean {
-  if (!def.condition) return false;
-  const current = Number(counters[def.condition.counter] ?? 0);
-  return Number.isFinite(current) && current >= def.condition.need;
+  const условие = def.condition;
+  if (!условие) return false;
+  const ключ = 'counter' in условие ? условие.counter : условие.state;
+  const current = Number(measures[ключ] ?? 0);
+  return Number.isFinite(current) && current >= условие.need;
 }
 
 export const ACHIEVEMENTS: AchievementDef[] = [
@@ -136,10 +195,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // ── СОЦИАЛЬНОЕ ───────────────────────────────────────
   { id: 'ach_first_friend', title: 'Friendly', title_ru: 'Дружелюбный',
     description: 'Add your first friend', description_ru: 'Добавить первого друга',
-    category: 'social', icon: '👥', reward_gold: 50, reward_experience: 50, hidden: false },
+    category: 'social', icon: '👥', reward_gold: 50, reward_experience: 50, hidden: false,
+    condition: { state: 'has_friend', need: 1 } },
   { id: 'ach_guild_member', title: 'Guild Member', title_ru: 'Член Гильдии',
     description: 'Join a guild', description_ru: 'Вступить в гильдию',
-    category: 'social', icon: '🏴', reward_gold: 100, reward_experience: 100, hidden: false },
+    category: 'social', icon: '🏴', reward_gold: 100, reward_experience: 100, hidden: false,
+    condition: { state: 'in_guild', need: 1 } },
   { id: 'ach_pvp_first', title: 'Gladiator', title_ru: 'Гладиатор',
     description: 'Win your first PvP match', description_ru: 'Выиграть первый PvP-бой',
     category: 'social', icon: '🏟️', reward_gold: 200, reward_experience: 300, hidden: false,
@@ -210,6 +271,36 @@ export class AchievementService {
   }
 
   /**
+   * Прочитать состояние персонажа для условий-состояний.
+   *
+   * Отдельно от getCounters, потому что это разные вопросы: счётчики
+   * живут в одной строке leaderboard и читаются одним SELECT, а
+   * состояния требуют по запросу на каждое.
+   *
+   * Отсутствующее состояние - это ноль, а не ошибка: у персонажа может
+   * не быть ни друга, ни гильдии, и это нормальное положение дел, а не
+   * сбой. Сбой базы здесь был бы поводом не выдать достижение, но
+   * тишина в базе - повод не выдать.
+   */
+  async getStates(charId: string): Promise<Partial<Record<AchievementState, number>>> {
+    const out: Partial<Record<AchievementState, number>> = {};
+    for (const [state, sql] of Object.entries(STATE_SOURCE) as [AchievementState, string][]) {
+      const row = await this.db.queryOne<{ n: number }>(sql, [charId]);
+      out[state] = Number(row?.n ?? 0);
+    }
+    return out;
+  }
+
+  /**
+   * Счётчики и состояния вместе - то, чем на самом деле измеряется
+   * выполнение условия.
+   */
+  async getMeasures(charId: string): Promise<Partial<Record<AchievementMeasure, number>>> {
+    const [counters, states] = await Promise.all([this.getCounters(charId), this.getStates(charId)]);
+    return { ...counters, ...states };
+  }
+
+  /**
    * Прочитать счётчики персонажа.
    *
    * Счётчики живут в таблице leaderboard, где они копятся сложением в
@@ -260,8 +351,8 @@ export class AchievementService {
     );
     if (existing) return false;
 
-    const counters = await this.getCounters(charId);
-    if (!isEarned(def, counters)) return false;
+    const measures = await this.getMeasures(charId);
+    if (!isEarned(def, measures)) return false;
 
     await this.db.query(
       'INSERT INTO character_achievements (character_id, achievement_id) VALUES ($1, $2)',
@@ -342,10 +433,15 @@ export class AchievementService {
       [charId, achievementId],
     ));
     if (!def.condition) return { unlocked, current: null, need: null, counted: false };
-    const counters = await this.getCounters(charId);
+    // Счётчики и состояния в одном пространстве: панели всё равно, откуда
+    // взялось число. Ключ берётся через 'counter' in условие, потому что
+    // условие теперь двух видов, и прямое условие.counter на состоянии
+    // не существует.
+    const measures = await this.getMeasures(charId);
+    const ключ = 'counter' in def.condition ? def.condition.counter : def.condition.state;
     return {
       unlocked,
-      current: Number(counters[def.condition.counter] ?? 0),
+      current: Number(measures[ключ] ?? 0),
       need: def.condition.need,
       counted: true,
     };

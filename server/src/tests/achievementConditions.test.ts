@@ -10,7 +10,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  AchievementService, ACHIEVEMENTS, isEarned, COUNTER_COLUMN,
+  AchievementService, ACHIEVEMENTS, isEarned, COUNTER_COLUMN, STATE_SOURCE,
 } from '../services/AchievementService';
 import type { AchievementCounter } from '../services/AchievementService';
 
@@ -96,14 +96,21 @@ describe('Условие достижения настоящее', () => {
   it('ровно на пороге достижение выдаётся, а не на пороге минус один', () => {
     // Сдвиг на единицу в сравнении не виден нигде: ни в описании, ни в
     // панели. Перебираем оба края у каждого достижения с условием.
+    //
+    // Ключ берётся по виду условия: счётчик и состояние живут в разных
+    // пространствах значений, и isEarned принимает оба. Первая версия
+    // проверки разбирала def.condition как будто у него всегда есть
+    // .counter - и упала бы, как только появилось состояние.
     const с_условием = ACHIEVEMENTS.filter(a => a.condition);
     expect(с_условием.length).toBeGreaterThan(0);
     for (const def of с_условием) {
-      const { counter, need } = def.condition!;
+      const условие = def.condition!;
+      const ключ = 'counter' in условие ? условие.counter : условие.state;
+      const { need } = условие;
       expect({
         id: def.id,
-        на_пороге_минус_один: isEarned(def, { [counter]: need - 1 }),
-        на_пороге: isEarned(def, { [counter]: need }),
+        на_пороге_минус_один: isEarned(def, { [ключ]: need - 1 }),
+        на_пороге: isEarned(def, { [ключ]: need }),
       }).toEqual({ id: def.id, на_пороге_минус_один: false, на_пороге: true });
     }
   });
@@ -120,13 +127,20 @@ describe('Условие достижения настоящее', () => {
     }
   });
 
-  it('счётчик достижения — из закрытого списка колонок', () => {
-    // Имя колонки подставляется в SQL. Если бы оно приходило из данных,
-    // подстановка чужого имени прошла бы мимо typecheck.
+  it('условие достижения — из закрытого списка', () => {
+    // Имя колонки или имя состояния подставляется в SQL. Если бы оно
+    // приходило из данных, подстановка чужого имени прошла бы мимо
+    // typecheck. Проверяются оба вида условия, каждый по своему списку.
     for (const def of ACHIEVEMENTS) {
       if (!def.condition) continue;
-      const col = COUNTER_COLUMN[def.condition.counter];
-      expect({ id: def.id, колонка_из_списка: col === def.condition.counter })
+      const условие = def.condition;
+      if ('state' in условие) {
+        expect({ id: def.id, состояние_из_списка: условие.state in STATE_SOURCE })
+          .toEqual({ id: def.id, состояние_из_списка: true });
+        continue;
+      }
+      const col = COUNTER_COLUMN[условие.counter];
+      expect({ id: def.id, колонка_из_списка: col === условие.counter })
         .toEqual({ id: def.id, колонка_из_списка: true });
     }
     // Зафиксировано руками: новый счётчик обязан сломать эту проверку.
@@ -374,9 +388,10 @@ describe('Проверка не пустая', () => {
     // Числа зафиксированы: новое достижение без условия или с условием
     // обязано сломать эту проверку, чтобы решение было осознанным.
     //
-    // Было 9 и 12, стало 10 и 11: «Шахматный Гений» получил настоящее
-    // условие (10 побед в шахматах) вместо «пока не считается».
-    expect({ с_условием, без }).toEqual({ с_условием: 10, без: 11 });
+    // Было 9 и 12, стало 10 и 11, потом 12 и 9: «Шахматный Гений» получил
+    // счётчик побед, а «Дружелюбный» и «Член Гильдии» - условие по
+    // состоянию, которое пересчитывается из своих таблиц.
+    expect({ с_условием, без }).toEqual({ с_условием: 12, без: 9 });
   });
 
   it('счётчик парирований — не единственный, кто ссылается на лидерборд', () => {
