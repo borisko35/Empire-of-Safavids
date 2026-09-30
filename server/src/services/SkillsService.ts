@@ -208,11 +208,24 @@ export class SkillsService {
     const owned = await this.getCharacterSkills(characterId);
     const ownedIds = new Set(owned.map(s => s.id));
     const profFilter = professionId || (owned[0]?.professionId);
-    return SKILLS.filter(s => 
-      !ownedIds.has(s.id) && 
+    // Порог берётся у персонажа, а не из constant: число 30 было написано
+    // руками и означало «любой уровень до тридцати», то есть навык
+    // десятого уровня предлагался первому. Теперь предлагается ровно то,
+    // что персонаж может выучить.
+    const charLevel = await this.characterLevel(characterId);
+    return SKILLS.filter(s =>
+      !ownedIds.has(s.id) &&
       (!profFilter || s.professionId === profFilter) &&
-      s.level <= 30
+      s.level <= charLevel
     );
+  }
+
+  /** Уровень персонажа. Не найден или ошибка базы - ноль: навыки не видны. */
+  private async characterLevel(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ level: number }>(
+      'SELECT level FROM characters WHERE id = $1', [characterId]
+    ).catch(() => null);
+    return Number(row?.level ?? 0);
   }
 
   async learnSkill(characterId: string, skillId: string, userId: string): Promise<SkillDef> {
@@ -225,11 +238,17 @@ export class SkillsService {
     );
     if (existing) throw new Error('Skill already known');
 
-    const char = await this.db.queryOne<{ profession_id: string | null }>(
-      'SELECT profession_id FROM characters WHERE id = $1', [characterId]
+    const char = await this.db.queryOne<{ profession_id: string | null; level: number }>(
+      'SELECT profession_id, level FROM characters WHERE id = $1', [characterId]
     );
     if (char?.profession_id !== skill.professionId) {
       throw new Error(`Requires ${skill.professionId} profession`);
+    }
+    // Требование уровня. Раньше оно было написано в данных и показывалось
+    // в панели рядом с кнопкой, но не проверялось: первый уровень выучивал
+    // навык десятого. Надпись «уровень 10» была обещанием без проверки.
+    if (Number(char?.level ?? 0) < skill.level) {
+      throw new Error(`Requires level ${skill.level}`);
     }
 
     await this.db.query(

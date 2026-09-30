@@ -3814,7 +3814,10 @@ export async function loadSkills(): Promise<void> {
     if (profId) {
       const { skills: avail } = await api.getProfessionSkills(profId);
       const known = new Set(skills.map(s => s.id));
-      const available = avail.filter(s => !known.has(s.id) && s.level <= 30);
+      // Порог - уровень самого персонажа, а не выдуманное тридцатое:
+      // иначе панель предлагала навык, который сервер всё равно не даст.
+      const myLevel = session.character?.level ?? 0;
+      const available = avail.filter(s => !known.has(s.id) && s.level <= myLevel);
       availBox.innerHTML = available.length
         ? available.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
         : '';
