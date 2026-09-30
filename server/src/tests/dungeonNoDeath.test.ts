@@ -128,3 +128,30 @@ describe('Колонка появляется миграцией', () => {
       .toEqual({ поле: true });
   });
 });
+
+describe('Вход в подземелье работает', () => {
+  it('reset_date указан с таблицей, а не голым именем', () => {
+    // В ветке ON CONFLICT DO UPDATE голое reset_date неоднозначно, и
+    // Postgres отвечал 500 на ЛЮБОЙ вход. Значит подземелья не открывались
+    // вообще, и счётчик прохождений не мог вырасти ни разу.
+    const блок = подземелья.slice(
+      подземелья.indexOf('private async spendAttempt'),
+      подземелья.indexOf('private async spendAttempt') + 1400);
+    expect({
+      квалифицировано: /WHERE dungeon_attempts\.reset_date = CURRENT_DATE/.test(блок),
+      голого_имени_нет: !/WHERE reset_date/.test(блок),
+    }).toEqual({ квалифицировано: true, голого_имени_нет: true });
+  });
+
+  it('проверка попыток тоже не прячет ошибку в catch', () => {
+    // attemptsLeft глотает ЛЮБУЮ ошибку запроса в .catch(() => null) и
+    // отвечает «осталось 3 попытки». При сломанном SQL игрок бы увидел
+    // «можно входить», потом 500 - и не понял бы почему.
+    const блок = подземелья.slice(
+      подземелья.indexOf('async attemptsLeft'),
+      подземелья.indexOf('async attemptsLeft') + 900);
+    expect({
+      глотает_ошибку: /\.catch\(\(\) => null\)/.test(блок),
+    }).toEqual({ глотает_ошибку: true });
+  });
+});

@@ -41,8 +41,14 @@ describe('Лимит попыток: сервис', () => {
     // Две одновременные попытки (двойной клик, две вкладки) при SELECT+UPDATE
     // обе прочитали бы «осталось 1» и обе прошли бы. Postgres обновляет
     // строку один раз: вторая увидит attempts уже 3 и вернёт ноль строк
+    // Имя колонки ЗДЕСЬ указывается с таблицей. Голое reset_date в ветке
+    // ON CONFLICT DO UPDATE неоднозначно, и Postgres отвечал 500 на вход в
+    // любое подземелье: подземелья не открывались вовсе, и счётчик
+    // прохождений не мог вырасти ни разу. Прежняя проверка искала ГОЛОЕ имя
+    // как признак правильности - и закрепляла ошибку.
     expect(service).toMatch(/ON CONFLICT \(character_id, dungeon_id\) DO UPDATE/);
-    expect(service).toMatch(/WHERE reset_date = CURRENT_DATE AND dungeon_attempts\.attempts < \$3/);
+    expect(service).toMatch(/WHERE dungeon_attempts\.reset_date = CURRENT_DATE AND dungeon_attempts\.attempts < \$3/);
+    expect(service).not.toMatch(/WHERE reset_date/);
     expect(service).toMatch(/RETURNING attempts/);
   });
 });

@@ -326,13 +326,19 @@ export class DungeonService {
    * прочитали бы «осталось 1» и обе прошли бы. Postgres же обновляет строку
    * один раз: вторая попытка увидит attempts уже 3 и вернёт ноль строк.
    */
+   // reset_date ЗДЕСЬ ПОД ТАБЛИЦЕЙ, А НЕ ГОЛОЕ ИМЯ. В ветке
+   // ON CONFLICT DO UPDATE голое reset_date неоднозначно, и Postgres
+   // отвечал "column reference \"reset_date\" is ambiguous" - то есть
+   // вход в любое подземелье падал с 500. Попытки не списывались, и
+   // подземелье не открывалось вовсе: счётчик прохождений не мог
+   // вырасти. Живой прогон нашёл это за минуту, чтение кода - нет.
   private async spendAttempt(characterId: string, dungeonId: string): Promise<boolean> {
     const res = await this.db.query<{ attempts: number }>(
       `INSERT INTO dungeon_attempts (character_id, dungeon_id, attempts, reset_date)
        VALUES ($1, $2, 1, CURRENT_DATE)
        ON CONFLICT (character_id, dungeon_id) DO UPDATE
          SET attempts = dungeon_attempts.attempts + 1
-       WHERE reset_date = CURRENT_DATE AND dungeon_attempts.attempts < $3
+       WHERE dungeon_attempts.reset_date = CURRENT_DATE AND dungeon_attempts.attempts < $3
        RETURNING attempts`,
       [characterId, dungeonId, DUNGEON_ATTEMPTS_PER_DAY]
     );
