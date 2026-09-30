@@ -69,6 +69,45 @@ const ERRORS: Record<string, string> = {
   SKILL_UNKNOWN: 'guild.err_skill_unknown',
   SKILL_MAXED: 'guild.err_skill_maxed',
   NOT_ENOUGH_GUILD_GOLD: 'guild.err_skill_no_gold',
+  // Задания. Четыре разные причины отказа - четыре разные подсказки.
+  // Одна надпись «недоступно» на все случаи выглядела бы как поломка.
+  MISSION_NO_PERMISSION: 'guild.err_mission_no_permission',
+  MISSION_UNKNOWN: 'guild.err_mission_unknown',
+  MISSION_NOT_ACTIVE: 'guild.err_mission_not_active',
+  MISSION_NOT_DONE: 'guild.err_mission_not_done',
+  MISSION_ALREADY_ACTIVE: 'guild.err_mission_already_active',
+  MISSION_ALREADY_CLAIMED: 'guild.err_mission_already_claimed',
+  MISSION_ON_COOLDOWN: 'guild.err_mission_on_cooldown',
+  MISSION_NEEDS_MEMBERS: 'guild.err_mission_needs_members',
+  MISSION_CLAIM_FAILED: 'guild.err_mission_claim_failed',
+};
+
+/**
+ * Почему задание не берётся, на языке интерфейса.
+ *
+ * Ключ приходит с сервера полем blockedBy. Пустая строка - причин нет.
+ * Ранжируется по ключу, а не по состоянию: одно и то же состояние 'open'
+ * бывает и доступным, и заблокированным, и рисовать по нему - значит
+ * врать игроку.
+ */
+const MISSION_BLOCKS: Record<string, string> = {
+  MISSION_ALREADY_ACTIVE: 'guild.mission_already_active',
+  MISSION_ON_COOLDOWN: 'guild.mission_on_cooldown',
+  MISSION_NEEDS_MEMBERS: 'guild.mission_needs_members',
+};
+
+/**
+ * Вид цели на языке интерфейса.
+ *
+ * Тип цели приходит с сервера строкой, и сервер отдаёт их на трёх языках
+ * (kill, collect, dungeon). Новое значение из справочника не должно
+ * превращать интерфейс в «kill: 12/100» посреди русского текста, поэтому
+ * неизвестный вид показывается словом «цель», а не сырой строкой.
+ */
+const MISSION_OBJECTIVE_KIND: Record<string, string> = {
+  kill: 'guild.mission_obj_kill',
+  collect: 'guild.mission_obj_collect',
+  dungeon: 'guild.mission_obj_dungeon',
 };
 
 /**
@@ -101,6 +140,136 @@ function block(cls = 'guild-block'): HTMLDivElement {
   const el = document.createElement('div');
   el.className = cls;
   return el;
+}
+
+// ── Задания: карточка одного задания ───────────────────────────
+
+/**
+ * Одно задание целиком.
+ *
+ * ЧТО ПРИХОДИТ С СЕРВЕРА И ЧТО НЕ РИСУЕТСЯ. state и blockedBy - решения
+ * сервера. Клиент не решает, можно ли взять, потому что сервер всё равно
+ * откажет, а игрок увидит причину только после нажатия. Здесь блок
+ * рисуется по тому, что сервер сказал, и ни по чему другому.
+ *
+ * ЗАЧЕМ ЧЕТЫРЕ СОСТОЯНИЯ. 'open' - можно взять, 'active' - взято и не
+ * выполнено, 'done' - выполнено, можно забрать, 'claimed' - награда уже
+ * получена, задание на откате. Свести их в два («есть / нет») значило бы
+ * отнять у игрока самое интересное состояние - «выполнено, забери награду».
+ */
+function renderMission(задание: {
+  id: string; name: string; nameRu: string; description: string;
+  objectives: { index: number; type: string; target: string; required: number; progress: number }[];
+  rewards: { guildExp: number; gold: number; memberExp: number };
+  cooldown: number; minMembers: number; needMembers: number; haveMembers: number;
+  state: 'open' | 'active' | 'done' | 'claimed';
+  blockedBy: string; availableAt: string | null;
+}): HTMLElement {
+  const карточка = document.createElement('div');
+  const готово = задание.state === 'done';
+  // Погашенная карточка - только у уже полученной награды. Активное и
+  // готовое задания остаются яркими: это единственное, за чем игрок
+  // приходит в панель.
+  карточка.className = 'guild-skill'
+    + (задание.state === 'claimed' ? ' guild-skill-off' : '')
+    + (готово ? ' guild-mission-done' : '');
+
+  const имя = document.createElement('div');
+  имя.className = 'guild-skill-name';
+  // Названия заданий в справочнике только по-русски и по-английски.
+  // Азербайджанцу показывается английский, а не выдуманный перевод.
+  имя.textContent = t('lang') === 'ru' ? задание.nameRu : задание.name;
+  карточка.append(имя);
+
+  const описание = document.createElement('div');
+  описание.className = 'guild-skill-desc';
+  описание.textContent = задание.description;
+  карточка.append(описание);
+
+  for (const цель of задание.objectives) {
+    const строка = document.createElement('div');
+    строка.className = 'guild-mission-obj';
+    const сколько = Math.min(цель.progress, цель.required);
+    строка.textContent = `${t(MISSION_OBJECTIVE_KIND[цель.type] ?? 'guild.mission_obj_other')}: `
+      + `${сколько}/${цель.required}`;
+    // Выполненная цель помечается отдельно: по одному числу «100/100» не
+    // всегда видно, это конец или середина пути.
+    if (сколько >= цель.required) строка.className += ' guild-mission-obj-done';
+    карточка.append(строка);
+  }
+
+  const награда = document.createElement('div');
+  награда.className = 'guild-skill-level';
+  награда.textContent = t('guild.mission_rewards') + ': '
+    + `${задание.rewards.gold.toLocaleString()} ${t('guild.mission_gold')}, `
+    + `${задание.rewards.guildExp.toLocaleString()} ${t('guild.mission_guild_exp')}, `
+    + `${задание.rewards.memberExp.toLocaleString()} ${t('guild.mission_member_exp')}`;
+  карточка.append(награда);
+
+  if (задание.state === 'claimed') {
+    const отметка = document.createElement('div');
+    отметка.className = 'guild-skills-hint';
+    отметка.textContent = t('guild.mission_claimed');
+    карточка.append(отметка);
+    return карточка;
+  }
+
+  if (задание.state === 'done') {
+    const забрать = document.createElement('button');
+    забрать.type = 'button';
+    забрать.className = 'guild-btn';
+    забрать.textContent = t('guild.mission_claim');
+    забрать.addEventListener('click', async () => {
+      забрать.disabled = true;
+      try {
+        const итог = await api.guildMissionClaim(cid(), задание.id);
+        const п = итог?.rewards;
+        toast(п
+          ? `${t('guild.mission_claimed_toast')} +${п.gold.toLocaleString()} ${t('guild.mission_gold')}`
+          : t('guild.mission_claimed_toast'), 'success');
+        await loadGuild();
+      } catch (err) {
+        fail(err);
+        забрать.disabled = false;
+      }
+    });
+    карточка.append(забрать);
+    return карточка;
+  }
+
+  // Причина блокировки показывается ВМЕСТО кнопки. Кнопка «взять» с
+  // подсказкой при наведении выглядела бы как «сейчас не выйдет», а на
+  // телефоне подсказку никто не увидит.
+  const причина = MISSION_BLOCKS[задание.blockedBy];
+  if (причина) {
+    const подсказка = document.createElement('div');
+    подсказка.className = 'guild-skills-hint';
+    подсказка.textContent = t(причина);
+    // Сколько именно не хватает - иначе игрок не знает, кого звать.
+    if (задание.blockedBy === 'MISSION_NEEDS_MEMBERS') {
+      подсказка.textContent += ` (${задание.haveMembers}/${задание.needMembers})`;
+    }
+    карточка.append(подсказка);
+    return карточка;
+  }
+
+  const взять = document.createElement('button');
+  взять.type = 'button';
+  взять.className = 'guild-btn';
+  взять.textContent = t('guild.mission_start');
+  взять.addEventListener('click', async () => {
+    взять.disabled = true;
+    try {
+      await api.guildMissionStart(cid(), задание.id);
+      toast(t('guild.mission_started'), 'success');
+      await loadGuild();
+    } catch (err) {
+      fail(err);
+      взять.disabled = false;
+    }
+  });
+  карточка.append(взять);
+  return карточка;
 }
 
 // ── Нет гильдии: поиск и вступление ────────────────────────────
@@ -519,6 +688,40 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
     console.warn('[Guild] навыки не загрузились:', err);
   }
   box.append(skillsBlock);
+
+  // ── Задания ───────────────────────────────────────────────
+  // Отдельный блок, а не часть навыков: у заданий другой срок (откат в
+  // часах), другое право (глава или офицер) и другое состояние. Смешанное
+  // в одном списке выглядело бы так, будто это одно и то же.
+  const missionsBlock = block('guild-block guild-missions');
+  const missionsTitle = document.createElement('h3');
+  missionsTitle.className = 'guild-h';
+  missionsTitle.textContent = t('guild.missions_title');
+  missionsBlock.append(missionsTitle);
+
+  try {
+    const данные = await api.guildMissions(cid());
+    if (данные.missions.length === 0) {
+      const пусто = document.createElement('div');
+      пусто.className = 'guild-skills-hint';
+      пусто.textContent = t('guild.missions_none');
+      missionsBlock.append(пусто);
+    }
+
+    for (const задание of данные.missions) {
+      missionsBlock.append(renderMission(задание));
+    }
+  } catch (err) {
+    // Панель заданий не появилась - и об этом сказано прямо. Молчание
+    // выглядело бы как «заданий нет», а это другое и более опасное
+    // сообщение: игрок решил бы, что гильдия ничего не может делать.
+    const сбой = document.createElement('div');
+    сбой.className = 'guild-skills-hint';
+    сбой.textContent = t('guild.missions_load_failed');
+    missionsBlock.append(сбой);
+    console.warn('[Guild] задания не загрузились:', err);
+  }
+  box.append(missionsBlock);
 
   // ── Выход ────────────────────────────────────────────────
   const leave = document.createElement('button');

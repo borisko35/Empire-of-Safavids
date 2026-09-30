@@ -905,6 +905,31 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ characterId, skillId, levels }),
     }),
+  // Гильдейские задания. Состояние приходит с сервера: что открыто, что уже
+  // взято, что готово и почему нельзя. Клиент ничего не решает - иначе он
+  // нарисует кнопку «взять» там, где сервер откажет, а игрок увидит причину
+  // отказа только после нажатия.
+  guildMissions: (characterId: string) => req<{
+    missions: {
+      id: string; name: string; nameRu: string; description: string;
+      objectives: { index: number; type: string; target: string; required: number; progress: number }[];
+      rewards: { guildExp: number; gold: number; memberExp: number };
+      cooldown: number; minMembers: number; needMembers: number; haveMembers: number;
+      state: 'open' | 'active' | 'done' | 'claimed';
+      blockedBy: string; availableAt: string | null;
+    }[];
+  }>(`/api/guilds/missions?characterId=${characterId}`),
+  guildMissionStart: (characterId: string, missionId: string) =>
+    req<{ success: boolean }>('/api/guilds/missions/start', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, missionId }),
+    }),
+  guildMissionClaim: (characterId: string, missionId: string) =>
+    req<{ success: boolean; rewards: { guildExp: number; gold: number; memberExp: number } | null }>(
+      '/api/guilds/missions/claim', {
+        method: 'POST',
+        body: JSON.stringify({ characterId, missionId }),
+      }),
   guildKick: (actorId: string, targetId: string) =>
     req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 
