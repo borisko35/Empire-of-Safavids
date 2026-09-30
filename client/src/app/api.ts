@@ -236,6 +236,30 @@ export const api = {
   skillProgress: (characterId: string, skillId: string) =>
     req<{ progress: { level: number; xp: number; needed: number } }>(`/api/skills/progress/${skillId}?characterId=${characterId}`),
 
+  /**
+   * Ссылка перехода по рекламному партнёру с идентификатором игрока.
+   *
+   * Заглушка вида «?userid=PLAYER_ID» больше не встречается на сайте: все
+   * игроки уходили бы с одним и тем же sub-id, и партнёрский счёт считал бы
+   * такой поток невалидным. Идентификатор подставляет сервер - на статической
+   * странице подставить его нечем.
+   */
+  rewardLink: (characterId: string) =>
+    req<{ url: string; gold: number; alreadyClaimed: boolean }>(
+      `/api/game/reward-link?characterId=${characterId}`),
+
+  /**
+   * Забрать награду за переход.
+   *
+   * Ответ 409 с already_claimed - это НЕ ошибка для игрока, а «уже
+   * получено»: кнопка должна гаснуть, а не показывать тревогу.
+   */
+  claimReward: (characterId: string) =>
+    req<{ success: boolean; gold: number }>('/api/game/reward-claim', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
+
   getSkills: (characterId: string) =>
     req<{ skills: any[] }>(`/api/skills?characterId=${characterId}`),
 

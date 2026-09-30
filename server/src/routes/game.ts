@@ -19,6 +19,9 @@ import { GAME_SERVERS } from '../../../shared/constants';
 import { RedisService } from '../services/RedisService';
 const redis = RedisService.getInstance();
 import { TradeService } from '../systems/TradeService';
+// Награда за переход по рекламной ссылке. Ссылка собирается на
+// идентификаторе игрока, золото выдаётся один раз на персонажа.
+import { RewardService, linkFor, partnerConfigured, REWARD_GOLD } from '../services/RewardService';
 import { CRAFTING_RECIPES } from '../data/crafting';
 import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -986,6 +989,44 @@ gameRouter.get('/trade/contracts', secureMiddleware,
     });
   })
 );
+
+// GET /api/game/reward-link — ссылка перехода с идентификатором игрока
+// Зачем маршрут, а не ссылка в HTML. Страница сайта статическая, и
+// подставить в неё идентификатор игрока нечем: раньше там стоял
+// буквальный «?userid=PLAYER_ID», и все игроки уходили к партнёру с одним
+// и тем же sub-id. Такой поток партнёр считает невалидным.
+gameRouter.get('/reward-link', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!partnerConfigured()) {
+      return res.status(503).json({ success: false, error: 'reward_link_not_configured' });
+    }
+    const characterId = String(req.query.characterId ?? '');
+    const rewards = new RewardService();
+    return res.json({
+      url: linkFor(characterId),
+      gold: REWARD_GOLD,
+      // Панель гасит кнопку сразу, а не после неудачной попытки.
+      alreadyClaimed: await rewards.hasClaimed(characterId),
+    });
+  }));
+
+// POST /api/game/reward-claim — забрать награду
+//
+// Выдача происходит по нажатию кнопки, без подтверждения от партнёрской
+// сети. Честное следствие: игрок может нажать и не перейти по ссылке, и
+// золото всё равно получит. Защита есть только от повторной выдачи - один
+// раз на персонажа, и проверяет её база, а не код.
+gameRouter.post('/reward-claim', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.body?.characterId ?? '');
+    const итог = await new RewardService().claim(characterId);
+    if (!итог.ok) {
+      // 409, а не 200 с нулем: игрок должен отличать «уже получено» от
+      // «начислено».
+      return res.status(409).json({ success: false, error: итог.code });
+    }
+    return res.json({ success: true, gold: итог.gold });
+  }));
 
 // POST /api/game/trade/accept — принять контракт { characterId, contractId }
 gameRouter.post('/trade/accept', secureMiddleware, requireCharacterOwnership(),

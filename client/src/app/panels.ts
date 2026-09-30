@@ -266,6 +266,57 @@ async function pollPayment(paymentId: string, expected: number): Promise<void> {
     amt.placeholder = t('common.amount');
     amt.style.width = '80px';
     top.append(cur, amt);
+    // ── Награда за переход по рекламной ссылке ──────────────────
+    //
+    // Кнопка делает две вещи: открывает ссылку партнёра с идентификатором
+    // ИГРОКА (не заглушкой) и забирает награду. Порядок именно такой:
+    // сначала ссылка, потом кнопка забирает, - потому что выдача происходит
+    // по нажатию, а не по факту перехода.
+    //
+    // ЧЕСТНОЕ ОГРАНИЧЕНИЕ, ОНО НЕ СПРЯТАНО. Игрок может нажать «забрать»,
+    // не уходя по ссылке, и золото всё равно получит: подтверждения от
+    // партнёрской сети нет. Защита одна - награда выдаётся один раз на
+    // персонажа, и проверяет это база.
+    const rewardRow = document.createElement('div');
+    rewardRow.className = 'topup-row';
+    const rewardBtn = actionButton(t('wallet.reward_btn').replace('{gold}', '100'), async () => {
+      rewardBtn.disabled = true;
+      try {
+        const info = await api.rewardLink(cid());
+        if (!info.alreadyClaimed) window.open(info.url, '_blank', 'noopener');
+        const got = await api.claimReward(cid());
+        if (got?.success) {
+          toast(`+${info.gold} ${t('common.gold')}`, 'success');
+          if (session.character && typeof got.gold === 'number') session.character.gold = got.gold;
+          refreshBars();
+        }
+      } catch {
+        // 409 already_claimed - это «уже получено», а не поломка. Показать
+        // игроку ошибку здесь означало бы наказать его за честное
+        // повторное нажатие.
+        toast(t('wallet.reward_already'), 'info');
+      } finally {
+        rewardBtn.disabled = false;
+        loadRewards();
+      }
+    });
+    rewardRow.append(rewardBtn);
+    const rewardsHost = document.createElement('div');
+    rewardsHost.append(rewardRow);
+    top.append(rewardsHost);
+
+    /** Погасить кнопку, если награда уже получена. */
+    async function loadRewards(): Promise<void> {
+      try {
+        const info = await api.rewardLink(cid());
+        rewardBtn.disabled = info.alreadyClaimed;
+        rewardBtn.textContent = info.alreadyClaimed
+          ? t('wallet.reward_done')
+          : t('wallet.reward_btn').replace('{gold}', String(info.gold));
+      } catch { /* панель работает и без награды */ }
+    }
+    void loadRewards();
+
     top.append(actionButton(t('wallet.topup_btn'), async () => {
       const sum = Number(amt.value);
       if (!sum || sum <= 0) { toast(t('wallet.enter_amount'), 'error'); return; }
