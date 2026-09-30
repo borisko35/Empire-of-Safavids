@@ -744,23 +744,23 @@ export const api = {
     req<{ success: boolean }>(`/api/tutorial/${characterId}/skip`, { method: 'POST' }),
 
   // ── Шахматы Шаха ──────────────────────────────────────────
-  chessStart: (betGold: number) =>
+  chessStart: (characterId: string, betGold: number) =>
     req<{ gameId: string; board: (string | null)[][]; turn: string; status: string; betGold: number }>(
-      '/api/chess/start', { method: 'POST', body: JSON.stringify({ betGold }) },
+      '/api/chess/start', { method: 'POST', body: JSON.stringify({ characterId, betGold }) },
     ),
 
-  chessMove: (gameId: string, from: { row: number; col: number }, to: { row: number; col: number }) =>
+  chessMove: (characterId: string, gameId: string, from: { row: number; col: number }, to: { row: number; col: number }) =>
     req<{ board: (string | null)[][]; turn: string; status: string; result?: { winner: string; goldWon: number; messageRu: string } }>(
-      '/api/chess/move', { method: 'POST', body: JSON.stringify({ gameId, from, to }) },
+      '/api/chess/move', { method: 'POST', body: JSON.stringify({ characterId, gameId, from, to }) },
     ),
 
-  chessState: (gameId: string) =>
+  chessState: (characterId: string, gameId: string) =>
     req<{ board: (string | null)[][]; turn: string; status: string; moveCount: number; betGold: number }>(
-      `/api/chess/state/${gameId}`,
+      `/api/chess/state/${gameId}?characterId=${characterId}`,
     ),
 
-  chessResign: (gameId: string) =>
-    req<{ success: boolean }>('/api/chess/resign', { method: 'POST', body: JSON.stringify({ gameId }) }),
+  chessResign: (characterId: string, gameId: string) =>
+    req<{ success: boolean }>('/api/chess/resign', { method: 'POST', body: JSON.stringify({ characterId, gameId }) }),
 
   // ── Стихи Хафиза ──────────────────────────────────────────
   poetryChallenges: () =>

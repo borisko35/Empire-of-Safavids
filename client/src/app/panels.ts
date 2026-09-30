@@ -1561,7 +1561,12 @@ async function loadChess(): Promise<void> {
   startBtn.addEventListener('click', async () => {
     const bet = Number(betInput.value) || 50;
     try {
-      const game = await api.chessStart(bet);
+      // Персонаж обязателен: золото и партия принадлежат персонажу, а не
+    // аккаунту. Без него сервер считал id сессии за персонажа и отвечал
+    // «не хватает золота» при полном кошельке.
+    const charId = cid();
+    if (!charId) return;
+    const game = await api.chessStart(charId, bet);
       renderChessBoard(box, game);
     } catch (err) { toast((err as Error).message, 'error'); }
   });
@@ -1603,7 +1608,7 @@ function renderChessBoard(container: HTMLElement, game: { gameId: string; board:
           }
         } else {
           try {
-            const result = await api.chessMove(game.gameId, selectedCell, { row: r, col: c });
+            const result = await api.chessMove(cid(), game.gameId, selectedCell, { row: r, col: c });
             game.board = result.board;
             game.turn = result.turn;
             game.status = result.status;
@@ -1640,7 +1645,7 @@ function renderChessBoard(container: HTMLElement, game: { gameId: string; board:
   resignBtn.textContent = t('chess.resign');
   resignBtn.style.marginTop = '8px';
   resignBtn.addEventListener('click', async () => {
-    await api.chessResign(game.gameId);
+    await api.chessResign(cid(), game.gameId);
     toast(t('chess.resigned'), 'info');
     void loadChess();
   });

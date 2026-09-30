@@ -22,10 +22,35 @@ import { getChessGame } from '../systems/ChessOfTheShah';
 import { authMiddleware } from '../middleware/auth';
 import { ChessBetService, normalizeBet, MIN_BET, MAX_BET, DEFAULT_BET } from '../services/ChessBetService';
 import { logger } from '../utils/logger';
+import { DatabaseService } from '../services/DatabaseService';
 
 const router = Router();
 const chess = getChessGame();
 const bets = new ChessBetService();
+
+const db = DatabaseService.getInstance();
+
+/**
+ * Персонаж по id, и только если он принадлежит вошедшему.
+ *
+ * ЗАЧЕМ ЭТО ПОЯВИЛОСЬ. Ставка списывается с characters.gold, а characters
+ * заводится на ПЕРСОНАЖА, а не на аккаунт: у одного аккаунта несколько
+ * персонажей. Маршрут брал id из сессии и считал его за персонажа. Списание
+ * не находило строку, и сервер отвечал «не хватает золота» - то есть
+ * врал о причине при совершенно достаточном кошельке.
+ *
+ * Проверка принадлежности не формальность: без неё один вошедший снял бы
+ * ставку с чужого персонажа, зная его id.
+ */
+async function свойПерсонаж(req: any, res: any): Promise<string | null> {
+  const characterId = String(req.body?.characterId ?? req.query.characterId ?? '');
+  if (!characterId) { res.status(400).json({ error: 'characterId is required' }); return null; }
+  const строка = await db.queryOne<{ id: string }>(
+    'SELECT id FROM characters WHERE id = $1 AND user_id = $2', [characterId, req.userId],
+  );
+  if (!строка) { res.status(404).json({ error: 'character_not_found' }); return null; }
+  return строка.id;
+}
 
 /**
  * Восстановить партию в память движка.
@@ -40,11 +65,12 @@ function восстановить(state: Parameters<typeof chess.restore>[0]): v
 // Начать партию
 router.post('/start', authMiddleware, async (req: any, res) => {
   try {
-    const playerId = req.userId;
+    const персонаж = await свойПерсонаж(req, res);
+    if (!персонаж) return;
     const betGold = normalizeBet(req.body?.betGold);
-    const game = chess.startGame(playerId, betGold);
+    const game = chess.startGame(персонаж, betGold);
 
-    const открытие = await bets.open(game.gameId, playerId, betGold, game);
+    const открытие = await bets.open(game.gameId, персонаж, betGold, game);
     if (!открытие.ok) {
       // Партия в памяти уже создана, но деньги не заложены. Убираем её,
       // иначе по gameId можно было бы играть без ставки.
@@ -81,8 +107,10 @@ async function закрыть(gameId: string, characterId: string, outcome: 'whi
 // Сделать ход
 router.post('/move', authMiddleware, async (req: any, res) => {
   try {
+    const персонаж = await свойПерсонаж(req, res);
+    if (!персонаж) return;
     const { gameId, from, to } = req.body ?? {};
-    const result = chess.makeMove(gameId, req.userId, { from, to });
+    const result = chess.makeMove(gameId, персонаж, { from, to });
     if (!result.success) {
       res.status(400).json({ error: 'invalid_move' });
       return;
@@ -97,7 +125,7 @@ router.post('/move', authMiddleware, async (req: any, res) => {
     if (result.result) {
       // Партия кончилась ходом игрока. Выплата - по-настоящему.
       const исход = result.result.winner;
-      const оплата = await закрыть(gameId, req.userId, исход === 'draw' ? 'draw' : исход);
+      const оплата = await закрыть(gameId, персонаж, исход === 'draw' ? 'draw' : исход);
       resp.result = { ...result.result, goldWon: оплата.payout, gold: оплата.gold, alreadySettled: оплата.alreadySettled };
       chess.deleteGame(gameId);
       res.json(resp);
@@ -112,7 +140,7 @@ router.post('/move', authMiddleware, async (req: any, res) => {
       resp.status = aiState.status;
       if (aiState.status === 'checkmate' || aiState.status === 'stalemate') {
         const исход = aiState.status === 'checkmate' ? 'black' : 'draw';
-        const оплата = await закрыть(gameId, req.userId, исход);
+        const оплата = await закрыть(gameId, персонаж, исход);
         resp.result = {
           winner: исход,
           goldWon: оплата.payout,
@@ -133,6 +161,8 @@ router.post('/move', authMiddleware, async (req: any, res) => {
 // Текущая партия. Ищем и в памяти, и в базе: после перезапуска в памяти
 // пусто, а партия с заложенным жива.
 router.get('/state/:gameId', authMiddleware, async (req, res) => {
+  const персонаж = await свойПерсонаж(req, res);
+  if (!персонаж) return;
   const game = chess.getGame(req.params.gameId);
   if (game) {
     res.json({
@@ -144,7 +174,7 @@ router.get('/state/:gameId', authMiddleware, async (req, res) => {
     });
     return;
   }
-  const изБазы = await bets.findPlaying(req.userId!);
+  const изБазы = await bets.findPlaying(персонаж);
   if (!изБазы || изБазы.gameId !== req.params.gameId || !изБазы.state) {
     res.status(404).json({ error: 'game_not_found' });
     return;
@@ -163,7 +193,9 @@ router.get('/state/:gameId', authMiddleware, async (req, res) => {
 // Незакрытая партия игрока: клиент зовёт это при входе, чтобы вернуть
 // игрока к доске, а не выбрасывать из партии с заложенным.
 router.get('/current', authMiddleware, async (req, res) => {
-  const изБазы = await bets.findPlaying(req.userId!);
+  const персонаж = await свойПерсонаж(req, res);
+  if (!персонаж) return;
+  const изБазы = await bets.findPlaying(персонаж);
   if (!изБазы) { res.json({ game: null }); return; }
   if (изБазы.state) восстановить(изБазы.state);
   res.json({
@@ -180,9 +212,11 @@ router.get('/current', authMiddleware, async (req, res) => {
 
 // Сдаться / выйти. Заложенное не возвращается - в этом и смысл ставки.
 router.post('/resign', authMiddleware, async (req, res) => {
+  const персонаж = await свойПерсонаж(req, res);
+  if (!персонаж) return;
   const gameId = String(req.body?.gameId ?? '');
   if (!gameId) { res.status(400).json({ error: 'gameId is required' }); return; }
-  const итог = await bets.resign(gameId, req.userId!);
+  const итог = await bets.resign(gameId, персонаж);
   chess.deleteGame(gameId);
   res.json({ success: true, closed: итог.ok, betLost: true });
 });
