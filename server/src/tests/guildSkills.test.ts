@@ -48,14 +48,27 @@ function подменить(opts: {
 }): { service: GuildService; запросы: string[] } {
   const service = new GuildService();
   const запросы: string[] = [];
-  const db = {
+  // Явный тип: db ссылается на себя через transaction, и без аннотации
+  // вывод типа зацикливается и роняет сборку.
+  type Результат = { rows: unknown[]; rowCount: number | null };
+  type Подмена = {
+    query: (sql: string, params?: unknown[]) => Promise<Результат>;
+    queryOne: (sql: string, params: unknown[]) => Promise<Record<string, unknown> | null>;
+    transaction: (cb: (c: Подмена) => Promise<unknown>) => Promise<unknown>;
+  };
+  const db: Подмена = {
     query: jest.fn(async (sql: string) => {
       запросы.push(sql);
       // Списание золота: WHERE gold >= стоимость отсекает долг.
       if (/UPDATE guilds SET gold = gold -/.test(sql)) {
-        return opts.золото > 0 ? [{ gold: opts.золото }] : [];
+        // Форма настоящего pg: объект с rows и rowCount. Массив тут не
+        // годится - код смотрит rowCount, а у массива его нет, и отказ
+        // о нехватке золота молча не срабатывал бы.
+        return opts.золото > 0
+          ? { rows: [{ gold: opts.золото }], rowCount: 1 }
+          : { rows: [], rowCount: 0 };
       }
-      return [];
+      return { rows: [], rowCount: 0 };
     }),
     queryOne: jest.fn(async (sql: string, params: unknown[] = []) => {
       запросы.push(sql);
@@ -78,7 +91,9 @@ function подменить(opts: {
       }
       return null;
     }),
-    transaction: jest.fn(),
+    // Тело транзакции ВЫПОЛНЯЕТСЯ - иначе весь код внутри неё не
+    // выполняется, и проверки падают на неисполненном коде.
+    transaction: jest.fn(async (cb: (c: Подмена) => Promise<unknown>) => cb(db)),
   };
   (service as unknown as { db: unknown }).db = db;
   return { service, запросы };
