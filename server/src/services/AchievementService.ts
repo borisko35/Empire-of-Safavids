@@ -76,7 +76,8 @@ export type AchievementCounter =
   | 'items_crafted'
   | 'trades_completed'
   | 'world_boss_kills'
-  | 'combo_best';
+  | 'combo_best'
+  | 'dungeons_no_death';
 
 /**
  * Условия, которые не счётчик, а состояние.
@@ -156,6 +157,7 @@ export const COUNTER_COLUMN: Record<AchievementCounter, string> = {
   trades_completed: 'trades_completed',
   world_boss_kills: 'world_boss_kills',
   combo_best: 'combo_best',
+  dungeons_no_death: 'dungeons_no_death',
 };
 
 /**
@@ -318,9 +320,18 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   // сессии: подземелье просто закрывается. Условие потребовало бы начать
   // считать смерти в каждой сессии подземелья - это правка в системе
   // подземелий, а не достижение.
+  // Без единой смерти. Условие на счётчик заходов без потерь, а не на
+  // число смертей: считать надо ЗАХОДЫ, а не потери. Начисляет
+  // DungeonService в момент прохождения, и только тем, кто этот заход
+  // действительно прошёл.
   { id: 'ach_no_death', title: 'Untouchable', title_ru: 'Неприкосновенный',
     description: 'Complete a dungeon without dying', description_ru: 'Пройти подземелье без смертей',
-    category: 'combat', icon: '✨', reward_gold: 1000, reward_experience: 2000, reward_title: 'Неприкосновенный', hidden: true },
+    category: 'combat', icon: '✨', reward_gold: 1000, reward_experience: 2000, reward_title: 'Неприкосновенный', hidden: true,
+    // Счётчик ЗАХОДОВ без потерь, а не число смертей. Пять заходов по
+    // одной смерти - это пять смертей, и достижение «ни разу не умер»
+    // закрывать не должно. Начисляет DungeonService в момент
+    // прохождения, по единице за заход, и только тому, кто его прошёл.
+    condition: { counter: 'dungeons_no_death', need: 1 } },
 ];
 
 export class AchievementService {

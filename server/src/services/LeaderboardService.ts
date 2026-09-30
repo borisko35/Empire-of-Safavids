@@ -121,6 +121,8 @@ export class LeaderboardService {
     tradesCompleted?: number;
     /** Победы над мировыми боссами. */
     worldBossKills?: number;
+    /** Заходы в подземелье, пройденные без единой смерти. */
+    dungeonsNoDeath?: number;
   }): Promise<void> {
     const cols: string[] = [];
     const values: number[] = [];

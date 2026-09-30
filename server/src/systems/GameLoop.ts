@@ -266,6 +266,11 @@ export class GameLoop {
       const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
       if (!applied) continue;
 
+      // Смерть в подземелье - единственное место, где она считается для
+      // достижения «пройти без единой смерти». Один раз на смерть, без
+      // await: тик не должен ждать счётчик.
+      if (applied.died) DungeonService.getInstance().recordDeath(target.id);
+
       // Эффект из данных монстра. Раньше `effect` и `effectDuration` были
       // объявлены у одиннадцати способностей и не читались нигде: монстр
       // бил числом и забывал, что у него написано. «Землетрясение» с

@@ -46,6 +46,19 @@ export interface DungeonSession {
   killedBossIds: Set<string>;
   startedAt: number;
   completedAt?: number;
+  // Смерти участников ЗА ЭТУ СЕССИЮ. Нужны для достижения «пройти без
+  // смертей», у которого не было условия.
+  //
+  // Считается в памяти и НЕ сохраняется: сессия живёт, пока идёт заход.
+  // Держать смерти в базе незачем - начисление происходит в момент
+  // прохождения, и там же сессия закрывается.
+  //
+  // Ключ - characterId, значение - сколько раз умер. Map, а не Set:
+  // «умер ли» недостаточно, потому что после поднятия можно умереть
+  // снова, и заход, где умер дважды, не должен считаться безсмертным так
+  // же, как заход, где умер один раз. Раз заход засчитывается целиком,
+  // достаточно сравнения с нулём - но хранить сам факт надо точно.
+  deaths: Map<string, number>;
 }
 
 export interface DungeonCompleteInfo {
@@ -134,6 +147,7 @@ export class DungeonService {
       requiredBossIds: new Set(),
       killedBossIds: new Set(),
       startedAt: Date.now(),
+    deaths: new Map(),
     };
 
     this.spawnSessionMonsters(session, def);
@@ -270,6 +284,11 @@ export class DungeonService {
         requiredBossIds: new Set(),
         killedBossIds: new Set(),
         startedAt: new Date(row.started_at).getTime(),
+      // Смерти ДО перезапуска восстановить нельзя: в базе их нет, и
+      // специальной таблицы для них тоже нет. Сессия продолжается с
+      // нуля, и заход, в котором игрок умер до перезапуска, может быть
+      // засчитан как безсмертный. Это известная дыра, а не замысел.
+      deaths: new Map(),
       };
       session.members.add(row.leader_id);
       this.spawnSessionMonsters(session, def);
@@ -422,8 +441,54 @@ export class DungeonService {
     await new LeaderboardService().increment(killerId, { dungeonsCleared: 1 })
       .catch((e) => logger.warn(`[Dungeon] счётчик прохождений не вырос: ${e}`));
 
+    // Счётчик достижения «пройти подземелье без единой смерти».
+    //
+    // Кому засчитывается. Тому же, кому и прохождение, - killerId. Не
+    // всем участникам сессии: сейчас за прохождение получают только его,
+    // и выдавать достижение остальным значило бы раздать награду за то,
+    // чего они не делали. Политика наград не меняется молча.
+    //
+    // Сколько прибавляется. Ровно единица за заход, а не по числу
+    // смертей. Счётчик показывает, сколько раз игрок обошёлся без
+    // потерь, и прибавление «по одной смерти» означало бы, что десять
+    // заходов с одной смертью дают десять - то есть ровно то, чего
+    // достижение обещает не считать.
+    //
+    // ПОСЛЕ closeSessionInDb, как и dungeons_cleared: без записи
+    // подземелья расти нечему.
+    const смертей = session.deaths.get(killerId) ?? 0;
+    if (смертей === 0) {
+      await new LeaderboardService().increment(killerId, { dungeonsNoDeath: 1 })
+        .catch((e) => logger.warn(`[Dungeon] счётчик заходов без смертей не вырос: ${e}`));
+    }
+
     this.disposeSession(session);
     return info;
+  }
+
+  /**
+   * Отметить смерть персонажа в текущей сессии подземелья.
+   *
+   * Зовётся из боевого тика на каждой смерти. Поэтому возвращает Promise
+   * и НИЧЕГО не ждёт: тик не должен вставать из-за счётчика. Отметка
+   * переживает отсутствие сессии - просто ничего не делает.
+   *
+   * Вне подземелья и после его закрытия тоже ничего не делает: смерть на
+   * поле не отменяет «прошёл без смертей» в подземелье.
+   */
+  recordDeath(characterId: string): void {
+    const sessionId = this.characterToSession.get(characterId);
+    if (!sessionId) return;
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    session.deaths.set(characterId, (session.deaths.get(characterId) ?? 0) + 1);
+  }
+
+  /** Сколько раз персонаж умер за эту сессию. */
+  deathsInSession(characterId: string): number {
+    const sessionId = this.characterToSession.get(characterId);
+    if (!sessionId) return 0;
+    return this.sessions.get(sessionId)?.deaths.get(characterId) ?? 0;
   }
 
   /** Убрать монстры сессии из мира и забыть сессию */
