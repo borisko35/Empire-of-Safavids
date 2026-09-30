@@ -888,6 +888,23 @@ export const api = {
   guildWithdrawItem: (characterId: string, bankId: number, qty = 1) =>
     req<{ success: boolean }>('/api/guilds/withdraw-item', { method: 'POST', body: JSON.stringify({ characterId, bankId, qty }) }),
   guildBank: (characterId: string) => req<{ items: any[] }>(`/api/guilds/bank?characterId=${characterId}`),
+  // Навыки гильдии. Право на покупку и цена приходят готовыми с сервера:
+  // клиент не решает, можно ли купить, - иначе он нарисует кнопку там, где
+  // покупка невозможна, и игрок увидит цену рядом с отказом.
+  guildSkills: (characterId: string) => req<{
+    gold: number;
+    canManage: boolean;
+    skills: {
+      id: string; name: string; nameRu: string; description: string;
+      level: number; maxLevel: number; costNext: number;
+      maxed: boolean; available: boolean;
+    }[];
+  }>(`/api/guilds/skills?characterId=${characterId}`),
+  guildSkillUpgrade: (characterId: string, skillId: string, levels = 1) =>
+    req<{ success: boolean; level: number; cost: number }>('/api/guilds/skills/upgrade', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, skillId, levels }),
+    }),
   guildKick: (actorId: string, targetId: string) =>
     req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 

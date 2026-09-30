@@ -6,6 +6,11 @@ import { Router } from 'express';
 import { GuildService } from '../services/GuildService';
 import { CharacterService } from '../services/CharacterService';
 import { authMiddleware } from '../middleware/auth';
+// Право ранга, справочник навыков и цена уровня нужны маршруту GET /skills:
+// он сам решает, что показать кнопкой, а что - зачёркнутым пунктом.
+import { getGuildRankPermissions } from '../data/guilds';
+import { GUILD_SKILLS } from '../data/guilds';
+import { isSkillWired, upgradeCost } from '../systems/GuildBonuses';
 
 const router = Router();
 const guilds = new GuildService();
@@ -142,6 +147,54 @@ router.post('/deposit-gold', authMiddleware, async (req: any, res) => {
  * средств, - manageTreasury. Сделать это может офицер с соответствующим
  * правом, а не рядовой участник.
  */
+/**
+ * Навыки гильдии: уровни, цены и право на покупку.
+ *
+ * Право и возможность покупки считает сервер и присылает готовыми: клиент
+ * не должен решать, можно ли купить, - иначе он нарисует кнопку для
+ * навыка без точки применения, игрок нажмёт и получит отказ с ценой на
+ * экране.
+ *
+ * available - это ровно та же isSkillWired, которую проверяет upgradeSkill.
+ * Расхождение этих двух было бы хуже отсутствия поля: кнопка есть, цена
+ * есть, покупка невозможна.
+ */
+router.get('/skills', authMiddleware, async (req: any, res) => {
+  try {
+    const characterId = await ownCharacterId(req);
+    if (!characterId) { res.status(403).json({ error: 'characterId is required' }); return; }
+    const data = await guilds.getGuildByCharacter(characterId);
+    if (!data) { res.status(400).json({ error: 'Not in a guild' }); return; }
+
+    const уровни = await guilds.getSkillLevels(data.guild.id);
+    res.json({
+      gold: data.guild.gold,
+      // Право тратить казну - то же, что и у вывода средств. Качает
+      // уровень офицер, у которого есть manageTreasury.
+      canManage: Boolean(getGuildRankPermissions(data.rank as Parameters<typeof getGuildRankPermissions>[0])?.manageTreasury),
+      skills: GUILD_SKILLS.map((skill: (typeof GUILD_SKILLS)[number]) => {
+        const level = Number(уровни[skill.id] ?? 0);
+        const максимум = level >= skill.maxLevel;
+        return {
+          id: skill.id,
+          name: skill.name,
+          nameRu: skill.nameRu,
+          // Описание в данных только на русском. Перевод сюда не вносится:
+          // выдуманный текст хуже русского среди азербайджана.
+          description: skill.description,
+          level,
+          maxLevel: skill.maxLevel,
+          // Нулевая цена означает «уже максимум», и клиент это не
+          // отличает от «бесплатно» - поэтому цена идёт вместе с флагом.
+          costNext: максимум ? 0 : upgradeCost(skill.id, 1),
+          maxed: максимум,
+          available: isSkillWired(skill.id),
+        };
+      }),
+    });
+  } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
+
 router.post('/skills/upgrade', authMiddleware, async (req: any, res) => {
   try {
     const characterId = await ownCharacterId(req);

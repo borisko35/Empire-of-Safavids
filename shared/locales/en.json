@@ -7,7 +7,6 @@
     "fear": "Fear",
     "stunned_hint": "You are stunned and cannot attack"
   },
-
   "meta": {
     "name": "English",
     "code": "en"
@@ -1020,7 +1019,22 @@
     "withdraw": "Take",
     "withdrawn": "Item is in your bag",
     "bank_nothing_to_deposit": "Nothing here can be deposited",
-    "err_bank_empty": "The bank does not hold that many"
+    "err_bank_empty": "The bank does not hold that many",
+    "skills_title": "Guild skills",
+    "skills_gold": "Treasury",
+    "skills_no_right": "Only an officer with treasury rights can buy skills.",
+    "skill_level": "Level",
+    "skill_max": "Max level",
+    "skill_buy": "Buy level",
+    "skill_no_gold": "Not enough gold in the treasury",
+    "skill_unavailable": "Unavailable: this skill has no effect in the game yet.",
+    "skill_bought": "Skill upgraded to level",
+    "skills_load_failed": "Skills are unavailable right now.",
+    "err_skill_unavailable": "This skill does not work in the game yet.",
+    "err_skill_unknown": "No such skill.",
+    "err_skill_maxed": "The skill is already at max level.",
+    "err_skills_forbidden": "Only an officer with treasury rights can buy skills.",
+    "err_skill_no_gold": "Not enough gold in the guild treasury."
   },
   "worldclock": {
     "morning": "Morning",
@@ -1164,7 +1178,6 @@
   },
   "notifications": {
     "achievement_unlocked": "Achievement unlocked",
-
     "title": "Notifications",
     "empty": "No notifications yet",
     "read_all": "Mark all as read"
@@ -1369,14 +1382,14 @@
     "study": "Learn",
     "free": "free",
     "xp_short": "XP",
-"skill_alams": "Alams",
-"skill_zikr": "Zikr",
-"skill_taj": "Taj",
-"skill_alams_hint": "Passive: a quarter longer and 15% stronger strike",
-"skill_zikr_hint": "Active: +25% damage for 30 seconds",
-"skill_taj_hint": "Active: −20% damage taken for 30 seconds",
-"skill_activate": "Activate",
-"skill_passive_badge": "passive",
+    "skill_alams": "Alams",
+    "skill_zikr": "Zikr",
+    "skill_taj": "Taj",
+    "skill_alams_hint": "Passive: a quarter longer and 15% stronger strike",
+    "skill_zikr_hint": "Active: +25% damage for 30 seconds",
+    "skill_taj_hint": "Active: −20% damage taken for 30 seconds",
+    "skill_activate": "Activate",
+    "skill_passive_badge": "passive",
     "prof_none": "No profession selected",
     "title": "Skills & Professions"
   },

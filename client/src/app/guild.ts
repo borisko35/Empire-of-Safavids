@@ -62,6 +62,13 @@ const ERRORS: Record<string, string> = {
   RANK_TRANSFER_UNSUPPORTED: 'guild.err_rank_transfer',
   MEMBER_NOT_FOUND: 'guild.err_no_member',
   ALREADY_IN_GUILD: 'guild.err_already_in',
+  // Навыки. SKILL_UNAVAILABLE отдаётся кодом 409 - это недоработка сервера,
+  // а не ошибка игрока, и текст это говорит прямо.
+  SKILLS_FORBIDDEN: 'guild.err_skills_forbidden',
+  SKILL_UNAVAILABLE: 'guild.err_skill_unavailable',
+  SKILL_UNKNOWN: 'guild.err_skill_unknown',
+  SKILL_MAXED: 'guild.err_skill_maxed',
+  NOT_ENOUGH_GUILD_GOLD: 'guild.err_skill_no_gold',
 };
 
 /**
@@ -411,6 +418,107 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
   });
   bankBlock.append(amount, deposit);
   box.append(bankBlock);
+
+  // ── Навыки гильдии ─────────────────────────────────────────
+  // Панели навыков не было вовсе, хотя сервер их считал и покупка была
+  // доступна по маршруту: игрок не мог нажать кнопку, потому что кнопки
+  // не существовало. Навыки были функцией без входа.
+  //
+  // Кнопка рисуется ТОЛЬКО там, где сервер разрешил. Поле available - это
+  // та же isSkillWired, которую проверяет upgradeSkill. Если бы клиент
+  // показывал кнопку для навыка без точки применения, игрок увидел бы цену
+  // и получил бы отказ: цена показана, а купить нельзя.
+  const skillsBlock = block('guild-block guild-skills');
+  const skillsTitle = document.createElement('h3');
+  skillsTitle.className = 'guild-h';
+  skillsTitle.textContent = t('guild.skills_title');
+  skillsBlock.append(skillsTitle);
+
+  try {
+    const данные = await api.guildSkills(cid());
+    const казна = document.createElement('div');
+    казна.className = 'guild-skills-gold';
+    казна.textContent = t('guild.skills_gold') + ': ' + данные.gold.toLocaleString();
+    skillsBlock.append(казна);
+
+    if (!данные.canManage) {
+      const подсказка = document.createElement('div');
+      подсказка.className = 'guild-skills-hint';
+      подсказка.textContent = t('guild.skills_no_right');
+      skillsBlock.append(подсказка);
+    }
+
+    for (const навык of данные.skills) {
+      const строка = document.createElement('div');
+      строка.className = 'guild-skill' + (навык.available ? '' : ' guild-skill-off');
+
+      const имя = document.createElement('div');
+      имя.className = 'guild-skill-name';
+      // Русское название на русском сервере, английское - на остальных.
+      // Данные навыков описаны только по-русски, и выдумывать перевод
+      // хуже, чем показать русский текст азербайджанцу.
+      имя.textContent = t('lang') === 'ru' ? навык.nameRu : навык.name;
+      строка.append(имя);
+
+      const описание = document.createElement('div');
+      описание.className = 'guild-skill-desc';
+      описание.textContent = навык.description;
+      строка.append(описание);
+
+      const уровень = document.createElement('div');
+      уровень.className = 'guild-skill-level';
+      уровень.textContent = навык.maxed
+        ? t('guild.skill_max')
+        : t('guild.skill_level') + ' ' + навык.level + '/' + навык.maxLevel;
+      строка.append(уровень);
+
+      if (!навык.available) {
+        // Навык без точки применения. Показываем честно, что его нельзя
+        // купить, вместо пустого места: молчание выглядело бы как забытый
+        // пункт, а не как сознательное решение.
+        const недоступен = document.createElement('div');
+        недоступен.className = 'guild-skill-hint';
+        недоступен.textContent = t('guild.skill_unavailable');
+        строка.append(недоступен);
+      } else if (!навык.maxed) {
+        const кнопка = document.createElement('button');
+        кнопка.type = 'button';
+        кнопка.className = 'guild-btn';
+        const хватает = данные.gold >= навык.costNext;
+        кнопка.textContent = t('guild.skill_buy') + ' — ' + навык.costNext.toLocaleString();
+        // Кнопка гасится по трём причинам сразу, и каждая показывает
+        // игроку СВОЮ подсказку при наведении: нет права, не хватает золота
+        // или уже максимум. Одно серое «нельзя» ни о чём не говорит.
+        кнопка.disabled = !данные.canManage || !хватает;
+        кнопка.title = !данные.canManage ? t('guild.skills_no_right')
+          : (хватает ? '' : t('guild.skill_no_gold'));
+        кнопка.addEventListener('click', async () => {
+          кнопка.disabled = true;
+          try {
+            const итог = await api.guildSkillUpgrade(cid(), навык.id, 1);
+            toast(t('guild.skill_bought') + ' ' + итог.level, 'success');
+            await loadGuild();
+          } catch (err) {
+            fail(err);
+            кнопка.disabled = false;
+          }
+        });
+        строка.append(кнопка);
+      }
+      skillsBlock.append(строка);
+    }
+  } catch (err) {
+    // Панель навыков не появилась - и это не повод молчать. Но и повод
+    // ронять всю панель гильдии тоже нет: склад и состав важнее.
+    const сбой = document.createElement('div');
+    сбой.className = 'guild-skills-hint';
+    сбой.textContent = t('guild.skills_load_failed');
+    skillsBlock.append(сбой);
+    // Ошибка уходит в консоль, а не в интерфейс: игроку «навыки не
+    // загрузились» ничего не объясняет, разработчику нужна причина.
+    console.warn('[Guild] навыки не загрузились:', err);
+  }
+  box.append(skillsBlock);
 
   // ── Выход ────────────────────────────────────────────────
   const leave = document.createElement('button');
