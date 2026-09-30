@@ -216,6 +216,31 @@ export const api = {
       method: 'POST', body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
     }),
 
+  // ── Второй фактор ──────────────────────────────────────────
+  // Всё решение принимает сервер: клиент не решает, включён ли 2FA, можно
+  // ли его выключить и действителен ли код. Иначе он нарисовал бы кнопку
+  // там, где сервер откажет.
+  twoFactorStatus: () =>
+    req<{ success: boolean; enabled: boolean; confirmed: boolean; locked: boolean;
+          lockedUntil: string | null; период: number; цифры: number }>('/api/auth/2fa/status'),
+  twoFactorBegin: () =>
+    req<{ success: boolean; secret: string; otpauthUrl: string;
+          recoveryCodes: string[]; период: number; цифры: number }>('/api/auth/2fa/begin', {
+      method: 'POST',
+    }),
+  twoFactorConfirm: (code: string) =>
+    req<{ success: boolean }>('/api/auth/2fa/confirm', {
+      method: 'POST', body: JSON.stringify({ code }),
+    }),
+  twoFactorDisable: (code: string) =>
+    req<{ success: boolean }>('/api/auth/2fa/disable', {
+      method: 'POST', body: JSON.stringify({ code }),
+    }),
+  twoFactorRecoveryCodes: (code: string) =>
+    req<{ success: boolean; recoveryCodes: string[] }>('/api/auth/2fa/recovery-codes', {
+      method: 'POST', body: JSON.stringify({ code }),
+    }),
+
   resetPassword: (email: string, newPassword: string) =>
     req<{ success: boolean; message: string }>('/api/auth/reset-password', {
       method: 'POST', body: JSON.stringify({ email, password: newPassword }),

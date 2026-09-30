@@ -16,6 +16,14 @@ export interface LoginRequest {
   email: string;
   password: string;
   rememberMe: boolean;
+  /**
+   * Код из приложения-аутентификатора или код восстановления.
+   *
+   * Необязателен: у аккаунта без 2FA его не будет. Наличие второго фактора
+   * решает сервер, а не клиент, - иначе клиент пришлось бы знать про 2FA
+   * больше, чем сервер, и наверстал бы расхождение.
+   */
+  code?: string;
 }
 
 export interface AuthResponse {
@@ -93,7 +101,15 @@ export type AuthError =
   | 'already_claimed'
   | 'provider_disabled'
   | 'invalid_state'
-  | 'provider_error';
+  | 'provider_error'
+  // Второй фактор. Возможны только после верного пароля.
+  | 'two_factor_required'
+  | 'two_factor_invalid'
+  | 'two_factor_replayed'
+  | 'two_factor_locked'
+  | 'two_factor_not_enabled'
+  | 'two_factor_no_secret'
+  | 'two_factor_unavailable';
 
 export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   invalid_credentials: 'Неверный email или пароль',
@@ -115,5 +131,12 @@ export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   already_claimed:     'Аккаунт уже сохранён',
   provider_disabled:   'Этот способ входа пока не настроен',
   invalid_state:       'Вход устарел. Попробуйте ещё раз',
+  two_factor_required:   'Введите код из приложения-аутентификатора',
+  two_factor_invalid:    'Код не подошёл',
+  two_factor_replayed:   'Этот код уже использован. Введите следующий',
+  two_factor_locked:     'Слишком много попыток. Подождите несколько минут',
+  two_factor_not_enabled:'Второй фактор не включён',
+  two_factor_no_secret:  'Код временно недоступен. Попробуйте позже',
+  two_factor_unavailable:'Второй фактор сейчас недоступен',
   provider_error:      'Не удалось войти через внешний сервис',
 };

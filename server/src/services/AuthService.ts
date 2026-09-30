@@ -11,6 +11,7 @@ import { analytics } from './AnalyticsService';
 import { logger } from '../utils/logger';
 import { RegisterRequest, LoginRequest, AuthResponse, AuthUser, AuthError } from '../../../shared/auth.types';
 import { validateRegister, validateLogin } from '../../../shared/auth.validation';
+import { TwoFactorService } from './TwoFactorService';
 
 const JWT_SECRET      = process.env.JWT_SECRET ?? 'safavid-secret-key';
 const SESSION_TTL_7D  = 7 * 24 * 3600;   // 7 дней в секундах
@@ -64,6 +65,10 @@ const REGISTER_ERROR_CODES: Record<string, AuthError> = {
 
 export class AuthService {
   private db           = DatabaseService.getInstance();
+  // Второй фактор - обычное поле, а не модульный синглтон: поле создаётся
+  // при конструировании, синглтон при загрузке модуля, и второе ломает
+  // тесты с подменой DatabaseService.
+  private двухФактор      = new TwoFactorService();
   private redis        = RedisService.getInstance();
 
   // ============================================================
@@ -252,6 +257,42 @@ export class AuthService {
     await this.db.query(
       'UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]
     );
+
+    // ── Второй фактор ──────────────────────────────────────────
+    // ГЛАВНОЕ МЕСТО ВСЕГО 2FA. Проверка стоит ЗДЕСЬ, а не в маршруте и не
+    // в клиенте, и стоит ДО createSession.
+    //
+    // Если бы код проверялся после выдачи сессии, игрок получил бы рабочий
+    // токен и отказку на экране. Токен остался бы в браузере, обошёл бы
+    // интерфейс и был бы пригоден, пока не истечёт. То есть «вход защищён
+    // вторым фактором» означал бы, что защиты нет.
+    //
+    // Здесь сессия ещё не создана: пароль уже сошёлся, но код ещё не
+    // принят, и createSession ниже выполнится только после успеха.
+    const дваФактора = await this.db.queryOne<{ enabled: boolean }>(
+      'SELECT enabled FROM user_2fa WHERE user_id = $1 AND enabled = TRUE',
+      [user.id],
+    );
+    if (дваФактора?.enabled) {
+      const код = (data as { code?: unknown }).code;
+      if (typeof код !== 'string' || код.trim() === '') {
+        // Отдельная причина, а не «неверные данные». Игрок должен понять,
+        // что пароль подошёл, а нужен ещё код, - иначе он решит, что ввёл
+        // пароль неправильно, и начнёт подбирать пароль вместо кода.
+        logger.info(`[Auth] 2FA требуется для ${user.username} с ${ip}`);
+        throw this.authError('two_factor_required');
+      }
+      const результат = await this.двухФактор.проверитьКод(user.id, код);
+      if (!результат.ok) {
+        logger.warn(`[Auth] 2FA отказ для ${user.username}: ${результат.code}`);
+        // Код приводится к типу AuthError явным преобразованием намеренно.
+        // Сервис возвращает string, потому что не должен знать про типы
+        // ошибок входа; перечислять шесть кодов в проверке значило бы
+        // рассинхронизировать два места. Если сервис когда-нибудь вернёт
+        // незнакомый код, игрок увидит generic-текст, а не пустой экран.
+        throw this.authError(результат.code as AuthError);
+      }
+    }
 
     analytics.track('player_login', { ip }, user.id);
     logger.info(`[Auth] Login: ${user.username} from ${ip}`);

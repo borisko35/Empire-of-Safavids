@@ -1522,5 +1522,25 @@
     "on": "● Qoşulub",
     "reconnect": "🔄 Yenidən qoşulur…",
     "connecting": "🔄 Qoşulur…"
+  },
+  "twofa": {
+    "title": "İkili faktörlü qoruma",
+    "on": "Açıqdır. Girişdə tətbiqdan kod tələb olunur.",
+    "on_unconfirmed": "Verilib, amma təsdiqlənməyib. Açmaq üçün telefondan kodu daxil edin.",
+    "off": "Bağlıdır. Giriş yalnız şifrə ilə qorunur.",
+    "enable": "Aç",
+    "disable": "Bağla",
+    "confirm": "Kodla təsdiqlə",
+    "scan_or_type": "Kodu autentifikator tətbiqində skan edin və ya açarı əl ilə yazın:",
+    "code_placeholder": "Tətbiqdan kod",
+    "disabled": "İkili faktörlü qoruma bağlandı",
+    "locked": "Çox cəhd edildi. Bir neçə dəqiqə gözləyin.",
+    "unavailable": "İkili faktörlü qoruma hazırda əlçatan deyil.",
+    "err_required": "Autentifikator tətbiqindən kodu daxil edin",
+    "err_invalid": "Kod uyğun gəlmədi",
+    "err_replayed": "Bu kod artıq istifadə olunub. Növbətiki kodu daxil edin",
+    "err_locked": "Çox cəhd edildi. Bir neçə dəqiqə gözləyin",
+    "err_not_enabled": "İkili faktörlü qoruma açılmayıb",
+    "err_no_secret": "Kod müvəqqəti əlçatan deyil. Sonra yenidən yoxlayın"
   }
 }

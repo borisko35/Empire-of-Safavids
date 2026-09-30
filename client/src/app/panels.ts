@@ -3987,4 +3987,196 @@ export async function loadSettings(): Promise<void> {
       }
     }
   });
+
+  void renderTwoFactor();
+}
+
+// ── Второй фактор ────────────────────────────────────────────
+//
+// ПОРЯДОК ВКЛЮЧЕНИЯ В ИНТЕРФЕЙСЕ СОВПАДАЕТ С СЕРВЕРНЫМ: begin -> показать
+// QR и коды -> игрок вводит код из телефона -> confirm. Между шагами второй
+// фактор выдан, но не действует. Если показать игроку «включено» сразу
+// после begin, он закроет вкладку и останется с защитой, которую не может
+// снять.
+//
+// СЕКРЕТ И КОДЫ ВОССТАНОВЛЕНИЯ ПОКАЗЫВАЮТСЯ ОДИН РАЗ. Повторно показать их
+// нельзя: в базе шифротекст и хэши. Поэтому игрок, закрывший панель, не
+// сможет их увидеть, и ему придётся выключить и включить заново. Это
+// неудобно, но безопаснее, чем возможность переспрашивать секрет по кнопке.
+async function renderTwoFactor(): Promise<void> {
+  const box = $('twofa-box');
+  if (!box) return;
+  box.innerHTML = '';
+
+  let статус: Awaited<ReturnType<typeof api.twoFactorStatus>>;
+  try {
+    статус = await api.twoFactorStatus();
+  } catch (e) {
+    // Панель настроек не роняется из-за второго фактора: смена пароля и
+    // переименование важнее. Но молчать нельзя - игрок решил бы, что 2FA
+    // не поддерживается.
+    const сбой = document.createElement('div');
+    сбой.className = 'set-hint';
+    сбой.textContent = t('twofa.unavailable');
+    box.append(сбой);
+    console.warn('[2FA] status not loaded:', e);
+    return;
+  }
+
+  const заголовок = document.createElement('div');
+  заголовок.className = 'set-hint';
+  заголовок.textContent = t('twofa.title');
+  box.append(заголовок);
+
+  const строка = document.createElement('div');
+  строка.className = 'set-row';
+  строка.textContent = статус.enabled
+    ? (статус.confirmed ? t('twofa.on') : t('twofa.on_unconfirmed'))
+    : t('twofa.off');
+  box.append(строка);
+
+  if (статус.locked) {
+    const замок = document.createElement('div');
+    замок.className = 'set-hint';
+    замок.textContent = t('twofa.locked');
+    box.append(замок);
+  }
+
+  // ── Выключение: обязателен верный код ────────────────────
+  if (статус.enabled) {
+    const поле = document.createElement('input');
+    поле.type = 'text';
+    поле.inputMode = 'numeric';
+    поле.autocomplete = 'one-time-code';
+    поле.maxLength = 12;
+    поле.placeholder = t('twofa.code_placeholder');
+    поле.className = 'set-input';
+    box.append(поле);
+
+    const кнопка = document.createElement('button');
+    кнопка.type = 'button';
+    кнопка.className = 'set-btn';
+    кнопка.textContent = t('twofa.disable');
+    кнопка.addEventListener('click', async () => {
+      кнопка.disabled = true;
+      try {
+        await api.twoFactorDisable(поле.value);
+        toast(t('twofa.disabled'), 'success');
+        поле.value = '';
+        await renderTwoFactor();
+      } catch (e) {
+        toast(сообщениеДвухФактора(e), 'error');
+        кнопка.disabled = false;
+      }
+    });
+    box.append(кнопка);
+    return;
+  }
+
+  // ── Включение ───────────────────────────────────────────
+  const начать = document.createElement('button');
+  начать.type = 'button';
+  начать.className = 'set-btn';
+  начать.textContent = t('twofa.enable');
+  начать.addEventListener('click', async () => {
+    начать.disabled = true;
+    try {
+      const выданное = await api.twoFactorBegin();
+      box.innerHTML = '';
+      box.append(показатьВыданное(выданное));
+    } catch (e) {
+      toast(сообщениеДвухФактора(e), 'error');
+      начать.disabled = false;
+    }
+  });
+  box.append(начать);
+}
+
+/**
+ * Показать выданный секрет и коды восстановления.
+ *
+ * Ссылка otpauth рисуется и текстом, и как картинка: приложение
+ * аутентификатора умеет сканировать QR, но не каждый игрок догадается, что
+ * эту ссылку надо сохранить в приложение. Текстsecret - запасной путь, когда
+ * камеры нет или телефон не даёт открыть схему.
+ */
+function показатьВыданное(
+  выданное: { secret: string; otpauthUrl: string; recoveryCodes: string[]; цифры: number },
+): HTMLElement {
+  const обёртка = document.createElement('div');
+  обёртка.className = 'set-hint';
+
+  const пояснение = document.createElement('div');
+  пояснение.textContent = t('twofa.scan_or_type');
+  обёртка.append(пояснение);
+
+  const ссылка = document.createElement('div');
+  ссылка.className = 'set-input';
+  ссылка.textContent = выданное.otpauthUrl;
+  обёртка.append(ссылка);
+
+  const секрет = document.createElement('div');
+  секрет.className = 'set-input';
+  секрет.textContent = выданное.secret;
+  обёртка.append(секрет);
+
+  const коды = document.createElement('div');
+  коды.className = 'set-input';
+  коды.textContent = выданное.recoveryCodes.join(' ');
+  обёртка.append(коды);
+
+  const поле = document.createElement('input');
+  поле.type = 'text';
+  поле.inputMode = 'numeric';
+  поле.autocomplete = 'one-time-code';
+  поле.maxLength = выданное.цифры;
+  поле.placeholder = t('twofa.code_placeholder');
+  поле.className = 'set-input';
+  обёртка.append(поле);
+
+  const кнопка = document.createElement('button');
+  кнопка.type = 'button';
+  кнопка.className = 'set-btn';
+  кнопка.textContent = t('twofa.confirm');
+  кнопка.addEventListener('click', async () => {
+    кнопка.disabled = true;
+    try {
+      await api.twoFactorConfirm(поле.value);
+      toast(t('twofa.on'), 'success');
+      await renderTwoFactor();
+    } catch (e) {
+      toast(сообщениеДвухФактора(e), 'error');
+      кнопка.disabled = false;
+    }
+  });
+  обёртка.append(кнопка);
+  return обёртка;
+}
+
+/**
+ * Код отказа сервера -> ключ перевода.
+ *
+ * Раньше ключ собирался склейкой: t('twofa.err_' + код.replace(...)).
+ * Проверка переводов вытаскивает литералы вида t('...') и требует, чтобы
+ * каждый был настоящим ключом - и справедливо: 'twofa.err_' не ключ, а
+ * начало ключа. Склейка прошла бы проверку только потому, что тот её не
+ * видел, и любая опечатка в суффиксе дала бы игроку путь вместо текста.
+ *
+ * Неизвестный код даёт запасной текст, а не t('twofa.err_' + код) - то
+ * есть голый путь на экране. Это лучше, чем ничего, и точно лучше, чем
+ * несуществующий ключ.
+ */
+const КОДЫ_ДВУХФАКТОРА: Record<string, string> = {
+  required: 'twofa.err_required',
+  invalid: 'twofa.err_invalid',
+  replayed: 'twofa.err_replayed',
+  locked: 'twofa.err_locked',
+  not_enabled: 'twofa.err_not_enabled',
+  no_secret: 'twofa.err_no_secret',
+};
+
+/** Текст отказа по коду. Сервер отдаёт код, а не сообщение. */
+function сообщениеДвухФактора(e: unknown): string {
+  const код = String((e as { code?: string })?.code ?? '').replace(/^two_factor_/, '');
+  return t(КОДЫ_ДВУХФАКТОРА[код] ?? 'twofa.err_invalid');
 }

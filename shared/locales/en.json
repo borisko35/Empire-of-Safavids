@@ -1522,5 +1522,25 @@
     "on": "● Connected",
     "reconnect": "🔄 Reconnecting…",
     "connecting": "🔄 Connecting…"
+  },
+  "twofa": {
+    "title": "Two-factor protection",
+    "on": "Enabled. A code from the app is required at sign-in.",
+    "on_unconfirmed": "Issued but not confirmed. Enter a code from your phone to enable it.",
+    "off": "Disabled. Sign-in is protected by password only.",
+    "enable": "Enable",
+    "disable": "Disable",
+    "confirm": "Confirm with code",
+    "scan_or_type": "Scan the code in your authenticator app, or type the key by hand:",
+    "code_placeholder": "Code from the app",
+    "disabled": "Two-factor protection disabled",
+    "locked": "Too many attempts. Wait a few minutes.",
+    "unavailable": "Two-factor protection is unavailable right now.",
+    "err_required": "Enter a code from your authenticator app",
+    "err_invalid": "That code did not match",
+    "err_replayed": "That code was already used. Enter the next one",
+    "err_locked": "Too many attempts. Wait a few minutes",
+    "err_not_enabled": "Two-factor protection is not enabled",
+    "err_no_secret": "Code temporarily unavailable. Try again later"
   }
 }

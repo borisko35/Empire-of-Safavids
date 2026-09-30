@@ -12,10 +12,13 @@ import { authRateLimiter } from '../middleware/rateLimiter';
 import { authMiddleware, secureMiddleware } from '../middleware/auth';
 import { AccountLinkService } from '../services/AccountLinkService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { twoFactor } from '../services/TwoFactorService';
+import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
 
 export const authRouter = Router();
 const authService = new AuthService();
+const db = DatabaseService.getInstance();
 const oauth      = new OAuthService();
 const redis      = RedisService.getInstance();
 
@@ -279,6 +282,94 @@ authRouter.post('/change-password', secureMiddleware, async (req: Request, res: 
   } catch (err: unknown) {
     const e = err as Error & { code?: string };
     return res.status(400).json({ success: false, code: e.code, message: e.message });
+  }
+});
+
+// ============================================���===================
+// Второй фактор (TOTP)
+// ============================================================
+// Маршруты требуют сессии: включить или выключить второй фактор может только
+// тот, кто уже вошёл.
+//
+// ПОРЯДОК ВКЛЮЧЕНИЯ. begin -> код из телефона -> confirm. Между ними 2FA
+// выдан, но НЕ действует (enabled = false). Иначе игрок, закрывший вкладку
+// на втором шаге, остался бы с включённым вторым фактором и без входа, а
+// починить это можно было бы только правкой базы.
+//
+// СЕКРЕТ И КОДЫ ВОССТАНОВЛЕНИЯ ОТДАЮТСЯ ОДИН РАЗ. В базе лежит шифротекст
+// секрета и хэши кодов, а открытые значения игрок видит только сейчас. Если
+// потеряет - придётся выключать и включать заново.
+authRouter.get('/2fa/status', secureMiddleware, async (req: Request, res: Response) => {
+  try {
+    const статус = await twoFactor().статус(req.userId!);
+    return res.json({ success: true, ...статус, ...twoFactor().параметры });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(503).json({ success: false, code: 'two_factor_unavailable', message: e.message });
+  }
+});
+
+authRouter.post('/2fa/begin', secureMiddleware, authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const строка = await db.queryOne<{ email: string }>(
+      'SELECT email FROM users WHERE id = $1', [req.userId!]);
+    if (!строка) return res.status(404).json({ success: false, code: 'user_not_found' });
+    const начали = await twoFactor().начать(req.userId!, строка.email);
+    return res.json({
+      success: true,
+      secret: начали.secret,
+      otpauthUrl: начали.otpauthUrl,
+      recoveryCodes: начали.recoveryCodes,
+      ...twoFactor().параметры,
+    });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(503).json({ success: false, code: 'two_factor_unavailable', message: e.message });
+  }
+});
+
+authRouter.post('/2fa/confirm', secureMiddleware, authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const код = String(req.body?.code ?? '');
+    const р = await twoFactor().подтвердить(req.userId!, код);
+    if (!р.ok) {
+      return res.status(400).json({ success: false, code: р.code });
+    }
+    return res.json({ success: true });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(503).json({ success: false, code: 'two_factor_unavailable', message: e.message });
+  }
+});
+
+authRouter.post('/2fa/disable', secureMiddleware, authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    // Требуется верный код. Иначе достаточно украсть сессию, чтобы снять
+    // защиту с чужого аккаунта - то есть второй фактор защищал бы от
+    // угона пароля и не защищал бы от угона сессии.
+    const р = await twoFactor().выключить(req.userId!, String(req.body?.code ?? ''));
+    if (!р.ok) {
+      const статус = Number(р.code === 'two_factor_locked') ? 429 : 400;
+      return res.status(статус).json({ success: false, code: р.code });
+    }
+    return res.json({ success: true });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(503).json({ success: false, code: 'two_factor_unavailable', message: e.message });
+  }
+});
+
+authRouter.post('/2fa/recovery-codes', secureMiddleware, authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const р = await twoFactor().проверитьКод(req.userId!, String(req.body?.code ?? ''));
+    if (!р.ok) {
+      return res.status(400).json({ success: false, code: р.code });
+    }
+    const коды = await twoFactor().перевыпуститьКоды(req.userId!);
+    return res.json({ success: true, recoveryCodes: коды });
+  } catch (err: unknown) {
+    const e = err as Error & { code?: string };
+    return res.status(503).json({ success: false, code: 'two_factor_unavailable', message: e.message });
   }
 });
 
