@@ -288,6 +288,14 @@
         <button id="btn-rename"><span data-i18n="settings.change_name">Сменить имя</span></button>
         <span id="rename-status"></span>
       </div>
+      <!-- Второй фактор. Коробка пустая: содержимое рисует renderTwoFactor,
+           потому что состояние приходит с сервера, а разметка наперёд знать
+           его не может. Заголовок переводится через data-i18n, как остальные
+           заголовки панели. -->
+      <div class="settings-section">
+        <h4 data-i18n="twofa.title">Второй фактор</h4>
+        <div id="twofa-box"></div>
+      </div>
     </div>
     <div class="hud side-panel hidden" id="panel-tower">
       <h3><span data-icon="star8"></span><span data-i18n="hub.tower">Башня</span></h3>
