@@ -113,6 +113,10 @@
      около трёх мегабайт. В связку для itch.io он НЕ входит намеренно: там
      нужна страница, а не файл. -->
 <p class="hint vid" id="vid"><span data-vid="ru">Ролик целиком: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 секунды</a></span><span data-vid="en">The full video: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 seconds</a></span><span data-vid="az">Tam videosu: <a href="https://www.game.eos-gameonline.com/assets/trailer.mp4" target="_blank" rel="noopener">MP4, 44 saniyə</a></span></p>
+<!-- Исходный код. Трейлер - то, что кладут в чужой тред, и там о
+     свободном ПО сказать нужно вслух. Ссылка абсолютная: страницу
+     выкладывают на itch.io, где относительный путь ушёл бы мимо. -->
+<p class="hint src" id="src"><span data-src="ru">Исходный код: <a href="https://github.com/borisko35/Empire-of-Safavids" target="_blank" rel="noopener">GitHub</a></span><span data-src="en">Source code: <a href="https://github.com/borisko35/Empire-of-Safavids" target="_blank" rel="noopener">GitHub</a></span><span data-src="az">Mənbə kodu: <a href="https://github.com/borisko35/Empire-of-Safavids" target="_blank" rel="noopener">GitHub</a></span></p>
 <p class="hint lic" id="lic"><span data-lic="ru">Свободное программное обеспечение: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="en">Free software: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span><span data-lic="az">Azad proqram təminatı: <a href="LICENSE" rel="license">GNU GPL v3</a>.</span></p>
 
 <script>
@@ -252,6 +256,9 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
     document.querySelectorAll('[data-lic]').forEach((s) => {
       s.style.display = s.dataset.lic === lang ? '' : 'none';
     });
+    document.querySelectorAll('[data-src]').forEach((s) => {
+      s.style.display = s.dataset.src === lang ? '' : 'none';
+    });
     document.querySelectorAll('[data-vid]').forEach((s) => {
       s.style.display = s.dataset.vid === lang ? '' : 'none';
     });
@@ -262,6 +269,9 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
 document.querySelector('[data-lang="ru"]').classList.add('on');
 document.querySelectorAll('[data-lic]').forEach((s) => {
   s.style.display = s.dataset.lic === 'ru' ? '' : 'none';
+});
+document.querySelectorAll('[data-src]').forEach((s) => {
+  s.style.display = s.dataset.src === 'ru' ? '' : 'none';
 });
 document.querySelectorAll('[data-vid]').forEach((s) => {
   s.style.display = s.dataset.vid === 'ru' ? '' : 'none';
