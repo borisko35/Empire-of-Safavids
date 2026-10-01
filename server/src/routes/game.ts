@@ -78,7 +78,28 @@ export const topupSchema = Joi.object({
 }).xor('packId', 'realCurrency').with('realCurrency', 'amount');
 
 /** Провайдер по умолчанию, если клиент поле не прислал. */
-export const DEFAULT_PAYMENT_PROVIDER = 'yookassa';
+/** Запасное имя, когда не настроен ни один провайдер. */
+const ЗАПАСНОЙ_ПРОВАЙДЕР = 'yookassa';
+
+/**
+ * Провайдер по умолчанию - тот, который реально настроен на сервере.
+ *
+ * ПОЧЕМУ БОЛЬШЕ НЕ КОНСТАНТА. Раньше здесь стояло 'yookassa' жёстко, и
+ * клиент дублировал то же самое у себя. В итоге покупка упиралась в
+ * «провайдер не настроен», хотя настроен был другой - Xsolla. Схема
+ * принимала поле, маршрут его читал, а толку не было: имя провайдера было
+ * прописано в двух местах и разъехалось с реальностью.
+ *
+ * Теперь клиент имя не присылает, а решение принимает сервер по своим
+ * ключам. Порядок: сначала Xsolla, потом ЮKassa, а если не настроен
+ * ничего - возвращается запасное имя, и маршрут честно отвечает «провайдер
+ * не настроен».
+ */
+export function выборПровайдера(env: NodeJS.ProcessEnv = process.env): string {
+  if (isXsollaEnabled(env)) return XSOLLA;
+  if (isYooKassaEnabled()) return 'yookassa';
+  return ЗАПАСНОЙ_ПРОВАЙДЕР;
+}
 
 /**
  * Куда провайдер возвращает игрока после оплаты.
@@ -570,7 +591,10 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
       // что его заказ ушёл.
       // Из проверенного value, а не из req.body. Схема приводит регистр и
       // обрезает пробелы; сырое тело этим свойствам не обязано.
-      const provider = String(value.provider ?? DEFAULT_PAYMENT_PROVIDER);
+      // Поле provider остаётся в схеме: старый клиент его присылает, и его
+      // надо принять, а не отвергнуть. Но приоритет у сервера: без поля
+      // выборПровайдера смотрит на свои ключи, а не на клиентское имя.
+      const provider = String(value.provider ?? выборПровайдера());
       let checkoutUrl: string | null = null;
       let providerError: string | null = null;
 

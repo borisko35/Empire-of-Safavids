@@ -508,7 +508,13 @@ export const api = {
   paymentRates: () =>
     req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; firstBonus: { multiplier: number; maxBonus: number }; premiumDurations: { days: number; priceAzens: number }[]; simulator: boolean }>('/api/game/payments/rates'),
 
-  paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }, provider = 'yookassa') =>
+  // Имя провайдера здесь намеренно НЕ задано. Раньше стояло
+  // `provider = 'yookassa'`, и это была вторая копия решения: клиент
+  // указывал провайдера, которого на сервере не настроено, и покупка
+  // упиралась в «провайдер не настроен». Теперь поле не уходит вовсе, а
+  // сервер выбирает того, кто у него реально настроен. Чтобы принудительно
+  // задать - передать provider явно.
+  paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }, provider?: string) =>
     req<{
       success: boolean; paymentId: string; status: string; packId: string | null;
       azensExpected: number; realCurrency: string; realAmount: number;
@@ -519,7 +525,9 @@ export const api = {
       providerError: string | null;
     }>('/api/game/payments/topup', {
       method: 'POST',
-      body: JSON.stringify({ characterId, provider, ...input }),
+      // provider попадает в тело, только если его задали явно: пустая строка
+      // это уже значение, и сервер не примет её за «не задано».
+      body: JSON.stringify(provider ? { characterId, provider, ...input } : { characterId, ...input }),
     }),
 
   paymentStatus: (paymentId: string) =>
