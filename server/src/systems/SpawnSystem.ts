@@ -121,8 +121,8 @@ const SPAWN_POINTS: SpawnPoint[] = [
   // воздухе над сушей).
   makePoint({ id: 'sp_gulf_isl_rustam', monsterId: 'world_boss_rustam_reborn', region: Region.PERSIAN_GULF, position: { x: 40, y: 0, z: -620 }, maxCount: 1, respawnTime: 1209600, weatherBonus: {} }),
   // Гавань (80) тоже была пустой - добавлены корсар (80) и головорез (80).
-  makePoint({ id: 'sp_gulf_har_cors',  monsterId: 'mob_corsair',       region: Region.PERSIAN_GULF, position: { x: -120, y: 0, z: -1000 }, maxCount: 4, respawnTime: 1800, weatherBonus: { storm: 1.4 } }),
-  makePoint({ id: 'sp_gulf_har_brute', monsterId: 'mob_harbor_brute',  region: Region.PERSIAN_GULF, position: { x: 160,  y: 0, z: -960  }, maxCount: 2, respawnTime: 2100, weatherBonus: {} }),
+  makePoint({ id: 'sp_gulf_har_cors',  monsterId: 'mob_corsair',       region: Region.PERSIAN_GULF, position: { x: -55, y: 0, z: -985 }, maxCount: 4, respawnTime: 1800, weatherBonus: { storm: 1.4 } }),
+  makePoint({ id: 'sp_gulf_har_brute', monsterId: 'mob_harbor_brute',  region: Region.PERSIAN_GULF, position: { x: 60,  y: 0, z: -1010 }, maxCount: 2, respawnTime: 2100, weatherBonus: {} }),
   // Зона persian_gulf_waters (от 85) остаётся пустой: ей нужен залив, а
   // моря в мире нет. Это зафиксировано в spawnPlacement.test.ts как
   // известная дыра, чтобы она не росла молча.
