@@ -120,13 +120,30 @@ say "  server otvechaet"
 # сравнивается с моментом начала выкатки. Это ровно то, что нужно:
 # пересобрался образ или едет старый.
 say "  proverka vozrasta obraza"
-VOZRAST=$($C images --format '{{.CreatedAtUnix}}' 2>/dev/null | head -1 | tr -d '\r')
-if [ -z "${VOZRAST:-}" ]; then
-  say "  vozrast obraza ne prochitan - propuskayu (docker bez .CreatedAtUnix)"
-elif [ "$VOZRAST" -ge "${DEPLOY_STARTED:-0}" ] 2>/dev/null; then
-  say "  obraz server perezobran v etoy vytachke"
+# ИДЁМ ОБРАЗА, А НЕ ВОЗРАСТ. Сначала берём id контейнера сервиса,
+# потом узнаём, когда создан его образ. Так надёжнее, чем парсить вывод
+# docker images: у compose-версий фильтр по сервису отдаёт пустую строку.
+OBRAZ_ID=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+VOZRAST=0
+if [ -n "${OBRAZ_ID:-}" ] && [ "$OBRAZ_ID" != "0" ]; then
+  # .Created отдаётся как дата в ISO ("2026-10-01T17:27:55.953336178Z"),
+  # а не числом, поэтому переводим её через date -d. Две попытки сделать
+  # это неверно - CreatedAtUnix (не поддерживается в Docker 29.1.3, шаблон
+  # не парсится) и арифметика по .Created как по числу (всегда уходило в
+  # пропуск, и проверка молча ничего не делала).
+  DATA=$(docker inspect -f '{{.Created}}' "$OBRAZ_ID" 2>/dev/null | tr -d '\r')
+  VOSRAT_OTKAZ=$(date -d "$DATA" +%s 2>/dev/null)
+  case "${VOSRAT_OTKAZ:-}" in
+    ''|*[!0-9]*) VOSRAT_OTKAZ="" ;;
+  esac
+  VOSRAT=$(( ${DEPLOY_STARTED:-0} - ${VOSRAT_OTKAZ:-0} ))
+fi
+if [ -z "${VOSRAT_OTKAZ:-}" ]; then
+  say "  vozrast obraza ne prochitan - propuskayu (docker bez .Created)"
+elif [ "$VOSRAT_OTKAZ" -ge "${DEPLOY_STARTED:-0}" ]; then
+  say "  obraz server perezobran v etoy vytachke (vozrast ${VOSRAT} s)"
 else
-  stop "obraz server starshe nachala vytachki - konteyner mozhet byt na starom kode"
+  stop "obraz server starshe nachala vytachki (vozrast ${VOSRAT} s) - konteyner mozhet byt na starom kode"
 fi
 
 for f in / /trailer.html /LICENSE; do
