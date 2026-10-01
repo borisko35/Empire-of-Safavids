@@ -285,7 +285,13 @@ export const REGION_SPAWNS: Record<string, { x: number; z: number }> = {
   caucasus: { x: 60, z: 560 },
   mesopotamia: { x: 200, z: -450 },
   khorasan: { x: 150, z: 750 },
-  persian_gulf: { x: -60, z: -700 },
+  // Персидский залив. Якорь стоял в (-60, -700) - в мелкой воде, на
+  // высоте -2.1. Место назначения у якоря одно: CharacterService.respawn()
+  // при выборе «возродиться в городе» и спасение из глубокой воды в
+  // handleAuth. То есть игрок, умерший в заливе, возвращался в воду - и
+  // так после каждой смерти. Стоит в (-60, -620): суша, уклон 0,
+  // высота 3.5, своя зона persian_gulf_islands, форт в 274.
+  persian_gulf: { x: -60, z: -620 },
 };
 
 export function getRegionSpawn(region: string): { x: number; z: number } {
