@@ -12,6 +12,7 @@ import { getGuildRankPermissions } from '../data/guilds';
 import { GUILD_SKILLS } from '../data/guilds';
 import { isSkillWired, upgradeCost } from '../systems/GuildBonuses';
 import { guildMissionService } from '../services/GuildMissionService';
+import { SiegeSystem } from '../systems/SiegeSystem';
 
 const router = Router();
 const guilds = new GuildService();
@@ -356,6 +357,24 @@ router.post('/missions/claim', authMiddleware, async (req: any, res) => {
     }
     res.json({ success: true, rewards: результат.rewards });
   } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
+
+/**
+ * Территории и осады: кто чем владеет, сколько у крепости осталось.
+ *
+ * БЕЗ АВТОРИЗАЦИИ И ПРОВЕРКИ ГИЛЬДИИ, в отличие от соседних маршрутов.
+ * Состояние территории общее: кто ею владеет и идёт ли осада - не тайна,
+ * и без этого осада остаётся невидимой. Персонаж здесь не нужен вовсе,
+ * потому что смотреть можно и без гильдии.
+ *
+ * capturePoints отдаётся, потому что это единственное поле TerritoryDefinition,
+ * которое со дня объявления читает кто-то кроме самой системы: пока его
+ * никто не спрашивал, оно было данными в вакууме.
+ */
+router.get('/territories', authMiddleware, async (_req, res) => {
+  try {
+    res.json({ territories: await SiegeSystem.getInstance().territoryState() });
+  } catch (err) { res.status(500).json({ error: (err as Error).message }); }
 });
 
 export default router;

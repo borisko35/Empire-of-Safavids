@@ -23,7 +23,7 @@
 // прочие из TerritoryDefinition.bonuses) здесь НЕ сделаны: объявлены они в
 // данных так же давно, как и сами осады, и читает их пока только этот файл.
 
-import { TERRITORIES, type TerritoryDefinition } from '../data/guilds';
+import { TERRITORIES, GUILD_SKILLS, type TerritoryDefinition } from '../data/guilds';
 import { GAME_SERVERS } from '../../../shared/constants';
 import { DatabaseService } from '../services/DatabaseService';
 import { NotificationService } from '../services/NotificationService';
@@ -141,9 +141,32 @@ export function уронЗаУбийство(прочность: number): number
   return Math.max(1, Math.floor(прочность / ЦЕЛЬ_УБИЙСТВ));
 }
 
-/** Строка осады из базы. */
-export interface СтрокаОсады {
+/**
+ * Состояние территории для маршрута и панели.
+ *
+ * Бонусы отдаются как есть, из данных. Русского названия достаточно: в игре
+ * интерфейс идёт через словари переводов, а выдуманный азербайджанский
+ * текст хуже русского среди азербайджана - это уже сделано с описаниями
+ * навыков гильдий.
+ */
+export interface СостояниеТерритории {
   id: string;
+  name: string;
+  nameRu: string;
+  region: string;
+  /** null = территория ничья. */
+  ownerGuildId: string | null;
+  capturedAt: string | null;
+  defenseHp: number;
+  defenseMax: number;
+  siegeActive: boolean;
+  siegeSchedule: string;
+  capturePoints: number;
+  bonuses: TerritoryDefinition['bonuses'];
+}
+
+/** Строка осады из базы. */
+export interface СтрокаОсады {  id: string;
   territory_id: string;
   started_at: string;
   ended_at: string | null;
@@ -402,18 +425,101 @@ export class SiegeSystem {
       return;
     }
 
-    const урон = уронЗаУбийство(территория.defensePoints);
+    // Навык гильдии «Мастера осады»: +10% урона за уровень, максимум 5.
+    // Читается по одной строке и только когда осада действительно идёт, то
+    // есть раз в час на регион, а не на каждый удар каждого игрока.
+    const урон = await this.уронСНавыком(герой.guild_id, территория.defensePoints);
+
     await this.db.query(
       `UPDATE guild_sieges SET damage = damage + $2, attacker_guild_id = $3, updated_at = NOW()
         WHERE id = $1`,
       [строка.id, урон, герой.guild_id],
     );
+    const прочность = await this.db.queryOne<{ defense_hp: number; guild_id: string | null }>(
+      `SELECT defense_hp, guild_id FROM guild_territories WHERE territory_id = $1`,
+      [территория.id],
+    );
+    if (прочность === null) return;
+    const осталось = Math.max(0, Number(прочность.defense_hp) - урон);
     await this.db.query(
       `UPDATE guild_territories
-          SET defense_hp = GREATEST(defense_hp - $2, 0), updated_at = NOW()
+          SET defense_hp = $2, captured_at = CASE WHEN $3 AND $2 = 0 THEN NOW() ELSE captured_at END,
+              updated_at = NOW()
         WHERE territory_id = $1`,
-      [территория.id, урон],
+      [территория.id, осталось, прочность.guild_id !== герой.guild_id],
     );
+
+    // Захват. Крепость падает, когда прочность обнулена, и пасть должна
+    // ЧУЖОЙ гвардии: своей гильдии территория и не принадлежит, и не
+    // переходит - иначе гильдия «забирала бы» сама себя и писала в лог о
+    // захвате, которого не было.
+    //
+    // Исход осады НЕ ставится здесь. Единственный честный признак захвата -
+    // сменившийся guild_id в guild_territories; второй источник правды
+    // разошёлся бы с первым при любом сбое записи, и пострадала бы история.
+    if (осталось === 0 && прочность.guild_id !== герой.guild_id) {
+      await this.db.query(
+        `UPDATE guild_territories SET guild_id = $2 WHERE territory_id = $1`,
+        [территория.id, герой.guild_id],
+      );
+      await this.объявить(территория, {
+        territoryId: территория.id,
+        capturedBy: герой.guild_id,
+        phase: 'captured',
+      });
+      logger.info(`[Siege] ${территория.id}: захвачена гильдией ${герой.guild_id}`);
+    }
+  }
+
+  /** Урон за убийство с учётом навыка «Мастера осады». */
+  private async уронСНавыком(guildId: string, прочность: number): Promise<number> {
+    const базовый = уронЗаУбийство(прочность);
+    const навык = await this.db.queryOne<{ level: number }>(
+      `SELECT level FROM guild_skills WHERE guild_id = $1 AND skill_id = 'guild_siege_power'`,
+      [guildId],
+    );
+    const уровень = Number(навык?.level ?? 0);
+    if (уровень <= 0) return базовый;
+    // Потолок берём из справочника, а не пишем константой: maxLevel в данных
+    // и в коде разошлись бы при правке одного из них.
+    const потолок = GUILD_SKILLS.find((s) => s.id === 'guild_siege_power')?.maxLevel ?? 0;
+    const действует = Math.min(уровень, потолок);
+    return Math.floor(базовый * (1 + 0.1 * действует));
+  }
+
+  /**
+   * Состояние территорий для игрового интерфейса.
+   *
+   * Без этого осада выглядит «объявленной, но непрозрачной»: игрок получает
+   * уведомление и наносит урон, не видя ни прочности крепости, ни её
+   * владельца. TerritoryDefinition.capturePoints при этом остаётся полем,
+   * которое никто не читает, - ровно та же болезнь, что была с боссами
+   * данжей и бонусами сезонных праздников.
+   */
+  async territoryState(): Promise<СостояниеТерритории[]> {
+    const строки = await this.db.query<{
+      territory_id: string; guild_id: string | null; defense_hp: number; captured_at: string | null;
+    }>(
+      `SELECT territory_id, guild_id, defense_hp, captured_at FROM guild_territories`,
+    );
+    const поТаблице = new Map(строки.map((s) => [s.territory_id, s]));
+    return TERRITORIES.map((территория) => {
+      const строка = поТаблице.get(территория.id);
+      return {
+        id: территория.id,
+        name: территория.name,
+        nameRu: территория.nameRu,
+        region: территория.region,
+        ownerGuildId: строка?.guild_id ?? null,
+        capturedAt: строка?.captured_at ?? null,
+        defenseHp: Number(строка?.defense_hp ?? территория.defensePoints),
+        defenseMax: территория.defensePoints,
+        siegeActive: this.идущие.has(территория.id),
+        siegeSchedule: территория.siegeSchedule,
+        capturePoints: территория.capturePoints,
+        bonuses: территория.bonuses,
+      };
+    });
   }
 
   /** Кто держит территорию сейчас. */
