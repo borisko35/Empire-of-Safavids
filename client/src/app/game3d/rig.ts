@@ -1022,6 +1022,18 @@ export function buildMonsterRig(monsterId: string): Rig {
     case 'mob_harbor_brute':
       return buildHumanoid({ robe: 0x4a4038, robeDark: 0x2a2420, hat: 'none', hatColor: 0x000000, weapon: 'none', shield: true, scale: 1.34 });
 
+    // ── Подводные залива ──────────────────────────────────────
+    // Тело рыбы, а не гуманоид: все три помечены aquatic, ИИ держит их в
+    // воде, и суша с мечом была бы враньём.
+    // Цвета светлее воды залива намеренно: вода тёмная, и тёмная тварь
+    // в ней не читается — игрок должен видеть, что в воде кто-то есть.
+    case 'mob_gulf_reef_raider':
+      return buildFish({ body: 0x7a8f86, belly: 0xd6cfae, length: 1.1, girth: 0.28, eye: 0xffb03a, jaws: true });
+    case 'mob_gulf_depth_lurker':
+      return buildFish({ body: 0x2e3a4e, belly: 0x8ea0b8, length: 2.1, girth: 0.55, eye: 0x9fe8ff, glow: 0x2a4a6a, jaws: true });
+    case 'mob_gulf_leviathan_cub':
+      return buildFish({ body: 0x3f6a78, belly: 0xbfe0e8, length: 1.6, girth: 0.44, eye: 0xff6a4a, glow: 0x3a7a8a, jaws: true });
+
     // ── ЧТО БЫЛО ПОД ЭТИМ БЛОКОМ ──────────────────────────────
     // Дальше шёл `default: buildHumanoid({ hood, sword })`. Из двадцати
     // четырёх монстров разбирались одиннадцать, а остальные ТРИНАДЦАТЬ

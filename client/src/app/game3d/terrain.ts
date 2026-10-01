@@ -19,100 +19,21 @@ export const CITY = { x: 34, z: 26, radius: 116 }; // Столица: радиу
 export const CAMP = { x: 167, z: 132, radius: 16 }; // Полевой лагерь ВНЕ стен (город r=116)
 
 // ── Вода и достопримечательности ─────────────────────────────
-export const LAKE = { x: -420, z: -160, r: 170, level: -2.0 };
-export const POND = { x: 620, z: 300, r: 70, level: -1.6 };   // оазис в пустыне
-export const WATERFALL = { x: -352, z: -568, width: 11, height: 15 };
-
-/**
- * Море Персидского залива.
- *
- * ЧТО БЫЛО. Моря в мире не было вообще: вода - это озеро LAKE, пруд
- * POND и русла двух рек. При этом в данных есть целый регион
- * PERSIAN_GULF с тремя зонами, одна из которых так и называется -
- * «Персидский залив — воды», и водные зоны шли по z -1100..-550. То
- * есть регион «Залив» стоял на суше, а его водная зона была пустой не
- * из-за нехватки монстров, а потому что воды не было физически.
- *
- * География здесь приблизительная, и это сказано прямо: полосы зон
- * выложены одна за другой по z, и настоящий залив так не устроен. Берег
- * идёт волной по шуму, острова вырезаны из воды списком - чтобы игрок
- * мог дойти пешком с суши и не уйти в бесконечное плавание.
- */
-export const SEA = {
-  level: -3.2,          // поверхность воды
-  bed: -12.0,           // дно
-  coast: -660,          // средняя линия берега по z: южнее - вода
-  jitter: 60,           // размах берега
-  ramp: 60,             // ширина полосы прибрежного перехода
-  islandCore: 0.75,     // доля радиуса острова, где суша
+// Вода описана в ОДНОМ месте — shared/water.ts. До этого контуры были
+// продублированы здесь и на сервере (utils/spawn.ts), и копии разошлись:
+// море появилось в клиенте, а сервер о нём не узнал. Реэкспорт нужен для
+// существующих потребителей, которые берут LAKE и реки из terrain.ts.
+import {
+  LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
+  seaMask, seaIslandAt, waterMask, isWater, isDeepWater, canFloatAt,
+} from '../../../../shared/water';
+export {
+  LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
+  seaMask, seaIslandAt, waterMask, isWater, isDeepWater, canFloatAt,
 };
 
-/**
- * Острова в заливе: суша посреди воды.
- *
- * Первый - портовый: на нём стоит гавань, и поэтому в нём живут
- * наземные монстры залива. Остальные - в зоне «острова», где вода
- * перемежается с сушей.
- *
- * ЧИСЛА ПОДОБРАНЫ ИЗМЕРЕНИЕМ, а не на глаз. Первая версия брала r=175
- * с мягким краем на 45% радиуса, и такой остров дотягивался до z=-850 -
- * то есть гасил воду за пределами гавани. Зона «Залив — воды» оказывалась
- * мокрой наполовину, а на z=-910 было сухо. Теперь радиусы меньше, а
- * край острова узкий (25% радиуса), и суша острова читается как суша.
- */
-export const SEA_ISLANDS: { x: number; z: number; r: number; имя: string }[] = [
-  { x: 0,   z: -980, r: 120, имя: 'портовый остров' },
-  { x: 60,  z: -600, r: 95,  имя: 'остров Рустама' },
-  { x: 300, z: -650, r: 70,  имя: 'восточный риф' },
-  { x: -350, z: -640, r: 60, имя: 'западный риф' },
-];
+export const WATERFALL = { x: -352, z: -568, width: 11, height: 15 };
 
-/** Насколько точка под морем: 0 - суша, 1 - открытая гладь. */
-export function seaMask(x: number, z: number): number {
-  const берег = SEA.coast + (fbm(x / 220 + 31, z / 220 - 17) - 0.5) * 2 * SEA.jitter;
-  // Чем южнее берег, тем глубже вода: z меньше берега даёт воду.
-  let m = clamp01((берег - z) / SEA.ramp);
-  if (m <= 0) return 0;
-  // Острова вычитаются: в ядре острова суша, к краю вода возвращается.
-  for (const о of SEA_ISLANDS) {
-    const d = Math.hypot(x - о.x, z - о.z);
-    if (d < о.r) m = Math.min(m, clamp01((d - о.r * SEA.islandCore) / (о.r * (1 - SEA.islandCore))));
-  }
-  return m;
-}
-
-/** Остров, внутри которого точка, или null. */
-export function seaIslandAt(x: number, z: number): { x: number; z: number; r: number; имя: string } | null {
-  for (const о of SEA_ISLANDS) {
-    if (Math.hypot(x - о.x, z - о.z) < о.r * SEA.islandCore) return о;
-  }
-  return null;
-}
-// Река: хребет -> озеро; озеро -> оазис
-export const RIVER_A: { x: number; z: number }[] = [
-  { x: -350, z: -575 }, { x: -368, z: -470 }, { x: -398, z: -310 }, { x: -412, z: -220 },
-];
-export const RIVER_B: { x: number; z: number }[] = [
-  { x: -300, z: 20 }, { x: -140, z: 120 }, { x: 120, z: 200 }, { x: 380, z: 270 }, { x: 540, z: 292 },
-];
-
-// ── Мосты через воду ──────────────────────────────────────────
-export interface Bridge {
-  x: number; z: number;       // центр
-  dx: number; dz: number;     // направление (нормализовано)
-  length: number;             // длина
-  width: number;              // ширина
-  height: number;             // высота поверхности моста
-}
-/** Мосты: from -> to, ширина 4, высота чуть выше уровня воды */
-export const BRIDGES: Bridge[] = [
-  // Мост через RIVER_B на дороге Исфahan ↔ Лагерь (пересекает реку у ~(-140,120))
-  { x: -100, z: 130, dx: 0.85, dz: 0.53, length: 18, width: 4.5, height: LAKE.level + 1.2 },
-  // Мост через RIVER_A у входа в озеро (северное русло)
-  { x: -405, z: -230, dx: 0.2, dz: -0.98, length: 16, width: 4, height: LAKE.level + 1.0 },
-  // Мост через RIVER_B на пути к Караван-сараю (восточный)
-  { x: 320, z: 255, dx: 0.96, dz: 0.29, length: 14, width: 4, height: LAKE.level + 0.8 },
-];
 
 /** Проверяет, находится ли точка на мосту. Возвращает высоту поверхности или null */
 export function bridgeAt(x: number, z: number): number | null {
@@ -198,37 +119,7 @@ function ridgeMask(x: number, z: number): number {
   return smoothstep(clamp01((-z - 430) / 220)) * clamp01(1 - desertMask(x, z) * 0.8);
 }
 
-/** Расстояние до оси реки (обе ветки) в условных единицах */
-function riverInfo(x: number, z: number): { d: number } {
-  let best = 1e9;
-  const seg = (ax: number, az: number, bx: number, bz: number) => {
-    const dx = bx - ax, dz = bz - az;
-    const len2 = dx * dx + dz * dz;
-    const t = clamp01(((x - ax) * dx + (z - az) * dz) / len2);
-    best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
-  };
-  for (let i = 0; i < RIVER_A.length - 1; i++) {
-    seg(RIVER_A[i].x, RIVER_A[i].z, RIVER_A[i + 1].x, RIVER_A[i + 1].z);
-  }
-  for (let i = 0; i < RIVER_B.length - 1; i++) {
-    seg(RIVER_B[i].x, RIVER_B[i].z, RIVER_B[i + 1].x, RIVER_B[i + 1].z);
-  }
-  return { d: best };
-}
 
-/** Маска воды: 1 в центре русла/озера, 0 на берегу */
-export function waterMask(x: number, z: number): number {
-  let m = 0;
-  m = Math.max(m, clamp01(1 - Math.hypot(x - LAKE.x, z - LAKE.z) / LAKE.r));
-  m = Math.max(m, clamp01(1 - Math.hypot(x - POND.x, z - POND.z) / POND.r));
-  const { d } = riverInfo(x, z);
-  m = Math.max(m, clamp01(1 - (d - 3) / 13));
-
-  // Море. Без этой строки регион «Персидский залив» оставался сушей:
-  // в нём не было ни капли, а зона так и называлась «Залив — воды».
-  m = Math.max(m, seaMask(x, z));
-  return m;
-}
 
 /** Уровень поверхности воды в точке или null, если суша.
  *  Озеро и реки — на уровне LAKE, пруд — на своём. */

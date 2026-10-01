@@ -123,6 +123,11 @@ const SPAWN_POINTS: SpawnPoint[] = [
   // Гавань (80) тоже была пустой - добавлены корсар (80) и головорез (80).
   makePoint({ id: 'sp_gulf_har_cors',  monsterId: 'mob_corsair',       region: Region.PERSIAN_GULF, position: { x: -55, y: 0, z: -985 }, maxCount: 4, respawnTime: 1800, weatherBonus: { storm: 1.4 } }),
   makePoint({ id: 'sp_gulf_har_brute', monsterId: 'mob_harbor_brute',  region: Region.PERSIAN_GULF, position: { x: 60,  y: 0, z: -1010 }, maxCount: 2, respawnTime: 2100, weatherBonus: {} }),
+  // Вода залива (85-90). Точки стоят там, где маска моря высокая, - иначе
+  // ИИ вытащил бы подводных монстров на берег, а они там зависли бы.
+  makePoint({ id: 'sp_gulf_wat_reef',  monsterId: 'mob_gulf_reef_raider',    region: Region.PERSIAN_GULF, position: { x: -140, y: 0, z: -790 }, maxCount: 4, respawnTime: 900,  weatherBonus: { storm: 1.4 } }),
+  makePoint({ id: 'sp_gulf_wat_lurk',  monsterId: 'mob_gulf_depth_lurker',   region: Region.PERSIAN_GULF, position: { x: 180,  y: 0, z: -840 }, maxCount: 2, respawnTime: 1500, weatherBonus: {} }),
+  makePoint({ id: 'sp_gulf_wat_cub',   monsterId: 'mob_gulf_leviathan_cub', region: Region.PERSIAN_GULF, position: { x: -40,  y: 0, z: -760 }, maxCount: 1, respawnTime: 2400, weatherBonus: {} }),
   // Зона persian_gulf_waters (от 85) остаётся пустой: ей нужен залив, а
   // моря в мире нет. Это зафиксировано в spawnPlacement.test.ts как
   // известная дыра, чтобы она не росла молча.
