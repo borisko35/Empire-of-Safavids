@@ -1034,6 +1034,24 @@ export function buildMonsterRig(monsterId: string): Rig {
     case 'mob_gulf_leviathan_cub':
       return buildFish({ body: 0x3f6a78, belly: 0xbfe0e8, length: 1.6, girth: 0.44, eye: 0xff6a4a, glow: 0x3a7a8a, jaws: true });
 
+    // ── Герат: восьмой регион ───────────────────────────────
+    // Три монстра Герата. Без своих веток они уезжали в default и
+    // рисовались гуманоидом в капюшоне с мечом - то есть выглядели как
+    // бандиты из другого края мира. Проверка «у каждого монстра из базы
+    // есть своя ветка» это сторожит.
+    case 'mob_herat_gate_guard':
+      // Страж врат: тяжёлая броня, щит, шлем. Он стоит на посту, и вид у
+      // него должен читаться как стойкий, а не как нападающий.
+      return buildHumanoid({ robe: 0x4a4e58, robeDark: 0x2a2d34, hat: 'helmet', hatColor: 0xb8a068, weapon: 'sword', shield: true, scale: 1.20 });
+    case 'mob_herat_road_reaver':
+      // Дорожный налётчик: плащ в пыли, кинжал вместо меча, ниже остальных.
+      return buildHumanoid({ robe: 0x8a7048, robeDark: 0x544028, hat: 'hood', hatColor: 0x6a5230, weapon: 'dagger', scale: 1.02 });
+    case 'mob_herat_dust_lord':
+      // Пыльный владыка: мифическое тело, а не гуманоид. То же тело, что у
+      // джиннов и песчаного дива, - и это честное ограничение сборки, а не
+      // пропуск: отдельное тело для пыли - следующая работа.
+      return buildDemon();
+
     // ── ЧТО БЫЛО ПОД ЭТИМ БЛОКОМ ──────────────────────────────
     // Дальше шёл `default: buildHumanoid({ hood, sword })`. Из двадцати
     // четырёх монстров разбирались одиннадцать, а остальные ТРИНАДЦАТЬ

@@ -47,8 +47,8 @@ const SPOTS: { id: string; kind: BuildingKind; nameKey: string; icon: string; lx
   { id: 'circus', kind: 'circus', nameKey: 'buildings.circus', icon: '🎪', lx: -55.0, lz: 45.0 },
 ];
 
-export const POCKET_X = 2500;
-export const POCKET_Z = 2500;
+export const POCKET_X = 4000;
+export const POCKET_Z = 4000;
 const ROOM_DX = 44;
 export const ROOM_W = 22;
 export const ROOM_D = 16;

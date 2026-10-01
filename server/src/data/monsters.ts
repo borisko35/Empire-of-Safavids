@@ -84,6 +84,105 @@ export interface MonsterDefinition {
 export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
 
   // ── ОБЫЧНЫЕ МОНСТРЫ ──────────────────────────────────────────────
+  // ── Герат: восьмой регион ──────────────────────────────────────
+  // Регион добавлен решением владельца. Без монстров он был бы полосой
+  // земли, куда доезжаешь и не встречаешь никого.
+  'mob_herat_gate_guard': {
+    id: 'mob_herat_gate_guard',
+    name: 'Gate Guard of Herat',
+    nameRu: 'Страж Врат Герата',
+    type: 'elite',
+    faction: 'neutral',
+    level: 90,
+    hp: 22000,
+    mana: 600,
+    strength: 128,
+    agility: 74,
+    intelligence: 46,
+    defense: 82,
+    moveSpeed: 5.0,
+    attackRange: 2,
+    aggroRange: 18,
+    expReward: 5200,
+    goldReward: { min: 200, max: 480 },
+    skills: [
+      { id: 'herat_guard_thrust', name: 'Gate Thrust', nameRu: 'Укол Врат', damage: 880, cooldown: 4, range: 2, aoe: false },
+      // Клич, а не щит: у навыка монстра разрешено ровно пять эффектов
+      // (stun, slow, bleed, poison, fear), и щита среди них нет. Написать
+      // 'shield' значило бы выдумать значение, которого контракт не знает.
+      { id: 'herat_guard_shout', name: 'Gate Watch Cry', nameRu: 'Клич Стража', damage: 260, cooldown: 18, range: 10, aoe: true, aoeRadius: 12, effect: 'fear', effectDuration: 4 },
+    ],
+    lootTable: [
+      { itemId: 'mat_turquoise', chance: 0.3, minQty: 2, maxQty: 5 },
+      { itemId: 'con_health_potion_m', chance: 0.4, minQty: 1, maxQty: 3 },
+    ],
+    region: Region.HERAT,
+    respawnTime: 1200,
+    description: 'Стоит у врат Герата с тех пор, как их построили, и ни разу не отошёл.',
+  },
+  'mob_herat_road_reaver': {
+    id: 'mob_herat_road_reaver',
+    name: 'Silk Road Reaver',
+    nameRu: 'Шёлковый Дорожник',
+    type: 'elite',
+    faction: 'bandit',
+    level: 90,
+    hp: 19500,
+    mana: 500,
+    strength: 121,
+    agility: 88,
+    intelligence: 52,
+    defense: 71,
+    moveSpeed: 5.4,
+    attackRange: 2,
+    aggroRange: 20,
+    expReward: 5400,
+    goldReward: { min: 220, max: 520 },
+    skills: [
+      { id: 'reaver_cut', name: 'Caravan Cut', nameRu: 'Разрез Каравана', damage: 940, cooldown: 3, range: 2, aoe: false },
+      { id: 'reaver_ambush', name: 'Ambush', nameRu: 'Засада', damage: 610, cooldown: 14, range: 3, aoe: false },
+    ],
+    lootTable: [
+      { itemId: 'trophy_caravan_raider_seal', chance: 0.1, minQty: 1, maxQty: 1 },
+      { itemId: 'mat_turquoise', chance: 0.28, minQty: 1, maxQty: 4 },
+      { itemId: 'con_health_potion_m', chance: 0.38, minQty: 1, maxQty: 3 },
+    ],
+    region: Region.HERAT,
+    respawnTime: 1200,
+    description: 'Разбирает караваны за Гератом. Дорогу знает лучше, чем городская стража.',
+  },
+  'mob_herat_dust_lord': {
+    id: 'mob_herat_dust_lord',
+    nameRu: 'Пыльный Владыка',
+    name: 'Dust Lord',
+    type: 'boss',
+    faction: 'mythical',
+    level: 95,
+    hp: 46000,
+    mana: 1800,
+    strength: 140,
+    agility: 66,
+    intelligence: 96,
+    defense: 90,
+    moveSpeed: 4.6,
+    attackRange: 2,
+    aggroRange: 22,
+    expReward: 11800,
+    goldReward: { min: 600, max: 1400 },
+    skills: [
+      { id: 'dust_lord_strike', name: 'Dust Strike', nameRu: 'Удар Пыли', damage: 1240, cooldown: 4, range: 2, aoe: false },
+      { id: 'dust_lord_storm', name: 'Dust Storm', nameRu: 'Пыльная Буря', damage: 720, cooldown: 16, range: 12, aoe: true, aoeRadius: 18 },
+    ],
+    lootTable: [
+      { itemId: 'mat_turquoise', chance: 0.7, minQty: 4, maxQty: 10 },
+      { itemId: 'con_health_potion_m', chance: 1.0, minQty: 2, maxQty: 5 },
+      { itemId: 'con_exp_scroll', chance: 0.5, minQty: 2, maxQty: 6 },
+    ],
+    region: Region.HERAT,
+    respawnTime: 3600,
+    description: 'Поднимается из пыли за последними воротами. Чем дальше к краю мира, тем он тише и злее.',
+  },
+
   'mob_bandit_scout': {
     id: 'mob_bandit_scout',
     name: 'Bandit Scout',

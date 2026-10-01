@@ -836,7 +836,7 @@
   "admin": {
     "page_title": "Admin Panel — Empire of Safavids",
     "muted": "You have been muted",
-    "teleported": "An administrator teleported you",
+    "teleported": "Teleported",
     "item_given": "An administrator gave you an item",
     "logout": "Log out",
     "login_title": "Staff Login",
@@ -916,7 +916,6 @@
     "unbanned": "Unbanned",
     "tp_gold": "Teleport / gold",
     "teleport": "Teleport",
-    "teleported": "Teleported",
     "give_gold": "Give gold",
     "need_target_amount": "Choose a target and an amount",
     "gold_given": "Gold granted",
@@ -1429,7 +1428,8 @@
     "caucasus": "Caucasus",
     "mesopotamia": "Mesopotamia",
     "khorasan": "Khorasan",
-    "persian_gulf": "Persian Gulf"
+    "persian_gulf": "Persian Gulf",
+    "herat": "Herat"
   },
   "achievements": {
     "stats": "Unlocked: {done} / {total}",
@@ -1488,7 +1488,10 @@
     "khorasan_east": "East",
     "persian_gulf_harbor": "Harbor",
     "persian_gulf_waters": "Waters",
-    "persian_gulf_islands": "Islands"
+    "persian_gulf_islands": "Islands",
+    "herat_gates": "Herat Gates",
+    "herat_city": "Herat City",
+    "herat_east": "Eastern Herat"
   },
   "quest_type": {
     "main": "Main",

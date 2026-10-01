@@ -49,6 +49,9 @@ export const REGION_LEVEL_REQUIREMENTS: Record<string, number> = {
   mesopotamia: 60,
   khorasan: 70,
   persian_gulf: 80,
+  // Герат — восьмой регион и самый дальний. 90 — под стать самому суровому
+  // краю: зоны Персидского залива доходят до 90, MAX_LEVEL = 100.
+  herat: 90,
 };
 
 // Множители опыта
@@ -285,6 +288,17 @@ export const REGION_SPAWNS: Record<string, { x: number; z: number }> = {
   caucasus: { x: 60, z: 560 },
   mesopotamia: { x: 200, z: -450 },
   khorasan: { x: 150, z: 750 },
+  // Герат — восьмой регион, за Хорасаном на северо-востоке. Стоит в
+  // полосе z 1600..3175 (herat_city — 2100..2600), то есть внутри своей
+  // зоны, как того требует проверка якорей.
+  //
+  // Точка выбрана перебором, а не на глаз. Первый кандидат (100, 2350)
+  // стоял на высоте -3.70 при уровне моря -3.2, то есть в яме. Проверка
+  // «не в воде» этого бы не заметила: вода считается по берегу и маскам,
+  // а не по высоте. Перебор искал сухое ровное место повыше моря, в стороне
+  // от соседних городов и от края мира, и нашёл ровно одно: разброс высот
+  // по кругу радиусом 116 - 2.93, до ближайшего города 1724.
+  herat: { x: -700, z: 2250 },
   // Персидский залив. Якорь стоял в (-60, -700) - в мелкой воде, на
   // высоте -2.1. Место назначения у якоря одно: CharacterService.respawn()
   // при выборе «возродиться в городе» и спасение из глубокой воды в
@@ -328,28 +342,35 @@ export const ZONES: Zone[] = [
   // ЧТО БЫЛО. Полоса называлась tabriz_center, хотя город Исфахан: то есть
   // зона и код называли столицу разными именами. Полоса не двигалась, а
   // только переименована - город и зоны теперь совпадают.
-  { id: 'isfahan_center', region: 'isfahan', name: 'Isfahan Center', nameRu: 'Центр Исфахана', minLevel: 1, dangerLevel: 1, bounds: { x1: -1200, z1: -50, x2: 1200, z2: 33 }, description: 'Столица империи. Безопасная зона для новичков.' },
-  { id: 'isfahan_outskirts', region: 'isfahan', name: 'Isfahan Outskirts', nameRu: 'Окраины Исфахана', minLevel: 5, dangerLevel: 2, bounds: { x1: -1200, z1: 33, x2: 1200, z2: 117 }, description: 'Пригороды и фермы. Встречаются волки и бандиты.' },
-  { id: 'isfahan_north', region: 'isfahan', name: 'Northern Isfahan', nameRu: 'Северный Исфахан', minLevel: 10, dangerLevel: 3, bounds: { x1: -1200, z1: 117, x2: 1200, z2: 350 }, description: 'Холмы и руины. Опасные монстры.' },
+  { id: 'isfahan_center', region: 'isfahan', name: 'Isfahan Center', nameRu: 'Центр Исфахана', minLevel: 1, dangerLevel: 1, bounds: { x1: -3175, z1: -50, x2: 3175, z2: 33 }, description: 'Столица империи. Безопасная зона для новичков.' },
+  { id: 'isfahan_outskirts', region: 'isfahan', name: 'Isfahan Outskirts', nameRu: 'Окраины Исфахана', minLevel: 5, dangerLevel: 2, bounds: { x1: -3175, z1: 33, x2: 3175, z2: 117 }, description: 'Пригороды и фермы. Встречаются волки и бандиты.' },
+  { id: 'isfahan_north', region: 'isfahan', name: 'Northern Isfahan', nameRu: 'Северный Исфахан', minLevel: 10, dangerLevel: 3, bounds: { x1: -3175, z1: 117, x2: 3175, z2: 350 }, description: 'Холмы и руины. Опасные монстры.' },
   // ── Тебриз: полоса, которую раньше занимал Исфахан.
-  { id: 'tabriz_bazaar', region: 'tabriz', name: 'Tabriz Bazaar', nameRu: 'Базар Тебриза', minLevel: 20, dangerLevel: 1, bounds: { x1: -1200, z1: -350, x2: 1200, z2: -283 }, description: 'Главный базар Тебриза. Безопасно, много торговцев.' },
-  { id: 'tabriz_gates', region: 'tabriz', name: 'Tabriz Gates', nameRu: 'Ворота Тебриза', minLevel: 20, dangerLevel: 2, bounds: { x1: -1200, z1: -283, x2: 1200, z2: -217 }, description: 'Ворота и стены города.' },
-  { id: 'tabriz_south', region: 'tabriz', name: 'Southern Tabriz', nameRu: 'Южный Тебриз', minLevel: 25, dangerLevel: 3, bounds: { x1: -1200, z1: -217, x2: 1200, z2: -50 }, description: 'Южные дороги. Караваны и разбойники.' },
-  { id: 'shiraz_gardens', region: 'shiraz', name: 'Shiraz Gardens', nameRu: 'Сады Шираза', minLevel: 40, dangerLevel: 1, bounds: { x1: -1200, z1: 350, x2: 1200, z2: 400 }, description: 'Сады и дворцы. Безопасно.' },
-  { id: 'shiraz_walls', region: 'shiraz', name: 'Shiraz Walls', nameRu: 'Стены Шираза', minLevel: 40, dangerLevel: 2, bounds: { x1: -1200, z1: 400, x2: 1200, z2: 450 }, description: 'Городские стены и окрестности.' },
-  { id: 'shiraz_east', region: 'shiraz', name: 'Eastern Shiraz', nameRu: 'Восточный Шираз', minLevel: 45, dangerLevel: 3, bounds: { x1: -1200, z1: 450, x2: 1200, z2: 500 }, description: 'Восточные пустыни. Опасные монстры.' },
-  { id: 'caucasus_pass', region: 'caucasus', name: 'Caucasus Pass', nameRu: 'Кавказский перевал', minLevel: 50, dangerLevel: 3, bounds: { x1: -1200, z1: 500, x2: 1200, z2: 567 }, description: 'Горный перевал. Опасно.' },
-  { id: 'caucasus_fortress', region: 'caucasus', name: 'Caucasus Fortress', nameRu: 'Кавказская крепость', minLevel: 55, dangerLevel: 4, bounds: { x1: -1200, z1: 567, x2: 1200, z2: 633 }, description: 'Крепость и окрестности.' },
-  { id: 'caucasus_peaks', region: 'caucasus', name: 'Caucasus Peaks', nameRu: 'Кавказские пики', minLevel: 60, dangerLevel: 5, bounds: { x1: -1200, z1: 633, x2: 1200, z2: 700 }, description: 'Высокие горы. Самые опасные монстры.' },
-  { id: 'mesopotamia_river', region: 'mesopotamia', name: 'Mesopotamia River', nameRu: 'Месопотамская река', minLevel: 60, dangerLevel: 3, bounds: { x1: -1200, z1: -550, x2: 1200, z2: -483 }, description: 'Речные долины. Караваны.' },
-  { id: 'mesopotamia_ruins', region: 'mesopotamia', name: 'Mesopotamia Ruins', nameRu: 'Месопотамские руины', minLevel: 65, dangerLevel: 4, bounds: { x1: -1200, z1: -483, x2: 1200, z2: -417 }, description: 'Древние руины. Опасно.' },
-  { id: 'mesopotamia_frontier', region: 'mesopotamia', name: 'Mesopotamia Frontier', nameRu: 'Месопотамская граница', minLevel: 70, dangerLevel: 5, bounds: { x1: -1200, z1: -417, x2: 1200, z2: -350 }, description: 'Граница с Османами. Постоянные бои.' },
-  { id: 'khorasan_oasis', region: 'khorasan', name: 'Khorasan Oasis', nameRu: 'Хорасанский оазис', minLevel: 70, dangerLevel: 3, bounds: { x1: -1200, z1: 700, x2: 1200, z2: 817 }, description: 'Оазис в пустыне.' },
-  { id: 'khorasan_caravanserai', region: 'khorasan', name: 'Khorasan Caravanserai', nameRu: 'Хорасанский караван-сарай', minLevel: 75, dangerLevel: 4, bounds: { x1: -1200, z1: 817, x2: 1200, z2: 933 }, description: 'Караван-сарай и дороги.' },
-  { id: 'khorasan_east', region: 'khorasan', name: 'Eastern Khorasan', nameRu: 'Восточный Хорасан', minLevel: 80, dangerLevel: 5, bounds: { x1: -1200, z1: 933, x2: 1200, z2: 1200 }, description: 'Дальний восток. Самые опасные монстры.' },
-  { id: 'persian_gulf_harbor', region: 'persian_gulf', name: 'Persian Gulf Harbor', nameRu: 'Персидский залив — гавань', minLevel: 80, dangerLevel: 2, bounds: { x1: -1200, z1: -1200, x2: 1200, z2: -917 }, description: 'Гавань и порт.' },
-  { id: 'persian_gulf_waters', region: 'persian_gulf', name: 'Persian Gulf Waters', nameRu: 'Персидский залив — воды', minLevel: 85, dangerLevel: 4, bounds: { x1: -1200, z1: -917, x2: 1200, z2: -733 }, description: 'Открытые воды. Пираты и морские чудовища.' },
-  { id: 'persian_gulf_islands', region: 'persian_gulf', name: 'Persian Gulf Islands', nameRu: 'Персидский залив — острова', minLevel: 90, dangerLevel: 5, bounds: { x1: -1200, z1: -733, x2: 1200, z2: -550 }, description: 'Острова. Самые опасные монстры.' },
+  { id: 'tabriz_bazaar', region: 'tabriz', name: 'Tabriz Bazaar', nameRu: 'Базар Тебриза', minLevel: 20, dangerLevel: 1, bounds: { x1: -3175, z1: -350, x2: 3175, z2: -283 }, description: 'Главный базар Тебриза. Безопасно, много торговцев.' },
+  { id: 'tabriz_gates', region: 'tabriz', name: 'Tabriz Gates', nameRu: 'Ворота Тебриза', minLevel: 20, dangerLevel: 2, bounds: { x1: -3175, z1: -283, x2: 3175, z2: -217 }, description: 'Ворота и стены города.' },
+  { id: 'tabriz_south', region: 'tabriz', name: 'Southern Tabriz', nameRu: 'Южный Тебриз', minLevel: 25, dangerLevel: 3, bounds: { x1: -3175, z1: -217, x2: 3175, z2: -50 }, description: 'Южные дороги. Караваны и разбойники.' },
+  { id: 'shiraz_gardens', region: 'shiraz', name: 'Shiraz Gardens', nameRu: 'Сады Шираза', minLevel: 40, dangerLevel: 1, bounds: { x1: -3175, z1: 350, x2: 3175, z2: 400 }, description: 'Сады и дворцы. Безопасно.' },
+  { id: 'shiraz_walls', region: 'shiraz', name: 'Shiraz Walls', nameRu: 'Стены Шираза', minLevel: 40, dangerLevel: 2, bounds: { x1: -3175, z1: 400, x2: 3175, z2: 450 }, description: 'Городские стены и окрестности.' },
+  { id: 'shiraz_east', region: 'shiraz', name: 'Eastern Shiraz', nameRu: 'Восточный Шираз', minLevel: 45, dangerLevel: 3, bounds: { x1: -3175, z1: 450, x2: 3175, z2: 500 }, description: 'Восточные пустыни. Опасные монстры.' },
+  { id: 'caucasus_pass', region: 'caucasus', name: 'Caucasus Pass', nameRu: 'Кавказский перевал', minLevel: 50, dangerLevel: 3, bounds: { x1: -3175, z1: 500, x2: 3175, z2: 567 }, description: 'Горный перевал. Опасно.' },
+  { id: 'caucasus_fortress', region: 'caucasus', name: 'Caucasus Fortress', nameRu: 'Кавказская крепость', minLevel: 55, dangerLevel: 4, bounds: { x1: -3175, z1: 567, x2: 3175, z2: 633 }, description: 'Крепость и окрестности.' },
+  { id: 'caucasus_peaks', region: 'caucasus', name: 'Caucasus Peaks', nameRu: 'Кавказские пики', minLevel: 60, dangerLevel: 5, bounds: { x1: -3175, z1: 633, x2: 3175, z2: 700 }, description: 'Высокие горы. Самые опасные монстры.' },
+  { id: 'mesopotamia_river', region: 'mesopotamia', name: 'Mesopotamia River', nameRu: 'Месопотамская река', minLevel: 60, dangerLevel: 3, bounds: { x1: -3175, z1: -550, x2: 3175, z2: -483 }, description: 'Речные долины. Караваны.' },
+  { id: 'mesopotamia_ruins', region: 'mesopotamia', name: 'Mesopotamia Ruins', nameRu: 'Месопотамские руины', minLevel: 65, dangerLevel: 4, bounds: { x1: -3175, z1: -483, x2: 3175, z2: -417 }, description: 'Древние руины. Опасно.' },
+  { id: 'mesopotamia_frontier', region: 'mesopotamia', name: 'Mesopotamia Frontier', nameRu: 'Месопотамская граница', minLevel: 70, dangerLevel: 5, bounds: { x1: -3175, z1: -417, x2: 3175, z2: -350 }, description: 'Граница с Османами. Постоянные бои.' },
+  { id: 'khorasan_oasis', region: 'khorasan', name: 'Khorasan Oasis', nameRu: 'Хорасанский оазис', minLevel: 70, dangerLevel: 3, bounds: { x1: -3175, z1: 700, x2: 3175, z2: 900 }, description: 'Оазис в пустыне.' },
+  { id: 'khorasan_caravanserai', region: 'khorasan', name: 'Khorasan Caravanserai', nameRu: 'Хорасанский караван-сарай', minLevel: 75, dangerLevel: 4, bounds: { x1: -3175, z1: 900, x2: 3175, z2: 1150 }, description: 'Караван-сарай и дороги.' },
+  { id: 'khorasan_east', region: 'khorasan', name: 'Eastern Khorasan', nameRu: 'Восточный Хорасан', minLevel: 80, dangerLevel: 5, bounds: { x1: -3175, z1: 1150, x2: 3175, z2: 1600 }, description: 'Дальний восток. Самые опасные монстры.' },
+  // ── Герат: восьмой регион, северо-восточный край за Хорасаном.
+  // Герата не было в мире вовсе, хотя он и назван в ROADMAP как город, и
+  // решение по нему было отложено на владельца. Владелец решил: заводим
+  // полноценный регион, а не город внутри Хорасана.
+  { id: 'herat_gates', region: 'herat', name: 'Herat Gates', nameRu: 'Ворота Герата', minLevel: 90, dangerLevel: 4, bounds: { x1: -3175, z1: 1600, x2: 3175, z2: 2100 }, description: 'Западные ворота и подступы к Герату.' },
+  { id: 'herat_city', region: 'herat', name: 'Herat City', nameRu: 'Герат', minLevel: 90, dangerLevel: 5, bounds: { x1: -3175, z1: 2100, x2: 3175, z2: 2600 }, description: 'Сам Герат и его кварталы.' },
+  { id: 'herat_east', region: 'herat', name: 'Eastern Herat', nameRu: 'Восточный Герат', minLevel: 95, dangerLevel: 5, bounds: { x1: -3175, z1: 2600, x2: 3175, z2: 3175 }, description: 'Край мира за Гератом. Самые опасные монстры.' },
+  { id: 'persian_gulf_harbor', region: 'persian_gulf', name: 'Persian Gulf Harbor', nameRu: 'Персидский залив — гавань', minLevel: 80, dangerLevel: 2, bounds: { x1: -3175, z1: -3175, x2: 3175, z2: -917 }, description: 'Гавань и порт.' },
+  { id: 'persian_gulf_waters', region: 'persian_gulf', name: 'Persian Gulf Waters', nameRu: 'Персидский залив — воды', minLevel: 85, dangerLevel: 4, bounds: { x1: -3175, z1: -917, x2: 3175, z2: -733 }, description: 'Открытые воды. Пираты и морские чудовища.' },
+  { id: 'persian_gulf_islands', region: 'persian_gulf', name: 'Persian Gulf Islands', nameRu: 'Персидский залив — острова', minLevel: 90, dangerLevel: 5, bounds: { x1: -3175, z1: -733, x2: 3175, z2: -550 }, description: 'Острова. Самые опасные монстры.' },
 ];
 
 export function getZoneAt(x: number, z: number): Zone | null {

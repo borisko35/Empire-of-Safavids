@@ -18,6 +18,10 @@ export enum Region {
   MESOPOTAMIA = 'mesopotamia',
   KHORASAN = 'khorasan',
   PERSIAN_GULF = 'persian_gulf',
+  // Герат — восьмой регион. Его не было в мире вовсе: решение о нём было
+  // отложено на владельца, и владелец велел завести полноценный регион,
+  // а не город внутри Хорасана.
+  HERAT = 'herat',
 }
 
 export enum ItemRarity {

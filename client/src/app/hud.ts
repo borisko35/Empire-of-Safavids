@@ -127,6 +127,9 @@ export function refreshBars(): void {
 const REGION_NAMES: Record<string, string> = {
   tabriz: 'regions.tabriz', isfahan: 'regions.isfahan', shiraz: 'regions.shiraz', caucasus: 'regions.caucasus',
   mesopotamia: 'regions.mesopotamia', khorasan: 'regions.khorasan', persian_gulf: 'regions.persian_gulf',
+  // Герат — восьмой регион. Без этой строки игрок в Герате видел бы имя зоны
+  // и не видел бы имени региона, а путешествовать в него было бы некуда.
+  herat: 'regions.herat',
 };
 
 const ZONE_NAMES: Record<string, string> = {
@@ -140,6 +143,7 @@ const ZONE_NAMES: Record<string, string> = {
   mesopotamia_river: 'zones.mesopotamia_river', mesopotamia_ruins: 'zones.mesopotamia_ruins', mesopotamia_frontier: 'zones.mesopotamia_frontier',
   khorasan_oasis: 'zones.khorasan_oasis', khorasan_caravanserai: 'zones.khorasan_caravanserai', khorasan_east: 'zones.khorasan_east',
   persian_gulf_harbor: 'zones.persian_gulf_harbor', persian_gulf_waters: 'zones.persian_gulf_waters', persian_gulf_islands: 'zones.persian_gulf_islands',
+  herat_gates: 'zones.herat_gates', herat_city: 'zones.herat_city', herat_east: 'zones.herat_east',
 };
 
 // ── Рамка цели ───────────────────────────────────────────────

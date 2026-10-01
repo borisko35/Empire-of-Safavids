@@ -836,7 +836,7 @@
   "admin": {
     "page_title": "Admin Panel — Empire of Safavids",
     "muted": "Sizə susdırma tətbiq edildi",
-    "teleported": "Administrator sizi teleport etdi",
+    "teleported": "Teleport edildi",
     "item_given": "Administrator sizə əşya verdi",
     "logout": "Çıxış",
     "login_title": "İdarəçiliyə giriş",
@@ -916,7 +916,6 @@
     "unbanned": "Qadağa götürüldü",
     "tp_gold": "Teleport / qızıl",
     "teleport": "Teleport",
-    "teleported": "Teleport edildi",
     "give_gold": "Qızıl ver",
     "need_target_amount": "Hədəf və məbləğ seçin",
     "gold_given": "Qızıl verildi",
@@ -1429,7 +1428,8 @@
     "caucasus": "Qafqaz",
     "mesopotamia": "Mesopotamiya",
     "khorasan": "Xorasən",
-    "persian_gulf": "Fars körfəzi"
+    "persian_gulf": "Fars körfəzi",
+    "herat": "Herət"
   },
   "achievements": {
     "stats": "Açılıb: {done} / {total}",
@@ -1488,7 +1488,10 @@
     "khorasan_east": "Şərq",
     "persian_gulf_harbor": "Liman",
     "persian_gulf_waters": "Sular",
-    "persian_gulf_islands": "Adalar"
+    "persian_gulf_islands": "Adalar",
+    "herat_gates": "Herət qapıları",
+    "herat_city": "Herət şəhəri",
+    "herat_east": "Şərqi Herət"
   },
   "quest_type": {
     "main": "Əsas",

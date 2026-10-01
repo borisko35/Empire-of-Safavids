@@ -25,6 +25,7 @@ const REGION_INFO: Record<Region, { name: string; nameRu: string; minLevel: numb
   [Region.MESOPOTAMIA]: { name: 'Mesopotamia', nameRu: 'Месопотамия', minLevel: REGION_LEVEL_REQUIREMENTS.mesopotamia, description: 'Спорные земли между Сефевидами и Османами. Постоянные сражения.' },
   [Region.KHORASAN]: { name: 'Khorasan', nameRu: 'Хорасан', minLevel: REGION_LEVEL_REQUIREMENTS.khorasan, description: 'Восточные рубежи. Рейдовые данжи и мировые боссы.' },
   [Region.PERSIAN_GULF]: { name: 'Persian Gulf', nameRu: 'Персидский залив', minLevel: REGION_LEVEL_REQUIREMENTS.persian_gulf, description: 'Морская торговля и пиратские сражения. Эндгейм-контент.' },
+  [Region.HERAT]: { name: 'Herat', nameRu: 'Герат', minLevel: REGION_LEVEL_REQUIREMENTS.herat, description: 'Самый дальний регион за Хорасаном. Ворота, караваны и последний рубеж.' },
 };
 
 // GET /api/world/regions

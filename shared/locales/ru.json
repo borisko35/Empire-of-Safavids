@@ -836,7 +836,7 @@
   "admin": {
     "page_title": "Админ-панель — Empire of Safavids",
     "muted": "Вам назначено молчание",
-    "teleported": "Вас телепортировал администратор",
+    "teleported": "Телепортирован",
     "item_given": "Администратор выдал вам предмет",
     "logout": "Выйти",
     "login_title": "Вход для администрации",
@@ -916,7 +916,6 @@
     "unbanned": "Разбанен",
     "tp_gold": "Телепорт / золото",
     "teleport": "Телепорт",
-    "teleported": "Телепортирован",
     "give_gold": "Выдать золото",
     "need_target_amount": "Выберите цель и сумму",
     "gold_given": "Золото выдано",
@@ -1429,7 +1428,8 @@
     "caucasus": "Кавказ",
     "mesopotamia": "Месопотамия",
     "khorasan": "Хорасан",
-    "persian_gulf": "Персидский залив"
+    "persian_gulf": "Персидский залив",
+    "herat": "Герат"
   },
   "achievements": {
     "stats": "Разблокировано: {done} / {total}",
@@ -1488,7 +1488,10 @@
     "khorasan_east": "Восток",
     "persian_gulf_harbor": "Гавань",
     "persian_gulf_waters": "Воды",
-    "persian_gulf_islands": "Острова"
+    "persian_gulf_islands": "Острова",
+    "herat_gates": "Ворота Герата",
+    "herat_city": "Герат",
+    "herat_east": "Восточный Герат"
   },
   "quest_type": {
     "main": "Основной",

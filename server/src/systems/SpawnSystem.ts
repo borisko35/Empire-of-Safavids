@@ -109,9 +109,9 @@ const SPAWN_POINTS: SpawnPoint[] = [
   makePoint({ id: 'sp_khor_oas_lynx', monsterId: 'mob_oasis_lynx',    region: Region.KHORASAN, position: { x: 200,  y: 0, z: 780 }, maxCount: 3, respawnTime: 1500, weatherBonus: { fog: 1.4 } }),
   // Караван-сарай (75) наполнен боссом Арзхангом - зона не пустая.
   makePoint({ id: 'sp_khor_car_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 180,  y: 0, z: 870  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
-  makePoint({ id: 'sp_khor_eas_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 250,  y: 0, z: 980  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
+  makePoint({ id: 'sp_khor_eas_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 250,  y: 0, z: 980 }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
   // Симург - 90 уровень, и теперь действительно в Хорасане.
-  makePoint({ id: 'sp_khor_eas_simurgh', monsterId: 'world_boss_simurgh', region: Region.KHORASAN, position: { x: 0, y: 100, z: 1010 }, maxCount: 1, respawnTime: 604800, weatherBonus: {} }),
+  makePoint({ id: 'sp_khor_eas_simurgh', monsterId: 'world_boss_simurgh', region: Region.KHORASAN, position: { x: 0, y: 100, z: 1450 }, maxCount: 1, respawnTime: 604800, weatherBonus: {} }),
 
   // ─ Персидский залив (z -1100..-550, 80-90 уровень).
   // ОСТОРОЖНО, и это не опечатка: моря в мире НЕТ. В terrain.ts вода -
@@ -127,6 +127,10 @@ const SPAWN_POINTS: SpawnPoint[] = [
   // ИИ вытащил бы подводных монстров на берег, а они там зависли бы.
   makePoint({ id: 'sp_gulf_wat_reef',  monsterId: 'mob_gulf_reef_raider',    region: Region.PERSIAN_GULF, position: { x: -140, y: 0, z: -790 }, maxCount: 4, respawnTime: 900,  weatherBonus: { storm: 1.4 } }),
   makePoint({ id: 'sp_gulf_wat_lurk',  monsterId: 'mob_gulf_depth_lurker',   region: Region.PERSIAN_GULF, position: { x: 180,  y: 0, z: -840 }, maxCount: 2, respawnTime: 1500, weatherBonus: {} }),
+      // ── Герат: восьмой регион ────────────────────────────────────────
+      makePoint({ id: 'sp_herat_gate_watch', monsterId: 'mob_herat_gate_guard',  region: Region.HERAT, position: { x: -500, y: 0, z: 1900 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
+      makePoint({ id: 'sp_herat_road_ambush', monsterId: 'mob_herat_road_reaver', region: Region.HERAT, position: { x: -300, y: 0, z: 2450 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
+      makePoint({ id: 'sp_herat_dust_lord',  monsterId: 'mob_herat_dust_lord',   region: Region.HERAT, position: { x: -900, y: 0, z: 2850 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
   makePoint({ id: 'sp_gulf_wat_cub',   monsterId: 'mob_gulf_leviathan_cub', region: Region.PERSIAN_GULF, position: { x: -40,  y: 0, z: -760 }, maxCount: 1, respawnTime: 2400, weatherBonus: {} }),
   // Зона persian_gulf_waters (от 85) остаётся пустой: ей нужен залив, а
   // моря в мире нет. Это зафиксировано в spawnPlacement.test.ts как

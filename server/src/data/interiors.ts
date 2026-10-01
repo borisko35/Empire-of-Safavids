@@ -23,46 +23,55 @@ export interface InteriorDef {
   exitZ: number;
 }
 
-const ROOM_CZ = 2500;
+// Комнаты стоят ЗА краем мира, и это требование, а не украшение.
+//
+// Мир вырос: WORLD_HALF 1200 -> 3175, и карман, который раньше лежал за
+// краем (2500..2852), оказался внутри него. Там есть рельеф, зоны и спавны
+// монстров, и комната стояла бы посреди поля, а игрок, вошедший в здание на
+// улице, попадал бы в ту же точку, что и открытая земля вокруг. Сдвиг на
+// 1500 вернул комнаты далеко за край (4000..4352) и за кламп игрока
+// (WORLD_HALF - 30). Проверка «комнаты интерьеров действительно за границей
+// мира» это требование сторожит - и сработала, когда край разошёлся с миром.
+const ROOM_CZ = 4000;
 const ROOM_HALF = 16;
 
 export const INTERIORS: Record<string, InteriorDef> = {
   stable: {
-    id: 'stable', roomCx: 2500, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2500, spawnZ: 2505.5, doorX: 15.4, doorZ: -43.6, exitX: 14.4, exitZ: -47.5,
+    id: 'stable', roomCx: 4000, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4000, spawnZ: 4005.5, doorX: 15.4, doorZ: -43.6, exitX: 14.4, exitZ: -47.5,
   },
   barracks: {
-    id: 'barracks', roomCx: 2544, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2544, spawnZ: 2505.5, doorX: 70.0, doorZ: -36.4, exitX: 72.0, exitZ: -39.9,
+    id: 'barracks', roomCx: 4044, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4044, spawnZ: 4005.5, doorX: 70.0, doorZ: -36.4, exitX: 72.0, exitZ: -39.9,
   },
   workshop: {
-    id: 'workshop', roomCx: 2588, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2588, spawnZ: 2505.5, doorX: 101.7, doorZ: 1.4, exitX: 105.5, exitZ: 0.0,
+    id: 'workshop', roomCx: 4088, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4088, spawnZ: 4005.5, doorX: 101.7, doorZ: 1.4, exitX: 105.5, exitZ: 0.0,
   },
   tavern: {
-    id: 'tavern', roomCx: 2632, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2632, spawnZ: 2505.5, doorX: 101.7, doorZ: 50.6, exitX: 105.5, exitZ: 52.0,
+    id: 'tavern', roomCx: 4132, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4132, spawnZ: 4005.5, doorX: 101.7, doorZ: 50.6, exitX: 105.5, exitZ: 52.0,
   },
   observatory: {
-    id: 'observatory', roomCx: 2676, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2676, spawnZ: 2505.5, doorX: 58.6, doorZ: 93.7, exitX: 60.0, exitZ: 97.5,
+    id: 'observatory', roomCx: 4176, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4176, spawnZ: 4005.5, doorX: 58.6, doorZ: 93.7, exitX: 60.0, exitZ: 97.5,
   },
   science: {
-    id: 'science', roomCx: 2720, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2720, spawnZ: 2505.5, doorX: -31.2, doorZ: 56.4, exitX: -34.8, exitZ: 58.1,
+    id: 'science', roomCx: 4220, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4220, spawnZ: 4005.5, doorX: -31.2, doorZ: 56.4, exitX: -34.8, exitZ: 58.1,
   },
   // ── Новая инфраструктура ─────────────────────────────────────
   arena: {
-    id: 'arena', roomCx: 2764, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2764, spawnZ: 2505.5, doorX: -60.0, doorZ: -40.0, exitX: -62.0, exitZ: -44.0,
+    id: 'arena', roomCx: 4264, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4264, spawnZ: 4005.5, doorX: -60.0, doorZ: -40.0, exitX: -62.0, exitZ: -44.0,
   },
   auction_house: {
-    id: 'auction_house', roomCx: 2808, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2808, spawnZ: 2505.5, doorX: -100.0, doorZ: 10.0, exitX: -102.0, exitZ: 6.0,
+    id: 'auction_house', roomCx: 4308, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4308, spawnZ: 4005.5, doorX: -100.0, doorZ: 10.0, exitX: -102.0, exitZ: 6.0,
   },
   circus: {
-    id: 'circus', roomCx: 2852, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 2852, spawnZ: 2505.5, doorX: -50.0, doorZ: 50.0, exitX: -52.0, exitZ: 46.0,
+    id: 'circus', roomCx: 4352, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4352, spawnZ: 4005.5, doorX: -50.0, doorZ: 50.0, exitX: -52.0, exitZ: 46.0,
   },
 };
 

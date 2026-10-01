@@ -253,13 +253,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     // не сходив. Ловушка была замечена до того, как сработала.
     condition: { state: 'visited_tabriz', need: 1 } },
   { id: 'ach_explorer_all', title: 'Master of Maps', title_ru: 'Повелитель Карт',
-    description: 'Visit all 7 regions', description_ru: 'Посетить все 7 регионов',
+    // Восемь, а не семь: регионов теперь восемь. Порог и текст обязаны
+    // совпадать с настоящим списком, иначе достижение закрывается, не
+    // покрыв новую землю, - игрок обходит все семь старых и больше не
+    // получает награду за самое дальнее место в мире.
+    description: 'Visit all 8 regions', description_ru: 'Посетить все 8 регионов',
     category: 'exploration', icon: '🌍', reward_gold: 1000, reward_experience: 2000, reward_title: 'Странник Миров', hidden: false,
-    // Число 7 - это ровно те регионы, что перечислены в enum Region.
+    // Число 8 - это ровно те регионы, что перечислены в enum Region.
     // Оно зашито руками, и проверка сверяет его со списком: при появлении
-    // восьмого региона порог обязан измениться, иначе «все 7» останется
-    // достижимым, не покрывая новую землю.
-    condition: { state: 'regions_visited', need: 7 } },
+    // девятого региона порог обязан измениться снова, иначе «все 8»
+    // останется достижимым, не покрывая новую землю.
+    condition: { state: 'regions_visited', need: 8 } },
   { id: 'ach_dungeon_first', title: 'Dungeon Delver', title_ru: 'Исследователь Подземелий',
     description: 'Complete your first dungeon', description_ru: 'Пройти первое подземелье',
     category: 'exploration', icon: '🏰', reward_gold: 200, reward_experience: 400, hidden: false,
