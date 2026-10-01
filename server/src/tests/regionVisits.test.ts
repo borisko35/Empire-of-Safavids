@@ -18,6 +18,11 @@ import { ACHIEVEMENTS, isEarned, STATE_SOURCE } from '../services/AchievementSer
 const корень = join(__dirname, '..', '..', '..');
 const читать = (p: string): string => readFileSync(join(корень, p), 'utf-8');
 
+/** Падение с внятной причиной вместо невнятного false в deep equality. */
+function must(условие: unknown, причина: string): asserts условие {
+  if (!условие) throw new Error(причина);
+}
+
 /** Все регионы из enum Region - единственный их перечень в проекте. */
 function регионыИзКода(): string[] {
   const src = читать('server/src/types/game.types.ts');
@@ -85,10 +90,24 @@ describe('Тебриж считается по посещениям, а не п�
 
 describe('Посещение записывается, а не выдумывается', () => {
   it('отметка есть и при создании персонажа, и при путешествии', () => {
-    // Без отметки при создании «Посетить Тебриз» было бы недостижимо для тех,
-    // кто ни разу не путешествовал, хотя Тебриц - их стартовый город.
+    // Отметка при создании нужна, потому что стартовый регион - Исфахан, и
+    // без неё «посетить Исфахан» не засчитывалось бы новичку, который никуда
+    // не ходил. Это общий случай, а не частность Тебрица.
+    //
+    // ЧТО БЫЛО. Окно бралось фиксированной длиной в 1400 символов от
+    // INSERT. Стоило вставить в createCharacter ещё одну колонку с
+    // комментарием - и вызов recordRegionVisit выпал из окна, проверка
+    // упала, хотя вызов никуда не делся. Окно было произвольным числом,
+    // а не границей: так ломается сама идея проверки.
+    //
+    // Теперь окно - от INSERT до следующего метода. Это настоящая граница
+    // функции createCharacter, и добавление строк внутри неё её не сдвинет.
     const код = читать('server/src/services/CharacterService.ts');
-    const создание = код.slice(код.indexOf('INSERT INTO characters'), код.indexOf('INSERT INTO characters') + 1400);
+    const начало = код.indexOf('INSERT INTO characters');
+    const конец = код.indexOf('async updateRegion');
+    must(начало > 0, 'в CharacterService не найден INSERT INTO characters');
+    must(конец > начало, 'в CharacterService не найден async updateRegion после INSERT');
+    const создание = код.slice(начало, конец);
     const регион = код.slice(код.indexOf('async updateRegion'), код.indexOf('async updateZone'));
     expect({
       при_создании: /recordRegionVisit\(character\.id, character\.region\)/.test(создание),
@@ -152,8 +171,18 @@ describe('Таблица и добавление существующих', () =
   });
 
   it('миграций на добавление посещений ровно одна', () => {
+    // ЧТО БЫЛО. Фильтр искал слово region_visits по всему тексту миграции,
+    // включая комментарии. Стоило новой миграции упомянуть таблицу в
+    // комментарии - и проверка объявляла, что посещений добавляли дважды.
+    // Это ложное срабатывание: комментарий не создаёт таблицу.
+    //
+    // Теперь комментарии вырезаются, и считаются только настоящие
+    // обращения к таблице. Ловушка при этом остаётся: вторая миграция,
+    // которая её правда меняет, всё равно попадёт в список.
+    const безКомментариев = (текст: string): string => текст.replace(/--[^\n]*/g, ' ');
     const файлы = readdirSync(join(корень, 'database', 'migrations'))
-      .filter(f => f.endsWith('.sql') && /region_visits/i.test(читать(`database/migrations/${f}`)));
+      .filter(f => f.endsWith('.sql') && /region_visits/i.test(безКомментариев(читать(`database/migrations/${f}`))));
+    must(файлы.length > 0, 'не нашлось ни одной миграции, создающей таблицу посещений');
     expect({ файлы }).toEqual({ файлы: ['056_region_visits.sql'] });
   });
 });

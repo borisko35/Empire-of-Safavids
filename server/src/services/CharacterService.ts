@@ -80,6 +80,32 @@ export class CharacterService {
     const maxMana = 50 + stats.intelligence * 8;
     const maxStamina = 100 + stats.agility * 5;
 
+    // ЧТО БЫЛО. Точка старта и регион задавались двумя разными вещами:
+    // position = (0,0) - это Исфахан по REGION_SPAWNS, а region стоял
+    // Region.TABRIZ. Персонаж рождался на площади столицы, а сервер
+    // считал его в Тебризе, где требуется 20 уровень.
+    //
+    // Чем это оборачивалось. Персонаж 1-го уровня числился в регионе,
+    // в который нельзя попасть: требование уровня переставало быть
+    // затвором, потому что новичок рождался по ту сторону ворот.
+    // Отсюда же монстры, комнаты сокетов, чат и квесты ключились на
+    // Тебриц, а игрок стоял в Исфахане, и подпись в углу экрана врала.
+    // А recordRegionVisit сразу помечал Тебриз посещённым - «посетить
+    // Тебриз» засчитывалось, никуда не сходив.
+    //
+    // Комментарий в коде это оправдывал: мол, Тебриц - стартовый город.
+    // Но город, который построен и в который ставят спавн, - Исфахан.
+    // Это остался след от времени, когда столицу называли tabriz.
+    //
+    // ЧТО СДЕЛАНО. Точка, регион и зона берутся из ОДНОГО источника -
+    // якоря Исфахана в REGION_SPAWNS, а зона считается от той же точки
+    // функцией getZoneAt. Три поля не могут разойтись между собой: их
+    // негде вводить по отдельности.
+    const СТАРТОВЫЙ_РЕГИОН = Region.ISFAHAN;
+    const якорь = REGION_SPAWNS[СТАРТОВЫЙ_РЕГИОН];
+    const стартовая_позиция = { x: якорь.x, y: 0, z: якорь.z };
+    const стартовая_зона = getZoneAt(якорь.x, якорь.z);
+
     const character: Character = {
       id: uuidv4(),
       userId,
@@ -94,8 +120,13 @@ export class CharacterService {
       maxMana,
       stamina: maxStamina,
       maxStamina,
-      position: { x: 0, y: 0, z: 0 }, // Площадь возрождения у ворот Исфахана (суша, см. REGION_SPAWNS)
-      region: Region.TABRIZ,
+      position: стартовая_позиция,
+      region: СТАРТОВЫЙ_РЕГИОН,
+      // Зона пишется сразу, при создании. Раньше колонка zone вообще не
+      // попадала в INSERT и молча брала значение из умолчания базы, а
+      // имя региона в интерфейсе бралось из characters.region. Вместе
+      // это давало подпись «Тебриз» рядом с площадью Исфахана.
+      zone: стартовая_зона?.id,
       serverId,
       gold: 100,
       createdAt: new Date(),
@@ -105,8 +136,8 @@ export class CharacterService {
     await this.db.query(
       `INSERT INTO characters
         (id, user_id, name, class, level, experience, stats, hp, max_hp, base_max_hp,
-         mana, max_mana, stamina, max_stamina, position, region, server_id, gold, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+         mana, max_mana, stamina, max_stamina, position, region, zone, server_id, gold, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         character.id, character.userId, character.name, character.class,
         character.level, character.experience, JSON.stringify(character.stats),
@@ -117,14 +148,17 @@ export class CharacterService {
         character.maxHp,
         character.mana, character.maxMana,
         character.stamina, character.maxStamina, JSON.stringify(character.position),
-        character.region, character.serverId, character.gold, character.createdAt, character.updatedAt,
+        // 16 - region, 17 - zone. Зона вставлена ровно на своё место:
+        // при добавлении колонки в конец списка без сдвига плейсхолдеров
+        // значение zone молча легло бы в server_id.
+        character.region, character.zone ?? null,
+        character.serverId, character.gold, character.createdAt, character.updatedAt,
       ]
     );
 
-    // Стартовый регион считается посещённым. Персонаж стоит в нём, значит
-    // он там и был: иначе «Посетить Тебриз» оказалось бы недостижимым для
-    // тех, кто ещё ни разу не путешествовал, хотя Тебриц - их стартовый
-    // город.
+    // Стартовый регион считается посещённым: персонаж стоит в нём, значит
+    // он там и был. Иначе «посетить все семь регионов» было бы недостижимо
+    // для новичка - ему пришлось бы сходить в Исфахан, чтобы тот засчитался.
     await this.recordRegionVisit(character.id, character.region);
 
     // Приглашение друга засчитывается здесь, а не при регистрации:
