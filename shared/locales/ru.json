@@ -1433,12 +1433,12 @@
     "explorer": "Исследователь"
   },
   "zones": {
-    "tabriz_center": "Центр",
-    "tabriz_outskirts": "Окраины",
-    "tabriz_north": "Север",
-    "isfahan_bazaar": "Базар",
-    "isfahan_gates": "Ворота",
-    "isfahan_south": "Юг",
+    "isfahan_center": "Центр",
+    "isfahan_outskirts": "Окраины",
+    "isfahan_north": "Север",
+    "tabriz_bazaar": "Базар",
+    "tabriz_gates": "Ворота",
+    "tabriz_south": "Юг",
     "shiraz_gardens": "Сады",
     "shiraz_walls": "Стены",
     "shiraz_east": "Восток",

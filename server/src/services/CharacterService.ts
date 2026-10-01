@@ -4,6 +4,7 @@ import { Character, CharacterClass, CharacterStats, Region, ItemType, EquipmentB
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ITEMS_DATABASE } from '../data/items';
+import { REGION_SPAWNS, getZoneAt } from '../../../shared/constants';
 import { getBuffService, ITEM_BUFFS, type ActiveBuff } from './BuffService';
 import { ReferralService } from './ReferralService';
 import { logger } from '../utils/logger';
@@ -708,9 +709,36 @@ export class CharacterService {
 
   /** Сменить регион персонажа (путешествие). Возвращает обновлённого персонажа. */
   async updateRegion(characterId: string, region: Region): Promise<Character | null> {
+    // ЧТО БЫЛО. Метод менял ровно одну вещь - region, - и больше ничего.
+    // Путешествие меняло МЕТКУ, а персонаж оставался стоять на прежних
+    // координатах. Зона же считалась функцией координат (getZoneAt на
+    // каждом шаге), так что после поездки персонаж оказывался сразу в двух
+    // местах: region = khorasan в базе и zone = tabriz_north по старой точке.
+    // Оба поля хранились, оба показывались.
+    //
+    // Теперь регион и координаты меняются вместе: якорь региона из
+    // REGION_SPAWNS, зона считается от новой точки. Регион стал местом,
+    // а не подписью.
+    const якорь = REGION_SPAWNS[region];
+    if (!якорь) {
+      // Раньше такой случай проходил молча: UPDATE отрабатывал, игрок
+      // менял регион на тот, у которого нет ни якоря, ни зон, и оказывался
+      // посреди пустоты без спавнов. Теперь это ошибка, а не поломка.
+      logger.warn(`[Regions] путешествие без якоря: регион ${String(region)}`);
+      return null;
+    }
+    const позиция = { x: якорь.x, y: 0, z: якорь.z };
+    const зона = getZoneAt(якорь.x, якорь.z);
+
     const row = await this.db.queryOne<{ id: string }>(
-      'UPDATE characters SET region = $2, updated_at = NOW() WHERE id = $1 RETURNING id',
-      [characterId, region]
+      `UPDATE characters
+          SET region = $2,
+              position = $3,
+              zone = $4,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING id`,
+      [characterId, region, JSON.stringify(позиция), зона?.id ?? null]
     );
     if (!row) return null;
     // Отметка посещения: сменить регион и забыть об этом нельзя, иначе

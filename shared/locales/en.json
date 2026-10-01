@@ -1433,12 +1433,12 @@
     "explorer": "Explorer"
   },
   "zones": {
-    "tabriz_center": "Center",
-    "tabriz_outskirts": "Outskirts",
-    "tabriz_north": "North",
-    "isfahan_bazaar": "Bazaar",
-    "isfahan_gates": "Gates",
-    "isfahan_south": "South",
+    "isfahan_center": "Center",
+    "isfahan_outskirts": "Outskirts",
+    "isfahan_north": "North",
+    "tabriz_bazaar": "Bazaar",
+    "tabriz_gates": "Gates",
+    "tabriz_south": "South",
     "shiraz_gardens": "Gardens",
     "shiraz_walls": "Walls",
     "shiraz_east": "East",

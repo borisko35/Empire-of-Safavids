@@ -130,8 +130,11 @@ const REGION_NAMES: Record<string, string> = {
 };
 
 const ZONE_NAMES: Record<string, string> = {
-  tabriz_center: 'zones.tabriz_center', tabriz_outskirts: 'zones.tabriz_outskirts', tabriz_north: 'zones.tabriz_north',
-  isfahan_bazaar: 'zones.isfahan_bazaar', isfahan_gates: 'zones.isfahan_gates', isfahan_south: 'zones.isfahan_south',
+  // Столица - Исфахан, и полоса вокруг построенного города названа его
+  // именем. Раньше здесь стояло tabriz_*, хотя город был Исфаханом, и зона
+  // на экране называлась «Центр Тебриза» внутри Исфахана.
+  isfahan_center: 'zones.isfahan_center', isfahan_outskirts: 'zones.isfahan_outskirts', isfahan_north: 'zones.isfahan_north',
+  tabriz_bazaar: 'zones.tabriz_bazaar', tabriz_gates: 'zones.tabriz_gates', tabriz_south: 'zones.tabriz_south',
   shiraz_gardens: 'zones.shiraz_gardens', shiraz_walls: 'zones.shiraz_walls', shiraz_east: 'zones.shiraz_east',
   caucasus_pass: 'zones.caucasus_pass', caucasus_fortress: 'zones.caucasus_fortress', caucasus_peaks: 'zones.caucasus_peaks',
   mesopotamia_river: 'zones.mesopotamia_river', mesopotamia_ruins: 'zones.mesopotamia_ruins', mesopotamia_frontier: 'zones.mesopotamia_frontier',

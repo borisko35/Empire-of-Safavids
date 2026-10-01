@@ -1433,12 +1433,12 @@
     "explorer": "Kəşfiyatçı"
   },
   "zones": {
-    "tabriz_center": "Mərkəz",
-    "tabriz_outskirts": "Ətraf",
-    "tabriz_north": "Şimal",
-    "isfahan_bazaar": "Bazar",
-    "isfahan_gates": "Qapılar",
-    "isfahan_south": "Cənub",
+    "isfahan_center": "Mərkəz",
+    "isfahan_outskirts": "Ətraf",
+    "isfahan_north": "Şimal",
+    "tabriz_bazaar": "Bazar",
+    "tabriz_gates": "Qapılar",
+    "tabriz_south": "Cənub",
     "shiraz_gardens": "Bağlar",
     "shiraz_walls": "Divarlar",
     "shiraz_east": "Şərq",

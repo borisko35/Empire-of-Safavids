@@ -14,7 +14,7 @@ import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene'
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
 import { GATE, groundHeight, waterSurfaceY } from './game3d/terrain';
-import { STAMINA, GAME_VERSION, SOCKET_EVENTS, SERVER_EVENTS } from '../../../shared/constants';
+import { STAMINA, GAME_VERSION, SOCKET_EVENTS, SERVER_EVENTS, REGION_SPAWNS } from '../../../shared/constants';
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
@@ -73,11 +73,16 @@ let night = 0;
 let navDefs: QuestDef[] | null = null;
 let navTimer: ReturnType<typeof setInterval> | null = null;
 
-const REGION_ANCHORS: Record<string, { x: number; z: number }> = {
-  tabriz: { x: 34, z: 26 }, isfahan: { x: 34, z: 26 }, shiraz: { x: 90, z: -60 },
-  caucasus: { x: 60, z: 140 }, mesopotamia: { x: 200, z: 50 },
-  khorasan: { x: 150, z: 200 }, persian_gulf: { x: -60, z: -170 },
-};
+// Якоря регионов для стрелки навигатора.
+//
+// ЧТО БЫЛО. Таблица дублировала REGION_SPAWNS из shared/constants, и все
+// семь якорей стояли рядом со столицей: z от -170 до 200 при том, что
+// зоны Хорасана лежат на z 700..1050. Стрелка вела к цели за полкилометра
+// от зоны, к которой цель относилась.
+//
+// Теперь берётся из общего места, чтобы список нельзя было развести
+// снова, и каждая точка лежит ВНУТРИ своей полосы.
+const REGION_ANCHORS: Record<string, { x: number; z: number }> = REGION_SPAWNS;
 const EXPLORE_ANCHORS: Record<string, { x: number; z: number }> = {
   tabriz_gate: GATE, isfahan_bazaar: { x: 34, z: 34 }, ottoman_camp_isfahan: { x: 34, z: 26 },
 };

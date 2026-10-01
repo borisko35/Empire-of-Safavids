@@ -20,9 +20,19 @@ export function expRequiredForLevel(level: number): number {
 }
 
 // Регионы и их уровневые требования
+//
+// ЧТО БЫЛО. Первым по требованию стоял tabriz (уровень 1), и полоса
+// вокруг построенного города называлась tabriz_center. Но город-то один, и
+// он Исфахан: так его названы ISFAHAN в SpawnSystem, PVP_ZONES и якоря.
+// Получалось, что столица империи называлась Тебризом в зонах и Исфаханом
+// в коде, а якоря tabriz и isfahan указывали в ОДНУ точку - то есть
+// путешествие в Исфахан вообще никуда не перемещало.
+//
+// Теперь столица - Исфахан, ему и требование первого уровня. Тебриз занял
+// полосу, которую раньше занимал Исфахан, и требование 20.
 export const REGION_LEVEL_REQUIREMENTS: Record<string, number> = {
-  tabriz: 1,
-  isfahan: 20,
+  isfahan: 1,
+  tabriz: 20,
   shiraz: 40,
   caucasus: 50,
   mesopotamia: 60,
@@ -226,13 +236,17 @@ export function isValidServerId(id: string): boolean {
 export const SPAWN_PLAZA = { x: 0, z: 0 };
 
 export const REGION_SPAWNS: Record<string, { x: number; z: number }> = {
-  tabriz: { x: 0, z: 0 },
+  // Исфахан - столица, и его якорь обязан лежать ВНУТРИ его собственной
+  // зоны. Раньше isfahan и tabriz указывали в (0,0), то есть путешествие
+  // в Исфахан было полным no-op: и регион, и якорь совпадали со стартом.
   isfahan: { x: 0, z: 0 },
-  shiraz: { x: 90, z: -60 },
-  caucasus: { x: 60, z: 140 },
-  mesopotamia: { x: 200, z: 50 },
-  khorasan: { x: 150, z: 200 },
-  persian_gulf: { x: -60, z: -170 },
+  // Тебриз - внутри своей полосы (z -350..-150).
+  tabriz: { x: 0, z: -300 },
+  shiraz: { x: 90, z: 400 },
+  caucasus: { x: 60, z: 560 },
+  mesopotamia: { x: 200, z: -450 },
+  khorasan: { x: 150, z: 750 },
+  persian_gulf: { x: -60, z: -700 },
 };
 
 export function getRegionSpawn(region: string): { x: number; z: number } {
@@ -265,12 +279,17 @@ export interface Zone {
 }
 
 export const ZONES: Zone[] = [
-  { id: 'tabriz_center', region: 'tabriz', name: 'Tabriz Center', nameRu: 'Центр Тебриза', minLevel: 1, dangerLevel: 1, bounds: { x1: -1170, z1: -50, x2: 1170, z2: 33 }, description: 'Столица империи. Безопасная зона для новичков.' },
-  { id: 'tabriz_outskirts', region: 'tabriz', name: 'Tabriz Outskirts', nameRu: 'Окраины Тебриза', minLevel: 5, dangerLevel: 2, bounds: { x1: -1170, z1: 33, x2: 1170, z2: 117 }, description: 'Пригороды и фермы. Встречаются волки и бандиты.' },
-  { id: 'tabriz_north', region: 'tabriz', name: 'Northern Tabriz', nameRu: 'Северный Тебриз', minLevel: 10, dangerLevel: 3, bounds: { x1: -1170, z1: 117, x2: 1170, z2: 200 }, description: 'Холмы и руины. Опасные монстры.' },
-  { id: 'isfahan_bazaar', region: 'isfahan', name: 'Isfahan Bazaar', nameRu: 'Базар Исфахана', minLevel: 20, dangerLevel: 1, bounds: { x1: -1170, z1: -350, x2: 1170, z2: -283 }, description: 'Главный базар. Безопасно, много торговцев.' },
-  { id: 'isfahan_gates', region: 'isfahan', name: 'Isfahan Gates', nameRu: 'Ворота Исфахана', minLevel: 20, dangerLevel: 2, bounds: { x1: -1170, z1: -283, x2: 1170, z2: -217 }, description: 'Ворота и стены города.' },
-  { id: 'isfahan_south', region: 'isfahan', name: 'Southern Isfahan', nameRu: 'Южный Исфахан', minLevel: 25, dangerLevel: 3, bounds: { x1: -1170, z1: -217, x2: 1170, z2: -150 }, description: 'Южные дороги. Караваны и разбойники.' },
+  // ── Исфахан: столица, полоса вокруг ПОСТРОЕННОГО города (34, 26).
+  // ЧТО БЫЛО. Полоса называлась tabriz_center, хотя город Исфахан: то есть
+  // зона и код называли столицу разными именами. Полоса не двигалась, а
+  // только переименована - город и зоны теперь совпадают.
+  { id: 'isfahan_center', region: 'isfahan', name: 'Isfahan Center', nameRu: 'Центр Исфахана', minLevel: 1, dangerLevel: 1, bounds: { x1: -1170, z1: -50, x2: 1170, z2: 33 }, description: 'Столица империи. Безопасная зона для новичков.' },
+  { id: 'isfahan_outskirts', region: 'isfahan', name: 'Isfahan Outskirts', nameRu: 'Окраины Исфахана', minLevel: 5, dangerLevel: 2, bounds: { x1: -1170, z1: 33, x2: 1170, z2: 117 }, description: 'Пригороды и фермы. Встречаются волки и бандиты.' },
+  { id: 'isfahan_north', region: 'isfahan', name: 'Northern Isfahan', nameRu: 'Северный Исфахан', minLevel: 10, dangerLevel: 3, bounds: { x1: -1170, z1: 117, x2: 1170, z2: 200 }, description: 'Холмы и руины. Опасные монстры.' },
+  // ── Тебриз: полоса, которую раньше занимал Исфахан.
+  { id: 'tabriz_bazaar', region: 'tabriz', name: 'Tabriz Bazaar', nameRu: 'Базар Тебриза', minLevel: 20, dangerLevel: 1, bounds: { x1: -1170, z1: -350, x2: 1170, z2: -283 }, description: 'Главный базар Тебриза. Безопасно, много торговцев.' },
+  { id: 'tabriz_gates', region: 'tabriz', name: 'Tabriz Gates', nameRu: 'Ворота Тебриза', minLevel: 20, dangerLevel: 2, bounds: { x1: -1170, z1: -283, x2: 1170, z2: -217 }, description: 'Ворота и стены города.' },
+  { id: 'tabriz_south', region: 'tabriz', name: 'Southern Tabriz', nameRu: 'Южный Тебриз', minLevel: 25, dangerLevel: 3, bounds: { x1: -1170, z1: -217, x2: 1170, z2: -150 }, description: 'Южные дороги. Караваны и разбойники.' },
   { id: 'shiraz_gardens', region: 'shiraz', name: 'Shiraz Gardens', nameRu: 'Сады Шираза', minLevel: 40, dangerLevel: 1, bounds: { x1: -1170, z1: 350, x2: 1170, z2: 400 }, description: 'Сады и дворцы. Безопасно.' },
   { id: 'shiraz_walls', region: 'shiraz', name: 'Shiraz Walls', nameRu: 'Стены Шираза', minLevel: 40, dangerLevel: 2, bounds: { x1: -1170, z1: 400, x2: 1170, z2: 450 }, description: 'Городские стены и окрестности.' },
   { id: 'shiraz_east', region: 'shiraz', name: 'Eastern Shiraz', nameRu: 'Восточный Шираз', minLevel: 45, dangerLevel: 3, bounds: { x1: -1170, z1: 450, x2: 1170, z2: 500 }, description: 'Восточные пустыни. Опасные монстры.' },
