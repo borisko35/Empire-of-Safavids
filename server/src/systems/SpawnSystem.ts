@@ -35,37 +35,89 @@ function makePoint(p: Omit<SpawnPoint, 'counts' | 'lastDeath'>): SpawnPoint {
 const ISFAHAN = { x: 34, z: 26, radius: 116 };
 
 // Точки спавна (шаблон; экземпляры создаются на каждый активный шард)
+//
+// ЧТО БЫЛО. Точки лежали одной кучей у столицы (z от -230 до 230), а
+// объявляли при этом семь разных регионов. Из 20 точек только 4 стояли
+// в своём регионе; Великий Симург, квест про которого говорит «в горах
+// Хорасана», стоял в Тебризе (0, 0). Это молчало: монстр появлялся,
+// объявлялся в канал своего региона и стоял за 600 метров от игроков
+// этого региона.
+//
+// ХУЖЕ. Регион читался в ДВУХ местах, и это были разные поля:
+// объявление спавна шло по sp.region (регион точки), а ИИ искал игроков
+// по ctx.definition.region (регион МОНСТРА). У mob_bandit_scout регион
+// объявлен TABRIZ, а спавнился он в точке, объявленной SHIRAZ. То есть
+// Ширазу показывали «вот монстр», а бить этот монстр шёл в Тебриз:
+// видно одному, достаётся другому. Ни то ни другое не падало.
+//
+// Теперь: точка стоит в зоне своего региона, регион точки совпадает с
+// регионом монстра, и обе вещи проверяются тестом.
 const SPAWN_POINTS: SpawnPoint[] = [
-  // ─ Тебриз
-  makePoint({ id: 'sp_tabriz_01', monsterId: 'mob_bandit_scout',   region: Region.TABRIZ,      position: { x: 143, y: 0, z: 115 }, maxCount: 5, respawnTime: 60,   weatherBonus: {} }),
-  makePoint({ id: 'sp_tabriz_02', monsterId: 'mob_bandit_warrior', region: Region.TABRIZ,      position: { x: -80, y: 0, z: 120 }, maxCount: 3, respawnTime: 90,   weatherBonus: { fog: 1.5 } }),
-  makePoint({ id: 'sp_tabriz_scorp', monsterId: 'mob_desert_scorpion', region: Region.TABRIZ,   position: { x: 220, y: 0, z: 70  }, maxCount: 4, respawnTime: 45,   weatherBonus: { sandstorm: 2.0 } }),
-  makePoint({ id: 'sp_tabriz_wolf',  monsterId: 'mob_wolf',         region: Region.TABRIZ,      position: { x: -90, y: 0, z: 130 }, maxCount: 3, respawnTime: 60,   weatherBonus: { fog: 1.5 } }),
-  // ─ Озеро у истоков (глубокая вода: центр -420,-160, радиус 170)
-  // Подводные существа стоят точно в воде — иначе ИИ не смог бы их
-  // удержать в воде, и они «зависали» бы на берегу.
-  makePoint({ id: 'sp_lake_piranha',  monsterId: 'mob_lake_piranha',          region: Region.TABRIZ, position: { x: -420, y: 0, z: -100 }, maxCount: 3, respawnTime: 40,  weatherBonus: {} }),
-  makePoint({ id: 'sp_lake_sturgeon', monsterId: 'mob_lake_sturgeon_horror', region: Region.TABRIZ, position: { x: -500, y: 0, z: -200 }, maxCount: 2, respawnTime: 75,  weatherBonus: { fog: 1.4 } }),
-  makePoint({ id: 'sp_lake_ghost',    monsterId: 'mob_lake_ghost_fish',       region: Region.TABRIZ, position: { x: -350, y: 0, z: -230 }, maxCount: 1, respawnTime: 150, weatherBonus: { storm: 1.6 } }),
-  makePoint({ id: 'sp_lake_leviathan', monsterId: 'mob_lake_leviathan',       region: Region.TABRIZ, position: { x: -430, y: 0, z: -190 }, maxCount: 1, respawnTime: 900, weatherBonus: {} }),
-  // ─ Шираз
-  makePoint({ id: 'sp_shir_01',   monsterId: 'mob_bandit_scout',   region: Region.SHIRAZ,      position: { x: 110, y: 0, z: -91 }, maxCount: 4, respawnTime: 75,   weatherBonus: {} }),
-  makePoint({ id: 'sp_shir_02',   monsterId: 'mob_fog_assassin',   region: Region.SHIRAZ,      position: { x: -110, y: 0, z: -90 }, maxCount: 2, respawnTime: 240,  weatherBonus: { fog: 2.0 } }),
-  // ─ Кавказ
-  makePoint({ id: 'sp_cauc_01',   monsterId: 'mob_mongol_raider',  region: Region.CAUCASUS,    position: { x: 66,  y: 0, z: 167 }, maxCount: 4, respawnTime: 120,  weatherBonus: { snow: 1.4 } }),
-  makePoint({ id: 'sp_cauc_02',   monsterId: 'mob_bandit_warrior', region: Region.CAUCASUS,    position: { x: -140, y: 0, z: 160 }, maxCount: 3, respawnTime: 150,  weatherBonus: {} }),
-  // ─ Месопотамия
-  makePoint({ id: 'sp_meso_01',   monsterId: 'mob_ottoman_janissary', region: Region.MESOPOTAMIA, position: { x: 200, y: 0, z: 50  }, maxCount: 4, respawnTime: 300,  weatherBonus: { sandstorm: 1.3 } }),
-  // ─ Хорасан
-  makePoint({ id: 'sp_khor_01',   monsterId: 'mob_mongol_raider',    region: Region.KHORASAN,    position: { x: -150, y: 0, z: 200 }, maxCount: 3, respawnTime: 600,  weatherBonus: {} }),
-  makePoint({ id: 'sp_khor_02',   monsterId: 'mob_div_fire',         region: Region.KHORASAN,    position: { x: 300, y: 0, z: -100 }, maxCount: 2, respawnTime: 1800, weatherBonus: { storm: 2.0 } }),
-  makePoint({ id: 'sp_khor_03',   monsterId: 'mob_sand_div',         region: Region.KHORASAN,    position: { x: 180, y: 0, z: 230 }, maxCount: 2, respawnTime: 900,  weatherBonus: { sandstorm: 3.0 } }),
-  // ─ Персидский залив
-  makePoint({ id: 'sp_gulf_01',   monsterId: 'mob_ottoman_janissary', region: Region.PERSIAN_GULF, position: { x: -60, y: 0, z: -170 }, maxCount: 4, respawnTime: 180,  weatherBonus: {} }),
-  makePoint({ id: 'sp_gulf_02',   monsterId: 'mob_bandit_warrior',    region: Region.PERSIAN_GULF, position: { x: 140, y: 0, z: -190 }, maxCount: 3, respawnTime: 150,  weatherBonus: { storm: 1.6 } }),
-  // ─ Мировые боссы
-  makePoint({ id: 'sp_wb_simurgh', monsterId: 'world_boss_simurgh',  region: Region.KHORASAN,    position: { x: 0, y: 100, z: 0 },   maxCount: 1, respawnTime: 604800, weatherBonus: {} }),
-  makePoint({ id: 'sp_wb_rustam',  monsterId: 'world_boss_rustam_reborn', region: Region.PERSIAN_GULF, position: { x: 40, y: 0, z: -230 }, maxCount: 1, respawnTime: 1209600, weatherBonus: {} }),
+  // ─ Исфахан (столица). Внутри стен не спавним: точки вынесены за
+  // ISFAHAN.radius + 15, и spawnMonster дополнительно отсекает их.
+  // isfahan_center (z -50..33) - безопасная зона, поэтому монстры стоят
+  // в outskirts (33..117) и north (117..200), как и зоны по уровню:
+  // тут 3-8 уровень.
+  makePoint({ id: 'sp_isf_out_01',  monsterId: 'mob_bandit_scout',      region: Region.ISFAHAN, position: { x: 280,  y: 0, z: 60  }, maxCount: 5, respawnTime: 60,  weatherBonus: {} }),
+  makePoint({ id: 'sp_isf_out_02',  monsterId: 'mob_desert_scorpion', region: Region.ISFAHAN, position: { x: -380, y: 0, z: 75  }, maxCount: 4, respawnTime: 45,  weatherBonus: { sandstorm: 2.0 } }),
+  makePoint({ id: 'sp_isf_out_03',  monsterId: 'mob_road_bandit',     region: Region.ISFAHAN, position: { x: 350,  y: 0, z: 105 }, maxCount: 4, respawnTime: 75,  weatherBonus: {} }),
+  makePoint({ id: 'sp_isf_nth_01',  monsterId: 'mob_wolf',            region: Region.ISFAHAN, position: { x: 200,  y: 0, z: 150 }, maxCount: 3, respawnTime: 60,  weatherBonus: { fog: 1.5 } }),
+  makePoint({ id: 'sp_isf_nth_02',  monsterId: 'mob_bandit_scout',    region: Region.ISFAHAN, position: { x: -300, y: 0, z: 160 }, maxCount: 5, respawnTime: 60,  weatherBonus: {} }),
+  makePoint({ id: 'sp_isf_nth_03',  monsterId: 'mob_bandit_warrior',  region: Region.ISFAHAN, position: { x: 150,  y: 0, z: 190 }, maxCount: 3, respawnTime: 90,  weatherBonus: { fog: 1.5 } }),
+  makePoint({ id: 'sp_isf_nth_04',  monsterId: 'mob_wolf',            region: Region.ISFAHAN, position: { x: -330, y: 0, z: 195 }, maxCount: 3, respawnTime: 60,  weatherBonus: {} }),
+
+  // ─ Тебриз (z -350..-150, 20-25 уровень). Озеро на (-420,-160) r=170
+  // физически лежит в этой полосе, поэтому подводные существа стоят
+  // внутри LAKE - иначе ИИ не удержит их в воде и они «зависнут» на
+  // берегу. Сухопутные точки от lake держатся подальше: радиус 170.
+  makePoint({ id: 'sp_tab_baz_rain', monsterId: 'mob_rain_spirit',     region: Region.TABRIZ, position: { x: -100, y: 0, z: -320 }, maxCount: 3, respawnTime: 120, weatherBonus: { rain: 2.0 } }),
+  makePoint({ id: 'sp_lake_piranha',  monsterId: 'mob_lake_piranha',          region: Region.TABRIZ, position: { x: -420, y: 0, z: -300 }, maxCount: 3, respawnTime: 40,  weatherBonus: {} }),
+  makePoint({ id: 'sp_lake_sturgeon', monsterId: 'mob_lake_sturgeon_horror', region: Region.TABRIZ, position: { x: -480, y: 0, z: -250 }, maxCount: 2, respawnTime: 75,  weatherBonus: { fog: 1.4 } }),
+  makePoint({ id: 'sp_tab_gate_king',  monsterId: 'boss_bandit_king',          region: Region.TABRIZ, position: { x: 60,   y: 0, z: -250 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
+  makePoint({ id: 'sp_tab_gate_acol',  monsterId: 'mob_assassin_acolyte',      region: Region.TABRIZ, position: { x: -150, y: 0, z: -240 }, maxCount: 4, respawnTime: 120, weatherBonus: { fog: 1.3 } }),
+  makePoint({ id: 'sp_lake_ghost',    monsterId: 'mob_lake_ghost_fish',       region: Region.TABRIZ, position: { x: -380, y: 0, z: -200 }, maxCount: 1, respawnTime: 150, weatherBonus: { storm: 1.6 } }),
+  makePoint({ id: 'sp_lake_leviathan', monsterId: 'mob_lake_leviathan',       region: Region.TABRIZ, position: { x: -450, y: 0, z: -180 }, maxCount: 1, respawnTime: 900, weatherBonus: {} }),
+  makePoint({ id: 'sp_tab_sou_elem',  monsterId: 'mob_sand_elemental',       region: Region.TABRIZ, position: { x: 120,  y: 0, z: -170 }, maxCount: 3, respawnTime: 240, weatherBonus: { sandstorm: 2.0 } }),
+
+  // ─ Шираз (z 350..500, 40-45 уровень). Монстры 35-45.
+  // ─ Шираз (z 350..500, 40-45 уровень). Джинн и янычар - 35 уровня,
+  // разрыв с зоной от 40 равен 5.
+  makePoint({ id: 'sp_shir_gar_dji', monsterId: 'mob_storm_djinn',     region: Region.SHIRAZ, position: { x: -60,  y: 0, z: 380 }, maxCount: 3, respawnTime: 180, weatherBonus: { storm: 2.0 } }),
+  makePoint({ id: 'sp_shir_gar_01',  monsterId: 'mob_fog_assassin',    region: Region.SHIRAZ, position: { x: 80,   y: 0, z: 395 }, maxCount: 2, respawnTime: 240, weatherBonus: { fog: 2.0 } }),
+  makePoint({ id: 'sp_shir_wal_01',  monsterId: 'mob_undead_guardian', region: Region.SHIRAZ, position: { x: -120, y: 0, z: 425 }, maxCount: 3, respawnTime: 300, weatherBonus: {} }),
+  makePoint({ id: 'sp_shir_wal_jan', monsterId: 'mob_ottoman_janissary', region: Region.SHIRAZ, position: { x: 40, y: 0, z: 440 }, maxCount: 4, respawnTime: 300, weatherBonus: { sandstorm: 1.3 } }),
+  makePoint({ id: 'sp_shir_eas_01',  monsterId: 'mob_fog_assassin',    region: Region.SHIRAZ, position: { x: 150,  y: 0, z: 470 }, maxCount: 2, respawnTime: 240, weatherBonus: { fog: 2.0 } }),
+  makePoint({ id: 'sp_shir_eas_02',  monsterId: 'mob_undead_guardian', region: Region.SHIRAZ, position: { x: -60,  y: 0, z: 490 }, maxCount: 3, respawnTime: 300, weatherBonus: {} }),
+
+  // ─ Кавказ (z 500..700, 50-60 уровень). Монстры 55 уровня: разрыв
+  // с зоной от 60 равен 5.
+  makePoint({ id: 'sp_cauc_pas_div', monsterId: 'mob_sand_div',        region: Region.CAUCASUS, position: { x: -150, y: 0, z: 530 }, maxCount: 3, respawnTime: 600, weatherBonus: { sandstorm: 2.0 } }),
+  makePoint({ id: 'sp_cauc_pas_mon', monsterId: 'mob_mongol_raider',   region: Region.CAUCASUS, position: { x: 200,  y: 0, z: 545 }, maxCount: 3, respawnTime: 600, weatherBonus: { snow: 1.4 } }),
+  makePoint({ id: 'sp_cauc_for_01',  monsterId: 'mob_sand_div',        region: Region.CAUCASUS, position: { x: 150,  y: 0, z: 600 }, maxCount: 3, respawnTime: 600, weatherBonus: { storm: 1.6 } }),
+  makePoint({ id: 'sp_cauc_pek_01',  monsterId: 'mob_mongol_raider',   region: Region.CAUCASUS, position: { x: 60,   y: 0, z: 660 }, maxCount: 3, respawnTime: 600, weatherBonus: { snow: 1.6 } }),
+
+  // ─ Месопотамия (z -550..-350, 60-70 уровень). Огненный див - 65.
+  // Русло RIVER_A идёт по x примерно -350..-412, точки от него отведены.
+  makePoint({ id: 'sp_meso_riv_01', monsterId: 'mob_div_fire',          region: Region.MESOPOTAMIA, position: { x: 140,  y: 0, z: -515 }, maxCount: 3, respawnTime: 1800, weatherBonus: { storm: 2.0 } }),
+  makePoint({ id: 'sp_meso_run_01', monsterId: 'mob_div_fire',          region: Region.MESOPOTAMIA, position: { x: -80,  y: 0, z: -450 }, maxCount: 3, respawnTime: 1800, weatherBonus: { storm: 2.0 } }),
+  makePoint({ id: 'sp_meso_fro_pasha', monsterId: 'boss_ottoman_pasha',  region: Region.MESOPOTAMIA, position: { x: 200,  y: 0, z: -380 }, maxCount: 1, respawnTime: 7200, weatherBonus: {} }),
+
+  // ─ Хорасан (z 700..1050, 70-80 уровень). Обычных монстров 70-80
+  // уровня в базе нет вообще, поэтому oasis (70) и caravanserai (75)
+  // стоят пустыми - это зафиксировано в проверке как известная дыра,
+  // а не замаскировано слабым монстром.
+  makePoint({ id: 'sp_khor_car_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 180,  y: 0, z: 870  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
+  makePoint({ id: 'sp_khor_eas_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 250,  y: 0, z: 980  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
+  // Симург - 90 уровень, и теперь действительно в Хорасане.
+  makePoint({ id: 'sp_khor_eas_simurgh', monsterId: 'world_boss_simurgh', region: Region.KHORASAN, position: { x: 0, y: 100, z: 1010 }, maxCount: 1, respawnTime: 604800, weatherBonus: {} }),
+
+  // ─ Персидский залив (z -1100..-550, 80-90 уровень).
+  // ОСТОРОЖНО, и это не опечатка: моря в мире НЕТ. В terrain.ts вода -
+  // только LAKE (-420,-160), POND и русла RIVER_A/RIVER_B. Зона
+  // «Залив — воды» стоит на суше. Монстр залива поэтому наземный, и
+  // поставить его в воду нельзя: он там утонет (или будет стоять в
+  // воздухе над сушей).
+  makePoint({ id: 'sp_gulf_isl_rustam', monsterId: 'world_boss_rustam_reborn', region: Region.PERSIAN_GULF, position: { x: 40, y: 0, z: -620 }, maxCount: 1, respawnTime: 1209600, weatherBonus: {} }),
 ];
 
 export class SpawnSystem {
