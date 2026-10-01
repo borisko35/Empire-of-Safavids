@@ -149,8 +149,24 @@ export function xsollaCountry(country: string | null | undefined): string | null
   return код.toUpperCase();
 }
 
+/**
+ * Адрес игрока для заголовка X-User-Ip.
+ *
+ * Проверка не для красоты: значение уходит в HTTP-заголовок, а перевод
+ * строки в заголовке ломает запрос целиком и роняет весь платёж. Поэтому
+ * пропускаем только то, что состоит из hex-символов и точек, - этого
+ * хватает и для IPv4, и для IPv6, и не даёт проскочить ничего управляющего.
+ */
+export function xsollaUserIp(ip: string | null | undefined): string | null {
+  if (typeof ip !== 'string') return null;
+  const значение = непустое(ip);
+  if (значение === null) return null;
+  if (!/^[0-9a-fA-F:.]{2,45}$/.test(значение)) return null;
+  return значение;
+}
+
 export interface XsollaTokenInput {
-  /** Наш paymentId: уходит в settings.external_id и связывает вебхук с записью. */
+  /** Наш paymentId: уходит в content позиции заказа и связывает вебхук с записью. */
   paymentId: string;
   /** Наш users.id: Xsolla будет присылать его в user_validation. */
   userId: string;
@@ -166,6 +182,13 @@ export interface XsollaTokenInput {
   email?: string | null;
   /** Страна игрока: по ней Xsolla выбирает валюту. */
   country?: string | null;
+  /**
+   * Адрес игрока: Xsolla берёт страну из него, если country не передан.
+   *
+   * Ровно то, о чём говорит её 422: «user.country.value or the header
+   * X-User-Ip must be specified». Адрес у нас есть всегда - это req.ip.
+   */
+  userIp?: string | null;
   /** Язык витрины. */
   language?: string | null;
 }
@@ -202,18 +225,20 @@ export function buildXsollaTokenRequest(
   if (typeof input.returnUrl !== 'string' || !/^https?:\/\//.test(input.returnUrl)) {
     throw new Error('return_url должен быть http(s)-адресом');
   }
-  // Страна или IP обязательны: по ним Xsolla определяет валюту и набор
-  // способов оплаты. Без неё витрина откроется в валюте по умолчанию, и
-  // игрок из Казахстана увидит цену не в тенге.
+  // Страна НЕ обязательна, вопреки тому, что написано было здесь раньше.
+  // Проверено на живых ответах Xsolla: запрос без country приходит с
+  //   422, errorCode 1102: «The parameter user.country.value or the header
+  //   X-User-Ip must be specified»
+  // То есть Xsolla требует страну ЛИБО адрес, и адрес для неё равноценен.
+  // Прежний код требовал именно страну и падал сам, не доходя до Xsolla:
+  // в игре страну игрока взять неоткуда, а заголовка x-solla-country в
+  // обычном запросе не бывает. Из-за этого каждый платёж упирался в
+  // «не удалось открыть страницу оплаты» при заведомо рабочих ключах.
   const country = xsollaCountry(input.country);
-  if (country === null) {
-    throw new Error('country обязателен: без него валюта не определяется');
+  const user: Record<string, unknown> = { id: { value: input.userId } };
+  if (country !== null) {
+    user.country = { value: country };
   }
-
-  const user: Record<string, unknown> = {
-    id: { value: input.userId },
-    country: { value: country },
-  };
   const почта = xsollaEmail(input.email);
   if (почта !== null) {
     // allow_modify не передаём: переданный адрес витрина не даёт менять, и
@@ -224,9 +249,8 @@ export function buildXsollaTokenRequest(
   const settings: Record<string, unknown> = {
     // Число, не строка. Строка даёт 422.
     project_id: config.projectId,
-    // Связь с нашей записью. По нему вебхук order_paid указывает, какой
-    // платёж начислять.
-    external_id: input.paymentId,
+    // ВАЖНО: settings.external_id здесь БЫЛ и PayStation его не принимает.
+    // См. purchase.items[].content ниже - наш paymentId едет туда.
     return_url: input.returnUrl,
     // Редиректы настроены так же, как в кабинете: автоматического нет,
     // игрок уходит кнопкой «Вернуться в игру» после успешной оплаты.
@@ -255,7 +279,26 @@ export function buildXsollaTokenRequest(
 
   const body: Record<string, unknown> = {
     user,
-    purchase: { items: [{ sku: input.sku, quantity: input.quantity }] },
+    purchase: {
+      items: [
+        {
+          sku: input.sku,
+          quantity: input.quantity,
+          // Наш paymentId едет ЗДЕСЬ, а не в settings.external_id.
+          //
+          // Проверено на живых ответах Xsolla, методом деления запроса на
+          // шаги. settings.external_id с ЛЮБЫМ строковым значением (UUID,
+          // число строкой, 'abc') роняет PayStation:
+          //   422, errorCode 2000: «Exception with PayStation service»
+          // Числом он тоже не проходит, но с другой ошибкой (1102), то есть
+          // поле Xsolla знает, а PayStation ломается на самом значении.
+          // Поле content у позиции заказа такого отказа не даёт: 201 и
+          // токен. Это единственное найденное место, куда Xsolla берёт наш
+          // идентификатор и отдаёт его потом в заказе.
+          content: { external_id: input.paymentId },
+        },
+      ],
+    },
     settings,
   };
   // Флаг песочницы на верхнем уровне, а не в settings. Отдельное поле.

@@ -641,6 +641,12 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
               // Xsolla не определяет валюту и покажет цену не в той, а
               // поле country формально обязательное - витрина не откроется.
               country: paymentCountry(req),
+              // Страну знаем не всегда, а Xsolla просит страну ЛИБО адрес.
+              // req.ip - это ровно тот адрес, с которого пришёл запрос, и он
+              // есть всегда. Без него запрос уходил без страны и получал
+              // 422 «user.country.value or the header X-User-Ip must be
+              // specified» - витрина не открывалась.
+              userIp: req.ip,
               language: 'ru',
             }, process.env);
             checkoutUrl = invoice.checkoutUrl;
@@ -655,6 +661,15 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
         }
       } else {
         providerError = 'unknown_provider';
+      }
+
+      // ПОЧЕМУ ЛОГ. providerError уходит клиенту только как «не удалось
+      // открыть страницу оплаты», и по логам было не видно, ЧТО именно сломалось:
+      // в журнале оставался только 201 без тела. Из-за этой слепой зоны поиск
+      // причины занял несколько заходов. Теперь причина пишется в лог всегда,
+      // когда счёт не создан, - молча пропадать ей нельзя.
+      if (providerError) {
+        logger.error(`[Payments] ${provider} nedal schet dlya ${payment.id}: ${providerError}`);
       }
 
       return res.status(201).json({

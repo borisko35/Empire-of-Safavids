@@ -183,6 +183,58 @@ describe('Xsolla: тело заказа', () => {
       'заказ без идентификаторов разобран как наш');
     must(parseXsollaOrder({ notification_type: 'order_paid' }) === null, 'тело без order разобрано как заказ');
   });
+
+  it('наш paymentId читается из content позиции заказа', () => {
+    // ГЛАВНОЕ МЕСТО ПОИСКА. Наш paymentId кладётся в content позиции при
+    // создании счёта, потому что settings.external_id PayStation не принимает:
+    // 422 errorCode 2000 на любое строковое значение, проверено вживую. Если
+    // разбор перестанет смотреть в content, оплаченный заказ перестанет
+    // находиться, и azens не начислятся - при полностью рабочей витрине.
+    //
+    // Проверяются оба места: items на верхнем уровне тела (так разбираются
+    // товары) и items внутри order (структура order_paid может отличаться).
+    const сверху = разобратьЗаказ({
+      notification_type: 'order_paid',
+      items: [{ sku: 'eos.azens.rub_m', quantity: 1300, content: { external_id: PAYMENT_ID } }],
+      order: { id: 1 },
+    });
+    must(сверху.paymentId === PAYMENT_ID, 'paymentId не прочитан из content на верхнем уровне');
+
+    const изЗаказа = разобратьЗаказ({
+      notification_type: 'order_paid',
+      order: {
+        id: 1,
+        items: [{ sku: 'eos.azens.rub_m', quantity: 1300, content: { external_id: PAYMENT_ID } }],
+      },
+    });
+    must(изЗаказа.paymentId === PAYMENT_ID, 'paymentId не прочитан из content внутри order');
+
+    // Чужое значение в content - не наше: начислять нельзя.
+    const чужое = разобратьЗаказ({
+      notification_type: 'order_paid',
+      items: [{ sku: 'eos.azens.rub_m', quantity: 1300, content: { external_id: 42 } }],
+      order: { id: 1 },
+    });
+    must(чужое.paymentId === null, 'число из content принято за наш paymentId');
+
+    // Мусор в content не должен ронять разбор: без него заказ просто без
+    // нашего идентификатора, а не 500.
+    const мусор = разобратьЗаказ({
+      notification_type: 'order_paid',
+      items: [null, 'не объект', { quantity: 1 }, { content: 'не объект' }, { content: { external_id: {} } }],
+      order: { id: 1 },
+    });
+    must(мусор.paymentId === null, 'мусор в content дал наш paymentId');
+
+    // Наш UUID выигрывает у чужого числа, даже если число стоит в invoice_id:
+    // перебор начинается с content, где мы кладём идентификатор сами.
+    const приоритет = разобратьЗаказ({
+      notification_type: 'order_paid',
+      items: [{ sku: 'eos.azens.rub_m', quantity: 1300, content: { external_id: PAYMENT_ID } }],
+      order: { id: 1, invoice_id: '1' },
+    });
+    must(приоритет.paymentId === PAYMENT_ID, 'invoice_id перебил наш content.external_id');
+  });
 });
 
 describe('Xsolla: суммы', () => {

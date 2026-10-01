@@ -7,6 +7,7 @@ import {
   xsollaSku,
   xsollaEmail,
   xsollaCountry,
+  xsollaUserIp,
   buildXsollaTokenRequest,
   xsollaAuthHeader,
   xsollaCheckoutUrl,
@@ -146,22 +147,50 @@ describe('Xsolla: каталог и почта', () => {
     must(xsollaEmail('igrok@example.com') === 'igrok@example.com', 'настоящая почта потерялась');
   });
 
-  it('страна обязательна и приводится к верхнему регистру', () => {
-    // Без страны Xsolla не определяет валюту: игрок из Казахстана увидит
-    // цену не в тенге. А поле формально обязательное.
+  it('страна НЕ обязательна: Xsolla берёт её из адреса', () => {
+    // ЧТО БЫЛО. Тест утверждал, что без страны запрос не собирается, и сам
+    // требовал падения. Это было написано по документации и оказалось неправдой
+    // на живых ответах: Xsolla отвечает
+    //   422 errorCode 1102: «The parameter user.country.value OR THE HEADER
+    //   X-User-Ip must be specified»
+    // То есть страна не самоцель, а адрес для неё равноценен. Код требовал
+    // именно страну, падал сам, не доходя до Xsolla, и витрина не открывалась
+    // ни при каких обстоятельствах - а заголовка x-solla-country в обычном
+    // запросе из игры не бывает.
     must(xsollaCountry('ru') === 'RU', 'страна не приведена к верхнему регистру');
     must(xsollaCountry('kz') === 'KZ', 'страна kz не приведена');
     must(xsollaCountry('RUS') === null, 'трёхбуквенный код принят');
     must(xsollaCountry('r') === null, 'однобуквенный код принят');
     must(xsollaCountry(null) === null, 'null-страна не отброшена');
 
+    // Без страны запрос собирается, а узел country просто не появляется.
     let упало = false;
+    let безСтраны: ReturnType<typeof buildXsollaTokenRequest> | null = null;
     try {
-      buildXsollaTokenRequest({ ...ВХОД, country: null }, КОНФИГ);
+      безСтраны = buildXsollaTokenRequest({ ...ВХОД, country: null }, КОНФИГ);
     } catch {
       упало = true;
     }
-    must(упало, 'запрос собрался без страны');
+    must(упало === false, 'запрос без страны всё ещё падает - Xsolla её не требует');
+    must(безСтраны !== null, 'запрос без страны не собран вовсе');
+    const пользователь = запись((безСтраны as ReturnType<typeof buildXsollaTokenRequest>).body.user);
+    must(пользователь !== null && пользователь.country === undefined,
+      'country попал в запрос, хотя страна не задана');
+  });
+
+  it('адрес для X-User-Ip пропускает только похожее на IP', () => {
+    // Значение уходит в HTTP-заголовок, а перевод строки в заголовке ломает
+    // запрос целиком. Поэтому мусор и управляющие символы не проходят.
+    must(xsollaUserIp('94.20.42.49') === '94.20.42.49', 'обычный IPv4 не прошёл');
+    must(xsollaUserIp('2001:db8::1') === '2001:db8::1', 'IPv6 не прошёл');
+    must(xsollaUserIp('  94.20.42.49  ') === '94.20.42.49', 'пробелы не срезаны');
+    must(xsollaUserIp(null) === null, 'null-адрес не отброшен');
+    must(xsollaUserIp('') === null, 'пустой адрес не отброшен');
+    must(xsollaUserIp('   ') === null, 'из одних пробелов адрес прошёл');
+    // Главное: перевод строки не должен пройти.
+    must(xsollaUserIp('1.2.3.4\r\nX-Injected: 1') === null, 'инъекция заголовка прошла');
+    must(xsollaUserIp('1.2.3.4 bad') === null, 'адрес с пробелом и буквами прошёл');
+    must(xsollaUserIp('не адрес вовсе') === null, 'кириллица прошла как адрес');
   });
 });
 
@@ -184,8 +213,22 @@ describe('Xsolla: запрос токена', () => {
     must(позиция.quantity === 1, 'quantity не тот');
     must(позиция.sku === 'eos.azens.rub_m', 'SKU в заказе не тот');
 
-    // Идентификаторы: наш paymentId в external_id, наш users.id в user.id.
-    must(настройки.external_id === PAYMENT_ID, 'external_id не равен нашему paymentId');
+    // Идентификаторы. Наш paymentId едет в content позиции заказа, а НЕ в
+    // settings.external_id.
+    //
+    // ЧТО БЫЛО. Тест требовал settings.external_id === наш paymentId. На живых
+    // ответах Xsolla это поле роняет PayStation с 422 errorCode 2000
+    // «Exception with PayStation service» при ЛЮБОМ строковом значении:
+    // проверены UUID, число строкой и 'abc'. Числом - тоже отказ, но с другой
+    // ошибкой (1102), то есть поле Xsolla знает, а ломается само значение.
+    // Счёт при этом не создаётся вовсе, и витрина не открывается.
+    // Принято только purchase.items[].content.external_id: 201 с токеном.
+    must(настройки.external_id === undefined,
+      `settings.external_id снова в запросе - PayStation его не принимает: ${String(настройки.external_id)}`);
+    const content = запись(позиция.content);
+    must(content !== null, 'у позиции заказа нет content, а paymentId больше некуда деть');
+    must(content.external_id === PAYMENT_ID, 'content.external_id не равен нашему paymentId');
+
     const узелId = запись(пользователь.id);
     must(узелId.value === USER_ID, 'user.id.value не равен нашему users.id');
   });

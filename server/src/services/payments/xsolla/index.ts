@@ -30,7 +30,8 @@
 // другую (4xx на живом платеже) — тоже. Правило простое, и оно в коде.
 
 import { xsollaConfig, isXsollaEnabled, buildXsollaTokenRequest, xsollaAuthHeader,
-  xsollaCheckoutUrl, xsollaApiUrl, type XsollaConfig, type XsollaTokenInput, type Env }
+  xsollaCheckoutUrl, xsollaApiUrl, xsollaUserIp,
+  type XsollaConfig, type XsollaTokenInput, type Env }
   from './token';
 import { xsollaVerifySignature } from './signature';
 import { xsollaNotificationType, parseXsollaUser, parseXsollaOrder, суммаСовпадает,
@@ -112,14 +113,20 @@ export async function createXsollaPayment(
     return { checkoutUrl: null, orderId: null, providerError: `provider_request_invalid: ${(err as Error).message}` };
   }
 
+  // Страну знаем не всегда (в игре её нигде не спрашивают), а Xsolla требует
+  // страну ЛИБО адрес. Адрес есть всегда - это тот, с которого пришёл запрос.
+  const ip = xsollaUserIp(input.userIp);
+  const заголовки: Record<string, string> = {
+    Authorization: xsollaAuthHeader(config),
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+  if (ip !== null) заголовки['X-User-Ip'] = ip;
+
   try {
     const ответ = await fetch(xsollaApiUrl(запрос.path), {
       method: 'POST',
-      headers: {
-        Authorization: xsollaAuthHeader(config),
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
+      headers: заголовки,
       body: JSON.stringify(запрос.body),
       signal: AbortSignal.timeout(20_000),
     });
