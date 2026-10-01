@@ -35,6 +35,7 @@ import { PvPService } from '../services/PvPService';
 import { EndGameService } from '../services/EndGameService';
 import { PremiumSystem, CURRENT_SEASON, BATTLE_PASS_TIERS } from '../systems/PremiumSystem';
 import { PaymentService } from '../services/PaymentService';
+import { AuthService } from '../services/AuthService';
 import { professionOf } from '../services/ProfessionService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
 import { PromoService } from '../services/PromoService';
@@ -45,6 +46,10 @@ import { PAYMENT_PROVIDERS, UNSIGNED_PROVIDERS } from '../services/paymentProvid
 import {
   createYooKassaPayment, fetchYooKassaPayment, isYooKassaEnabled, resolveYooKassaNotification,
 } from '../services/payments/yookassa';
+import {
+  createXsollaPayment, isXsollaEnabled, resolveXsollaNotification, XSOLLA,
+} from '../services/payments/xsolla';
+import { xsollaSku } from '../services/payments/xsolla/token';
 import Joi from 'joi';
 
 export const gameRouter = Router();
@@ -88,6 +93,26 @@ function paymentReturnUrl(req: Request, paymentId: string): string {
   return `${base}/game/?payment=${encodeURIComponent(paymentId)}`;
 }
 
+/**
+ * Страна игрока для Xsolla: ISO 3166-1 alpha-2.
+ *
+ * ПОЧЕМУ ИЗ ЗАГОЛОВКА, А НЕ ИЗ ПРОФИЛЯ. Страны в игре нет - её нигде не
+ * спрашивают, и заводить поле ради одного платежа незачем. Заголовок Xsolla
+ * для этого и существует: страна определяется по адресу, из которого пришёл
+ * запрос. Xsolla принимает и то, и другое, но адрес известен всегда.
+ *
+ * Если страна не определилась, возвращается null, и createXsollaPayment
+ * откажется создавать счёт: лучше «платёж не создан» игроку, чем витрина с
+ * ценой не в той валюте.
+ */
+function paymentCountry(req: Request): string | null {
+  const заголовок = req.header('x-solla-country') ?? req.header('cf-ipcountry') ?? '';
+  const код = заголовок.trim();
+  // Только две латинские буквы: значение из заголовка не доверяем, оно
+  // приходит извне и может содержать что угодно.
+  return /^[A-Za-z]{2}$/.test(код) ? код.toUpperCase() : null;
+}
+
 // Создаём сервисы лениво-локально там, где нужны
 import { QuestService } from '../services/QuestService';
 const questService = new QuestService();
@@ -105,6 +130,8 @@ const dungeonService = DungeonService.getInstance();
 const tradeService = new TradeService();
 const premiumSystem = new PremiumSystem();
 const paymentService = new PaymentService();
+// Для вебхука Xsolla user_validation: он спрашивает, существует ли игрок.
+const authService = new AuthService();
 const promoService = new PromoService();
 const notificationService = new NotificationService();
 const mailService = MailService.getInstance();
@@ -570,6 +597,38 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
             providerError = 'provider_request_failed';
           }
         }
+      } else if (provider === XSOLLA) {
+        if (!isXsollaEnabled()) {
+          providerError = 'provider_not_configured';
+        } else {
+          try {
+            // Набор становится товаром в каталоге Xsolla: SKU собирается из
+            // нашего packId. Сумма не передаётся - её берёт каталог, и это
+            // цена живёт в ДВУХ местах сразу (economy.ts и каталог). Расхождение
+            // ловится в вебхуке сверкой суммы, а не молчанием здесь.
+            const sku = xsollaSku(value.packId ?? 'rub_m');
+            const invoice = await createXsollaPayment({
+              paymentId: payment.id,
+              userId: character.userId,
+              sku,
+              quantity: 1,
+              returnUrl: paymentReturnUrl(req, payment.id),
+              // Страны у персонажа нет: в игре её не спрашивают. Без неё
+              // Xsolla не определяет валюту и покажет цену не в той, а
+              // поле country формально обязательное - витрина не откроется.
+              country: paymentCountry(req),
+              language: 'ru',
+            }, process.env);
+            checkoutUrl = invoice.checkoutUrl;
+            // order_id Xsolla пригодится при разбирательствах, а наш
+            // payment_id уже записан в заказ как external_id.
+            if (invoice.orderId) await paymentService.attachProviderPaymentId(payment.id, invoice.orderId);
+            providerError = invoice.providerError;
+          } catch (err) {
+            logger.error(`[Payments] xsolla create failed for ${payment.id}: ${(err as Error).message}`);
+            providerError = 'provider_request_failed';
+          }
+        }
       } else {
         providerError = 'unknown_provider';
       }
@@ -708,6 +767,102 @@ gameRouter.post('/payments/webhook/yookassa', asyncHandler(async (req: Request, 
   return res.json({ success: true, applied: true, deduped: result.deduped ?? false, azens: result.azens });
 }));
 
+// POST /api/game/payments/webhook/xsolla — вебхуки Xsolla.
+//
+// ОТДЕЛЬНЫЙ МАРШРУТ, А НЕ ОБЩИЙ /webhook/:provider, потому что у Xsolla
+// три вебхука с разными ответами, и один из них вообще не про оплату:
+// user_validation спрашивает, существует ли игрок, и обязан ответить 204.
+// Общий реестр умеет только разобрать тело и начислить.
+//
+// КОДЫ ОТВЕТОВ ЗДЕСЬ — ЭТО ДЕНЬГИ, А НЕ СТИЛЬ. Правило Xsolla: ответ 4xx,
+// отсутствие ответа или 5xx означает ВОЗВРАТ ПЛАТЕЖА ПОКУПАТЕЛЮ. Поэтому
+//   204 — приняли (order_paid начислено, user_validation подтверждён);
+//   400 — подделка или заказ не наш: повторять нечего;
+//   500 — наша ошибка или провайдер выключен: Xsolla повторит (20 попыток).
+// Путать второй и третий местами нельзя ни в ту, ни в другую сторону.
+gameRouter.post('/payments/webhook/xsolla', asyncHandler(async (req: Request, res: Response) => {
+  const rawBody = (req as Request & { rawBody?: string }).rawBody ?? '';
+  const decision = await resolveXsollaNotification({
+    // Именно сырое тело. Подпись по пересобранному JSON не сойдётся, и это
+    // выглядит как «секрет неверный».
+    rawBody,
+    signatureHeader: req.header('authorization'),
+    body: req.body,
+    userExists: (id) => authService.userExists(id),
+    findPayment: async (id) => {
+      const payment = await paymentService.getPayment(id);
+      if (!payment) return null;
+      return {
+        id: payment.id,
+        realAmount: payment.realAmount,
+        realCurrency: payment.realCurrency,
+      };
+    },
+  }, process.env);
+
+  switch (decision.action) {
+    case 'ack':
+    case 'confirm-user':
+      // 204 без тела. Xsolla считает это успехом.
+      return res.status(204).end();
+    case 'reject':
+      logger.warn(`[Payments] xsolla rejected: ${decision.reason}`);
+      return res.status(400).json({ error: decision.reason });
+    case 'retry':
+      logger.error(`[Payments] xsolla retry: ${decision.reason}`);
+      return res.status(500).json({ error: decision.reason });
+    default:
+      break;
+  }
+
+  const order = decision.order;
+  const payment = decision.payment;
+  if (!order || !payment || order.transactionId === null) {
+    // Решение «начислить» без номера транзакции означало бы начисление без
+    // ключа дедупликации: повторный вебхок начислил бы дважды.
+    logger.error('[Payments] xsolla credit without transaction id');
+    return res.status(500).json({ error: 'no_transaction_id' });
+  }
+
+  // Расхождение суммы не отменяет начисление: мы обещали азены за свою цену.
+  // Но молчать об этом нельзя - цена живёт в economy.ts и в каталоге Xsolla,
+  // и если они разошлись, это надо видеть в логах, а не узнавать от игрока.
+  if (decision.amountMismatch) {
+    logger.error(
+      `[Payments] xsolla amount mismatch for ${payment.id}: Xsolla ${order.amount} ${order.currency},`
+      + ` ours ${payment.realAmount} ${payment.realCurrency}`,
+    );
+  }
+
+  const result = decision.action === 'reverse'
+    ? await paymentService.reversePayment({
+        provider: XSOLLA,
+        providerPaymentId: order.transactionId,
+        paymentId: payment.id,
+        reason: 'xsolla_order_canceled',
+      })
+    : await paymentService.completePayment({
+        provider: XSOLLA,
+        providerPaymentId: order.transactionId,
+        paymentId: payment.id,
+        succeed: true,
+      });
+
+  if (!result.ok) {
+    // Начисление не прошло. 5xx, а не 400: платёж настоящий, и Xsolla
+    // повторит вебхук, а не вернёт деньги.
+    logger.error(`[Payments] xsolla apply failed: ${result.code}`);
+    return res.status(500).json({ error: result.code });
+  }
+  return res.json({
+    success: true,
+    applied: true,
+    deduped: result.deduped ?? false,
+    azens: result.azens,
+    bonus: result.bonus ?? 0,
+  });
+}));
+
 // POST /api/game/payments/webhook/:provider — подтверждение провайдера (без auth, по HMAC).
 // Тело: { paymentId, providerPaymentId, status: 'completed' | 'failed', failReason? }
 // Подпись: HMAC-SHA256 hex от сырого тела, заголовок x-payment-signature, секрет PAYMENT_WEBHOOK_SECRET.
@@ -718,6 +873,12 @@ gameRouter.post('/payments/webhook/:provider', asyncHandler(async (req: Request,
   // выше переспрашивает API, а этот по подписи.
   if (UNSIGNED_PROVIDERS.includes(name)) {
     return res.status(400).json({ error: 'provider_requires_api_verification' });
+  }
+  // Xsolla обслуживается выше, отдельным маршрутом. Попав сюда, он попал бы
+  // в разбор тела по общему контракту, где user_validation выглядит как
+  // платёж и был бы начислен.
+  if (name === XSOLLA) {
+    return res.status(400).json({ error: 'provider_has_dedicated_webhook_route' });
   }
   const provider = PAYMENT_PROVIDERS[name];
   if (!provider) return res.status(404).json({ error: 'Unknown payment provider' });

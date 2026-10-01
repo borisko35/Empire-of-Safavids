@@ -473,6 +473,25 @@ export class AuthService {
     return !existing;
   }
 
+  /**
+   * Есть ли такой игрок в игре.
+   *
+   * Для вебхука Xsolla user_validation: Xsolla спрашивает, существует ли
+   * игрок, и ждёт ответа 204 или 400. Отвечать «наверное» нельзя, а этот
+   * вебхук Xsolla не повторяет: ошибка здесь рушит оплату игроку.
+   *
+   * Возвращает boolean, а не бросает: «игрока нет» и «база недоступна» —
+   * разные ответы, и путать их нельзя. Второе — исключение наружу, и
+   * вызывающий сам решает, что сказать Xsolla.
+   */
+  async userExists(userId: string): Promise<boolean> {
+    if (typeof userId !== 'string' || userId.length === 0) return false;
+    const existing = await this.db.queryOne(
+      'SELECT id FROM users WHERE id = $1', [userId]
+    );
+    return existing !== null;
+  }
+
   // ============================================================
   // СБРОС ПАРОЛЯ (для разработчика)
   // ============================================================
