@@ -10,6 +10,7 @@ import { ReferralService } from './ReferralService';
 import { logger } from '../utils/logger';
 import { analytics } from './AnalyticsService';
 import { seasonalEvent } from './SeasonalEventService';
+import { weatherExpMultiplier } from '../systems/WorldTimeSystem';
 import type { WalletCurrency } from '../utils/economy';
 import { MAX_LEVEL, DEFAULT_SERVER_ID, getRegionSpawn, STAMINA } from '../../../shared/constants';
 import { isCombatStance, type CombatStance } from '../systems/CombatStance';
@@ -282,7 +283,11 @@ export class CharacterService {
     } catch {
       guildExp = 1;
     }
-    const total = Math.floor(amount * mult * seasonal * profExp * guildExp);
+    // Бонус погоды. Объявлялся в WEATHER_EFFECTS как expMod и не читался
+    // нигде: в дождь опыт шёл по базовой ставке. Считается здесь, в той
+    // же цепочке, что сезон, профессия и гильдия.
+    const weather = weatherExpMultiplier();
+    const total = Math.floor(amount * mult * seasonal * profExp * guildExp * weather);
 
     // Делегируем единой системе прокачки (прирост статов/навыков при level up)
     const result = await this.leveling.addExperience(character, total, 'experience_gain');

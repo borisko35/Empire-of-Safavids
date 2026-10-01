@@ -202,3 +202,27 @@ export function currentWeather(nowMs: number = Date.now()): Weather {
   const idx = Math.floor(nowMs / (4 * 60 * 1000)) % weathers.length;
   return weathers[idx];
 }
+
+/**
+ * Множитель опыта по погоде.
+ *
+ * ЧТО БЫЛО. WEATHER_EFFECTS объявлял expMod у каждой погоды («в дождь
+ * опыта на 10% больше»), и поле не читалось нигде: дождь менял небо в
+ * клиенте и скорость респавна у точек с weatherBonus, но опыт шёл
+ * ровно по базовой ставке. Объявленный бонус был пустым.
+ *
+ * ПОЧЕМУ currentWeather, А НЕ ЭКЗЕМПЛЯР WorldTimeSystem. Начисление
+ * опыта идёт из CharacterService, до GameLoop не дотянуться, поэтому
+ * берётся функция без Redis - так же, как seasonOf рядом.
+ *
+ * ЧЕСТНОЕ ОГРАНИЧЕНИЕ. Ручная погода админа живёт в экземпляре
+ * WorldTimeSystem, и эта функция её не видит: она всегда считает по
+ * расписанию. То есть нажал админ «бурю» - небо и монстры станут
+ * бурными, а опыт пойдёт по расписанию. Обратная связь проверяется на
+ * живом игроке, а не на админском предпросмотре, и это осознанно:
+ * общий доступ к погоде потребовал бы глобального состояния там, где
+ * раньше его не было.
+ */
+export function weatherExpMultiplier(nowMs: number = Date.now()): number {
+  return WEATHER_EFFECTS[currentWeather(nowMs)].expMod;
+}

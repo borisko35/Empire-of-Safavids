@@ -8,7 +8,7 @@
 import { Region } from '../types/game.types';
 import { MONSTERS_DATABASE } from '../data/monsters';
 import { AISystem, TargetPlayer } from './AISystem';
-import { WorldTimeSystem, Weather } from './WorldTimeSystem';
+import { WorldTimeSystem, Weather, WEATHER_EFFECTS } from './WorldTimeSystem';
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';
 
@@ -181,9 +181,32 @@ export class SpawnSystem {
         const elapsed = (now - (sp.lastDeath[sid] ?? 0)) / 1000;
         let respawnTime = sp.respawnTime;
 
-        // Погодный модификатор
+        // Погодный модификатор точки (у точки свой список погод).
         const weatherMod = sp.weatherBonus[worldTime.weather] ?? 1.0;
         respawnTime = respawnTime / weatherMod;
+
+        // ОБЩИЙ МНОЖИТЕЛЬ ПОГОДЫ. WEATHER_EFFECTS объявлял spawnMod
+        // («сколько монстров появляется в эту погоду»), и его не читал
+        // никто: погода меняла картинку в небе и скорость респавна у
+        // точек с weatherBonus, а больше ни на что не влияла.
+        const effect = WEATHER_EFFECTS[worldTime.weather];
+
+        // ПОГОДНЫЕ МОНСТРЫ. WEATHER_EFFECTS[...].specialMobs перечислял
+        // монстров «уникальных в эту погоду», и этот список не читался
+        // нигде: ни одним поиском по репозиторию. Теперь монстр из
+        // списка в своей погоде появляется заметно чаще.
+        //
+        // Дополнительный множитель - тот же объявленный spawnMod, а не
+        // новая константа: придумывать число рядом с уже объявленным
+        // нечем. Итог в буре, где spawnMod = 1.5: обычный монстр в 1.5
+        // раза быстрее, погодный - в 2.25 раза.
+        //
+        // Это НЕ «только в эту погоду»: джинн и туманный убийца стоят в
+        // обычных точках и в ясную погоду тоже. Делать их исчезающими -
+        // решение о балансе, а не починка мёртвого поля.
+        if (effect.specialMobs.includes(sp.monsterId)) {
+          respawnTime = respawnTime / effect.spawnMod;
+        }
 
         // Ночью монстры респят быстрее
         if (worldTime.timeOfDay === 'night' || worldTime.timeOfDay === 'midnight') {
