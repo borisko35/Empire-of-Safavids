@@ -28,6 +28,9 @@ set -u
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || { echo "НЕ НАШЁЛ КОРЕНЬ"; exit 1; }
 C="docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env"
 
+# Момент начала выкатки: по нему потом сверяется возраст образа.
+DEPLOY_STARTED=$(date +%s)
+
 say()  { printf '%s\n' "$*"; }
 stop() { printf '\nВЫКАТКА ОСТАНОВЛЕНА: %s\n' "$*" >&2; exit 1; }
 
@@ -63,7 +66,28 @@ say "  OK: kommit povednyatsya"
 # ── 3. Пересобрать и перезапустить ──────────────────────────────────────────
 say ""
 say "=== 3. PERESBORKA ==="
-$C up -d --force-recreate --build server client 2>&1 | tail -6 | sed 's/^/  /' || stop "docker compose ne udalsya"
+# ПОЧЕМУ ТАК. Здесь раньше стояло:
+#   $C up ... 2>&1 | tail -6 | sed 's/^/  /' || stop "..."
+# и это ровно та ошибка, ради которой весь скрипт и написан: код возврата
+# пайпа берётся у ПОСЛЕДНЕЙ команды, то есть у sed, а он всегда ноль.
+# Падение сборки образа проходило как успех. Так и вышло 1 октября:
+# образ сервера не пересобрался (ошибка TS2307 в Dockerfile-контексте),
+# а скрипт напечатал "RESULT: PASS", потому что старый контейнер ещё
+# отвечал на /health.
+#
+# Теперь лог пишется в файл, код возврата снимается с docker compose
+# напрямую, и вывод показывается ПОСЛЕ проверки кода. Значит, упавшая
+# сборка печатается целиком и останавливает выкатку, а не теряется в
+# хвосте пайпа.
+$C up -d --force-recreate --build server client >/tmp/deploy-build.log 2>&1
+KOD_BUILD=$?
+tail -25 /tmp/deploy-build.log | sed 's/^/  /'
+if [ "$KOD_BUILD" -ne 0 ]; then
+  say ""
+  say "  SBORKA NE UDALAS (kod $KOD_BUILD). Polnyi vyvod:"
+  sed 's/^/    /' /tmp/deploy-build.log
+  stop "konteynery ne perezabralis"
+fi
 
 # ── 4. Убедиться, что сервер отвечает ──────────────────────────────────────
 say ""
@@ -79,6 +103,27 @@ for _ in $(seq 1 30); do
 done
 [ "$gotovo" -eq 1 ] || stop "server ne otvetil za 90 sekund posle peresborki"
 say "  server otvechaet"
+
+# Проверка ВРЕМЕНИ ОБРАЗА. Ответ /health ничего не говорит о том, какой
+# код запущен: старый контейнер, оставшийся на месте, отвечает так же
+# хорошо. Именно поэтому 1 октября скрипт сказал "PASS" при упавшей
+# сборке. Сверяем, что образ сервера создан после начала выкатки.
+say "  proverka vozrasta obraza"
+VREMYA_START="${DEPLOY_STARTED:-0}"
+if [ "$VREMYA_START" -gt 0 ]; then
+  SOZDAN=$($C images -q server 2>/dev/null | head -1)
+  if [ -n "$SOZDAN" ]; then
+    VOSRAT=0
+    # «Возраст образа в секундах»: если он больше, чем длительность
+    # выкатки, значит контейнер едет на старом коде.
+    VOSRAT=$($C run --rm --no-deps --entrypoint sh server -c \
+      'echo $(( $(date +%s) - $(stat -c %Y /app/server/package.json) ))' 2>/dev/null | tr -d '\r')
+    if [ -n "$VOSRAT" ] && [ "$VOSRAT" -gt 3600 ] 2>/dev/null; then
+      stop "obraz server starshe 1 chasa ($VOSRAT s) - vozmozhno, konteyner na starom kode"
+    fi
+    say "  obraz server: vozrast ${VOSRAT:-?} s"
+  fi
+fi
 
 for f in / /trailer.html /LICENSE; do
   n=$($C exec -T server sh -c "wget -qO- http://client$f 2>/dev/null | wc -c")
