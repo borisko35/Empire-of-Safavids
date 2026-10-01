@@ -188,19 +188,85 @@ export class WorldTimeSystem {
  * экземпляра системы: сезон нужен в начислении опыта, где до GameLoop не
  * дотянуться.
  */
+/**
+ * Погода по сезонам.
+ *
+ * ЧТО БЫЛО, и почему это было неправильно. Погода бралась из ОДНОГО списка
+ * на 30 слотов, и сезон в формулу не входил вообще:
+ *   const idx = Math.floor(nowMs / (4 * 60 * 1000)) % weathers.length;
+ * Список был один и тот же круглый год, поэтому снег шёл летом, а дождь
+ * зимой. Это не ошибка отрисовки: клиент рисовал ровно ту погоду, которую
+ * прислал сервер. Несоответствие было в самом расписании, и заметить его
+ * можно было только играя.
+ *
+ * Теперь на каждый сезон своя таблица. Правила, видные игроку:
+ *   - снег бывает ТОЛЬКО зимой;
+ *   - песчаная буря бывает ТОЛЬКО летом;
+ *   - в разгар зимы дождя нет - вместо него снег;
+ *   - летом дождя мало: засуха, ветер, пыль и грозы.
+ *
+ * Длина всех таблиц одинакова (30 слотов по 4 минуты = 2 часа на круг
+ * погоды сезона). Одинаковая длина нужна, чтобы смена сезона не сдвигала
+ * ритм: игрок, ждавший бурю, получит её и в новое время года.
+ *
+ * Экспорт таблицы нужен проверкам: она и есть замысел, который обязан
+ * стоять в данных, а не собираться на лету.
+ */
+export const SEASON_WEATHER: Record<Season, Weather[]> = {
+  // Весна (месяцы 3–5): мягко, дожди, туманы по утрам. Без снега и пыли.
+  spring: [
+    'clear', 'clear', 'cloudy', 'rain', 'clear', 'wind',
+    'cloudy', 'rain', 'clear', 'clear', 'fog', 'rain',
+    'clear', 'cloudy', 'wind', 'rain', 'clear', 'clear',
+    'cloudy', 'rain', 'fog', 'clear', 'wind', 'clear',
+    'clear', 'rain', 'cloudy', 'clear', 'clear', 'rain',
+  ],
+  // Лето (6–8): зной, ясно, ветер и песчаные бури. Грозы, и почти нет дождя.
+  summer: [
+    'clear', 'clear', 'clear', 'wind', 'sandstorm', 'clear',
+    'clear', 'cloudy', 'sandstorm', 'clear', 'clear', 'wind',
+    'clear', 'storm', 'clear', 'sandstorm', 'clear', 'clear',
+    'wind', 'clear', 'sandstorm', 'clear', 'cloudy', 'clear',
+    'clear', 'clear', 'storm', 'clear', 'sandstorm', 'clear',
+  ],
+  // Осень (9–11): подсыхает, дожди, туман. Пыли и снега нет.
+  autumn: [
+    'clear', 'cloudy', 'rain', 'clear', 'fog', 'clear',
+    'cloudy', 'rain', 'wind', 'clear', 'clear', 'cloudy',
+    'rain', 'clear', 'fog', 'clear', 'cloudy', 'rain',
+    'clear', 'wind', 'clear', 'rain', 'cloudy', 'clear',
+    'clear', 'clear', 'fog', 'rain', 'clear', 'clear',
+  ],
+  // Зима (12–2): холодно, снег, облака, туман. Ни дождя, ни пыли.
+  winter: [
+    'snow', 'cloudy', 'snow', 'clear', 'fog', 'snow',
+    'cloudy', 'snow', 'clear', 'snow', 'cloudy', 'clear',
+    'snow', 'cloudy', 'clear', 'fog', 'snow', 'clear',
+    'snow', 'cloudy', 'snow', 'clear', 'cloudy', 'clear',
+    'snow', 'clear', 'fog', 'snow', 'cloudy', 'clear',
+  ],
+};
+
+/**
+ * Номер игрового месяца без вызова worldTimeAt.
+ *
+ * Выделено отдельно не из красоты: worldTimeAt сам вызывает currentWeather,
+ * и если бы тот стал считать дату через worldTimeAt, получилась бы
+ * бесконечная рекурсия. Здесь нужен только месяц - ровно то, что требуется
+ * сезону.
+ */
+function gameMonthAt(nowMs: number): number {
+  const elapsedMinutes = Math.max(0, (nowMs - GAME_EPOCH_MS) / 60000);
+  const totalGameHours = Math.floor(elapsedMinutes / REAL_MINUTES_PER_GAME_HOUR);
+  const totalMonths = Math.floor(totalGameHours / 24 / 30);
+  return (totalMonths % 12) + 1;
+}
+
+/** Погода по расписанию сезона. Слот - 4 минуты. */
 export function currentWeather(nowMs: number = Date.now()): Weather {
-  // Снега в таблице не было НИ ОДНОГО слота: клиент его всё равно не умел
-  // рисовать, поэтому «зимней» погоды в игре просто не существовало.
-  // Цикл теперь 30 слотов (2 часа) — разнообразие заметно богаче.
-  const weathers: Weather[] = [
-    'clear', 'clear', 'clear', 'cloudy', 'cloudy', 'wind',
-    'rain', 'rain', 'cloudy', 'fog', 'storm', 'clear',
-    'sandstorm', 'wind', 'clear', 'rain', 'storm', 'snow',
-    'clear', 'cloudy', 'rain', 'snow', 'wind', 'clear',
-    'cloudy', 'fog', 'clear', 'clear', 'rain', 'snow',
-  ];
-  const idx = Math.floor(nowMs / (4 * 60 * 1000)) % weathers.length;
-  return weathers[idx];
+  const таблица = SEASON_WEATHER[seasonOf(gameMonthAt(nowMs))];
+  const idx = Math.floor(nowMs / (4 * 60 * 1000)) % таблица.length;
+  return таблица[idx];
 }
 
 /**

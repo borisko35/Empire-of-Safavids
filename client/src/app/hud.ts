@@ -1069,15 +1069,51 @@ const WORLD_CLOCK = new Set([
   'clear', 'cloudy', 'rain', 'storm', 'fog', 'sandstorm', 'snow', 'wind',
 ]);
 
+/** Коды сезонов: приходят с сервера и переводятся отдельно от погоды. */
+const SEASONS = new Set(['spring', 'summer', 'autumn', 'winter']);
+
+/**
+ * Часы игрового времени: «7», «12», «23».
+ *
+ * Формат без ведущих нулей и без «:00» - намеренно: в углу экрана нужна
+ * читаемая метка, а не точность до минуты. Минута в игре равна часу
+ * (REAL_MINUTES_PER_GAME_HOUR = 1), поэтому «:00» был бы выдумкой.
+ */
+function clockLabel(hour: unknown): string {
+  const h = Number(hour);
+  return Number.isFinite(h) ? String(h) : '';
+}
+
+/**
+ * Дата игрового календаря: «5.3.1501» (день.месяц.год).
+ *
+ * Числами, а не словами «пятое марта»: год отсчитывается от 1501-го, и
+ * названия месяцев пришлось бы заводить ради одной строки. Числа в
+ * календаре уместны и не требуют перевода.
+ */
+function dateLabel(payload: Record<string, unknown>): string {
+  const d = Number(payload.gameDay);
+  const m = Number(payload.gameMonth);
+  const y = Number(payload.gameYear);
+  if (![d, m, y].every((n) => Number.isFinite(n) && n > 0)) return '';
+  return `${d}.${m}.${y}`;
+}
+
 export function setWorldTime(payload: Record<string, unknown>): void {
   const el = $('world-time');
   const rawTod = String(payload.timeOfDay ?? payload.time ?? '');
   const rawWeather = String(payload.weather ?? '');
+  const rawSeason = String(payload.season ?? '');
   // Неизвестный код пропускаем молча, иначе игрок увидит на экране
   // «worldclock.morning» — t() отдаёт путь, если ключа нет.
   const tod = WORLD_CLOCK.has(rawTod) ? t(`worldclock.${rawTod}`) : '';
   const weather = WORLD_CLOCK.has(rawWeather) ? t(`worldclock.${rawWeather}`) : '';
-  const parts = [tod, weather].filter(Boolean);
+  const season = SEASONS.has(rawSeason) ? t(`worldclock.season_${rawSeason}`) : '';
+  // ЧТО БЫЛО. В углу показывались только два слова - время суток и
+  // погода: «Утро · Дождь». Часов, числа, месяца, года и сезона не было,
+  // хотя сервер всё это вычислял и присылал каждыые четыре минуты.
+  // Теперь строка читается как настоящие часы с датой.
+  const parts = [clockLabel(payload.gameHour), dateLabel(payload), season, tod, weather].filter(Boolean);
   el.textContent = parts.join(' · ');
   el.classList.toggle('top-only', $('target-frame').classList.contains('hidden'));
   // Всю погоду теперь рисует 3D-движок (game3d/weather.ts + sky.ts).

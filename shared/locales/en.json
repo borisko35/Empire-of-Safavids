@@ -1082,7 +1082,11 @@
     "fog": "Fog",
     "sandstorm": "Sandstorm",
     "snow": "Snow",
-    "wind": "Wind"
+    "wind": "Wind",
+    "season_spring": "Spring",
+    "season_summer": "Summer",
+    "season_autumn": "Autumn",
+    "season_winter": "Winter"
   },
   "reputation": {
     "hint": "Qizilbash — monster kills, Sufi — quests, Merchants — auctions, Assassins — PvP wins.",

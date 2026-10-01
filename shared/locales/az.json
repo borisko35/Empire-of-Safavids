@@ -1082,7 +1082,11 @@
     "fog": "Duman",
     "sandstorm": "Qum fırtınası",
     "snow": "Qar",
-    "wind": "Külək"
+    "wind": "Külək",
+    "season_spring": "Yaz",
+    "season_summer": "Yay",
+    "season_autumn": "Payız",
+    "season_winter": "Qış"
   },
   "reputation": {
     "hint": "Qızılbaşı — canavar öldürmə, Sufilər — tapşırıqlar, Ticarətçilər — auksiyon, Assasinlər — PvP qələbələri.",
