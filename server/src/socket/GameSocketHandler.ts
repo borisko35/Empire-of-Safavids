@@ -33,6 +33,7 @@ import { professionOf } from '../services/ProfessionService';
 import { STANCES, isCombatStance, type CombatStance } from '../systems/CombatStance';
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
+import { SiegeSystem } from '../systems/SiegeSystem';
 import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ChatModerationService } from '../services/ChatModerationService';
@@ -1591,6 +1592,15 @@ export class GameSocketHandler {
       // гильдией поставило бы бой на паузу. Ошибка внутри onKill ловится
       // и пишется в журнал сама.
       void guildMissionService.onKill(attacker.id, def.id);
+      // Осада территории гильдии: урон крепости от убийств в её регионе.
+      // void и без await - по той же причине, что и у заданий гильдии выше:
+      // это горячая точка (каждый удар каждого игрока), и ожидание запроса в
+      // базу поставило бы бой на паузу. Если осады в регионе нет, система
+      // возвращается сразу, не обращаясь к базе.
+      void SiegeSystem.getInstance().нанестиУрон(attacker.id, attacker.region)
+        .catch((e: unknown) => {
+          logger.debug('Siege damage failed:', e);
+        });
       const evaluated = await this.questService.evaluateQuests(attacker.id).catch((e: unknown) => {
         logger.debug('Quest evaluate failed:', e);
         return [];

@@ -13,6 +13,7 @@ import { WorldTimeSystem } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
+import { SiegeSystem } from './SiegeSystem';
 import { MailService } from '../services/MailService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { RedisService } from '../services/RedisService';
@@ -111,6 +112,15 @@ export class GameLoop {
     // убийств. Не ждём — чтение из базы не должно задерживать старт
     void WorldEventSystem.getInstance().loadSchedule()
       .catch((e) => logger.error('[GameLoop] чтение расписания боссов не удалось:', e));
+    // Осады территорий гильдий. Данные и таблица объявлены давно, но
+    // планировщика не существовало: карта обещала «осады выходных», которых
+    // не было ни в коде, ни в данных.
+    //
+    // restore ДО start. Иначе тик успевает отработать на пустой памяти,
+    // решить, что осады нет, а через полминуты выяснилось бы, что она шла.
+    void SiegeSystem.getInstance().restore()
+      .catch((e) => logger.error('[GameLoop] восстановление осад не удалось:', e));
+    SiegeSystem.getInstance().start();
     // Убрать просроченные письма. expires_at в схеме есть, но про него
     // никто не помнил: письма копились бы вечно вместе с наградой внутри
     // Посев каталога ежедневных задач в таблицу daily_tasks.
@@ -134,6 +144,7 @@ export class GameLoop {
       this.timer = null;
     }
     WorldEventSystem.getInstance().stop();
+    SiegeSystem.getInstance().stop();
     this.running = false;
     logger.info('[GameLoop] Stopped');
   }
