@@ -752,6 +752,123 @@ function buildFish(cfg: FishCfg): Rig {
   };
 }
 
+/**
+ * Волк: четвероногий.
+ *
+ * Зачем отдельная фигура. mob_wolf раньше попадал в default разбора
+ * buildMonsterRig и рисовался гуманоидом в капюшоне с мечом - волк с
+ * саблей. Вблизи стартовой зоны Тебриза это первое, что видит игрок.
+ *
+ * Размеры под дистанцию боя (3 м): корпус около метра в длину, иначе
+ * волк не читается на общем плане.
+ */
+function buildWolf(): Rig {
+  const group = new THREE.Group();
+  const fur = mat(0x6e6a62, 0.95);
+  const furDark = mat(0x413e39, 0.95);
+  const light = mat(0xb4ada0, 0.95);
+  const dark = mat(0x1e1c1a, 0.9);
+  const body = new THREE.Group();
+  group.add(body);
+
+  // Корпус: вытянут вдоль Z, плечо выше хвоста.
+  const torso = sphere(0.30, fur, 10);
+  torso.scale.set(0.72, 0.62, 1.45);
+  torso.position.set(0, 0.42, 0);
+  body.add(torso);
+
+  // Грудь светлее корпуса, иначе силуэт сливается с землёй.
+  const chest = sphere(0.22, light, 8);
+  chest.scale.set(0.85, 0.9, 0.8);
+  chest.position.set(0, 0.38, 0.24);
+  body.add(chest);
+
+  // Голова: вытянутая морда, чтобы читался хищник, а не собака.
+  const head = sphere(0.16, furDark, 8);
+  head.scale.set(0.8, 0.8, 1.0);
+  head.position.set(0, 0.52, 0.46);
+  body.add(head);
+
+  const snout = sphere(0.10, furDark, 6);
+  snout.scale.set(0.7, 0.6, 1.3);
+  snout.position.set(0, 0.47, 0.60);
+  body.add(snout);
+
+  // Уши: треугольники из конусов, читаются силуэтом.
+  for (const side of [-1, 1]) {
+    const ear = cyl(0.0, 0.055, 0.14, furDark, 6);
+    ear.position.set(side * 0.09, 0.65, 0.44);
+    body.add(ear);
+    const eye = sphere(0.022, dark, 5);
+    eye.position.set(side * 0.07, 0.56, 0.57);
+    body.add(eye);
+  }
+
+  // Ноги: четыре, передние чуть короче задних.
+  const ноги: [number, number, number][] = [
+    [0.15, 0.30, -0.16], [-0.15, 0.30, -0.16], [0.15, 0.32, 0.20], [-0.15, 0.32, 0.20],
+  ];
+  for (const [x, y, z] of ноги) {
+    const leg = cyl(0.045, 0.055, y, furDark, 6);
+    leg.position.set(x, y / 2, z);
+    body.add(leg);
+    const paw = sphere(0.06, dark, 5);
+    paw.scale.set(1, 0.6, 1.2);
+    paw.position.set(x, 0.04, z + 0.03);
+    body.add(paw);
+  }
+
+  // Хвост: вверх и назад, как у загнанного волка.
+  const tail = cyl(0.03, 0.07, 0.46, furDark, 6);
+  tail.rotation.x = 0.9;
+  tail.position.set(0, 0.60, -0.48);
+  body.add(tail);
+
+  // Ноги храним отдельно, чтобы шевелить их по очереди: у четвероногого
+  // диагональный шаг, иначе лапы скользят по земле.
+  const лапы: THREE.Mesh[] = [];
+  for (const [x, , z] of ноги) {
+    const leg = cyl(0.045, 0.055, x > 0 ? 0.30 : 0.32, furDark, 6);
+    leg.position.set(x, (x > 0 ? 0.30 : 0.32) / 2, z);
+    // Диагонали двигаются вместе: передняя правая и задняя левая.
+    leg.userData.диагональ = (z > 0) === (x > 0);
+    body.add(leg);
+    лапы.push(leg);
+  }
+
+  let фаза = 0;
+  let падение = 0;
+  return {
+    group,
+    triggerAttack() {},
+    update(dt, p) {
+      // Шаг быстрее в движении; на месте волк дышит и качает головой.
+      фаза += dt * (p.moving ? 7 : 1.2);
+      const амплитуда = p.moving ? 0.16 : 0.02;
+      for (const лапа of лапы) {
+        const знак = лапа.userData.диагональ as boolean ? 1 : -1;
+        лапа.rotation.x = Math.cos(фаза) * амплитуда * знак;
+      }
+      body.position.y = Math.abs(Math.sin(фаза)) * (p.moving ? 0.03 : 0.008);
+      tail.rotation.z = Math.sin(фаза * 0.5) * 0.12;
+
+      // Падение: заваливается набок, как четвероногое.
+      падение = p.dead ? Math.min(1, падение + dt * 2.2) : 0;
+      if (падение > 0) {
+        group.rotation.x = -Math.PI / 2 * Math.min(1, падение * 1.4);
+        body.position.y = -падение * 0.12;
+      } else {
+        group.rotation.x *= 1 - Math.min(1, dt * 8);
+      }
+    },
+    equipWeapon() {}, equipShield() {},
+    isWeaponEquipped() { return false; },
+    isShieldEquipped() { return false; },
+    setArmorTint() {},
+    dispose() { group.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); }); },
+  };
+}
+
 function buildScorpion(): Rig {
   const group = new THREE.Group();
   const sand = mat(0xc4a04a, 0.9);
@@ -870,7 +987,58 @@ export function buildMonsterRig(monsterId: string): Rig {
       return buildFish({ body: 0x4a7a9e, belly: 0x9ec4d4, length: 1.7, girth: 0.42, eye: 0xff6a4a, glow: 0x5aa8d8, jaws: true });
     case 'world_boss_simurgh':
       return buildSimurgh();
+    case 'mob_wolf':
+      return buildWolf();
+
+    // ── ЧТО БЫЛО ПОД ЭТИМ БЛОКОМ ──────────────────────────────
+    // Дальше шёл `default: buildHumanoid({ hood, sword })`. Из двадцати
+    // четырёх монстров разбирались одиннадцать, а остальные ТРИНАДЦАТЬ
+    // рисовались как гуманоид в капюшоне с мечом - и молча. Среди них
+    // четыре босса: bandit_king, ottoman_pasha, div_arzhang и мировой
+    // босс rustam_reborn. То есть «Великий Рустам» был капюшоном с
+    // саблей, и это выглядело не поломкой, а просто бедной графикой.
+    //
+    // Почему молчало: поле modelPath в monsters.ts указывало на .fbx
+    // для всех двадцати четырёх, но клиент не грузит модели вообще -
+    // он собирает тела процедурно по monsterId. Поле выглядело как
+    // рабочее описание внешности и не читалось никем.
+    //
+    // Теперь каждый монстр базы имеет свою ветку, а не подменяется
+    // заглушкой. Проверка monsterRigCoverage.test.ts не даёт вернуться
+    // к молчаливому default.
+    //
+    // Общая форма у джиннов и дивов - buildDemon: он не принимает цвет,
+    // поэтому эти четверо выглядят одинаково. Это честное ограничение
+    // сборки, а не пропуск: отдельные тела для них - следующая работа.
+    case 'mob_road_bandit':
+      return buildHumanoid({ robe: 0x7a6a52, robeDark: 0x4c4030, hat: 'none', hatColor: 0x000000, weapon: 'dagger', scale: 0.95 });
+    case 'mob_assassin_acolyte':
+      return buildHumanoid({ robe: 0x2e2a38, robeDark: 0x1c1924, hat: 'hood', hatColor: 0x241f30, weapon: 'dagger', scale: 1.0 });
+    case 'mob_fog_assassin':
+      return buildHumanoid({ robe: 0x9aa4a8, robeDark: 0x6e787c, hat: 'hood', hatColor: 0x8c969a, weapon: 'rapier', scale: 1.04 });
+    case 'mob_undead_guardian':
+      return buildHumanoid({ robe: 0x5c5442, robeDark: 0x3a3428, hat: 'none', hatColor: 0x000000, weapon: 'sword', shield: true, scale: 1.06 });
+    case 'mob_rain_spirit':
+      // Дух воды: бледный, без оружия, слегка крупнее человека.
+      return buildHumanoid({ robe: 0x9fc8d8, robeDark: 0x6f9cb0, hat: 'none', hatColor: 0x000000, weapon: 'none', scale: 1.05 });
+    case 'mob_sand_elemental':
+      return buildHumanoid({ robe: 0xc4a878, robeDark: 0x9a8256, hat: 'none', hatColor: 0x000000, weapon: 'none', scale: 1.12 });
+    case 'mob_storm_djinn':
+    case 'mob_sand_div':
+      return buildDemon();
+    case 'boss_bandit_king':
+      return buildHumanoid({ robe: 0x6e4a2a, robeDark: 0x3e2a18, hat: 'helmet', hatColor: 0xd8b048, weapon: 'sword', shield: true, scale: 1.25 });
+    case 'boss_ottoman_pasha':
+      return buildHumanoid({ robe: 0x2e5a44, robeDark: 0x1a3a2c, hat: 'turban', hatColor: 0xf0e8d8, weapon: 'sword', shield: true, scale: 1.30 });
+    case 'boss_div_arzhang':
+      return buildDemon();
+    case 'world_boss_rustam_reborn':
+      // Рустам - герой, а не демон: тяжёлый доспех, шлем, рапира, щит и
+      // масштаб мирового босса.
+      return buildHumanoid({ robe: 0x8a8f96, robeDark: 0x4c5158, hat: 'helmet', hatColor: 0xc0c8d0, weapon: 'rapier', shield: true, scale: 1.45 });
     default:
+      // Заглушка осталась, но больше не молчит: любая новая ветка,
+      // не попавшая в разбор, будет видна в игре как капюшон с мечом.
       return buildHumanoid({ robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'sword' });
   }
 }
