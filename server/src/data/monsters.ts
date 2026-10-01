@@ -65,15 +65,18 @@ export interface MonsterDefinition {
   /**
    * Путь к 3D-модели. НЕ ЧИТАЕТСЯ НИГДЕ.
    *
-   * ЧТО ЭТО ТАКОЕ. Клиент не грузит модели: он собирает тела процедурно по
-   * monsterId в client/src/app/game3d/rig.ts. Поле указывало на .fbx, которых
-   * в репозитории нет, и выглядело как описание внешности монстра.
+   * ЧТО БЫЛО. Поле указывало на .fbx, которых в репозитории нет, и
+   * выглядело как описание внешности монстра: 24 выдуманных пути на
+   * 31 монстра. Клиент модели не грузит — он собирает тела процедурно
+   * по monsterId в client/src/app/game3d/rig.ts. Настоящие .fbx лежат
+   * в папках Animation/, Characters/, Enemies and monsters/ и в игру не
+   * подключены.
    *
-   * ПОЧЕМУ НЕ УДАЛЕНО, А ПРОСТО НЕОБЯЗАТЕЛЬНОЕ. Удалять 24 строки данных -
-   * решение владельца; проверка monsterRigCoverage.test.ts следит, чтобы
-   * поле не начали читать (клиент всё равно не умеет). А новым монстрам
-   * писать выдуманный путь нельзя: это была бы новая ложь в данных, и
-   * затыкать ею дыру в контенте нельзя.
+   * ПОЧЕМУ ПОЛЕ ОСТАЛОСЬ, А ЗНАЧЕНИЯ УБРАНЫ. Пустое необязательное поле
+   * — это честное «модели пока нет». 24 строки выдуманных путей были ложью
+   * в данных: любой, кто доверился бы им, счёл бы, что у монстра есть
+   * внешность. Проверка monsterRigCoverage.test.ts следит, чтобы поле не
+   * начали читать — клиент всё равно не умеет.
    */
   modelPath?: string;
 }
@@ -109,7 +112,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.ISFAHAN,
     respawnTime: 60,
     description: 'Одинокий разбойник, промышляющий околостей Тебриза.',
-    modelPath: 'models/monsters/bandit_scout.fbx',
   },
   'mob_bandit_warrior': {
     id: 'mob_bandit_warrior',
@@ -145,7 +147,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.ISFAHAN,
     respawnTime: 90,
     description: 'Бронированный разбойник с тяжёлым двуручным мечом.',
-    modelPath: 'models/monsters/bandit_warrior.fbx',
   },
   'mob_ottoman_janissary': {
     id: 'mob_ottoman_janissary',
@@ -179,7 +180,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.SHIRAZ,
     respawnTime: 300,
     description: 'Элитный пехотинец Османской империи. Вооружён мушкетом и ятаганом.',
-    modelPath: 'models/monsters/ottoman_janissary.fbx',
   },
   'mob_mongol_raider': {
     id: 'mob_mongol_raider',
@@ -212,7 +212,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.CAUCASUS,
     respawnTime: 600,
     description: 'Быстрый монгольский наездник на боевом коне. Опасен на открытой местности.',
-    modelPath: 'models/monsters/mongol_raider.fbx',
   },
   'mob_div_fire': {
     id: 'mob_div_fire',
@@ -246,7 +245,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.MESOPOTAMIA,
     respawnTime: 1800,
     description: 'Демон из персидской мифологии. Обитает в горных пещерах Хорасана.',
-    modelPath: 'models/monsters/fire_div.fbx',
   },
 
   // ── БОССЫ ДАНЖЕЙ ──────────────────────────────────────────────
@@ -282,7 +280,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.TABRIZ,
     respawnTime: 3600,
     description: 'Легендарный атаман Рустам. Главарь всех разбойников Тебриза.',
-    modelPath: 'models/bosses/bandit_king.fbx',
   },
   'boss_ottoman_pasha': {
     id: 'boss_ottoman_pasha',
@@ -318,7 +315,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.MESOPOTAMIA,
     respawnTime: 86400,
     description: 'Главный полководец Османской армии. Босс данжа «Багдадская Цитадель».',
-    modelPath: 'models/bosses/ottoman_pasha.fbx',
   },
 
   // ── МИРОВЫЕ БОССЫ ────────────────────────────────────────────
@@ -356,7 +352,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.KHORASAN,
     respawnTime: 604800, // 1 неделя
     description: 'Мифическая птица из персидской мифологии. Требует рейд из 40+ игроков.',
-    modelPath: 'models/world_bosses/simurgh.fbx',
   },
   'world_boss_rustam_reborn': {
     id: 'world_boss_rustam_reborn',
@@ -390,7 +385,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.PERSIAN_GULF,
     respawnTime: 1209600, // 2 недели
     description: 'Древний герой шахнаме, возрождённый тёмными силами. Требует 100+ игроков.',
-    modelPath: 'models/world_bosses/rustam_undying.fbx',
   },
 
   // ── ПОГОДНЫЕ ДУХИ (спавнятся только в соответствующую погоду,
@@ -425,7 +419,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.TABRIZ,
     respawnTime: 600,
     description: 'Полупрозрачный дух, материализующийся под дождём. Умывает путников и ворует их ману.',
-    modelPath: 'models/monsters/weather/rain_spirit.fbx',
   },
   'mob_storm_djinn': {
     id: 'mob_storm_djinn',
@@ -458,7 +451,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.SHIRAZ,
     respawnTime: 1800,
     description: 'Грозовой джинн, являющийся лишь в разгар бури. Каждая его молния слышна на милю вокруг.',
-    modelPath: 'models/monsters/weather/storm_djinn.fbx',
   },
   'mob_sand_div': {
     id: 'mob_sand_div',
@@ -491,7 +483,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.CAUCASUS,
     respawnTime: 2700,
     description: 'Див, чьё тело — спрессованная песчаная буря. Пробуждается, когда пустыня встаёт стеной.',
-    modelPath: 'models/monsters/weather/sand_div.fbx',
   },
   'mob_fog_assassin': {
     id: 'mob_fog_assassin',
@@ -525,7 +516,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.SHIRAZ,
     respawnTime: 1800,
     description: 'Никто не видел его лица: в тумане он рождается, в тумане и исчезает. Охотится на зазевавшихся торговцев.',
-    modelPath: 'models/monsters/weather/fog_assassin.fbx',
   },
 
   // ── БОССЫ ДАНЖЕЙ ──────────────────────────────────────────────
@@ -563,7 +553,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.KHORASAN,
     respawnTime: 604800,
     description: 'Царь огненных дивов Хорасана, повелитель пещер вечного пламени. Финальный босс пещер Хорасана.',
-    modelPath: 'models/dungeon_bosses/div_arzhang.fbx',
   },
 
   // ── ДОПОЛНИТЕЛЬНЫЕ МОНСТРЫ ──────────────────────────────────
@@ -588,7 +577,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.ISFAHAN,
     respawnTime: 30,
     description: 'Ядовитый скорпион, прячущийся под камнями.',
-    modelPath: 'models/mobs/scorpion.fbx',
   },
   'mob_road_bandit': {
     id: 'mob_road_bandit',
@@ -612,7 +600,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.ISFAHAN,
     respawnTime: 45,
     description: 'Преступник, грабящий караваны на дорогах Тебриза.',
-    modelPath: 'models/mobs/bandit.fbx',
   },
   'mob_wolf': {
     id: 'mob_wolf',
@@ -634,7 +621,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.ISFAHAN,
     respawnTime: 30,
     description: 'Серый волк, бродящий по горам к северу от Тебриза.',
-    modelPath: 'models/mobs/wolf.fbx',
   },
 
   // ── ПОДВОДНЫЕ СУЩЕСТВА (озеро у Тебриза) ────────────────────
@@ -666,7 +652,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     aquatic: true,
     aquaticSize: 0.15,
     description: 'Мелкая стая, держится у берега. Один не страшен — стая тянет на дно.',
-    modelPath: 'models/mobs/piranha.fbx',
   },
   'mob_lake_sturgeon_horror': {
     id: 'mob_lake_sturgeon_horror',
@@ -691,7 +676,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     aquatic: true,
     aquaticSize: 0.55,
     description: 'Толстый, слепой, размером с лодку. Бьёт хвостом — сбивает с ног.',
-    modelPath: 'models/mobs/wolf.fbx',
   },
   'mob_lake_ghost_fish': {
     id: 'mob_lake_ghost_fish',
@@ -717,7 +701,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     aquatic: true,
     aquaticSize: 0.45,
     description: 'Белая, светится изнутри. Тянет за собой течение — и туда, и обратно.',
-    modelPath: 'models/mobs/ghost_fish.fbx',
   },
   'mob_lake_leviathan': {
     id: 'mob_lake_leviathan',
@@ -748,7 +731,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     aquatic: true,
     aquaticSize: 0.95,
     description: 'Тот, кого рыбаки зовут «старухой озера». Дышит сорок лет, помнит ещё Кара-Хан.',
-    modelPath: 'models/mobs/leviathan.fbx',
   },
 
   // Исфахан — регион 20-40
@@ -774,7 +756,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.TABRIZ,
     respawnTime: 60,
     description: 'Послушник тайного ордена ассасинов, охраняющий подземелья Исфахана.',
-    modelPath: 'models/mobs/assassin_acolyte.fbx',
   },
   'mob_sand_elemental': {
     id: 'mob_sand_elemental',
@@ -798,7 +779,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.TABRIZ,
     respawnTime: 120,
     description: 'Древнее дух пустыни, сотканный из песка и ярости.',
-    modelPath: 'models/mobs/sand_elemental.fbx',
   },
 
   // Шираз — регион 40-60
@@ -825,7 +805,6 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     region: Region.SHIRAZ,
     respawnTime: 180,
     description: 'Древний страж гробниц Шираза, несущий вечную службу.',
-    modelPath: 'models/mobs/undead_guardian.fbx',
   },
 // ── ХОРАСАН: оазис, 70-80 уровень ────────────────────────────────
   // ЧТО БЫЛО. Зона khorasan_oasis (от 70 уровня) стояла пустой: в базе
