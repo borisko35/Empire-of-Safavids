@@ -991,6 +991,66 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     maxStack: 999,
     price: 45000,
   },
+
+  // ── Трофеи для монстров 70-80 уровня ───────────────────────────────
+  // ЧТО БЫЛО. Зон khorasan_oasis (от 70 уровня) и persian_gulf_harbor
+  // (от 80) в базе не было ни одного монстра: ничему было их наполнить.
+  // Трофеев под высокий уровень тоже не было - последний был 65 уровня, -
+  // поэтому новым монстрам пришлось бы ронять чужие трофеи вроде «Угля
+  // Огненного Дива». Эти четыре добавлены вместе с монстрами, чтобы добыча
+  // соответствовала тому, кто её роняет.
+  'trophy_caravan_raider_seal': {
+    id: 'trophy_caravan_raider_seal',
+    name: 'Caravan Raider Seal',
+    nameRu: 'Печатка Караванного Налётчика',
+    type: ItemType.TROPHY,
+    rarity: ItemRarity.ARTIFACT,
+    level: 70,
+    description: 'Печатка сбыта караванов. По ней в порту узнают налётчика и платят за голову.',
+    iconPath: 'icons/materials/iron_ore.png',
+    stackable: true,
+    maxStack: 999,
+    price: 52000,
+  },
+  'trophy_oasis_lynx_pelt': {
+    id: 'trophy_oasis_lynx_pelt',
+    name: 'Oasis Lynx Pelt',
+    nameRu: 'Шкура Оазисной Рыси',
+    type: ItemType.TROPHY,
+    rarity: ItemRarity.ARTIFACT,
+    level: 72,
+    description: 'Пятнистая шкура. Мехи пыльных рысей, говорят, отводят дурной глаз.',
+    iconPath: 'icons/materials/iron_ore.png',
+    stackable: true,
+    maxStack: 999,
+    price: 58000,
+  },
+  'trophy_corsair_cutlass': {
+    id: 'trophy_corsair_cutlass',
+    name: 'Corsair Cutlass',
+    nameRu: 'Абордажная Сабля Корсара',
+    type: ItemType.TROPHY,
+    rarity: ItemRarity.ARTIFACT,
+    level: 80,
+    description: 'Клинок с рубленой гардой. За неё в порту платят столько, что проще не драться.',
+    iconPath: 'icons/materials/iron_ore.png',
+    stackable: true,
+    maxStack: 999,
+    price: 78000,
+  },
+  'trophy_harbor_brute_iron': {
+    id: 'trophy_harbor_brute_iron',
+    name: 'Harbour Brute Iron',
+    nameRu: 'Железо Портного Головореза',
+    type: ItemType.TROPHY,
+    rarity: ItemRarity.ARTIFACT,
+    level: 80,
+    description: 'Кусок корабельной арматуры, который кто-то носил как напястник.',
+    iconPath: 'icons/materials/iron_ore.png',
+    stackable: true,
+    maxStack: 999,
+    price: 74000,
+  },
 };
 
 export function getItem(id: string): Item | undefined {

@@ -62,7 +62,20 @@ export interface MonsterDefinition {
    */
   aquaticSize?: number;
   description: string;
-  modelPath: string;
+  /**
+   * Путь к 3D-модели. НЕ ЧИТАЕТСЯ НИГДЕ.
+   *
+   * ЧТО ЭТО ТАКОЕ. Клиент не грузит модели: он собирает тела процедурно по
+   * monsterId в client/src/app/game3d/rig.ts. Поле указывало на .fbx, которых
+   * в репозитории нет, и выглядело как описание внешности монстра.
+   *
+   * ПОЧЕМУ НЕ УДАЛЕНО, А ПРОСТО НЕОБЯЗАТЕЛЬНОЕ. Удалять 24 строки данных -
+   * решение владельца; проверка monsterRigCoverage.test.ts следит, чтобы
+   * поле не начали читать (клиент всё равно не умеет). А новым монстрам
+   * писать выдуманный путь нельзя: это была бы новая ложь в данных, и
+   * затыкать ею дыру в контенте нельзя.
+   */
+  modelPath?: string;
 }
 
 export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
@@ -814,8 +827,149 @@ export const MONSTERS_DATABASE: Record<string, MonsterDefinition> = {
     description: 'Древний страж гробниц Шираза, несущий вечную службу.',
     modelPath: 'models/mobs/undead_guardian.fbx',
   },
-};
+// ── ХОРАСАН: оазис, 70-80 уровень ────────────────────────────────
+  // ЧТО БЫЛО. Зона khorasan_oasis (от 70 уровня) стояла пустой: в базе
+  // не было ни одного монстра 70-80 уровня, кроме босса Арзханга. Пустая
+  // зона видна игроку прямо - это «мир пустой», а не тонкая настройка.
+  //
+  // Характеристики взяты по соседям, а не выдуманы: монгол-рейдер
+  // 55 уровня имеет 7000 hp и 1500 опыта, огненный див 65 уровня -
+  // 12000 hp и 3000 опыта. Отсюда интерполяция для 70-72.
+  'mob_caravan_raider': {
+    id: 'mob_caravan_raider',
+    name: 'Caravan Raider',
+    nameRu: 'Караванный Налётчик',
+    type: 'elite',
+    faction: 'bandit',
+    level: 70,
+    hp: 14000,
+    mana: 400,
+    strength: 95,
+    agility: 72,
+    intelligence: 40,
+    defense: 55,
+    moveSpeed: 5.2,
+    attackRange: 2,
+    aggroRange: 16,
+    expReward: 3200,
+    goldReward: { min: 120, max: 320 },
+    skills: [
+      { id: 'raider_slash', name: 'Caravan Slash', nameRu: 'Взмах Налётчика', damage: 520, cooldown: 4, range: 2, aoe: false },
+      { id: 'raider_sprint', name: 'Ambush Rush', nameRu: 'Засада', damage: 380, cooldown: 12, range: 3, aoe: false },
+    ],
+    lootTable: [
+      { itemId: 'trophy_caravan_raider_seal', chance: 0.08, minQty: 1, maxQty: 1 },
+      { itemId: 'mat_turquoise', chance: 0.25, minQty: 1, maxQty: 3 },
+      { itemId: 'con_health_potion_m', chance: 0.35, minQty: 1, maxQty: 2 },
+    ],
+    region: Region.KHORASAN,
+    respawnTime: 1200,
+    description: 'Грабит караваны между оазисами. Знает тропы лучше, чем местные проводники.',
+  },
+  'mob_oasis_lynx': {
+    id: 'mob_oasis_lynx',
+    name: 'Oasis Lynx',
+    nameRu: 'Оазисная Рысь',
+    type: 'elite',
+    faction: 'neutral',
+    level: 72,
+    hp: 15500,
+    mana: 0,
+    strength: 112,
+    agility: 96,
+    intelligence: 60,
+    defense: 48,
+    moveSpeed: 6.2,
+    attackRange: 2,
+    aggroRange: 20,
+    expReward: 3600,
+    goldReward: { min: 90, max: 260 },
+    skills: [
+      { id: 'lynx_pounce', name: 'Pounce', nameRu: 'Прыжок', damage: 610, cooldown: 6, range: 4, aoe: false },
+      { id: 'lynx_rake', name: 'Rake', nameRu: 'Когти', damage: 340, cooldown: 3, range: 2, aoe: false, effect: 'bleed', effectDuration: 8 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_oasis_lynx_pelt', chance: 0.1, minQty: 1, maxQty: 1 },
+      { itemId: 'trophy_wolf_pelt', chance: 0.12, minQty: 1, maxQty: 2 },
+      { itemId: 'con_stamina_food', chance: 0.3, minQty: 1, maxQty: 2 },
+    ],
+    region: Region.KHORASAN,
+    respawnTime: 1500,
+    description: 'Пятнистая хищница, живущая у воды. Охотится на караваны, пока те стоят на водопой.',
+  },
 
+  // ── ПЕРСИДСКИЙ ЗАЛИВ: гавань, 80 уровень ──────────────────────────
+  // ЧТО БЫЛО. Зона persian_gulf_harbor (от 80 уровня) тоже стояла пустой.
+  // ВНИМАНИЕ, ЧТО ВЫБРАНО И ПОЧЕМУ. Монстры здесь наземные, хотя регион
+  // называется «Залив»: моря в мире нет. В client/src/app/game3d/terrain.ts
+  // вода - это LAKE (-420,-160), пруд и два русла рек. Поставить сюда
+  // водное существо нельзя - оно оказалось бы стоять на суше.
+  //
+  // Зону persian_gulf_waters (от 85) по той же причине наполнить нельзя:
+  // ей нужен залив, а залива нет. Она остаётся в списке известных дыр.
+  'mob_corsair': {
+    id: 'mob_corsair',
+    name: 'Corsair',
+    nameRu: 'Корсар',
+    type: 'elite',
+    faction: 'bandit',
+    level: 80,
+    hp: 20000,
+    mana: 500,
+    strength: 128,
+    agility: 104,
+    intelligence: 62,
+    defense: 70,
+    moveSpeed: 5.6,
+    attackRange: 2,
+    aggroRange: 18,
+    expReward: 5000,
+    goldReward: { min: 180, max: 450 },
+    skills: [
+      { id: 'corsair_cutlass', name: 'Cutlass', nameRu: 'Удар Саблей', damage: 680, cooldown: 3, range: 2, aoe: false },
+      { id: 'corsair_flurry', name: 'Boarding Flurry', nameRu: 'Абордажная очередь', damage: 420, cooldown: 10, range: 2, aoe: true, aoeRadius: 3 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_corsair_cutlass', chance: 0.06, minQty: 1, maxQty: 1 },
+      { itemId: 'mat_dragon_scale', chance: 0.1, minQty: 1, maxQty: 2 },
+      { itemId: 'con_health_potion_m', chance: 0.4, minQty: 1, maxQty: 2 },
+    ],
+    region: Region.PERSIAN_GULF,
+    respawnTime: 1800,
+    description: 'Гаванит, ушедший из порта с добычей. Нападает на купцов прямо у причала.',
+  },
+  'mob_harbor_brute': {
+    id: 'mob_harbor_brute',
+    name: 'Harbour Brute',
+    nameRu: 'Портный Головорез',
+    type: 'elite',
+    faction: 'bandit',
+    level: 80,
+    hp: 34000,
+    mana: 0,
+    strength: 165,
+    agility: 44,
+    intelligence: 30,
+    defense: 95,
+    moveSpeed: 4.2,
+    attackRange: 3,
+    aggroRange: 14,
+    expReward: 5600,
+    goldReward: { min: 220, max: 520 },
+    skills: [
+      { id: 'brute_maul', name: 'Maul', nameRu: 'Размах кувалдой', damage: 890, cooldown: 5, range: 3, aoe: true, aoeRadius: 4 },
+      { id: 'brute_slam', name: 'Ground Slam', nameRu: 'Удар о землю', damage: 0, cooldown: 18, range: 5, aoe: true, aoeRadius: 8, effect: 'stun', effectDuration: 3 },
+    ],
+    lootTable: [
+      { itemId: 'trophy_harbor_brute_iron', chance: 0.07, minQty: 1, maxQty: 1 },
+      { itemId: 'mat_iron_ore', chance: 0.4, minQty: 2, maxQty: 5 },
+      { itemId: 'con_exp_scroll', chance: 0.2, minQty: 1, maxQty: 1 },
+    ],
+    region: Region.PERSIAN_GULF,
+    respawnTime: 2100,
+    description: 'Списанный матрос, который остался на причале. Держит корабельную арматуру вместо оружия.',
+  },
+};
 export function getMonster(id: string): MonsterDefinition | undefined {
   return MONSTERS_DATABASE[id];
 }

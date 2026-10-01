@@ -102,10 +102,12 @@ const SPAWN_POINTS: SpawnPoint[] = [
   makePoint({ id: 'sp_meso_run_01', monsterId: 'mob_div_fire',          region: Region.MESOPOTAMIA, position: { x: -80,  y: 0, z: -450 }, maxCount: 3, respawnTime: 1800, weatherBonus: { storm: 2.0 } }),
   makePoint({ id: 'sp_meso_fro_pasha', monsterId: 'boss_ottoman_pasha',  region: Region.MESOPOTAMIA, position: { x: 200,  y: 0, z: -380 }, maxCount: 1, respawnTime: 7200, weatherBonus: {} }),
 
-  // ─ Хорасан (z 700..1050, 70-80 уровень). Обычных монстров 70-80
-  // уровня в базе нет вообще, поэтому oasis (70) и caravanserai (75)
-  // стоят пустыми - это зафиксировано в проверке как известная дыра,
-  // а не замаскировано слабым монстром.
+  // ─ Хорасан (z 700..1050, 70-80 уровень).
+  // Раньше oasis (70) стоял пустым: обычных монстров 70-80 уровня в базе
+  // не было вообще. Теперь есть - налётчик (70) и рысь (72).
+  makePoint({ id: 'sp_khor_oas_raid', monsterId: 'mob_caravan_raider', region: Region.KHORASAN, position: { x: -150, y: 0, z: 750 }, maxCount: 3, respawnTime: 1200, weatherBonus: {} }),
+  makePoint({ id: 'sp_khor_oas_lynx', monsterId: 'mob_oasis_lynx',    region: Region.KHORASAN, position: { x: 200,  y: 0, z: 780 }, maxCount: 3, respawnTime: 1500, weatherBonus: { fog: 1.4 } }),
+  // Караван-сарай (75) наполнен боссом Арзхангом - зона не пустая.
   makePoint({ id: 'sp_khor_car_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 180,  y: 0, z: 870  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
   makePoint({ id: 'sp_khor_eas_arzh', monsterId: 'boss_div_arzhang',   region: Region.KHORASAN, position: { x: 250,  y: 0, z: 980  }, maxCount: 1, respawnTime: 10800, weatherBonus: {} }),
   // Симург - 90 уровень, и теперь действительно в Хорасане.
@@ -118,6 +120,12 @@ const SPAWN_POINTS: SpawnPoint[] = [
   // поставить его в воду нельзя: он там утонет (или будет стоять в
   // воздухе над сушей).
   makePoint({ id: 'sp_gulf_isl_rustam', monsterId: 'world_boss_rustam_reborn', region: Region.PERSIAN_GULF, position: { x: 40, y: 0, z: -620 }, maxCount: 1, respawnTime: 1209600, weatherBonus: {} }),
+  // Гавань (80) тоже была пустой - добавлены корсар (80) и головорез (80).
+  makePoint({ id: 'sp_gulf_har_cors',  monsterId: 'mob_corsair',       region: Region.PERSIAN_GULF, position: { x: -120, y: 0, z: -1000 }, maxCount: 4, respawnTime: 1800, weatherBonus: { storm: 1.4 } }),
+  makePoint({ id: 'sp_gulf_har_brute', monsterId: 'mob_harbor_brute',  region: Region.PERSIAN_GULF, position: { x: 160,  y: 0, z: -960  }, maxCount: 2, respawnTime: 2100, weatherBonus: {} }),
+  // Зона persian_gulf_waters (от 85) остаётся пустой: ей нужен залив, а
+  // моря в мире нет. Это зафиксировано в spawnPlacement.test.ts как
+  // известная дыра, чтобы она не росла молча.
 ];
 
 export class SpawnSystem {

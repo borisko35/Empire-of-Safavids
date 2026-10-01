@@ -54,6 +54,25 @@ export interface Rig {
   dispose: () => void;
 }
 
+/**
+ * Четвероногий зверь: волк, рысь и всё, что ходит на четырёх ногах.
+ *
+ * Общая фигура с настройкой цвета и масштаба. Заведена потому, что волк
+ * раньше рисовался гуманоидом в капюшоне с мечом, а рисовать второе
+ * четвероногое копией того же кода - значит завести две правки там, где
+ * хватит одной.
+ */
+export interface QuadrupedCfg {
+  /** Шерсть корпуса */
+  fur: number;
+  /** Голова, морда, ноги и хвост */
+  furDark: number;
+  /** Грудь и брюхо: светлее корпуса, иначе силуэт сливается с землёй */
+  light: number;
+  /** Общий размер */
+  scale?: number;
+}
+
 export interface HumanoidCfg {
   robe: number;
   robeDark: number;
@@ -762,13 +781,14 @@ function buildFish(cfg: FishCfg): Rig {
  * Размеры под дистанцию боя (3 м): корпус около метра в длину, иначе
  * волк не читается на общем плане.
  */
-function buildWolf(): Rig {
+function buildQuadruped(cfg: QuadrupedCfg): Rig {
   const group = new THREE.Group();
-  const fur = mat(0x6e6a62, 0.95);
-  const furDark = mat(0x413e39, 0.95);
-  const light = mat(0xb4ada0, 0.95);
+  const fur = mat(cfg.fur, 0.95);
+  const furDark = mat(cfg.furDark, 0.95);
+  const light = mat(cfg.light, 0.95);
   const dark = mat(0x1e1c1a, 0.9);
   const body = new THREE.Group();
+  const k = cfg.scale ?? 1;
   group.add(body);
 
   // Корпус: вытянут вдоль Z, плечо выше хвоста.
@@ -804,21 +824,13 @@ function buildWolf(): Rig {
     body.add(eye);
   }
 
-  // Ноги: четыре, передние чуть короче задних.
+  // Ноги: четыре, передние чуть короче задних. Сами ноги строятся ниже, в
+  // цикле с анимацией, чтобы не создавать их дважды.
   const ноги: [number, number, number][] = [
     [0.15, 0.30, -0.16], [-0.15, 0.30, -0.16], [0.15, 0.32, 0.20], [-0.15, 0.32, 0.20],
   ];
-  for (const [x, y, z] of ноги) {
-    const leg = cyl(0.045, 0.055, y, furDark, 6);
-    leg.position.set(x, y / 2, z);
-    body.add(leg);
-    const paw = sphere(0.06, dark, 5);
-    paw.scale.set(1, 0.6, 1.2);
-    paw.position.set(x, 0.04, z + 0.03);
-    body.add(paw);
-  }
 
-  // Хвост: вверх и назад, как у загнанного волка.
+  // Хвост: вверх и назад, как у загнанного зверя.
   const tail = cyl(0.03, 0.07, 0.46, furDark, 6);
   tail.rotation.x = 0.9;
   tail.position.set(0, 0.60, -0.48);
@@ -834,7 +846,15 @@ function buildWolf(): Rig {
     leg.userData.диагональ = (z > 0) === (x > 0);
     body.add(leg);
     лапы.push(leg);
+    // Подушечка: без неё лапа выглядит обрубком, а не стопой.
+    const paw = sphere(0.06, dark, 5);
+    paw.scale.set(1, 0.6, 1.2);
+    paw.position.set(x, 0.04, z + 0.03);
+    body.add(paw);
   }
+
+  // Размер зверя: рысь крупнее волка, и масштаб задаётся настройкой.
+  if (k !== 1) body.scale.setScalar(k);
 
   let фаза = 0;
   let падение = 0;
@@ -988,7 +1008,19 @@ export function buildMonsterRig(monsterId: string): Rig {
     case 'world_boss_simurgh':
       return buildSimurgh();
     case 'mob_wolf':
-      return buildWolf();
+      return buildQuadruped({ fur: 0x6e6a62, furDark: 0x413e39, light: 0xb4ada0 });
+    // Оазисная рысь: пятнистого меха геометрией не сделать, поэтому
+    // отличия — цвет и размер.
+    case 'mob_oasis_lynx':
+      return buildQuadruped({ fur: 0x9a7a4e, furDark: 0x5c452a, light: 0xd8c49a, scale: 1.2 });
+    case 'mob_caravan_raider':
+      return buildHumanoid({ robe: 0x6a5230, robeDark: 0x3a2c18, hat: 'hood', hatColor: 0x2a2014, weapon: 'rapier', scale: 1.08 });
+    case 'mob_corsair':
+      return buildHumanoid({ robe: 0x2a3a4a, robeDark: 0x16202a, hat: 'cap', hatColor: 0x1a2028, weapon: 'rapier', scale: 1.10 });
+    // Портный головорез - самый крупный наземный монстр залива: без
+    // оружия в руках, только напястник из корабельной арматуры.
+    case 'mob_harbor_brute':
+      return buildHumanoid({ robe: 0x4a4038, robeDark: 0x2a2420, hat: 'none', hatColor: 0x000000, weapon: 'none', shield: true, scale: 1.34 });
 
     // ── ЧТО БЫЛО ПОД ЭТИМ БЛОКОМ ──────────────────────────────
     // Дальше шёл `default: buildHumanoid({ hood, sword })`. Из двадцати
