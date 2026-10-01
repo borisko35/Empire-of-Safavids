@@ -174,6 +174,11 @@ export function terrainHeight(x: number, z: number): number {
   h = flatten(h, x, z, CARAVANSERAI.x, CARAVANSERAI.z, CARAVANSERAI.radius, CARAVANSERAI.level);
   h = flatten(h, x, z, VILLAGE.x, VILLAGE.z, VILLAGE.radius, VILLAGE.level);
   h = flatten(h, x, z, FORT.x, FORT.z, FORT.radius, FORT.level);
+  // Площадки городов регионов. Радиус вдвое больше городского не из вкуса:
+  // flatten() держит ровную землю только в центральных 55% своего радиуса,
+  // а дома стоят на 86% городского. Без запаса они попали бы в зону
+  // смешивания, где земля идёт в гору, и дома стояли бы на разной высоте.
+  for (const t of REGION_TOWNS) h = flatten(h, x, z, t.x, t.z, t.radius * 2, t.level);
   // Низменность залива. Суша в заливе должна быть выше уровня моря
   // (SEA.level = -3.2), иначе после заливки половина берега окажется под
   // водой. Уровень +3.5 даёт суше 6.7 м над гладью - достаточно, чтобы
@@ -1973,4 +1978,304 @@ export function buildSettlements(scene: THREE.Scene): void {
     addCollider(FORT.x, FORT.z + 9, 2.4);
     scene.add(g);
   }
+}
+// ── Города регионов ────────────────────────────────────────────────────
+//
+// ЧТО БЫЛО. Регионов на карте семь, а построенных поселений шесть, и
+// четыре из них стоят в регионе Исфахана. Игрок, который выбрал Тебриз,
+// Шираз, Кавказ, Месопотамию, Хорасан или залив, возрождался на своём
+// якоре и стоял в пустом поле: ни домов, ни стен, ни торговли.
+//
+// ПОЧЕМУ НЕ КОПИЯ ГОРОДА. buildCity занимает около пятисот строк и
+// рассчитан на столицу: мечеть, базар, караван-сарай, дворец, стена с
+// воротами. Шесть его копий — это в шесть раз больше мешей на каждом
+// кадре и одинаковый силуэт в семи местах. Здесь построитель маленький:
+// дома, стена, торговля, один памятник на характер региона.
+//
+// ПОЧЕМУ ЗДЕСЬ, А НЕ В ОТДЕЛЬНОМ ФАЙЛЕ. Помощники (brickHouse,
+// tiledIwan, cypress, buildStall) и палитра MAT живут в этом модуле
+// закрытыми. Вынос потребовал бы сделать их публичными, то есть
+// расширить поверхность модуля ради одного файла.
+//
+// ЧТО ПРОВЕРЯЕТСЯ. spawnPlacement.test.ts требует, чтобы у каждого
+// региона, кроме Исфахана, было поселение в его зоне, на суше и на
+// ровном месте. Площадки выбраны замером, а не на глаз: сначала скан по
+// якорям с отбором по уклону, воде и принадлежности к зоне.
+export interface RegionTownDef {
+  region: string;
+  x: number;
+  z: number;
+  radius: number;
+  /** Уровень площадки. Для склонов взята высота в центре якоря. */
+  level: number;
+  kind: 'trade' | 'walls' | 'fortress' | 'ruins' | 'oasis' | 'port';
+  /** Русское имя — для таблицы в проверке, не для отрисовки. */
+  nameRu: string;
+}
+
+export const REGION_TOWNS: RegionTownDef[] = [
+  // Слободная площадка (уклон 0.7), зона tabriz_bazaar.
+  { region: 'khorasan', x: 150, z: 750, radius: 42, level: -0.9, kind: 'oasis', nameRu: 'Хорасан' },
+  { region: 'tabriz', x: 0, z: -300, radius: 46, level: 3.5, kind: 'trade', nameRu: 'Тебриз' },
+  // Уклон 7.0 — ровняем к высоте центра 0.1, зона shiraz_gardens.
+  { region: 'shiraz', x: 90, z: 400, radius: 44, level: 0.1, kind: 'walls', nameRu: 'Шираз' },
+  // Уклон 11.2, самый крутой из якорей, зона caucasus_pass.
+  { region: 'caucasus', x: 60, z: 560, radius: 42, level: 3.7, kind: 'fortress', nameRu: 'Кавказ' },
+  // Ровный (уклон 0), зона mesopotamia_ruins.
+  { region: 'mesopotamia', x: 200, z: -450, radius: 44, level: 3.5, kind: 'ruins', nameRu: 'Месопотамия' },
+  // Уклон 6.2, зона khorasan_oasis. Уровень ниже нуля: низменность.
+  // Ровный (уклон 0) берег залива, зона persian_gulf_islands.
+  { region: 'persian_gulf', x: -60, z: -620, radius: 44, level: 3.5, kind: 'port', nameRu: 'Залив' },
+];
+
+/**
+ * Города регионов.
+ *
+ * ЧТО ЭТО. Поселения в шести регионах, где их не было. Регионов на
+ * карте семь, а к началу этой правки построенных поселений было шесть, и
+ * четыре стояли в регионе Исфахана. То есть игрок, выбравший Тебриз,
+ * Шираз, Кавказ, Месопотамию, Хорасан или залив, возрождался на своём
+ * якоре и стоял в пустом поле.
+ *
+ * ПОЧЕМУ НЕ КОПИЯ buildCity. Столица занимает около пятисот строк: дворец,
+ * мечеть, базар, караван-сарай, стена с воротами. Шесть его копий — в
+ * шесть раз больше мешей в кадре и одинаковый силуэт в семи местах.
+ * Здесь построитель маленький: дома, стена, торг и один памятник,
+ * разный для каждого региона.
+ *
+ * ПОЧЕМУ ЗДЕСЬ, А НЕ В ОТДЕЛЬНОМ ФАЙЛЕ. Помощники (brickHouse,
+ * tiledIwan, buildStall) и палитра MAT закрыты в этом модуле. Вынос
+ * города потребовал бы сделать их публичными ради одного файла.
+ *
+ * ГЛАВНАЯ ОПАСНОСТЬ, И КАК ОНА ОБОЙДЕНА. cypress и addPalm внутри
+ * добавляют коллайдер в мировых координатах: первый — от координат
+ * столицы (CITY.x + x), второй — от сырых x, z. Оба придут не туда,
+ * откуда их звали: у первого все деревья новых городов сузились бы в
+ * коллайдеры внутри Исфахана. Поэтому здесь свои локальные деревья, а
+ * коллайдеры считаются в мировых координатах явно.
+ */
+export function buildRegionTowns(scene: THREE.Scene): void {
+  for (const t of REGION_TOWNS) {
+    const g = new THREE.Group();
+    const baseY = groundHeight(t.x, t.z);
+    g.position.set(t.x, baseY, t.z);
+
+    // Детерминированный генератор по региону: иначе после перезагрузки
+    // страницы город выглядел бы иначе и игрок сравнивал бы его с чужим.
+    let seed = t.region.length * 7919 + t.x + t.z;
+    const rnd = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    // Коллайдер в мировых координатах. Все места в этом файле считают
+    // именно так: группа смещена в (t.x, baseY, t.z), поэтому локальные
+    // координаты меша сами по себе ни о чём не говорят.
+    const коллайдер = (lx: number, lz: number, r: number): void => addCollider(t.x + lx, t.z + lz, r);
+
+    // ── Стена по кольцу с проходом на юге ──────────────────────
+    const сегментов = 14;
+    const hСтены = t.kind === 'fortress' ? 6.5 : 3.6;
+    for (let i = 0; i < сегментов; i++) {
+      if (i === сегментов / 2 || i === сегментов / 2 + 1) continue; // ворота
+      const a = (i / сегментов) * Math.PI * 2;
+      const wx = Math.cos(a) * t.radius;
+      const wz = Math.sin(a) * t.radius;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(t.radius * 0.44, hСтены, 1.6), MAT.stone);
+      wall.position.set(wx, hСтены / 2, wz);
+      wall.rotation.y = -a + Math.PI / 2;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      g.add(wall);
+      коллайдер(wx, wz, 2.4);
+    }
+    for (const sgn of [-1, 1]) {
+      const a = Math.PI / 2 + sgn * 0.16;
+      const px = Math.cos(a) * t.radius;
+      const pz = Math.sin(a) * t.radius;
+      const башня = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 7.4, 8), MAT.stone);
+      башня.position.set(px, 3.7, pz);
+      башня.castShadow = true;
+      g.add(башня);
+      коллайдер(px, pz, 1.9);
+    }
+    tiledIwan(g, 0, t.radius, 7, 5, 0);
+    коллайдер(0, t.radius, 2.4);
+
+    // ── Дома по кольцу лицом к центру ──────────────────────────
+    const домов = t.kind === 'fortress' ? 7 : 10;
+    for (let i = 0; i < домов; i++) {
+      const a = (i / домов) * Math.PI * 2 + 0.35;
+      if (Math.abs(a - Math.PI / 2) < 0.55) continue; // проход к воротам
+      const r = t.radius * (0.58 + rnd() * 0.2);
+      brickHouse(g, Math.cos(a) * r, Math.sin(a) * r, 4 + rnd() * 2.4, 3.4 + rnd() * 2.2, {
+        dome: rnd() > 0.72,
+        badgirH: rnd() > 0.6 ? 2.6 + rnd() * 1.6 : undefined,
+      });
+    }
+
+    // ── Площадь: торговые ряды и колодец ───────────────────────
+    const рядов = t.kind === 'fortress' ? 2 : 4;
+    for (let i = 0; i < рядов; i++) {
+      const a = (i / рядов) * Math.PI * 2;
+      const stall = buildStall(i, [MAT.clothRed, MAT.clothTeal, MAT.gold]);
+      stall.position.set(Math.cos(a) * t.radius * 0.3, 0, Math.sin(a) * t.radius * 0.3);
+      stall.rotation.y = -a;
+      g.add(stall);
+    }
+    const колодец = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.4, 1.5, 10), MAT.stone);
+    колодец.position.set(0, 0.75, 0);
+    колодец.castShadow = true;
+    g.add(колодец);
+    коллайдер(0, 0, 1.4);
+
+    // ── Памятник региона ───────────────────────────────────────
+    // Каждый город обязан отличаться силуэтом: иначе шесть одинаковых
+    // поселков на карте читаются как один, скопированный шесть раз.
+    switch (t.kind) {
+      case 'trade': {
+        for (const s of [-1, 1]) {
+          const col = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.8, 6, 8), MAT.wood);
+          col.position.set(s * 3.4, 3, -t.radius * 0.4);
+          col.castShadow = true;
+          g.add(col);
+          коллайдер(s * 3.4, -t.radius * 0.4, 0.8);
+        }
+        const перемычка = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1, 1.2), MAT.wood);
+        перемычка.position.set(0, 6.2, -t.radius * 0.4);
+        перемычка.castShadow = true;
+        g.add(перемычка);
+        break;
+      }
+      case 'walls': {
+        // Сад за стеной: ряд кипарисов и низкая кладка
+        for (let i = 0; i < 5; i++) {
+          деревоКипарис(g, -14 + i * 7, -t.radius * 0.45, 1.1, коллайдер);
+        }
+        const кладка = new THREE.Mesh(new THREE.BoxGeometry(34, 2.2, 0.9), MAT.stone);
+        кладка.position.set(0, 1.1, -t.radius * 0.45);
+        кладка.castShadow = true;
+        кладка.receiveShadow = true;
+        g.add(кладка);
+        коллайдер(0, -t.radius * 0.45, 1.6);
+        break;
+      }
+      case 'fortress': {
+        for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          const bx = sx * t.radius * 0.72;
+          const bz = sz * t.radius * 0.72;
+          const башня = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.7, 10, 8), MAT.stone);
+          башня.position.set(bx, 5, bz);
+          башня.castShadow = true;
+          башня.receiveShadow = true;
+          g.add(башня);
+          коллайдер(bx, bz, 2.4);
+        }
+        break;
+      }
+      case 'ruins': {
+        // Обломки колонн: то, что осталось от прежнего города
+        for (let i = 0; i < 5; i++) {
+          const a = -0.5 + i * 0.55;
+          const rx = Math.cos(a) * t.radius * 0.66;
+          const rz = Math.sin(a) * t.radius * 0.66;
+          const высота = 2.4 + rnd() * 4.2;
+          const колонна = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.85, высота, 9), MAT.stone);
+          колонна.position.set(rx, высота / 2, rz);
+          колонна.rotation.z = (rnd() - 0.5) * 0.22;
+          колонна.castShadow = true;
+          g.add(колонна);
+          коллайдер(rx, rz, 0.9);
+        }
+        break;
+      }
+      case 'oasis': {
+        // Финиковая роща: оазис обязан читаться оазисом
+        for (let i = 0; i < 6; i++) {
+          const a = 1.9 + i * 0.42;
+          деревоФиник(g, Math.cos(a) * t.radius * 0.72, Math.sin(a) * t.radius * 0.72, 1.15, коллайдер);
+        }
+        const бассейн = new THREE.Mesh(new THREE.BoxGeometry(9, 0.5, 6), MAT.stone);
+        бассейн.position.set(0, 0.25, -t.radius * 0.35);
+        бассейн.receiveShadow = true;
+        g.add(бассейн);
+        коллайдер(0, -t.radius * 0.35, 4);
+        break;
+      }
+      case 'port': {
+        // Причал с лодками: залив должен читаться заливом
+        const пирс = new THREE.Group();
+        for (let i = 0; i < 5; i++) {
+          const plank = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 1.7), MAT.wood);
+          plank.position.set(0, 0.5, -i * 1.8);
+          plank.castShadow = true;
+          пирс.add(plank);
+        }
+        for (let i = 0; i < 3; i++) {
+          const лодка = new THREE.Group();
+          const корпус = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.45, 3.2, 7), MAT.wood);
+          корпус.rotation.x = Math.PI / 2;
+          корпус.scale.y = 0.4;
+          лодка.add(корпус);
+          лодка.position.set(2.8 + i * 0.5, 0.2, -6 - i * 0.9);
+          лодка.rotation.y = 0.3;
+          пирс.add(лодка);
+        }
+        пирс.position.set(-t.radius * 0.5, 0, t.radius * 0.2);
+        g.add(пирс);
+        break;
+      }
+    }
+
+    // ── Зелень по кольцу, кроме сектора ворот ──────────────────
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + 0.9;
+      if (Math.abs(a - Math.PI / 2) < 0.5) continue;
+      деревоКипарис(g, Math.cos(a) * t.radius * 0.86, Math.sin(a) * t.radius * 0.86, 0.95, коллайдер);
+    }
+
+    scene.add(g);
+  }
+}
+
+/**
+ * Кипарис для городов регионов.
+ *
+ * Отдельная функция, а не cypress(), потому что cypress ставит коллайдер
+ * в координатах столицы (CITY.x + x): внутри группы нового города все
+ * деревья дали бы невидимые коллайдеры в Исфахане. Здесь координаты
+ * локальные, а коллайдер считает вызывающий.
+ */
+function деревоКипарис(
+  g: THREE.Group, x: number, z: number, s: number,
+  коллайдер: (x: number, z: number, r: number) => void,
+): void {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * s, 0.24 * s, 2.2 * s, 6), MAT.trunk);
+  trunk.position.set(x, 1.1 * s, z);
+  trunk.castShadow = true;
+  g.add(trunk);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.95 * s, 4.4 * s, 7), MAT.palmLeaf);
+  crown.position.set(x, 2.2 * s + 2.2 * s, z);
+  crown.castShadow = true;
+  g.add(crown);
+  коллайдер(x, z, 0.55);
+}
+
+/** Финиковая пальма для городов регионов. Причина та же, что у кипариса. */
+function деревоФиник(
+  g: THREE.Group, x: number, z: number, k: number,
+  коллайдер: (x: number, z: number, r: number) => void,
+): void {
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.17 * k, 0.27 * k, 5.4 * k, 6), MAT.palmTrunk);
+  trunk.position.set(x, 2.7 * k, z);
+  trunk.castShadow = true;
+  g.add(trunk);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2;
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.34 * k, 2.6 * k, 4), MAT.palmLeaf);
+    leaf.position.set(x + Math.cos(a) * 1 * k, 5.4 * k + 0.15 * k, z + Math.sin(a) * 1 * k);
+    leaf.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25);
+    leaf.castShadow = true;
+    g.add(leaf);
+  }
+  коллайдер(x, z, 0.55);
 }
