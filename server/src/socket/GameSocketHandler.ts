@@ -501,6 +501,113 @@ export class GameSocketHandler {
       if (socket) socket.emit(SERVER_EVENTS.KARMA_CHANGED, msg);
     });
 
+    // ── Партия ──────────────────────────────────────────────────
+    // Состав партии меняется, и участник должен узнать об этом сразу,
+    // а не после того, как сам откроет панель. Сообщение несёт список
+    // characterId, поэтому рассылаем по сокетам участников.
+    const переслатьУчастникам = async (
+      канал: string,
+      событие: string,
+      поле: (msg: Record<string, unknown>) => string[],
+    ) => {
+      await this.redis.subscribe(канал, (msg: Record<string, unknown>) => {
+        const участники = поле(msg);
+        if (участники.length === 0) {
+          logger.warn(`[Socket] ${канал}: событие без участников, пересылать некому`, msg);
+          return;
+        }
+        for (const characterId of участники) {
+          this.activePlayers.get(characterId)?.emit(событие, msg);
+        }
+      });
+    };
+    // party:updated несёт состав, остальные события - нет. Для них берём
+    // состав из Redis: без него участник, который вышел, не узнает,
+    // что вышел, а оставшиеся - что он ушёл.
+    const составПартии = async (partyId: string): Promise<string[]> => {
+      const сырое = await this.redis.get(`party:${partyId}`).catch(() => null);
+      if (!сырое) return [];
+      try {
+        const party = JSON.parse(сырое) as { members?: { characterId?: string }[] };
+        return (party.members ?? []).map((m) => String(m.characterId)).filter(Boolean);
+      } catch (e) {
+        logger.warn('[Socket] состав партии не разобран:', e);
+        return [];
+      }
+    };
+    await переслатьУчастникам(REDIS_CHANNELS.PARTY_UPDATED, SOCKET_EVENTS.PARTY_UPDATED,
+      (msg) => (Array.isArray(msg.members) ? (msg.members as { characterId: string }[]).map((m) => String(m.characterId)) : []));
+    for (const [канал, событие] of [
+      [REDIS_CHANNELS.PARTY_MEMBER_JOINED, SOCKET_EVENTS.PARTY_MEMBER_JOINED],
+      [REDIS_CHANNELS.PARTY_MEMBER_LEFT, SOCKET_EVENTS.PARTY_MEMBER_LEFT],
+    ] as const) {
+      await this.redis.subscribe(канал, (msg: Record<string, unknown>) => {
+        void составПартии(String(msg.partyId)).then((состав) => {
+          for (const characterId of состав) {
+            this.activePlayers.get(characterId)?.emit(событие, msg);
+          }
+        });
+      });
+    }
+    // Расформирование: партия уже удалена из Redis, поэтому состав
+    // взять неоткуда - но его присылает сам PartyService? Нет: удалено
+    // раньше публикации. Значит состав нужно было сохранить ДО delete.
+    await this.redis.subscribe(REDIS_CHANNELS.PARTY_DISBANDED, (msg: Record<string, unknown>) => {
+      const участники = Array.isArray(msg.members) ? (msg.members as { characterId: string }[]).map((m) => String(m.characterId)) : [];
+      for (const characterId of участники) {
+        this.activePlayers.get(characterId)?.emit(SOCKET_EVENTS.PARTY_DISBANDED, msg);
+      }
+    });
+
+    // Смена скакуна подписывается при аутентификации: канал персональный
+    // (в имени есть id персонажа), и на старте сервера ещё неизвестно,
+    // кто подключится. См. handleAuth.
+
+    // ── Аукцион, баунти, глобальные объявления ──────────────────
+    // Новый лот видят все: цены на аукционе меняются, и игрок, который
+    // смотрит рынок, должен узнать о лоте сразу.
+    await this.redis.subscribe(REDIS_CHANNELS.AUCTION_NEW_LISTING, (msg) => {
+      this.io.emit(SOCKET_EVENTS.AUCTION_NEW_LISTING, msg);
+    });
+    // Объявление всем игрокам (используется осадами территорий гильдий).
+    await this.redis.subscribe(REDIS_CHANNELS.GLOBAL_NOTIFICATION, (msg) => {
+      this.io.emit(SERVER_EVENTS.NOTIFICATION, msg);
+    });
+    // Баунти висит на конкретном игроке - сообщаем ему и только ему.
+    await this.redis.subscribe(REDIS_CHANNELS.BOUNTY_PLACED, (msg) => {
+      const socket = this.activePlayers.get(String(msg.targetId));
+      if (socket) socket.emit(SOCKET_EVENTS.BOUNTY_PLACED, msg);
+    });
+
+    // ── Действия администратора ──────────────────────────────────
+    // Кик приходит по userId, а не по characterId: у пользователя может
+    // быть несколько персонажей, и закрыть надо все их сокеты. Тот же
+    // обход, что и в handleLogout для auth:logout.
+    await this.redis.subscribe(REDIS_CHANNELS.ADMIN_KICK_USER, (msg: Record<string, unknown>) => {
+      const userId = String(msg.userId);
+      const reason = `Администратор: ${String(msg.reason ?? 'kick')}`;
+      for (const socket of [...this.activePlayers.values()]) {
+        if (socket.userId !== userId) continue;
+        socket.emit(SERVER_EVENTS.FORCE_DISCONNECT, { reason });
+        socket.disconnect(true);
+        this.activePlayers.delete(String(socket.characterId));
+      }
+    });
+    await this.redis.subscribe(REDIS_CHANNELS.ADMIN_MUTE, (msg) => {
+      const socket = this.activePlayers.get(String(msg.characterId));
+      if (socket) socket.emit(SOCKET_EVENTS.ADMIN_MUTE, msg);
+    });
+    // Телепорт и выдача предмета - игрок должен увидеть следствие,
+    // иначе он стоит в другом месте и не понимает почему.
+    await this.redis.subscribe(REDIS_CHANNELS.ADMIN_TELEPORT, (msg) => {
+      const socket = this.activePlayers.get(String(msg.characterId));
+      if (socket) socket.emit(SOCKET_EVENTS.ADMIN_TELEPORT, msg);
+    });
+    await this.redis.subscribe(REDIS_CHANNELS.ADMIN_GIVE_ITEM, (msg) => {
+      const socket = this.activePlayers.get(String(msg.characterId));
+      if (socket) socket.emit(SOCKET_EVENTS.ADMIN_GIVE_ITEM, msg);
+    });
+
     logger.info('[Socket] Redis pub/sub subscribers registered');
   }
 
@@ -585,6 +692,16 @@ export class GameSocketHandler {
       // пока клиент не пошлёт первый player:move
       await this.redis.setPlayerPosition(character.id, character.position).catch(() => {});
       this.activePlayers.set(character.id, socket);
+      // Канал смены скакуна персональный (в имени есть id персонажа),
+      // поэтому подписаться можно только зная, кто подключился. Раньше
+      // MountSystem публиковал в него, а подписчика не было вовсе: смена
+      // скакуна доходила до клиента лишь после перечитывания панели.
+      // Повторный вход подписывает ещё раз на тот же канал - Redis
+      // отдаст сообщение обоим, но это один и тот же сокет, так что
+      // игрок увидит событие ровно один раз.
+      void this.redis.subscribe(REDIS_CHANNELS.PLAYER_MOUNT(character.id), (mount: Record<string, unknown>) => {
+        this.activePlayers.get(character.id)?.emit(SOCKET_EVENTS.PLAYER_MOUNT, mount);
+      }).catch((e) => logger.warn('[Socket] подписка на канал скакуна не удалась:', e));
       // Базовая точка античита = точка спавна: первый пакет движения
       // после входа не должен считаться телепортом от старой позиции
       this.antiCheat.resetPosition(character.id, character.position);

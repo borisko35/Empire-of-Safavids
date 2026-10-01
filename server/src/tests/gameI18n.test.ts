@@ -110,14 +110,28 @@ function scan(rel: string): Scan {
   const keyLike: string[] = [];
 
   const walk = (node: ts.Node): void => {
-    if (
-      ts.isStringLiteral(node) ||
-      ts.isNoSubstitutionTemplateLiteral(node) ||
-      ts.isTemplateExpression(node)
-    ) {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       const start = node.getStart(sf);
       const raw = src.slice(start + 1, node.getEnd() - 1);
       literals.push({ line: sf.getLineAndCharacterOfPosition(start).line + 1, raw });
+    }
+    if (ts.isTemplateExpression(node)) {
+      // У ШАБЛОНА с подстановками берём ТОЛЬКО текстовые куски.
+      //
+      // Раньше сюда попадал весь шаблон целиком, вместе с выражениями
+      // ${...}. Из-за этого любая переменная с кириллическим именем
+      // внутри подстановки выглядела как «русский текст в коде»:
+      //   `${t('bounty.placed')}${сумма}`  <- попадало в отчёт
+      // хотя в интерфейсе показывается перевод из словаря, а «сумма» -
+      // имя переменной, а не текст. Игрок с латинским интерфейсом
+      // ничего русского не увидел бы.
+      const start = node.getStart(sf);
+      const номерСтроки = sf.getLineAndCharacterOfPosition(start).line + 1;
+      const начало = node.head;
+      literals.push({ line: номерСтроки, raw: начало.text });
+      for (const кусок of node.templateSpans) {
+        literals.push({ line: номерСтроки, raw: кусок.literal.text });
+      }
     }
     if (ts.isStringLiteral(node) && LOOKS_LIKE_KEY.test(node.text) && inMapContext(node)) {
       keyLike.push(node.text);

@@ -79,9 +79,23 @@ function отправкиСервера(): Map<string, string> {
   const найдено = new Map<string, string>();
   for (const файл of файлы(join(корень, 'server/src'))) {
     const код = readFileSync(файл, 'utf-8');
-    // emit(SERVER_EVENTS.ИМЯ) и this.io.to(...).emit(SERVER_EVENTS.ИМЯ)
+    // emit(SERVER_EVENTS.ИМЯ) и emit(SOCKET_EVENTS.ИМЯ).
+    //
+    // ВАЖНО: обе таблицы, а не только SERVER_EVENTS. Первая версия этой
+    // проверки искала только SERVER_EVENTS, и потому объявляла события,
+    // отправляемые через SOCKET_EVENTS, неотправленными - то есть
+    // требовала переименовать или удалить работающее. События партии,
+    // аукциона и баунти живут именно в SOCKET_EVENTS.
     for (const m of код.matchAll(/\.emit\(\s*(?:SERVER_EVENTS|SOCKET_EVENTS)\.([A-Z0-9_]+)/g)) {
       if (!найдено.has(m[1])) найдено.set(m[1], файл);
+    }
+    // Отправка по переменной: emit(событие, ...), куда событие - второй
+    // аргумент вызова метода-помощника
+    //   await переслатьУчастникам(REDIS_CHANNELS.X, SOCKET_EVENTS.Y, ...)
+    // Без этого событие партии считалось неотправленным, хотя партия
+    // менялась и доходила до игроков.
+    for (const вызов of код.matchAll(/(?:переслатьУчастникам|отправить|рассылка)\(\s*[^,)]+\s*,\s*(?:SERVER_EVENTS|SOCKET_EVENTS)\.([A-Z0-9_]+)/g)) {
+      if (!найдено.has(вызов[1])) найдено.set(вызов[1], файл);
     }
   }
   return найдено;
@@ -177,6 +191,19 @@ describe('События сервера доходят до клиента', () 
       'karma.status_changed',
       'world_event.boss_started',
       'world_event.boss_defeated',
+      // Партия, аукцион, баунти, админские действия
+      'party.members_changed',
+      'party.you_joined',
+      'party.you_left',
+      'party.disbanded',
+      'auction_notice.new_listing',
+      'bounty.placed',
+      'admin.muted',
+      'admin.teleported',
+      'admin.item_given',
+      // Подписи, которые переиспользуются в новых сообщениях
+      'world.gold',
+      'world.exp',
     ];
     const статусы = ['saint', 'good', 'neutral', 'chaotic', 'red', 'outlaw'];
     for (const статус of статусы) используемые.push(`karma.status.${статус}`);

@@ -6,6 +6,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { RedisService } from '../services/RedisService';
 import { camelizeRow } from '../utils/camelize';
 import { logger } from '../utils/logger';
+import { REDIS_CHANNELS } from '../../../shared/constants';
 
 export type MountType = 'horse' | 'camel' | 'elephant' | 'warhorse' | 'mythical';
 
@@ -166,7 +167,7 @@ export class MountSystem {
       );
     });
     const def = MOUNTS[mountId];
-    await this.redis.publish(`player:mount:${characterId}`, { mountId, speed: def?.baseSpeed });
+    await this.redis.publish(REDIS_CHANNELS.PLAYER_MOUNT(characterId), { mountId, speed: def?.baseSpeed });
   }
 
   async addMountExperience(characterId: string, mountId: string, amount: number): Promise<{ leveledUp: boolean; newLevel: number }> {

@@ -8,7 +8,7 @@ import { api } from './api';
 import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
-import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop, loadSkills } from './panels';
+import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop, loadSkills, loadParty } from './panels';
 import { setHubStaff } from './hub';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
@@ -986,6 +986,98 @@ function wireSocket(): void {
     // некрасивого слова, игрок должен увидеть, что сервер прислал.
     toast(t('karma.status_changed').replace('{status}', label === key ? k.newStatus : label),
       k.newKarma != null && k.newKarma < 0 ? 'error' : 'info');
+  });
+
+  // ── Партия, аукцион, баунти, действия администратора ──
+  //
+  // Все эти события сервер отдавал, а клиент не слушал. Партия при этом
+  // менялась по-настоящему: человек вступал, кто-то выходил, партия
+  // расформировалась - и панель продолжала показывать прежний состав
+  // до следующего открытия.
+
+  // Состав партии. members приходит с сервера: id и роль каждого.
+  const составПартии = (members: { characterId: string; role: string }[]) => {
+    const свои = members.filter((m) => m.characterId === session.character?.id).length;
+    toast(t('party.members_changed').replace('{n}', String(members.length)).replace('{me}', String(свои)), 'info');
+    void loadParty();
+  };
+
+  socket.on(SOCKET_EVENTS.PARTY_UPDATED, (d: { members?: { characterId: string; role: string }[] }) => {
+    составПартии(Array.isArray(d?.members) ? d.members : []);
+  });
+  socket.on(SOCKET_EVENTS.PARTY_MEMBER_JOINED, (d: { characterId?: string; members?: { characterId: string; role: string }[] }) => {
+    составПартии(Array.isArray(d?.members) ? d.members : []);
+    if (d?.characterId && d.characterId === session.character?.id) toast(t('party.you_joined'), 'success');
+  });
+  socket.on(SOCKET_EVENTS.PARTY_MEMBER_LEFT, (d: { characterId?: string; members?: { characterId: string; role: string }[] }) => {
+    // Вышедший должен забыть партию: сервер удалил её, а в localStorage
+    // остался её id, и панель продолжала бы опрашивать несуществующую.
+    if (d?.characterId && d.characterId === session.character?.id) {
+      localStorage.removeItem('eos_party');
+      toast(t('party.you_left'), 'info');
+      return;
+    }
+    составПартии(Array.isArray(d?.members) ? d.members : []);
+  });
+  socket.on(SOCKET_EVENTS.PARTY_DISBANDED, () => {
+    localStorage.removeItem('eos_party');
+    toast(t('party.disbanded'), 'info');
+  });
+
+  // Новый лот на аукционе. Сервер шлёт price - показываем его, а
+  // предмет не называем: идентификатор игроку ничего не скажет.
+  socket.on(SOCKET_EVENTS.AUCTION_NEW_LISTING, (d: { itemId?: string; price?: number }) => {
+    const части: string[] = [];
+    if (d?.price != null) части.push(`${d.price} ${t('world.gold')}`);
+    if (d?.itemId) {
+      const ключ = `items.${d.itemId}`;
+      const название = t(ключ);
+      части.unshift(название === ключ ? d.itemId : название);
+    }
+    // Русский текст внутри литералов в вызове toast() проверка
+    // gameI18n считает хардкодом: игрок с латинским интерфейсом увидел бы
+    // «Новый лот на аукционе» вместо перевода. Поэтому разделитель и
+    // двоеточие вынесены в словари, а здесь только ключи.
+    toast(`${t('auction_notice.new_listing')}${части.length ? t('common.list_sep') + части.join(t('common.list_sep')) : ''}`, 'info');
+  });
+
+  // Баунти на игрока. amount приходит с сервера, placerId - кто повесил.
+  socket.on(SOCKET_EVENTS.BOUNTY_PLACED, (d: { amount?: number; placerId?: string }) => {
+    const сумма = d?.amount != null ? t('common.list_sep') + `${d.amount} ${t('world.gold')}` : '';
+    toast(`${t('bounty.placed')}${сумма}`, 'error');
+  });
+
+  // Молчание персонажа. Причина приходит с сервера, показываем её.
+  socket.on(SOCKET_EVENTS.ADMIN_MUTE, (d: { muteUntil?: string; reason?: string }) => {
+    toast(`${t('admin.muted')}${d?.reason ? t('common.list_sep') + d.reason : ''}`, 'error');
+  });
+
+  // Телепорт администратором. Это единственное из трёх, где клиент
+  // обязан не просто показать текст, а переставить игрока: иначе он
+  // стоит в старом месте и не понимает, что произошло.
+  socket.on(SOCKET_EVENTS.ADMIN_TELEPORT, (d: { position?: { x: number; z: number }; region?: string }) => {
+    toast(t('admin.teleported'), 'info');
+    // Переставляем сущность игрока, а не только показываем текст: иначе
+    // он остался бы в старом месте и не понял бы, что произошло.
+    // Ориентир — обработчик move:rejected выше: там позиция приходит
+    // сверху и целиком переносится в сущность.
+    if (d?.position && me) {
+      me.pos = { x: Number(d.position.x), y: 0, z: Number(d.position.z) };
+      me.target = { ...me.pos };
+    }
+  });
+
+  // Выдача предмета: предмет уже в базе, но инвентарь в клиенте старый.
+  socket.on(SOCKET_EVENTS.ADMIN_GIVE_ITEM, () => {
+    toast(t('admin.item_given'), 'success');
+    void loadInventory();
+  });
+
+  // Смена скакуна. Скорость пересчитывается в тике из session.mount,
+  // поэтому достаточно перечитать активного скакуна: иначе игрок
+  // пересел и продолжает ехать на прежней скорости до перезахода.
+  socket.on(SOCKET_EVENTS.PLAYER_MOUNT, () => {
+    void loadActiveMount();
   });
 
   // Мировые события: выход босса и его гибель. Состав полей — из

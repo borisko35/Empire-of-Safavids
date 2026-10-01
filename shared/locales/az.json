@@ -589,6 +589,7 @@
   "common": {
     "loading": "Yüklənir…",
     "error": "Xəta",
+    "list_sep": " · ",
     "retry": "Yenidən cəhd et",
     "cancel": "Ləğv et",
     "back": "Geri",
@@ -834,6 +835,9 @@
   },
   "admin": {
     "page_title": "Admin Panel — Empire of Safavids",
+    "muted": "Sizə susdırma tətbiq edildi",
+    "teleported": "Administrator sizi teleport etdi",
+    "item_given": "Administrator sizə əşya verdi",
     "logout": "Çıxış",
     "login_title": "İdarəçiliyə giriş",
     "login_btn": "Daxil ol",
@@ -1250,7 +1254,17 @@
     "invite": "Dəvət et",
     "invite_ph": "Personajın adı",
     "invited": "Dəvət göndərildi",
-    "invite_empty": "Personajın adını daxil edin"
+    "invite_empty": "Personajın adını daxil edin",
+    "members_changed": "Partiyada {n} nəfər, siz onlardan {me}-siniz",
+    "you_joined": "Siz partiyaya qoşuldunuz",
+    "you_left": "Siz partiyadan ayrıldınız",
+    "disbanded": "Partiya dağıldı"
+  },
+  "bounty": {
+    "placed": "Sizin üzərinizə mükafat qoyuldu"
+  },
+  "auction_notice": {
+    "new_listing": "Yeni hərrac lotu"
   },
   "hall": {
     "title": "Şöhrət salonu",

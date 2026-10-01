@@ -5,6 +5,7 @@
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { REDIS_CHANNELS } from '../../../shared/constants';
 
 export type PartyRole = 'leader' | 'member';
 export type LootRule  = 'free_for_all' | 'round_robin' | 'leader_decides' | 'need_greed';
@@ -75,7 +76,7 @@ export class PartySystem {
     await this.saveParty(party);
     await this.redis.set(this.playerKey(targetId), party.id);
 
-    await this.redis.publish('party:member_joined', { partyId, characterId: targetId });
+    await this.redis.publish(REDIS_CHANNELS.PARTY_MEMBER_JOINED, { partyId, characterId: targetId });
     logger.info(`${targetId} joined party ${partyId}`);
   }
 
@@ -96,7 +97,7 @@ export class PartySystem {
     if (isLeader) party.members[0].role = 'leader';
 
     await this.saveParty(party);
-    await this.redis.publish('party:member_left', { partyId, characterId });
+    await this.redis.publish(REDIS_CHANNELS.PARTY_MEMBER_LEFT, { partyId, characterId });
   }
 
   async disbandParty(partyId: string): Promise<void> {
@@ -107,7 +108,11 @@ export class PartySystem {
     for (const member of party.members) {
       await this.redis.del(this.playerKey(member.characterId));
     }
-    await this.redis.publish('party:disbanded', { partyId });
+    // Состав обязателен в событии: партия к этому моменту уже удалена из
+    // Redis, и подписчик, который ищет участников по partyId, не найдёт
+    // никого. Без members никто из ушедших не узнает, что партия
+    // расформирована, - панель продолжит показывать её.
+    await this.redis.publish(REDIS_CHANNELS.PARTY_DISBANDED, { partyId, members: party.members });
     logger.info(`Party disbanded: ${partyId}`);
   }
 
@@ -157,6 +162,6 @@ export class PartySystem {
   private async saveParty(party: Party): Promise<void> {
     // TTL 12 часов: брошенные партии не копятся в Redis
     await this.redis.set(this.partyKey(party.id), JSON.stringify(party), 12 * 3600);
-    await this.redis.publish('party:updated', { partyId: party.id, members: party.members });
+    await this.redis.publish(REDIS_CHANNELS.PARTY_UPDATED, { partyId: party.id, members: party.members });
   }
 }

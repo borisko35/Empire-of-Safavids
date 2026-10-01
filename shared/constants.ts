@@ -127,6 +127,34 @@ export const SOCKET_EVENTS = {
   CHAT_REGION: 'chat:region',
   CHAT_GUILD: 'chat:guild',
   CHAT_PARTY: 'chat:party',
+
+  // ── Партия: сервер сообщает участникам об изменениях ─────────
+  // Через эти события PartySystem доставляет состав партии. Раньше
+  // изменения публиковались в Redis и там пропадали.
+  PARTY_UPDATED: 'party:updated',
+  PARTY_MEMBER_JOINED: 'party:member_joined',
+  PARTY_MEMBER_LEFT: 'party:member_left',
+  PARTY_DISBANDED: 'party:disbanded',
+
+  // ── Аукцион и баунти ────────────────────────────────────────
+  /** Новый лот на аукционе: видят все, цены меняются у всех */
+  AUCTION_NEW_LISTING: 'auction:new_listing',
+  /** На игрока повесили баунти: знает только он */
+  BOUNTY_PLACED: 'bounty:placed',
+
+  // ── Действия администратора, адресованные игроку ─────────────
+  /** Персонаж заглушён: чат и приглашения недоступны до снятия */
+  ADMIN_MUTE: 'admin:mute',
+  /** Персонаж телепортирован: клиент обязан переставить игрока */
+  ADMIN_TELEPORT: 'admin:teleport',
+  /** Персонажу выдан предмет: инвентарь надо перечитать */
+  ADMIN_GIVE_ITEM: 'admin:give_item',
+
+  /**
+   * Смена активного скакуна этого игрока. Персональное событие: приходит
+   * тому, кто переседок, и меняет скорость передвижения.
+   */
+  PLAYER_MOUNT: 'player:mount',
 } as const;
 
 // События, отправляемые только сервером (REST/фоновые системы → клиент)
@@ -328,6 +356,40 @@ export const REDIS_CHANNELS = {
   AUTH_LOGOUT_ALL: 'auth:logout_all',
   WORLD_TIME_UPDATE: 'world:time_update',
   PLAYER_KARMA_CHANGED: 'player:karma_changed',
+  /**
+   * Активация скакуна конкретным игроком. Канал персональный: персонаж
+   * входит в само имя, поэтому подписка делается на канал этого
+   * игрока. Раньше MountSystem публиковал сюда напрямую строкой, и
+   * подписчика не было - смена скакуна доходила только после
+   * перечитывания панели.
+   */
+  PLAYER_MOUNT: (characterId: string) => `player:mount:${characterId}`,
+  // ── Партия ────────────────────────────────────────────────────
+  // Партия живёт в Redis, а игроки подключены к сокетам. События из
+  // PartySystem уходили в каналы, на которые не подписан никто: состав
+  // партии менялся, и никто из участников об этом не узнавал, пока не
+  // открыл панель заново.
+  PARTY_UPDATED: 'party:updated',
+  PARTY_MEMBER_JOINED: 'party:member_joined',
+  PARTY_MEMBER_LEFT: 'party:member_left',
+  PARTY_DISBANDED: 'party:disbanded',
+  // ── Аукцион и карма ───────────────────────────────────────────
+  /** Новый лот: сообщаем всем, чтобы игрок увидел, что цена изменилась */
+  AUCTION_NEW_LISTING: 'auction:new_listing',
+  /** На игрока повесили баунти: сообщаем только ему */
+  BOUNTY_PLACED: 'player:bounty_placed',
+  // ── Глобальные объявления ─────────────────────────────────────
+  /** Объявление всем игрокам. Раньше канал был, подписчика не было */
+  GLOBAL_NOTIFICATION: 'global:notification',
+  // ── Действия администратора ───────────────────────────────────
+  /** Кик игрока: по userId, как и у анти-чита */
+  ADMIN_KICK_USER: 'admin:kick_user',
+  /** Молчание персонажа */
+  ADMIN_MUTE: 'admin:mute',
+  /** Телепорт персонажа: игрок должен оказаться в новом месте */
+  ADMIN_TELEPORT: 'admin:teleport',
+  /** Выдача предмета: игрок должен увидеть предмет у себя */
+  ADMIN_GIVE_ITEM: 'admin:give_item',
   // Каналы регионов изолированы по шардам (игровым серверам)
   REGION_SPAWN: (shardId: string, region: string) => `region:${shardId}:${region}:spawn`,
   REGION_AI_ACTION: (shardId: string, region: string) => `region:${shardId}:${region}:ai_action`,

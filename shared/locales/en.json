@@ -589,6 +589,7 @@
   "common": {
     "loading": "Loading…",
     "error": "Error",
+    "list_sep": " · ",
     "retry": "Retry",
     "cancel": "Cancel",
     "back": "Back",
@@ -834,6 +835,9 @@
   },
   "admin": {
     "page_title": "Admin Panel — Empire of Safavids",
+    "muted": "You have been muted",
+    "teleported": "An administrator teleported you",
+    "item_given": "An administrator gave you an item",
     "logout": "Log out",
     "login_title": "Staff Login",
     "login_btn": "Sign in",
@@ -1250,7 +1254,17 @@
     "invite": "Invite",
     "invite_ph": "Character name",
     "invited": "Invitation sent",
-    "invite_empty": "Enter a character name"
+    "invite_empty": "Enter a character name",
+    "members_changed": "Party of {n}, you are {me} of them",
+    "you_joined": "You joined a party",
+    "you_left": "You left the party",
+    "disbanded": "The party was disbanded"
+  },
+  "bounty": {
+    "placed": "A bounty has been placed on you"
+  },
+  "auction_notice": {
+    "new_listing": "New auction listing"
   },
   "hall": {
     "title": "Hall of Fame",
