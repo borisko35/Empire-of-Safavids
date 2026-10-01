@@ -107,22 +107,26 @@ say "  server otvechaet"
 # Проверка ВРЕМЕНИ ОБРАЗА. Ответ /health ничего не говорит о том, какой
 # код запущен: старый контейнер, оставшийся на месте, отвечает так же
 # хорошо. Именно поэтому 1 октября скрипт сказал "PASS" при упавшей
-# сборке. Сверяем, что образ сервера создан после начала выкатки.
+# сборке.
+#
+# ЧТО БЫЛО НЕ ТАК. Проверка смотрела на mtime файла package.json внутри
+# контейнера. Docker копирует файл СОХРАНЯЯ его время, а package.json
+# меняется редко, поэтому проверка всегда показывала «возраст» в
+# несколько дней и останавливала исправную выкатку: 1 октября она
+# написала «obraz server starshe 1 chasa (698720 s)» при только что
+# пересобранных контейнерах.
+#
+# Теперь сверяется дата создания ОБРАЗА, которую Docker ведёт сам, и
+# сравнивается с моментом начала выкатки. Это ровно то, что нужно:
+# пересобрался образ или едет старый.
 say "  proverka vozrasta obraza"
-VREMYA_START="${DEPLOY_STARTED:-0}"
-if [ "$VREMYA_START" -gt 0 ]; then
-  SOZDAN=$($C images -q server 2>/dev/null | head -1)
-  if [ -n "$SOZDAN" ]; then
-    VOSRAT=0
-    # «Возраст образа в секундах»: если он больше, чем длительность
-    # выкатки, значит контейнер едет на старом коде.
-    VOSRAT=$($C run --rm --no-deps --entrypoint sh server -c \
-      'echo $(( $(date +%s) - $(stat -c %Y /app/server/package.json) ))' 2>/dev/null | tr -d '\r')
-    if [ -n "$VOSRAT" ] && [ "$VOSRAT" -gt 3600 ] 2>/dev/null; then
-      stop "obraz server starshe 1 chasa ($VOSRAT s) - vozmozhno, konteyner na starom kode"
-    fi
-    say "  obraz server: vozrast ${VOSRAT:-?} s"
-  fi
+VOZRAST=$($C images --format '{{.CreatedAtUnix}}' 2>/dev/null | head -1 | tr -d '\r')
+if [ -z "${VOZRAST:-}" ]; then
+  say "  vozrast obraza ne prochitan - propuskayu (docker bez .CreatedAtUnix)"
+elif [ "$VOZRAST" -ge "${DEPLOY_STARTED:-0}" ] 2>/dev/null; then
+  say "  obraz server perezobran v etoy vytachke"
+else
+  stop "obraz server starshe nachala vytachki - konteyner mozhet byt na starom kode"
 fi
 
 for f in / /trailer.html /LICENSE; do
