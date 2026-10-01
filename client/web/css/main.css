@@ -774,6 +774,22 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 14px;
 }
+
+/* Анонс об обновлении мира - длинный структурированный текст со списком
+   из семи пунктов. В общей сетке он попадал в колонку 250px и читался
+   как узкая полоса текста. Такая новость занимает всю ширину строки,
+   остальные остаются в мелкой сетке. */
+.news-card--wide {
+  grid-column: 1 / -1;
+}
+.news-card--wide h3 {
+  font-size: 22px;
+}
+.news-card--wide p {
+  font-size: 15px;
+  line-height: 1.65;
+  max-width: 78ch;
+}
 .news-card {
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -799,6 +815,11 @@ body {
   color: var(--cream-dim);
   font-size: 14px;
   flex-grow: 1;
+  /* Анонсы приходят из CMS с переносами строк, а печатаются через
+     textContent, который не превращает \n в <br>. Без этого весь список
+     «что изменится» с семью пунктами слипался бы в один абзац, и
+     эмодзи-строки оказывались бы в общем потоке. */
+  white-space: pre-line;
 }
 .news-card .btn {
   align-self: flex-start;

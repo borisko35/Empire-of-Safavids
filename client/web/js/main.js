@@ -290,7 +290,13 @@ async function renderSiteContent() {
     const h3 = document.createElement('h3');
     h3.textContent = pickL10n(item.title, lang);
     const p = document.createElement('p');
-    p.textContent = pickL10n(item.body, lang);
+    const bodyText = pickL10n(item.body, lang);
+    p.textContent = bodyText;
+    // Длинный текст -Wide. Анонс об расширении мира содержит список из
+    // семи пунктов с эмодзи, и в общей сетке с колонками по 250px он
+    // читался как узкая полоса. Решение принимает сам текст, а не
+    // заголовок: важна длина текста, а не длина названия.
+    if (bodyText.length > 320) card.classList.add('news-card--wide');
     card.append(h3, p);
     if (item.date) {
       const time = document.createElement('time');
