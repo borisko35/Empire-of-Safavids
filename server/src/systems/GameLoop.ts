@@ -14,6 +14,7 @@ import { DefenseStates } from './DefenseStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
 import { SiegeSystem } from './SiegeSystem';
+import { TerritoryBonuses } from './TerritoryBonuses';
 import { MailService } from '../services/MailService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { RedisService } from '../services/RedisService';
@@ -121,6 +122,11 @@ export class GameLoop {
     void SiegeSystem.getInstance().restore()
       .catch((e) => logger.error('[GameLoop] восстановление осад не удалось:', e));
     SiegeSystem.getInstance().start();
+    // Бонусы территории: назвать один раз неподключённые виды из данных.
+    // Проверка, что их применяют, лежит в TerritoryBonusesTest; здесь нужно
+    // предупреждение в журнале, чтобы новый вид в справочнике не ждал
+    // полгода жалобы игрока.
+    TerritoryBonuses.getInstance().проверитьСправочник();
     // Убрать просроченные письма. expires_at в схеме есть, но про него
     // никто не помнил: письма копились бы вечно вместе с наградой внутри
     // Посев каталога ежедневных задач в таблицу daily_tasks.

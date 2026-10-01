@@ -34,6 +34,7 @@ import { STANCES, isCombatStance, type CombatStance } from '../systems/CombatSta
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { SiegeSystem } from '../systems/SiegeSystem';
+import { TerritoryBonuses } from '../systems/TerritoryBonuses';
 import { PartySystem } from '../systems/PartySystem';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ChatModerationService } from '../services/ChatModerationService';
@@ -1503,7 +1504,25 @@ export class GameSocketHandler {
     if (died) {
       // Начисляем награду убийце: опыт, золото и лут из таблицы монстра
       const def = monsterCtx.definition;
-      const reward = await this.characterService.addExperience(attacker.id, def.expReward);
+      // Бонус территории: +10% опыта владельцу за владение ею в этом
+      // регионе. До этого бонусы из TerritoryDefinition.bonuses были
+      // объявлены у всех четырёх территорий и не читались никем.
+      //
+      // Порядок тот же, что у навыка гильдии по золоту: множитель
+      // применяется ДО округления. Округлив базовое число, а потом умножив,
+      // потеряли бы весь бонус на мелком опыте.
+      //
+      // Отказ здесь не глотаем: бонусВида обязан бросить на неизвестном виде,
+      // потому что молчаливый ноль - это опечатка в данных, которая выглядит
+      // как «бонуса нет».
+      let опытБазовый = def.expReward;
+      try {
+        const бонусы = await TerritoryBonuses.getInstance().бонусыИгрока(attacker.id, attacker.region);
+        опытБазовый = Math.floor(опытБазовый * бонусы.exp);
+      } catch (e) {
+        logger.error(`[TerritoryBonuses] бонус не применён, опыт базовый: ${(e as Error).message}`);
+      }
+      const reward = await this.characterService.addExperience(attacker.id, опытБазовый);
 
       // Репутация за убийство. Раньше не начислялась: addReputation был
       // написан и не вызывался. Повышение ранга показываем игроку — иначе
