@@ -18,6 +18,7 @@ import { STAMINA, GAME_VERSION, SOCKET_EVENTS, SERVER_EVENTS } from '../../../sh
 import { QuestDef, QuestObjectiveDef } from './state';
 import { World3D } from './game3d/world3d';
 import { audio } from './audio';
+import { создатьАвтобой, запустить, остановить } from './autobattle';
 import {
   getSettings, updateSettings, applyDisplayMode, onSettingsChange,
   type DisplayMode, type GraphicsLevel,
@@ -657,6 +658,10 @@ export async function enterWorld(character: Character): Promise<void> {
   // их обрабатывал. Теперь ПКМ и двойное нажатие клавиши доходят до сервера.
   world3d?.setOnBlock(() => startBlock());
   world3d?.setOnDodge(() => startDodge());
+  // Автобой запускается при входе в мир, если игрок его включал. Выключенный
+  // по умолчанию: решение остаётся за игроком, и состояние живёт в
+  // настройках, поэтому между сессиями переключатель не сбрасывается.
+  if (автобой.включён) стартАвтобоя();
   resetWaterDanger();
   await finishLoading();
   audio.ensureGame();
@@ -1136,6 +1141,11 @@ function wireSocket(): void {
     // респавна на месте смерти надпись была бы враньём
     toast(d.type === 'spot' ? t('panels.death_respawned_spot') : t('world.respawned'), 'success');
     refreshBars();
+    // Автобой после смерти обязан начать заново: он был запущен до входа в
+    // мир, а мир пересоздаётся при входе. Без этого игрок включил бы авто,
+    // умер, вернулся - и автобой молчал бы, пока он не догадается
+    // переключить его в настройках.
+    if (автобой.включён) стартАвтобоя();
   });
 
   // ── Чат ── сервер поддерживает world/region/guild/party (см. GameSocketHandler.handleChatMessage)
@@ -1233,6 +1243,11 @@ function wireSocket(): void {
   });
 
   socket.on('disconnect', (reason: string) => {
+    // Автобой останавливается при разрыве. Без этого он продолжал бы
+    // слать удары по обрывающемуся сокету, а при возврате в игру стартовал
+    // бы ещё один цикл поверх работающего - и по миру пошло бы два
+    // автобоя, то есть вдвое больше пакетов, чем нужно.
+    стопАвтобоя();
     if (reason === 'io server disconnect' || reason === 'transport close') {
       showLostScreen('disconnect');
     }
@@ -1465,6 +1480,7 @@ function wireSettings(): void {
   const hints = $('set-hints') as HTMLInputElement;
   const minimap = $('set-minimap') as HTMLInputElement;
   const fog = $('set-fog') as HTMLInputElement;
+  const autobattle = $('set-autobattle') as HTMLInputElement;
 
   // Значения настроек → элементы панели
   const paint = (): void => {
@@ -1482,6 +1498,7 @@ function wireSettings(): void {
     if (hints) hints.checked = s.hints;
     if (minimap) minimap.checked = s.minimap;
     if (fog) fog.checked = s.fog;
+    if (autobattle) autobattle.checked = s.autobattle;
   };
 
   const open = (): void => {
@@ -1537,6 +1554,18 @@ function wireSettings(): void {
   hints?.addEventListener('change', () => updateSettings({ hints: hints.checked }));
   minimap?.addEventListener('change', () => updateSettings({ minimap: minimap.checked }));
   fog?.addEventListener('change', () => updateSettings({ fog: fog.checked }));
+  // Автобой. Переключатель меняет настройку, а настройка запускает и
+  // останавливает цикл - одной кнопкой, без двух разных механизмов.
+  autobattle?.addEventListener('change', () => {
+    updateSettings({ autobattle: autobattle.checked });
+    if (autobattle.checked) {
+      toast(t('world.autobattle_on'), 'info');
+      стартАвтобоя();
+    } else {
+      остановить(автобой);
+      toast(t('world.autobattle_off'), 'info');
+    }
+  });
 
   // Любое изменение настроек: подтянуть активные кнопки и применить в движке
   onSettingsChange(() => {
@@ -1733,6 +1762,46 @@ function basicAttack(): void {
   if (isDead()) return;        // мёртвый не дерётся и не включает боевую тему
   audio.pokeCombat();          // боевая тема на время драки
   emitCombat('attack');
+}
+
+// ── Автобой ──────────────────────────────────────────────────
+//
+// Цикл живёт в autobattle.ts, здесь только запуск и мост к настоящему бою.
+// Автобой НЕ обходит emitCombat: он вызывает тот же путь, что и клик, поэтому
+// серверные проверки урона, дальности и отката работают без исключений.
+const автобой = создатьАвтобой(getSettings().autobattle);
+let таймерАвтобоя: (() => void) | null = null;
+
+/** Запустить автобой, если он включён и ещё не идёт. */
+function стартАвтобоя(): void {
+  if (таймерАвтобоя !== null) return;
+  таймерАвтобоя = запустить(
+    автобой,
+    () => ({
+      monsters: world?.monsters ?? new Map(),
+      me,
+      region: session.character?.region ?? '',
+    }),
+    () => isDead(),
+    () => {
+      // Удар: тот же путь, что и клик, плюс боевая тема. Цель выбирается
+      // внутри цикла, поэтому сюда она не передаётся - и не может
+      // разойтись с той, по которой реально бьёт сервер.
+      audio.pokeCombat();
+      emitCombat('attack');
+    },
+    // Такт о PvP-молчании: игрок должен узнать, почему автобой стоит.
+    () => toast(t('world.autobattle_pvp_off'), 'info'),
+  );
+}
+
+/** Остановить цикл и забыть таймер. */
+function стопАвтобоя(): void {
+  остановить(автобой);
+  if (таймерАвтобоя !== null) {
+    таймерАвтобоя();
+    таймерАвтобоя = null;
+  }
 }
 
 function useSkill(skillId: string): void {

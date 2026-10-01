@@ -523,6 +523,14 @@
             <span data-i18n="settings.fog"></span>
             <input type="checkbox" id="set-fog" checked>
           </label>
+          <!-- Автобой. Выключен по умолчанию, и это решение игрока:
+               включается один раз и живёт в настройках между сессиями.
+               В PvP-зонах автобой сам смолкает, потому что бить там
+               автоматически - значит убивать не глядя. -->
+          <label class="settings-row">
+            <span data-i18n="settings.autobattle"></span>
+            <input type="checkbox" id="set-autobattle">
+          </label>
         </div>
 
         <button class="btn btn-gold" id="settings-close" type="button" data-i18n="settings.apply"></button>

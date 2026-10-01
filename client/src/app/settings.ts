@@ -25,6 +25,14 @@ export interface GameSettings {
   hints: boolean;
   minimap: boolean;
   fog: boolean;
+  /**
+   * Автобой: игрок выбирает сам, вручную или автоматом.
+   *
+   * По умолчанию ВЫКЛЮЧЕН, и это не упущение: автобой без переключателя
+   * лишает игрока контроля над боем. Выключатель лежит в настройках и в
+   * постоянном ряду кнопок, а не спрятан.
+   */
+  autobattle: boolean;
 }
 
 /** Что реально меняет уровень графики в 3D-движке */
@@ -61,6 +69,7 @@ const DEFAULTS: GameSettings = {
   hints: true,
   minimap: true,
   fog: true,
+  autobattle: false,
 };
 
 function isGraphics(v: unknown): v is GraphicsLevel {
@@ -94,6 +103,10 @@ export function getSettings(): GameSettings {
     hints: typeof raw.hints === 'boolean' ? raw.hints : DEFAULTS.hints,
     minimap: typeof raw.minimap === 'boolean' ? raw.minimap : DEFAULTS.minimap,
     fog: typeof raw.fog === 'boolean' ? raw.fog : DEFAULTS.fog,
+    // Отсутствие поля у старых игроков - это «не включал», а не «включил».
+    // Читать default тут нельзя: DEFAULT был бы true, и у всех, кто играл до
+    // появления автобоя, он включился бы сам при первом же входе.
+    autobattle: typeof raw.autobattle === 'boolean' ? raw.autobattle : false,
   };
   return cached;
 }
