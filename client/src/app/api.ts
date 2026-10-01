@@ -893,12 +893,6 @@ export const api = {
       `/api/chronicles/category/${cat}`,
     ),
 
-  // ── Фичи (для лендинга) ───────────────────────────────────
-  features: () =>
-    req<{ features: { icon: string; title: string; titleRu: string; desc: string; descRu: string }[] }>(
-      '/api/features',
-    ),
-
   // ── Гильдии ──────────────────────────────────────────────
   // Персонаж обязателен в каждом маршруте: сервер ищет по guild_members
   // .character_id, а не по аккаунту. Раньше он не передавался, и панель
