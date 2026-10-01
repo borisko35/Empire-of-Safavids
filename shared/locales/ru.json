@@ -1266,7 +1266,24 @@
     "claimed": "Награда получена"
   },
   "dungeon": {
-    "attempts_over": "Попытки на сегодня закончились. Обновятся завтра."
+    "attempts_over": "Попытки на сегодня закончились. Обновятся завтра.",
+    "completed": "Подземелье пройдено: {name}",
+    "completed_generic": "Подземелье пройдено"
+  },
+  "karma": {
+    "status_changed": "Репутация изменилась: {status}",
+    "status": {
+      "saint": "Святой",
+      "good": "Добрый",
+      "neutral": "Нейтральный",
+      "chaotic": "Хаотичный",
+      "red": "Красный",
+      "outlaw": "Изгой"
+    }
+  },
+  "world_event": {
+    "boss_started": "Появился мировой босс: {name}",
+    "boss_defeated": "Мировой босс повержен"
   },
   "craft": {
     "blacksmithing": "Кузнечное дело",

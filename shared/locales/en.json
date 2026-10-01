@@ -1266,7 +1266,24 @@
     "claimed": "Reward received"
   },
   "dungeon": {
-    "attempts_over": "No attempts left today. They reset tomorrow."
+    "attempts_over": "No attempts left today. They reset tomorrow.",
+    "completed": "Dungeon cleared: {name}",
+    "completed_generic": "Dungeon cleared"
+  },
+  "karma": {
+    "status_changed": "Your standing has changed: {status}",
+    "status": {
+      "saint": "Saint",
+      "good": "Good",
+      "neutral": "Neutral",
+      "chaotic": "Chaotic",
+      "red": "Red",
+      "outlaw": "Outlaw"
+    }
+  },
+  "world_event": {
+    "boss_started": "A world boss has appeared: {name}",
+    "boss_defeated": "The world boss has been defeated"
   },
   "craft": {
     "blacksmithing": "Blacksmithing",

@@ -940,6 +940,66 @@ function wireSocket(): void {
     void refreshDailyTasksBadge();
   });
 
+  // ── Подземелье, репутация, мировые события ──
+  //
+  // Три события сервер отдавал, а клиент слушал только два. Мёртвая
+  // доставка: игрок проходил подземелье, получал опыт и золото на руки и
+  // не знал об этом — награда появлялась сама, без объяснения. Так же
+  // молча менялся статус кармы (с нейтрального на красный, например) и
+  // приходил вылет мирового босса. Все три события объявлены в
+  // SERVER_EVENTS, все три шлются из GameSocketHandler — не хватало
+  // было только приёмника.
+
+  // Подземелье пройдено. Сервер уже начислил опыт, золото и предметы;
+  // nameRu приходит вместе с наградой, придумывать название не нужно.
+  socket.on(SERVER_EVENTS.DUNGEON_COMPLETED, (d: {
+    dungeonNameRu?: string; experience?: number; gold?: number; items?: string[];
+  }) => {
+    const name = d?.dungeonNameRu ?? '';
+    const parts: string[] = [];
+    if (d?.experience) parts.push(`+${d.experience} ${t('world.exp')}`);
+    if (d?.gold) parts.push(`+${d.gold} ${t('world.gold')}`);
+    // Идентификаторы предметов показываем названиями, как в задаче дня.
+    for (const id of d?.items ?? []) {
+      const key = `items.${id}`;
+      const label = t(key);
+      parts.push(label === key ? id : label);
+    }
+    const reward = parts.length ? `: ${parts.join(' · ')}` : '';
+    // Без названия подземелья заголовок с плейсхолдером бессмысленен,
+    // поэтому на такой случай отдельная фраза без имени.
+    const title = name
+      ? t('dungeon.completed').replace('{name}', name)
+      : t('dungeon.completed_generic');
+    audio.levelUp();
+    toast(`${title}${reward}`, 'success');
+  });
+
+  // Карма сменила статус. Сервер шлёт это только при смене статуса, а не
+  // при каждом изменении числа, — то есть событие означает «теперь тебя
+  // считают иначе», и молчать об этом нельзя.
+  socket.on(SERVER_EVENTS.KARMA_CHANGED, (k: { newStatus?: string; newKarma?: number }) => {
+    if (!k?.newStatus) return;
+    const key = `karma.status.${k.newStatus}`;
+    const label = t(key);
+    // Неизвестный статус показываем как есть: молчаливый пропуск хуже
+    // некрасивого слова, игрок должен увидеть, что сервер прислал.
+    toast(t('karma.status_changed').replace('{status}', label === key ? k.newStatus : label),
+      k.newKarma != null && k.newKarma < 0 ? 'error' : 'info');
+  });
+
+  // Мировые события: выход босса и его гибель. Состав полей — из
+  // WorldEventSystem.announce: started несёт nameRu, defeated — нет,
+  // поэтому у defeated своя фраза без имени.
+  socket.on(SERVER_EVENTS.WORLD_EVENT, (e: { status?: string; nameRu?: string }) => {
+    if (e?.status === 'started') {
+      if (!e.nameRu) return;
+      toast(t('world_event.boss_started').replace('{name}', e.nameRu), 'error');
+    } else if (e?.status === 'defeated') {
+      toast(t('world_event.boss_defeated'), 'success');
+    }
+  });
+
   // ── Бой ──
   // Ответ на включение активного навыка. Приходит тем же combat:result,
   // что и удар, поэтому обрабатывается здесь же, до проверки цели: у

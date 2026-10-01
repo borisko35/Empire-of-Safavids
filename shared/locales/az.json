@@ -1266,7 +1266,24 @@
     "claimed": "Mükafat alındı"
   },
   "dungeon": {
-    "attempts_over": "Bugün cəhd bitdi. Sabah yenilənir."
+    "attempts_over": "Bugün cəhd bitdi. Sabah yenilənir.",
+    "completed": "Dungeon bitdi: {name}",
+    "completed_generic": "Dungeon bitdi"
+  },
+  "karma": {
+    "status_changed": "Reputasiyan dəyişdi: {status}",
+    "status": {
+      "saint": "Müqəddəs",
+      "good": "Xeyirxah",
+      "neutral": "Neytral",
+      "chaotic": "Xaotik",
+      "red": "Qırmızı",
+      "outlaw": "Qanundan kənar"
+    }
+  },
+  "world_event": {
+    "boss_started": "Dünya bossu peyda oldu: {name}",
+    "boss_defeated": "Dünya bossu dəstəldi"
   },
   "craft": {
     "blacksmithing": "Dəmirçılıq",
