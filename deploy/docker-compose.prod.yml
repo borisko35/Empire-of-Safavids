@@ -81,6 +81,31 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
       FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      # Xsolla. Пустое значение - не ошибка: xsollaConfig вернёт null, и
+      # провайдер останется выключенным, а маршрут ответит «провайдер не
+      # настроен» вместо 500. Пока переменные здесь не перечислены, значения
+      # из deploy/.env до контейнера просто не доходят: файл на сервере был
+      # в порядке, а сервер их не видел - и это выглядело как «ключи не
+      # подхватились», хотя дело было в этом списке.
+      XSOLLA_ENABLED: ${XSOLLA_ENABLED:-}
+      XSOLLA_PUBLISHER_ID: ${XSOLLA_PUBLISHER_ID:-}
+      XSOLLA_PROJECT_ID: ${XSOLLA_PROJECT_ID:-}
+      XSOLLA_API_KEY: ${XSOLLA_API_KEY:-}
+      XSOLLA_WEBHOOK_SECRET: ${XSOLLA_WEBHOOK_SECRET:-}
+      XSOLLA_SANDBOX: ${XSOLLA_SANDBOX:-}
+      # ЮKassa. Раньше эти переменные тоже не были перечислены здесь, то
+      # есть значения из .env до контейнера не доходили и провайдер молча
+      # оставался выключенным - при живых ключах в файле.
+      PAYMENT_JOBIK_ENABLED: ${PAYMENT_JOBIK_ENABLED:-}
+      PAYMENT_JOBIK_SHOP_ID: ${PAYMENT_JOBIK_SHOP_ID:-}
+      PAYMENT_JOBIK_SECRET: ${PAYMENT_JOBIK_SECRET:-}
+      # PUBLIC_URL: адрес, на который провайдер возвращает игрока после
+      # оплаты. Без него адрес собирался из заголовка запроса, а игрок мог
+      # прийти с чужого домена - и возврат ушёл бы не туда, куда он
+      # собирался.
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      # Симулятор платежей. На боевом сервере обязан быть false.
+      PAYMENTS_SIMULATOR: ${PAYMENTS_SIMULATOR:-}
       # Куда складывать загруженные фото и видео. Без этой переменной сервер
       # положил бы файлы внутрь контейнера, и они пропали бы при пересборке.
       MEDIA_DIR: /app/uploads/media
