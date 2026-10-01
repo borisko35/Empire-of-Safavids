@@ -632,12 +632,43 @@ export function nearestShopId(): string | null {
 // ── Мини-карта ───────────────────────────────────────────────
 import {
   CITY, CAMP, PORT, CARAVANSERAI, VILLAGE, FORT, LAKE, POND, WORLD_HALF,
-  biomeAt, isRoad, terrainHeight,
+  biomeAt, isRoad, terrainHeight, REGION_TOWNS,
 } from './game3d/terrain';
+import { ZONES } from '../../../shared/constants';
 
 const MINIMAP_RANGE = 180;   // мировых единиц по горизонтали от игрока
 const TERRAIN_PAD = 24;      // запас слоя террейна (мировые единицы)
 const TERRAIN_SNAP = 16;     // шаг привязки слоя к сетке мира
+
+// Значки по виду города. Ключ - поле kind из REGION_TOWNS, то есть
+// список берётся из данных построек, а не повторяется руками.
+const ЗНАЧКИ_ГОРОДОВ: Record<string, string> = {
+  trade: '⚖',      // торговый город
+  walls: '🌿',     // сады за стеной
+  fortress: '🏰',   // крепость
+  ruins: '🏛',      // руины
+  oasis: '🌴',      // оазис
+  port: '⚓',       // причал
+};
+
+// Города регионов в списке поселений.
+//
+// Раньше список был захардкожен и содержал шесть записей - только те
+// поселения, что строит buildSettlements. Шесть городов регионов в него
+// не попадали, и карта показывала пустоту там, где стоит город. Поэтому
+// список собирается из REGION_TOWNS: новый город на карте появляется
+// сам, а не по памяти автора.
+const ГОРОДА_РЕГИОНОВ_НА_КАРТЕ = REGION_TOWNS.map((t) => ({
+  x: t.x,
+  z: t.z,
+  id: t.region,
+  // Название берётся из словаря регионов, а не из nameRu в данных:
+  // nameRu всегда по-русски, и игрок с английским интерфейсом увидел бы
+  // «Хорасан» вместо «Khorasan».
+  nameKey: `regions.${t.region}`,
+  icon: ЗНАЧКИ_ГОРОДОВ[t.kind] ?? '🏛',
+  r: t.radius,
+}));
 
 const MINIMAP_SETTLEMENTS: { x: number; z: number; id: string; nameKey: string; icon: string; r: number }[] = [
   { x: CITY.x, z: CITY.z, id: 'isfahan', nameKey: 'places.isfahan', icon: '🏰', r: CITY.radius },
@@ -646,7 +677,27 @@ const MINIMAP_SETTLEMENTS: { x: number; z: number; id: string; nameKey: string; 
   { x: CARAVANSERAI.x, z: CARAVANSERAI.z, id: 'caravanserai', nameKey: 'places.caravanserai', icon: '🐫', r: 30 },
   { x: VILLAGE.x, z: VILLAGE.z, id: 'village', nameKey: 'places.village', icon: '🏡', r: 30 },
   { x: FORT.x, z: FORT.z, id: 'fort', nameKey: 'places.fort', icon: '🏔', r: 30 },
+  ...ГОРОДА_РЕГИОНОВ_НА_КАРТЕ,
 ];
+
+// ── Полосы регионов: границы и названия ─────────────────────────────
+// Считаются из ZONES, а не пишутся числами. Регионы - горизонтальные
+// полосы на всю ширину мира, поэтому граница между ними - горизонтальная
+// линия, и контур получается честным, а не декоративным.
+const ПОЛОСЫ_РЕГИОНОВ: { region: string; z1: number; z2: number }[] = (() => {
+  const карта = new Map<string, { z1: number; z2: number }>();
+  for (const з of ZONES) {
+    const п = карта.get(з.region);
+    if (!п) карта.set(з.region, { z1: з.bounds.z1, z2: з.bounds.z2 });
+    else {
+      п.z1 = Math.min(п.z1, з.bounds.z1);
+      п.z2 = Math.max(п.z2, з.bounds.z2);
+    }
+  }
+  return [...карта.entries()]
+    .map(([region, п]) => ({ region, z1: п.z1, z2: п.z2 }))
+    .sort((a, b) => a.z1 - b.z1);
+})();
 
 let lastMinimapRegion = '';
 
@@ -968,6 +1019,44 @@ export function drawWorldMap(
       c.arc(p.x, p.y, r, 0, Math.PI * 2);
       c.stroke();
     }
+
+    // ── Границы регионов и их названия ─────────────────────────
+    // Полосы идут сверху вниз по z. Граница рисуется пунктиром, иначе
+    // сплошная линия читалась бы как дорога, а названия поверх неё
+    // показывали бы, что это рубеж между регионами.
+    c.save();
+    c.setLineDash([9, 7]);
+    c.lineWidth = 2;
+    c.strokeStyle = 'rgba(255, 233, 184, 0.55)';
+    for (const полоса of ПОЛОСЫ_РЕГИОНОВ) {
+      for (const z of [полоса.z1, полоса.z2]) {
+        const a = toPx(-WORLD_HALF, z);
+        const b = toPx(WORLD_HALF, z);
+        c.beginPath();
+        c.moveTo(a.x, a.y);
+        c.lineTo(b.x, b.y);
+        c.stroke();
+      }
+    }
+    c.restore();
+
+    // Название региона - по центру его полосы. Шрифт крупный и с
+    // обводкой, иначе надпись не читается поверх пятнистого биома.
+    c.textAlign = 'center';
+    c.font = 'bold 20px sans-serif';
+    c.lineJoin = 'round';
+    c.lineWidth = 5;
+    for (const полоса of ПОЛОСЫ_РЕГИОНОВ) {
+      const середина = toPx(0, (полоса.z1 + полоса.z2) / 2);
+      const надпись = t(`regions.${полоса.region}`);
+      // Если ключа нет, t вернёт сам путь - рисуем его, но так, чтобы
+      // это было видно: путь ключа на карте означает недописанный словарь.
+      c.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      c.strokeText(надпись, середина.x, середина.y);
+      c.fillStyle = 'rgba(255, 233, 184, 0.92)';
+      c.fillText(надпись, середина.x, середина.y);
+    }
+    c.textAlign = 'left';
     worldmapLayer = layer;
     worldmapLayerW = W;
   }
