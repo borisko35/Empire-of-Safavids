@@ -106,3 +106,45 @@ tools/trailer-out/
 # Инструкция по публикации: генерируется tools/build-publish-instructions.js
 # под имя владельца itch.io, поэтому в репозитории ей не место.
 tools/publish-instructions.md
+
+# ============================================================
+# Скачанные 3D-ассеты и аудио: НЕ ЧАСТЬ ИГРЫ
+# ============================================================
+# ЗАЧЕМ. В корне репозитория лежит около 10 ГБ чужих файлов: Assets
+# (9.5 ГБ, 2043 файла), Characters, Materials, Enemies and monsters,
+# Animation, Sounds and music. Ни один из них игра не читает.
+#
+# ПОЧЕМУ ОНИ НЕ НУЖНЫ, ПО ФАКТАМ А НЕ ПО ВКУСУ.
+#   1. Клиент не умеет грузить 3D. Поиск GLTFLoader, FBXLoader,
+#      TextureLoader, .gltf, .glb, .fbx по всему client/src даёт НОЛЬ
+#      совпадений. Персонажи, города и монстры строятся кодом на
+#      примитивах three.js.
+#   2. Движок чужой. В Materials лежат .usdc, .mtlx, .tres, .blend, .tx -
+#      это Unity и Unreal. Мы на three.js.
+#   3. Текстуры 4K неподъёмны. 193 текстуры по 4K занимают 2.5 ГБ, а весь
+#      клиент на проде весит 7.2 МБ. Игрок скачал бы 2.5 ГБ ради одной
+#      стены - в 350 раз больше, чем вся игра.
+#   4. ЛИЦЕНЗИЯ. Assets/Licenses/license.txt - Creazilla: бесплатно для
+#      личного и коммерческого использования, но «in case of
+#      redistribution, credits are required. Indicate Creazilla.com as the
+#      author's name and provide the link». То есть в репозиторий эти
+#      файлы класть нельзя без указания авторства.
+#
+# ПОЧЕМУ ИМЕННО ИГНОРИРУЮТСЯ, А НЕ УДАЛЯЮТСЯ. Решение владельца: большую
+# часть он удалит сам. Пока они лежат в корне, git status обязан их не
+# видеть - иначе любой `git add .` утащит 10 ГБ в историю навсегда, а
+# откатить это без переписывания истории нельзя.
+#
+# Ничего из перечисленного не участвует в сборке: docker собирает только
+# server/ и client/, и ни один из этих путей в Dockerfile не упоминается.
+
+/Animation/
+/Assets/
+/Characters/
+/Enemies and monsters/
+/Materials/
+/Sounds and music/
+
+# Служебное рядом с ними: список скачанного и ссылка на источник.
+/list of files.txt
+/Download More Of My Models @ 3DLowPolyModels.Com.url
