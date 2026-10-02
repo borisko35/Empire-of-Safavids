@@ -73,6 +73,15 @@ export const INTERIORS: Record<string, InteriorDef> = {
     id: 'circus', roomCx: 4352, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
     spawnX: 4352, spawnZ: 4005.5, doorX: -50.0, doorZ: 50.0, exitX: -52.0, exitZ: 46.0,
   },
+  // Караван-сарай на дороге Исфахан-Караван-сарай, (505, 55). Дверь у
+  // ворот: ворота стоят на z + 14, то есть (505, 69). Слот 4396 =
+  // 4000 + 9*44, и он обязан быть ПОСЛЕДНИМ: клиент считает слот
+  // индексом в массиве, а здесь число. Вставка в середину разъедет
+  // все последующие комнаты, и это молча.
+  caravanserai: {
+    id: 'caravanserai', roomCx: 4396, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4396, spawnZ: 4005.5, doorX: 505, doorZ: 69, exitX: 505, exitZ: 73,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {

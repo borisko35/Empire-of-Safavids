@@ -1556,7 +1556,8 @@
     "arena": "Арена-колизей",
     "auction_house": "Аукционный дом",
     "circus": "Цирк Сефевидов",
-    "exit": "Выход"
+    "exit": "Выход",
+    "caravanserai": "Караван-сарай"
   },
   "cutscene": {
     "throne_room": "Тронный зал",

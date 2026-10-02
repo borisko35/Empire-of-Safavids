@@ -1556,7 +1556,8 @@
     "arena": "Arena-Colosseum",
     "auction_house": "Auction House",
     "circus": "Safavid Circus",
-    "exit": "Exit"
+    "exit": "Exit",
+    "caravanserai": "Caravanserai"
   },
   "cutscene": {
     "throne_room": "Throne Room",

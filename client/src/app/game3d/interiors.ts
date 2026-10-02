@@ -15,7 +15,7 @@ import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai';
 
 export interface BuildingDef {
   id: string;
@@ -35,7 +35,14 @@ export interface BuildingDef {
 }
 
 // Локальные позиции домов в Исфахане (относительно центра города)
-const SPOTS: { id: string; kind: BuildingKind; nameKey: string; icon: string; lx: number; lz: number }[] = [
+// lx/lz - смещение двери от центра Исфахана. Необязательны, потому что
+// дверь караван-сарая стоит в 470 единицах от столицы, и прибить её к
+// городу нельзя. Для тех записей, где lx/lz заданы, поведение прежнее.
+// dx/dz - абсолютные координаты двери, ex/ez - выхода.
+const SPOTS: {
+  id: string; kind: BuildingKind; nameKey: string; icon: string;
+  lx?: number; lz?: number; dx?: number; dz?: number; ex?: number; ez?: number;
+}[] = [
   { id: 'stable', kind: 'stable', nameKey: 'buildings.stable', icon: '🐴', lx: -18.6, lz: -69.5 },
   { id: 'barracks', kind: 'barracks', nameKey: 'buildings.barracks', icon: '🛡️', lx: 36.0, lz: -62.4 },
   { id: 'workshop', kind: 'workshop', nameKey: 'buildings.workshop', icon: '⚒️', lx: 67.7, lz: -24.6 },
@@ -45,6 +52,10 @@ const SPOTS: { id: string; kind: BuildingKind; nameKey: string; icon: string; lx
   { id: 'arena', kind: 'arena', nameKey: 'buildings.arena', icon: '⚔️', lx: -40.0, lz: -50.0 },
   { id: 'auction_house', kind: 'auction_house', nameKey: 'buildings.auction_house', icon: '🏛️', lx: 50.0, lz: 50.0 },
   { id: 'circus', kind: 'circus', nameKey: 'buildings.circus', icon: '🎪', lx: -55.0, lz: 45.0 },
+  // ПОСЛЕДНЯЯ ЗАПИСЬ, И ЭТО ОБЯЗАТЕЛЬНО. Слот комнаты считается индексом
+  // (POCKET_X + i * ROOM_DX), а на сервере зашит числом. Запись выше
+  // сдвинет слоты всех, кто ниже, и комнаты разъедутся по координатам.
+  { id: 'caravanserai', kind: 'caravanserai', nameKey: 'buildings.caravanserai', icon: '🐫', dx: 505, dz: 69, ex: 505, ez: 73 },
 ];
 
 export const POCKET_X = 4000;
@@ -102,8 +113,8 @@ export function buildPocketGround(scene: THREE.Scene): void {
 }
 
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
-  const doorX = CITY.x + s.lx, doorZ = CITY.z + s.lz;
-  const n = Math.hypot(s.lx, s.lz) || 1;
+  const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
+  const n = Math.hypot(s.lx ?? 0, s.lz ?? 0) || 1;
   const roomCx = POCKET_X + i * ROOM_DX;
   return {
     id: s.id,
@@ -114,8 +125,8 @@ export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
     doorZ,
     roomCx,
     roomCz: POCKET_Z,
-    exitX: doorX + (s.lx / n) * 4,
-    exitZ: doorZ + (s.lz / n) * 4,
+    exitX: s.ex ?? doorX + ((s.lx ?? 0) / n) * 4,
+    exitZ: s.ez ?? doorZ + ((s.lz ?? 0) / n) * 4,
     floorY: FLOOR_Y,
   };
 });
@@ -189,6 +200,10 @@ function signMesh(text: string): THREE.Mesh {
 export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
   const clickTargets: THREE.Object3D[] = [];
   for (const s of SPOTS) {
+    // Запись без lx/lz стоит не в столице, и типовой домик ей не нужен:
+    // её собственное здание уже построено в мире. Иначе здесь получалось
+    // бы CITY.x + undefined, то есть NaN, и домик уехал бы в никуда.
+    if (s.lx === undefined || s.lz === undefined) continue;
     const wx = CITY.x + s.lx, wz = CITY.z + s.lz;
     const g = new THREE.Group();
     const faceRy = Math.atan2(-s.lx, -s.lz); // дверью к центру города
@@ -238,6 +253,43 @@ function furnishStable(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   g.add(box(3.2, 0.9, 1.2, M.woodDark, cx + 5, FLOOR_Y + 0.45, cz - 5.5));
   g.add(box(2.8, 0.2, 0.9, M.water, cx + 5, FLOOR_Y + 0.95, cz - 5.5));
   cols.push({ x: cx + 5, z: cz - 5.5, r: 1.9 });
+  return cols;
+}
+
+// Караван-сарай: не типовая конюшня, а помещение под караван-сарай -
+// стойла для верблюдов вдоль западной стены, две комнаты купцов с
+// коврами на востоке и ряд складских ниш с тюками вдоль северной.
+// Разделение сделано перегородками: одна большая коробка читалась бы
+// как склад, а здесь три разных помещения.
+function furnishCaravanserai(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // Стойла: три перегородки поперёк, между ними проходы.
+  for (const sy of [-4.5, 0.5, 5.5]) {
+    g.add(box(0.3, 2.2, 3.4, M.wood, cx - 7, FLOOR_Y + 1.1, cz + sy));
+    g.add(box(0.3, 2.2, 3.4, M.wood, cx - 7, FLOOR_Y + 1.1, cz + sy + 1.9));
+    cols.push({ x: cx - 7, z: cz + sy, r: 1.4 });
+    g.add(box(2.6, 0.5, 1.6, M.hay, cx - 5.2, FLOOR_Y + 0.25, cz + sy + 0.9));
+  }
+  cols.push({ x: cx - 6, z: cz - 5, r: 2.6 }, { x: cx - 6, z: cz + 1, r: 2.6 }, { x: cx - 6, z: cz + 6, r: 2.6 });
+  // Комнаты купцов: ковёр, низкий стол, светильник у каждого места.
+  for (const [sx, sz] of [[4.5, -4], [8, 4]] as const) {
+    // Перегородка между комнатами и общая стена отсекают их от прохода.
+    g.add(box(0.3, 3.2, 6.4, M.wall, cx + 2.2, FLOOR_Y + 1.6, cz + sz));
+    g.add(box(0.3, 3.2, 6.4, M.wall, cx + sx, FLOOR_Y + 1.6, cz + sz > 0 ? 7.2 : -7.2));
+    g.add(box(4.6, 0.06, 5.4, M.purple, cx + sx + 1.4, FLOOR_Y + 0.03, cz + sz));
+    g.add(box(2.2, 0.5, 1.2, M.woodDark, cx + sx + 1.4, FLOOR_Y + 0.25, cz + sz));
+    g.add(cyl(0.22, 0.3, 0.6, M.gold, cx + sx, FLOOR_Y + 0.3, cz + sz + 1.6));
+    cols.push({ x: cx + sx + 1.4, z: cz + sz, r: 1.7 });
+  }
+  // Складские ниши: полки с тюками вдоль северной стены.
+  for (let i = 0; i < 3; i++) {
+    const nx = cx - 5 + i * 5;
+    g.add(box(3.6, 0.24, 1.8, M.wood, nx, FLOOR_Y + 0.12, cz - 6.4));
+    g.add(box(3.6, 0.24, 1.8, M.wood, nx, FLOOR_Y + 1.5, cz - 6.4));
+    g.add(box(1.6, 1.1, 1.2, M.hay, nx, FLOOR_Y + 0.67, cz - 6.4));
+    g.add(box(1.2, 0.9, 1.0, M.woodDark, nx + 1.1, FLOOR_Y + 1.99, cz - 6.4));
+    cols.push({ x: nx, z: cz - 6.4, r: 1.5 });
+  }
   return cols;
 }
 
@@ -554,6 +606,7 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
     arena: furnishArena,
     auction_house: furnishAuctionHouse,
     circus: furnishCircus,
+  caravanserai: furnishCaravanserai,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 
