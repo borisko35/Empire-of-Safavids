@@ -49,7 +49,12 @@ import {
 } from '../../../shared/constants';
 // Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
 // то же самое. Расхождение двух копий уже стоило бага с дверями.
-import { spottedBy } from '../../../shared/stealth';
+import { spottedBy, GUARD_POSTS, nightFactor } from '../../../shared/stealth';
+// Погода берётся из того же источника, что и время суток, которое сервер и
+// так рассылает игрокам (WORLD_TIME), - чтобы клиент и правило считали одно
+// и то же. WEATHER_EFFECTS - справочник модификаторов, из него берётся
+// visibilityMod.
+import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -792,7 +797,7 @@ export class GameSocketHandler {
   // ============================================================
   private async handlePlayerMove(
     socket: AuthenticatedSocket,
-    data: { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number } }
+    data: { position: { x: number; y: number; z: number }; direction: { x: number; y: number; z: number }; crouch?: boolean }
   ): Promise<void> {
     if (!socket.characterId || !socket.region) return;
     const characterId = socket.characterId;
@@ -855,7 +860,24 @@ export class GameSocketHandler {
     // Правило в shared/stealth.ts, чтобы клиент считал то же самое.
     // Сообщаем только о смене состояния: пакеты движения идут десятками в
     // секунду, и без проверки «а было ли уже» клиент получал бы спам.
-    const заметил = spottedBy(data.position);
+    // Шаг 2 стелса: считаем не только обнаружение, но и скрытность.
+    //
+    // Погода берётся из WorldTimeSystem, а не из пакета игрока: игрок может
+    // прислать что угодно, а погода у него одна на весь мир. Время суток
+    // тоже своё - timeOfDay сервера. Фактор ночи считает nightFactor() из
+    // shared, тем же кодом, что и клиент, иначе стороны разошлись бы, как
+    // разошлись двери.
+    //
+    // visibilityMod берётся из WEATHER_EFFECTS: это поле было объявлено и
+    // не читалось (weatherEffects.test.ts так и писал). Песчаная буря
+    // сокращает обзор стража с 20 до 6 единиц - ровно то, что просил
+    // владелец: «пыльная буря ухудшает обзор, но скрывает игрока в стелсе».
+    const время = GameLoop.getInstance().getWorldTime();
+    const заметил = spottedBy(data.position, GUARD_POSTS, {
+      crouch: data.crouch === true,
+      night: nightFactor(время.timeOfDay),
+      visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
+    });
     const былЗамечен = this.spottedGuards.get(characterId) ?? null;
     if (заметил?.id !== былЗамечен) {
       this.spottedGuards.set(characterId, заметил?.id ?? null);

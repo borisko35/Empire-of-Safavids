@@ -180,8 +180,13 @@ describe('Обнаружение: правило действительно вы
     const socket = читать('server/src/socket/GameSocketHandler.ts');
     must(socket.length > 1000, 'GameSocketHandler.ts не прочитан');
 
+    // Шаг 2 добавил в вызов контекст скрытности, поэтому строка стала
+    // spottedBy(data.position, GUARD_POSTS, {...}). Проверка обновлена под
+    // новую сигнатуру, но смысл прежний: правило вызывается в потоке
+    // движения по позиции из пакета. Совпадение по data.position обязательно
+    // - вызов с другой позицией был бы подменой.
     must(
-      /spottedBy\(data\.position\)/.test(socket),
+      /spottedBy\(\s*data\.position/.test(socket),
       'сервер не вызывает spottedBy по позиции из пакета движения: правило есть, вызова нет'
     );
     must(

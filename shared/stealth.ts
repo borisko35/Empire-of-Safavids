@@ -91,27 +91,116 @@ export function distanceSq(a: Point, b: Point): number {
   return dx * dx + dz * dz;
 }
 
+// ============================================================
+// ШАГ 2 СТЕЛСА: СКРЫТНОСТЬ
+// ============================================================
+// ЧТО ЗДЕСЬ И ОТКУДА ВЗЯТЫ ЧИСЛА. Каждый коэффициент либо измерен по коду,
+// либо прямо назван выбором. Смешивать их нельзя, поэтому каждая строка
+// говорит, что она из себя представляет.
+//
+// ПРИСЕДАНИЕ - 0.5, ИЗМЕРЕНО. В client/src/app/game3d/world3d.ts:
+// CROUCH_SPEED = 2.2 при WALK_SPEED = 4.2, то есть 2.2/4.2 = 0.524.
+// Берём 0.5: страж теряет половину дальности обзора, и игрок ползёт вдвое
+// медленнее - ровно в той же пропорции. Не выдумано: это доля скорости из
+// кода, а не круглое число на глаз.
+//
+// НОЧЬ - 0.5, ВЫБОР, А НЕ ИЗМЕРЕНИЕ. В коде уже есть фактор ночи: в
+// client/src/app/world.ts night = 1 для night/midnight, 0.5 для evening/dawn,
+// 0 иначе. Он считался только для освещения картинки. Правило
+// "ночью страж видит вдвое далье" - это моё решение, и оно сделано так,
+// чтобы совпасть с тем же половинным шагом, что и у погоды. Спрятаться
+// ночью вдвое легче - это ровно то, что просил владелец ("ночью легче, днём
+// почти невозможно"). Если числа покажутся неудобными в игре - меняется
+// здесь одно значение, а не десять мест.
+//
+// ПОГОДА - ИЗМЕРЕНО, ГОТОВЫЕ ЧИСЛА. Берётся visibilityMod из
+// WEATHER_EFFECTS (server/src/systems/WorldTimeSystem.ts): ясно 1.0,
+// облачно 0.9, дождь 0.7, буря 0.4, песчаная буря 0.3, туман 0.5,
+// снег 0.6, ветер 0.85. Это поле было мёртвым: его объявляли и не читали
+// (проверка weatherEffects.test.ts так и говорила). Шаг 2 даёт ему
+// потребителя - песчаная буря сокращает обзор стража до 6 единиц от 20.
+//
+// ЧЕГО ТУТ НЕТ. Света от построек и теней: считать их нечем, данных нет.
+// Ночь берётся как фактор времени суток, а не как освещённость точки.
+
+/** Доля обзора стража, остающаяся при приседании. Измерено: 2.2 / 4.2. */
+export const CROUCH_SIGHT = 0.5;
+
+/** Сколько обзора снимает полная темнота. Выбор, а не измерение. */
+export const NIGHT_SIGHT = 0.5;
+
+/** Что игрок делает и когда вокруг. Всё необязательное: без этого
+ *  правило считает чистое обнаружение, как в шаге 1. */
+export interface SightContext {
+  /** Игрок присел (клавиша C или Ctrl) */
+  crouch?: boolean;
+  /** Фактор ночи: 1 - полная темнота, 0.5 - сумерки, 0 - день */
+  night?: number;
+  /** Видимость по погоде: visibilityMod из WEATHER_EFFECTS (0.3..1.0) */
+  visibility?: number;
+}
+
+/**
+ * Фактор ночи по времени суток.
+ *
+ * Формула снята с кода клиента (client/src/app/world.ts), где она считалась
+ * для освещения. Здесь она живёт потому, что считать её надо на обеих
+ * сторонах, а две копии одного правила однажды уже разъехались - так были
+ * потеряны координаты дверей. Проверка stealthRule.test.ts сверяет эту
+ * функцию с той строкой в клиенте.
+ */
+export function nightFactor(timeOfDay: string): number {
+  if (timeOfDay === 'night' || timeOfDay === 'midnight') return 1;
+  if (timeOfDay === 'evening' || timeOfDay === 'dawn') return 0.5;
+  return 0;
+}
+
+/**
+ * Во сколько раз дальность обзора стража меньше настоящей.
+ *
+ * Множители перемножаются, а не складываются: приседание ночью в ливень
+ * должно давать самую короткую дальность, а не «среднее».
+ */
+export function concealment(ctx: SightContext = {}): number {
+  let factor = 1;
+  if (ctx.crouch) factor *= CROUCH_SIGHT;
+  factor *= 1 - NIGHT_SIGHT * (ctx.night ?? 0);
+  factor *= ctx.visibility ?? 1;
+  return factor;
+}
+
+/** Дальность обзора стража с учётом того, чем игрок прикрывается. */
+export function effectiveSight(post: GuardPost, ctx: SightContext = {}): number {
+  return post.sight * concealment(ctx);
+}
+
 /**
  * Видит ли страж игрока.
  *
  * Граница включена: на расстоянии ровно sight - ещё видит.
+ * Без ctx это чистое обнаружение из шага 1, радиус не меняется.
  */
-export function canSee(player: Point, post: GuardPost): boolean {
-  return distanceSq(player, post) <= post.sight * post.sight;
+export function canSee(player: Point, post: GuardPost, ctx: SightContext = {}): boolean {
+  const radius = effectiveSight(post, ctx);
+  return distanceSq(player, post) <= radius * radius;
 }
 
 /**
  * Кто из стражей видит игрока.
  *
  * Возвращает пост, который заметил игрока первым по списку, либо null.
- * Список стражей — константа, поэтому порядок в GUARD_POSTS и есть
+ * Список стражей - константа, поэтому порядок в GUARD_POSTS и есть
  * приоритет: когда рядом оказались двое, считается тот, кто стоит выше в
  * списке. Это правило нужно, чтобы результат не зависел от порядка обхода
  * в вызывающем коде.
  */
-export function spottedBy(player: Point, posts: readonly GuardPost[] = GUARD_POSTS): GuardPost | null {
+export function spottedBy(
+  player: Point,
+  posts: readonly GuardPost[] = GUARD_POSTS,
+  ctx: SightContext = {}
+): GuardPost | null {
   for (const post of posts) {
-    if (canSee(player, post)) return post;
+    if (canSee(player, post, ctx)) return post;
   }
   return null;
 }
