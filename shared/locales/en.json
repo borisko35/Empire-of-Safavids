@@ -1563,7 +1563,8 @@
     "exit": "Exit",
     "caravanserai": "Caravanserai",
     "fortress": "Fortress at the Pass",
-    "palace": "Palace of Forty Columns"
+    "palace": "Palace of Forty Columns",
+    "mosque": "Mosque and Madrasa"
   },
   "cutscene": {
     "throne_room": "Throne Room",

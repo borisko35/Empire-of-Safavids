@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque';
 
 export interface BuildingDef {
   id: string;
@@ -78,6 +78,8 @@ const SPOTS: {
     // Дворец. В мире стоит восточнее города, дальше любой другой постройки.
     // Слот 11, и он последний: комнаты дальше не строятся.
   { id: 'palace', kind: 'palace', nameKey: 'buildings.palace', icon: '👑', dx: 620, dz: -300, ex: 620, ez: -296 },
+  // Мечеть. Ставится севернее города, ближе всех прочих сухих точек:
+  { id: 'mosque', kind: 'mosque', nameKey: 'buildings.mosque', icon: '🕌', dx: -20, dz: -480, ex: -20, ez: -476 },
 ];
 
 export const POCKET_X = 4000;
@@ -125,7 +127,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4528, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4572, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -282,6 +284,55 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   guard.group.position.set(cx - 8, FLOOR_Y + 0.7, cz + 6);
   g.add(guard.group);
   cols.push({ x: cx - 8, z: cz + 6, r: 1.1 });
+  return cols;
+}
+
+// Мечеть и медресе: молитвенный зал, галерея, комнаты учеников.
+//
+// Что просили: михраб и купол снаружи (купол уже стоит на площади), внутри —
+// молитвенный зал, галереи, комнаты учеников, библиотека. Всё в одной
+// комнате: в модели интерьеров переходов между комнатами нет.
+function furnishMosque(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Михраб в глубине: ниша в северной стене, смотрит на Мекку ──
+  g.add(box(3.2, 3.4, 0.5, M.gold, cx, FLOOR_Y + 1.7, cz - 10.2));
+  g.add(box(2.2, 2.4, 0.3, M.dark, cx, FLOOR_Y + 1.2, cz - 9.9));
+  cols.push({ x: cx, z: cz - 9.6, r: 1.5 });
+  // ── Ковёр перед михрабом ──
+  g.add(box(7, 0.05, 9, M.red, cx, FLOOR_Y + 0.03, cz - 4));
+  // ── Галерея: два ряда колонн вдоль боков ──
+  for (let i = 0; i < 7; i++) {
+    for (const side of [-1, 1]) {
+      const px = cx + side * 7.2;
+      const pz = cz - 8 + i * 2.4;
+      g.add(cyl(0.24, 4.2, 0.24, M.stone, px, FLOOR_Y + 2.1, pz));
+      g.add(box(0.7, 0.24, 0.7, M.gold, px, FLOOR_Y + 4.1, pz));
+      cols.push({ x: px, z: pz, r: 0.6 });
+    }
+  }
+  // ── Комнаты учеников: низкие столы и скамейки у дальней стены ──
+  // Стол низкий и без стульев: ученики сидят на ковре, как в медресе,
+  // и комната выглядит учебной, а не столовой.
+  for (let i = 0; i < 3; i++) {
+    const px = cx - 5.4 + i * 5.4;
+    g.add(box(3.6, 0.14, 1.3, M.wood, px, FLOOR_Y + 0.4, cz + 6.2));
+    g.add(box(3.4, 0.1, 0.9, M.hay, px, FLOOR_Y + 0.18, cz + 7.4));
+    cols.push({ x: px, z: cz + 6.8, r: 1.5 });
+  }
+  // ── Библиотека: стеллажи с сурами у боковых стен ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.8;
+    g.add(box(0.9, 2.8, 6, M.woodDark, px, FLOOR_Y + 1.4, cz + 3));
+    for (let s = 0; s < 3; s++) {
+      g.add(box(0.8, 0.1, 5.6, M.wood, px, FLOOR_Y + 0.6 + s * 0.9, cz + 3));
+      g.add(box(0.7, 0.42, 2.8, M.hay, px, FLOOR_Y + 0.86 + s * 0.9, cz + 2.1));
+      g.add(box(0.7, 0.34, 2.1, M.wood, px, FLOOR_Y + 0.8 + s * 0.9, cz + 4.6));
+    }
+    cols.push({ x: px, z: cz + 3, r: 1.4 });
+  }
+  // ── Жаровни у входа ──
+  brazier(g, cx - 9.6, cz + 9.4, FLOOR_Y);
+  brazier(g, cx + 9.6, cz + 9.4, FLOOR_Y);
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -814,6 +865,7 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
 caravanserai: furnishCaravanserai,
     fortress: furnishFortress,
     palace: furnishPalace,
+    mosque: furnishMosque,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

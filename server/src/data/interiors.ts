@@ -103,6 +103,17 @@ export const INTERIORS: Record<string, InteriorDef> = {
     // Дверь в мире: промерено waterMask, сухо 0.0000.
     doorX: 620, doorZ: -300, exitX: 620, exitZ: -296,
   },
+  // Мечеть и медресе. Снаружи мечеть уже стоит на площади в центре
+  // города (terrain.ts); здесь появляется её интерьер. Слот 12,
+  // cx = 4000 + 12 * 44 = 4528.
+  mosque: {
+    id: 'mosque', roomCx: 4528, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Выходит игрок у портала, а не в глубине: вход в зал - сразу
+    // передним, как в настоящей мечети.
+    spawnX: 4528, spawnZ: 4008.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: -20, doorZ: -480, exitX: -20, exitZ: -476,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {
