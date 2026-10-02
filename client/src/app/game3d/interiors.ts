@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb';
 
 export interface BuildingDef {
   id: string;
@@ -86,6 +86,8 @@ const SPOTS: {
   { id: 'customs', kind: 'customs', nameKey: 'buildings.customs', icon: '⚖️', dx: -900, dz: 800, ex: -900, ez: 804 },
   // Зороастрийское святилище. Юго-восток карты, дальше всех построек.
   { id: 'shrine', kind: 'shrine', nameKey: 'buildings.shrine', icon: '🔥', dx: 1200, dz: 1200, ex: 1200, ez: 1204 },
+  // Гробница Шеиха. Юго-восток, дальше святилища: своё место, не чужой зал.
+  { id: 'tomb', kind: 'tomb', nameKey: 'buildings.tomb', icon: '⚰️', dx: 1400, dz: 1400, ex: 1400, ez: 1404 },
 ];
 
 export const POCKET_X = 4000;
@@ -133,7 +135,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4704, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4748, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -513,6 +515,62 @@ function furnishShrine(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   // ── Заросли: трава пролзла через руины ──
   for (const [gx, gz] of [[-4, 2], [3.4, 4.4], [-6, 7.4], [5.4, 1.6]] as const) {
     g.add(box(0.5, 0.7, 0.5, M.hay, cx + gx, FLOOR_Y + 0.35, cz + gz));
+  }
+  return cols;
+}
+
+// Гробница Шеиха: лестница вниз, зал с саркофагом, ниши, светильники.
+//
+// Что просили: гробница Имамзаде. Механик из этого («один вход за попытку,
+// проклятия, лут один на группу, таблица рекордов») в проекте нет, и здесь
+// только место. Мебель замкнута на саркофаг: он окружён решёткой и стоит
+// на постаменте — добыча видна, но не валяется на полу.
+function furnishTomb(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Саркофаг в центре зала, на постаменте ──
+  g.add(box(5.4, 0.5, 2.8, M.stone, cx, FLOOR_Y + 0.25, cz - 3));
+  g.add(box(2.8, 1.1, 1.3, M.stone, cx, FLOOR_Y + 1.05, cz - 3));
+  // Крышка сдвинута на четверть: видно, что саркофаг вскрывали.
+  g.add(box(1.1, 0.22, 1.4, M.stone, cx + 1.5, FLOOR_Y + 1.65, cz - 3));
+  cols.push({ x: cx, z: cz - 3, r: 2.4 });
+  // ── Решётка вокруг саркофага ──
+  // Забрать что-то из гробницы нельзя, не сломав её: правило механики будет
+  // отдельным шагом, а сейчас решётка держит форму честной.
+  for (let i = 0; i < 7; i++) {
+    const bx = cx - 3.2 + i * 1.05;
+    g.add(box(0.12, 2.6, 0.12, M.iron, bx, FLOOR_Y + 1.3, cz - 5.4));
+  }
+  g.add(box(7.2, 0.16, 0.16, M.iron, cx, FLOOR_Y + 2.6, cz - 5.4));
+  for (let i = 0; i < 5; i++) {
+    g.add(box(0.12, 2.6, 0.12, M.iron, cx - 3.4, FLOOR_Y + 1.3, cz - 5.2 + i * 1.1));
+    g.add(box(0.12, 2.6, 0.12, M.iron, cx + 3.4, FLOOR_Y + 1.3, cz - 5.2 + i * 1.1));
+  }
+  cols.push({ x: cx, z: cz - 5.4, r: 1.6 });
+  // ── Лестница вниз у входа: ступени уходят в пол ──
+  for (let i = 0; i < 5; i++) {
+    g.add(box(3.2, 0.16, 0.5, M.stone, cx, FLOOR_Y + 0.08 - i * 0.16, cz + 8.2 + i * 0.5));
+  }
+  cols.push({ x: cx, z: cz + 8.4, r: 1.7 });
+  // ── Ниши со свитками по боковым стенам ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.8;
+    g.add(box(0.7, 2.4, 2, M.dark, px, FLOOR_Y + 1.2, cz + 1.4));
+    for (let r = 0; r < 2; r++) {
+      const sv = cyl(0.15, 1, 0.15, M.hay, px, FLOOR_Y + 1 + r * 0.7, cz + 1.4, 8);
+      sv.rotation.x = Math.PI / 2;
+      g.add(sv);
+    }
+    g.add(box(0.9, 3, 0.9, M.stone, px, FLOOR_Y + 1.5, cz + 2.7));
+    cols.push({ x: px, z: cz + 1.4, r: 1.5 });
+  }
+  // ── Потускневшие светильники на стойках ──
+  // Не жаровни: в гробнице огонь открытым не уместен, тут холодный камень
+  // и редкий огонёк. Отличие от жаровни видно и глазом, и проверкой.
+  for (const side of [-1, 1]) {
+    const px = cx + side * 5.2;
+    g.add(cyl(0.14, 2.2, 0.14, M.iron, px, FLOOR_Y + 1.1, cz - 7.6, 8));
+    g.add(cyl(0.3, 0.5, 0.3, M.gold, px, FLOOR_Y + 2.4, cz - 7.6, 8));
+    cols.push({ x: px, z: cz - 7.6, r: 0.9 });
   }
   return cols;
 }
@@ -1050,6 +1108,7 @@ caravanserai: furnishCaravanserai,
     weaver: furnishWeaver,
     customs: furnishCustoms,
     shrine: furnishShrine,
+    tomb: furnishTomb,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

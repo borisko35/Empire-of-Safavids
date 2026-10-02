@@ -142,6 +142,17 @@ export const INTERIORS: Record<string, InteriorDef> = {
     // Дверь в мире: промерено waterMask, сухо 0.0000.
     doorX: 1200, doorZ: 1200, exitX: 1200, exitZ: 1204,
   },
+  // Гробница Шеиха. Запись dungeon_shiraz_tomb существует, но геометрии у
+  // подземелий нет: файлов .umap на диске нет, mapPath не читает никто.
+  // Поэтому гробница строится интерьером, как святилище. Слот 16,
+  // cx = 4000 + 16 * 44 = 4704.
+  tomb: {
+    id: 'tomb', roomCx: 4704, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Игрок входит сверху, у лестницы: в гробницу спускаются, а не входят.
+    spawnX: 4704, spawnZ: 4009.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: 1400, doorZ: 1400, exitX: 1400, exitZ: 1404,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {

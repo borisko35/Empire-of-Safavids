@@ -1567,7 +1567,8 @@
     "mosque": "Mosque and Madrasa",
     "weaver": "Weaving House and Store",
     "customs": "Customs Yard",
-    "shrine": "Zoroastrian Shrine"
+    "shrine": "Zoroastrian Shrine",
+    "tomb": "Sheikh's Tomb"
   },
   "cutscene": {
     "throne_room": "Throne Room",
