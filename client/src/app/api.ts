@@ -473,6 +473,12 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
+  /** Рекорды прохождений: кто прошёл быстрее всех */
+  dungeonRecords: (dungeonId: string) =>
+    req<{
+      records: { name: string; durationSec: number; completedAt: string; bossesKilled: number }[];
+    }>(`/api/game/dungeons/${dungeonId}/records`),
+
   /** Открытые заходы по данжу: к кому можно присоединиться */
   dungeonSessions: (dungeonId: string) =>
     req<{ sessions: { sessionId: string; members: number; maxPlayers: number }[] }>(

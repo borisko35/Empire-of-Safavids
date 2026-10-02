@@ -474,6 +474,54 @@ export class DungeonService {
    * Заходы берутся из памяти, а не из базы: в базе остались бы и завершённые,
    * и кнопка предлагала бы войти в закрытый заход.
    */
+  /**
+   * Рекорды по данжу: самое быстрое прохождение и первые пять по времени.
+   *
+   * Таблица dungeon_history писалась с миграции 010 и годами только
+   * пополнялась: во всём сервере было одно обращение — вставка. Рекорды
+   * показывать было нечем. Запрос идёт по индексу (dungeon_id, result).
+   *
+   * Порядок однозначен: время, затем дата, затем имя. Без последнего
+   * одинаковые результаты прыгали бы между собой при каждом запросе.
+   *
+   * Проходы без времени отбрасываются: незавершённый заход рекордом не
+   * является, а «0 секунд» обошёл бы любой нормальный результат.
+   */
+  async dungeonRecords(dungeonId: string, сколько = 5): Promise<
+    {
+      // Имя берётся из characters.name: колонки name_ru у персонажа нет,
+      // такая колонка есть только у питомцев.
+      name: string;
+      durationSec: number;
+      completedAt: string;
+      bossesKilled: number;
+    }[]
+  > {
+    const строки = await this.db
+      .query<{ name: string; duration_sec: number; completed_at: Date; bosses_killed: number }>(
+        `SELECT c.name, h.duration_sec, h.completed_at, h.bosses_killed
+           FROM dungeon_history h
+           JOIN characters c ON c.id = h.character_id
+          WHERE h.dungeon_id = $1
+            AND h.result = 'completed'
+            AND h.duration_sec IS NOT NULL
+            AND h.duration_sec > 0
+          ORDER BY h.duration_sec ASC, h.completed_at ASC, c.name ASC
+          LIMIT $2`,
+        [dungeonId, сколько]
+      )
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] не удалось прочитать рекорды: ' + (e as Error).message);
+        return [] as { name: string; duration_sec: number; completed_at: Date; bosses_killed: number }[];
+      });
+    return строки.map((с) => ({
+      name: с.name,
+      durationSec: Number(с.duration_sec),
+      completedAt: new Date(с.completed_at).toISOString(),
+      bossesKilled: Number(с.bosses_killed),
+    }));
+  }
+
   listOpenSessions(dungeonId: string): { sessionId: string; members: number; maxPlayers: number }[] {
     const def = DUNGEONS_DATABASE[dungeonId];
     if (!def) return [];

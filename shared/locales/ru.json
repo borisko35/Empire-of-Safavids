@@ -778,7 +778,8 @@
     "error_msg": "Ошибка: {msg}",
     "join_raid": "Вступить",
     "joined_raid": "Вы вступили в заход",
-    "raid_open": "Открытый заход:"
+    "raid_open": "Открытый заход:",
+    "dungeon_records": "Рекорд"
   },
   "settings": {
     "title": "⚙ Настройки",

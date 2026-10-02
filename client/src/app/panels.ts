@@ -135,6 +135,23 @@ export async function loadDungeons(): Promise<void> {
           await loadDungeons();
         }));
       }
+      // Рекорды прохождений. Пустой список — не ошибка: данных просто
+      // ещё нет, и панель не должна из-за этого упасть.
+      const рекорды = await api.dungeonRecords(d.id).catch(() => ({ records: [] as never[] }));
+      if (рекорды.records.length > 0) {
+        for (const рекорд of рекорды.records) {
+          const строка = rowEl('inv-item');
+          const подпись = document.createElement('span');
+          подпись.className = 'inv-name';
+          const минуты = Math.floor(рекорд.durationSec / 60);
+          const секунды = рекорд.durationSec % 60;
+          подпись.textContent =
+            `${t('panels.dungeon_records')} ${рекорд.name} — ` +
+            `${String(минуты).padStart(2, '0')}:${String(секунды).padStart(2, '0')}`;
+          строка.append(подпись);
+          box.append(строка);
+        }
+      }
       // Присоединение к чужому заходу. Список открытых заходов берётся по
       // этому данжу; кнопка появляется только если есть куда идти.
       if (!status.active) {

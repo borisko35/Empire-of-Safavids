@@ -778,7 +778,8 @@
     "error_msg": "Error: {msg}",
     "join_raid": "Join",
     "joined_raid": "You joined the run",
-    "raid_open": "Open run:"
+    "raid_open": "Open run:",
+    "dungeon_records": "Record"
   },
   "settings": {
     "title": "⚙ Settings",

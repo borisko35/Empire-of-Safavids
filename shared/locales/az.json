@@ -778,7 +778,8 @@
     "error_msg": "Xəta: {msg}",
     "join_raid": "Qoşul",
     "joined_raid": "Siz oyuna qoşuldunuz",
-    "raid_open": "Açıq oyun:"
+    "raid_open": "Açıq oyun:",
+    "dungeon_records": "Rekord"
   },
   "settings": {
     "title": "⚙ Parametrlər",

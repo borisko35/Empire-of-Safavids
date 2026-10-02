@@ -1128,6 +1128,16 @@ gameRouter.get('/servers-status', asyncHandler(async (_req: Request, res: Respon
 // ДАНЖИ
 // ============================================================
 
+// GET /api/game/dungeons/:dungeonId/records — рекорды прохождений
+gameRouter.get(
+  '/dungeons/:dungeonId/records',
+  secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const сколько = Math.min(20, Math.max(1, Number(req.query.limit) || 5));
+    res.json({ records: await dungeonService.dungeonRecords(req.params.dungeonId, сколько) });
+  })
+);
+
 // GET /api/game/dungeons/:dungeonId/sessions — открытые заходы, к которым
 // можно присоединиться. Без этого кнопка «вступить» не знает, к кому идти.
 gameRouter.get(
