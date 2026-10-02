@@ -162,6 +162,13 @@ export const GUARD_POSTS: readonly GuardPost[] = [
   // проскочить за спиной - а комната маленькая, и это перестало бы быть
   // задачей.
   { id: 'npc_fort_watch', nameRu: 'Страж крепости', x: 4432, z: 4006, sight: GUARD_SIGHT },
+  // Страж тронного зала. Тот же принцип: фигура видима в тронном зале,
+  // а координата — ровно та же, что в правиле: cx - 8, cz + 6, где cx = 4484.
+  // Проверка secretDocuments.test.ts считает эту же формулу, поэтому
+  // страж не может «отойти» от своего места молча.
+  //
+  // Направления взгляда нет: круговой, как у всех постов.
+  { id: 'npc_palace_guard', nameRu: 'Страж тронного зала', x: 4476, z: 4006, sight: GUARD_SIGHT },
   { id: 'npc_guard_gate', nameRu: 'Привратник', x: 60, z: 32, sight: GUARD_SIGHT,
     // ПАТРУЛЬ. Единственный сторожевой пост, который ходит: остальные стоят,
     // и стоящий страж не может ни наказать, ни спрятаться - с ним можно
@@ -574,7 +581,7 @@ export interface DocumentSpot {
  * стоя за его спиной не спрячешься, как и не следовало бы.
  */
 export const DOCUMENT_SPOTS: readonly DocumentSpot[] = [
-  { id: 'desk_fort_watch', buildingId: 'fortress', nameRu: 'Стол смотровой', x: 4447, z: 4003 },
+  { id: 'desk_throne', buildingId: 'palace', nameRu: 'Стол тронного зала', x: 4491, z: 4003 },
 ];
 
 /** Почему документ не взяли. null — взяли. */

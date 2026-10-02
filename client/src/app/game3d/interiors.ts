@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace';
 
 export interface BuildingDef {
   id: string;
@@ -75,6 +75,9 @@ const SPOTS: {
   // 0.68), на (-320,-677) сухо (0.000). Выход - 4 единицы от центра, как
   // у караван-сарая (505,69 -> 505,73). До других дверей 750+ единиц.
   { id: 'fortress', kind: 'fortress', nameKey: 'buildings.fortress', icon: '🏰', dx: -320, dz: -677, ex: -320, ez: -673 },
+    // Дворец. В мире стоит восточнее города, дальше любой другой постройки.
+    // Слот 11, и он последний: комнаты дальше не строятся.
+  { id: 'palace', kind: 'palace', nameKey: 'buildings.palace', icon: '👑', dx: 620, dz: -300, ex: 620, ez: -296 },
 ];
 
 export const POCKET_X = 4000;
@@ -118,7 +121,11 @@ export const FLOOR_Y = 0.4;
  *  Для неё x1 поднят с 4440 до 4484: иначе комната вылезла бы за границу.
  *  Новый запас справа - 28 единиц, слева по-прежнему 24.
  */
-export const POCKET_RECT = { x0: 3960, x1: 4484, z0: 3960, z1: 4040 };
+// Правая граница — центр ПОСЛЕДНЕЙ комнаты, не её край. Так было и при
+// караван-сарае, и при крепости: полоса от края комнаты до центра
+// следующей нужна, чтобы промежуток между комнатами тоже был землёй.
+// Последняя комната теперь дворец, слот 11, центр 4484.
+export const POCKET_RECT = { x0: 3960, x1: 4528, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -212,6 +219,71 @@ function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z
   }
     
 
+
+// Дворец Сорока Колонн: тронный зал.
+//
+// Имя дворца обещает колонны, и здесь их двадцать: десять у дальней стены,
+// десять вдоль боковых. Считать двадцать можно прямо на экране — это дешевле,
+// чем спорить с текстом описания.
+//
+// Что ещё просили в тронном зале: ковёр, трон, столы по сторонам и стеллажи с
+// книгами (библиотека из списка владельца). Всё в одной комнате: в модели
+// интерьеров переходов между комнатами нет, и делать четыре комнаты из одной
+// означало бы выдумать систему, которой нет.
+function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Колонны: два ряда по десять ──
+  for (let i = 0; i < 10; i++) {
+    for (const side of [-1, 1]) {
+      const px = cx + side * (2.2 + i * 0.75);
+      const pz = cz - 9 + side * 0 + i * 2.05;
+      g.add(cyl(0.34, 4.6, 0.34, M.stone, px, FLOOR_Y + 2.3, pz));
+      g.add(box(0.9, 0.3, 0.9, M.gold, px, FLOOR_Y + 4.55, pz));
+      cols.push({ x: px, z: pz, r: 0.7 });
+    }
+  }
+  // ── Трон у северной стены, на ковре ──
+  // Трон напротив двери (юг): входящий видит его сразу, а не за спиной.
+  g.add(box(9, 0.06, 7, M.woodDark, cx, FLOOR_Y + 0.03, cz - 4.5));
+  g.add(box(9, 0.06, 7, M.red, cx, FLOOR_Y + 0.05, cz - 4.5));
+  g.add(box(2.4, 0.5, 1.6, M.stone, cx, FLOOR_Y + 0.3, cz - 8));
+  g.add(box(2.1, 2.6, 0.4, M.gold, cx, FLOOR_Y + 1.6, cz - 8.2));
+  cols.push({ x: cx, z: cz - 8, r: 1.4 });
+  // ── Столы по сторонам ──
+  for (const side of [-1, 1]) {
+    g.add(box(2.6, 0.16, 1.2, M.wood, cx + side * 8.2, FLOOR_Y + 0.92, cz + 1));
+    for (const b of [-1, 1]) {
+      g.add(cyl(0.12, 0.9, 0.12, M.woodDark, cx + side * 8.2 + b * 1, FLOOR_Y + 0.46, cz + 1));
+    }
+    cols.push({ x: cx + side * 8.2, z: cz + 1, r: 1.3 });
+  }
+  // ── Стеллажи с книгами у боковых стен ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.6;
+    g.add(box(1, 3.2, 7, M.woodDark, px, FLOOR_Y + 1.6, cz + 3));
+    for (let s = 0; s < 3; s++) {
+      g.add(box(0.9, 0.12, 6.4, M.wood, px, FLOOR_Y + 0.7 + s * 1.05, cz + 3));
+      // Книги: полки разной высоты, чтобы стеллаж не читался полосой.
+      g.add(box(0.8, 0.5, 3.2, M.hay, px, FLOOR_Y + 1 + s * 1.05, cz + 2.2));
+      g.add(box(0.8, 0.38, 2.4, M.red, px, FLOOR_Y + 0.92 + s * 1.05, cz + 5.2));
+    }
+    cols.push({ x: px, z: cz + 3, r: 1.5 });
+  }
+  // ── Жаровни у входа ──
+  brazier(g, cx - 9.4, cz + 8.4, FLOOR_Y);
+  brazier(g, cx + 9.4, cz + 8.4, FLOOR_Y);
+  // ── Страж тронного зала ──
+  // Фигура видимая, и её координата — ровно та, что в правиле стелса:
+  // cx - 8, cz + 6 = (4476, 4006). Проверка сверяет ту же формулу.
+  // Копья у гвардейца нет в наборе оружия (sword, staff, bow, dagger, rapier,
+  // none), поэтому страж вооружён саблей — как и страж крепости. Выдумывать
+  // «копьё» ради одного дворца значит расширять общий перечень из-за детали.
+  const guard = buildHumanoid({ robe: 0x2f3f6e, robeDark: 0x1e2946, hat: 'helmet', hatColor: 0xb08d3a, weapon: 'sword', shield: true, scale: 1.06 });
+  guard.group.position.set(cx - 8, FLOOR_Y + 0.7, cz + 6);
+  g.add(guard.group);
+  cols.push({ x: cx - 8, z: cz + 6, r: 1.1 });
+  return cols;
+}
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
   const n = Math.hypot(s.lx ?? 0, s.lz ?? 0) || 1;
@@ -741,6 +813,7 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
     circus: furnishCircus,
 caravanserai: furnishCaravanserai,
     fortress: furnishFortress,
+    palace: furnishPalace,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

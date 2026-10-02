@@ -92,6 +92,17 @@ export const INTERIORS: Record<string, InteriorDef> = {
     id: 'fortress', roomCx: 4440, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
     spawnX: 4440, spawnZ: 4005.5, doorX: -320, doorZ: -677, exitX: -320, exitZ: -673,
   },
+  // Дворец Сорока Колонн. Тронный зал, где лежат тайные документы.
+  // Слот 11: cx = 4000 + 11 * 44 = 4484. Крепость на слоте 10 не
+  // сдвигается, потому что эта запись стоит после неё, а не перед.
+  palace: {
+    id: 'palace', roomCx: 4484, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Точка появления внутри — у трона, а не в углу: игрок должен
+    // оказаться перед тронным залом, а не спиной к нему.
+    spawnX: 4484, spawnZ: 4006.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: 620, doorZ: -300, exitX: 620, exitZ: -296,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {
