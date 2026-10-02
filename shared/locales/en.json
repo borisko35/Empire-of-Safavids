@@ -1429,7 +1429,9 @@
     "mesopotamia": "Mesopotamia",
     "khorasan": "Khorasan",
     "persian_gulf": "Persian Gulf",
-    "herat": "Herat"
+    "herat": "Herat",
+    "east_frontier": "Far East",
+    "west_frontier": "Far West"
   },
   "achievements": {
     "stats": "Unlocked: {done} / {total}",
@@ -1493,7 +1495,13 @@
     "persian_gulf_islands": "Islands",
     "herat_gates": "Herat Gates",
     "herat_city": "Herat City",
-    "herat_east": "Eastern Herat"
+    "herat_east": "Eastern Herat",
+    "east_frontier_gates": "Far East Outpost",
+    "east_frontier_road": "Road to the Far East",
+    "east_frontier_far": "Edge of the East",
+    "west_frontier_gates": "Far West Outpost",
+    "west_frontier_road": "Road to the Far West",
+    "west_frontier_far": "Edge of the West"
   },
   "quest_type": {
     "main": "Main",

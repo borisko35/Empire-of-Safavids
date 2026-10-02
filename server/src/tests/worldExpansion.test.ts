@@ -13,7 +13,7 @@
 // тянет three и рисует текстуры через document, а серверный tsconfig не
 // включает клиент. Поэтому числа берутся из исходника. Это осознанно:
 // единственный источник - он же, иначе проверка мерила бы копию.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ZONES, REGION_SPAWNS, REGION_LEVEL_REQUIREMENTS, getZoneAt } from '../../../shared/constants';
 
@@ -172,7 +172,15 @@ describe('Восьмой регион настоящий, а не строчка
     // region_visits, а recordRegionVisit специально не поднимает
     // исключение, чтобы сбой отметки не ронял путешествие. Итог выглядел
     // бы исправно, а молча перестал бы работать целый механизм.
-    const миграция = читать('database/migrations/068_herat_region.sql').replace(/--[^\n]*/g, ' ');
+    // Читается ПОСЛЕДНЯЯ миграция, задающая ограничение, а не запись 068.
+// 068 - исторический факт: в своё время она и была правдой. Сверять с
+// кодом надо действующее ограничение, иначе проверка однажды начнёт
+// требовать, чтобы Герат остался именно в 068, а не просто где-то.
+const миграции = readdirSync(join(корень, 'database', 'migrations'))
+  .filter((f) => f.endsWith('.sql')).sort()
+  .filter((f) => /region IN \s*\(/i.test(читать(`database/migrations/${f}`).replace(/--[^\n]*/g, ' ')));
+must(миграции.length > 0, 'ни одна миграция не задаёт список регионов в CHECK - ограничение потерялось');
+const миграция = читать(`database/migrations/${миграции[миграции.length - 1]}`).replace(/--[^\n]*/g, ' ');
     const список = /region IN \(([^)]*)\)/.exec(миграция)?.[1] ?? '';
     const имена = [...список.matchAll(/'([a-z_]+)'/g)].map((м) => м[1]);
     must(имена.includes('herat'),

@@ -26,6 +26,8 @@ const REGION_INFO: Record<Region, { name: string; nameRu: string; minLevel: numb
   [Region.KHORASAN]: { name: 'Khorasan', nameRu: 'Хорасан', minLevel: REGION_LEVEL_REQUIREMENTS.khorasan, description: 'Восточные рубежи. Рейдовые данжи и мировые боссы.' },
   [Region.PERSIAN_GULF]: { name: 'Persian Gulf', nameRu: 'Персидский залив', minLevel: REGION_LEVEL_REQUIREMENTS.persian_gulf, description: 'Морская торговля и пиратские сражения. Эндгейм-контент.' },
   [Region.HERAT]: { name: 'Herat', nameRu: 'Герат', minLevel: REGION_LEVEL_REQUIREMENTS.herat, description: 'Самый дальний регион за Хорасаном. Ворота, караваны и последний рубеж.' },
+  [Region.EAST_FRONTIER]: { name: 'Far East', nameRu: 'Крайний восток', minLevel: REGION_LEVEL_REQUIREMENTS.east_frontier, description: 'Застава, дорога через горы и земля за гребнем хребта. Дальше на восток карты нет.' },
+  [Region.WEST_FRONTIER]: { name: 'Far West', nameRu: 'Крайний запад', minLevel: REGION_LEVEL_REQUIREMENTS.west_frontier, description: 'Степь на западной кромке мира и дальний предел за ней. Самый трудный край.' },
 };
 
 // GET /api/world/regions

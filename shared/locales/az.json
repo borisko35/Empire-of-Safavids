@@ -1429,7 +1429,9 @@
     "mesopotamia": "Mesopotamiya",
     "khorasan": "Xorasən",
     "persian_gulf": "Fars körfəzi",
-    "herat": "Herət"
+    "herat": "Herət",
+    "east_frontier": "Uzaq Şərq",
+    "west_frontier": "Uzaq Qərb"
   },
   "achievements": {
     "stats": "Açılıb: {done} / {total}",
@@ -1493,7 +1495,13 @@
     "persian_gulf_islands": "Adalar",
     "herat_gates": "Herət qapıları",
     "herat_city": "Herət şəhəri",
-    "herat_east": "Şərqi Herət"
+    "herat_east": "Şərqi Herət",
+    "east_frontier_gates": "Uzaq şərq postu",
+    "east_frontier_road": "Uzaq şərqə yol",
+    "east_frontier_far": "Şərqin kənarı",
+    "west_frontier_gates": "Uzaq qərb postu",
+    "west_frontier_road": "Uzaq qərbə yol",
+    "west_frontier_far": "Qərbin kənarı"
   },
   "quest_type": {
     "main": "Əsas",

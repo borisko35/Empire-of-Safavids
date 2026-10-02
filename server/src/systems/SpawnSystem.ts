@@ -131,6 +131,21 @@ const SPAWN_POINTS: SpawnPoint[] = [
       makePoint({ id: 'sp_herat_gate_watch', monsterId: 'mob_herat_gate_guard',  region: Region.HERAT, position: { x: -500, y: 0, z: 1900 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
       makePoint({ id: 'sp_herat_road_ambush', monsterId: 'mob_herat_road_reaver', region: Region.HERAT, position: { x: -300, y: 0, z: 2450 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
       makePoint({ id: 'sp_herat_dust_lord',  monsterId: 'mob_herat_dust_lord',   region: Region.HERAT, position: { x: -900, y: 0, z: 2850 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
+  // ── Дальние края: девятый и десятый регионы ──────────────────────────
+  // Точки лежат внутри своих зон, иначе монстр, помеченный регионом
+  // востока, стоял бы в регионе Исфахана. Координаты взяты под границы
+  // полос: восток x 2350..3175, запад x -3175..-2350.
+  makePoint({ id: 'sp_east_outpost_gate',  monsterId: 'mob_east_ridge_watch',    region: Region.EAST_FRONTIER, position: { x: 2500, y: 0, z: 300 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
+  makePoint({ id: 'sp_east_road_ambush',  monsterId: 'mob_east_road_reaver',    region: Region.EAST_FRONTIER, position: { x: 2900, y: 0, z: 500 }, maxCount: 3, respawnTime: 1000, weatherBonus: {} }),
+  makePoint({ id: 'sp_east_road_pass',    monsterId: 'mob_east_road_reaver',    region: Region.EAST_FRONTIER, position: { x: 2700, y: 0, z: 1500 }, maxCount: 2, respawnTime: 1100, weatherBonus: {} }),
+  makePoint({ id: 'sp_east_horizon',      monsterId: 'mob_east_horizon_terror', region: Region.EAST_FRONTIER, position: { x: 2600, y: 0, z: 2400 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
+  makePoint({ id: 'sp_east_horizon_deep', monsterId: 'mob_east_horizon_terror', region: Region.EAST_FRONTIER, position: { x: 2900, y: 0, z: 2900 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_outpost_gate', monsterId: 'mob_west_plain_stalker',   region: Region.WEST_FRONTIER, position: { x: -2500, y: 0, z: 200 }, maxCount: 3, respawnTime: 900, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_plain_hunt',   monsterId: 'mob_west_plain_stalker',   region: Region.WEST_FRONTIER, position: { x: -2900, y: 0, z: 900 }, maxCount: 3, respawnTime: 1000, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_road_ambush',  monsterId: 'mob_west_border_warden',   region: Region.WEST_FRONTIER, position: { x: -2600, y: 0, z: 1700 }, maxCount: 2, respawnTime: 1100, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_road_warden',  monsterId: 'mob_west_border_warden',   region: Region.WEST_FRONTIER, position: { x: -2900, y: 0, z: 2200 }, maxCount: 2, respawnTime: 1200, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_limit',        monsterId: 'mob_west_limit_stalker',   region: Region.WEST_FRONTIER, position: { x: -2700, y: 0, z: 2700 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
+  makePoint({ id: 'sp_west_limit_deep',   monsterId: 'mob_west_limit_stalker',   region: Region.WEST_FRONTIER, position: { x: -2900, y: 0, z: 3000 }, maxCount: 1, respawnTime: 3600, weatherBonus: {} }),
   makePoint({ id: 'sp_gulf_wat_cub',   monsterId: 'mob_gulf_leviathan_cub', region: Region.PERSIAN_GULF, position: { x: -40,  y: 0, z: -760 }, maxCount: 1, respawnTime: 2400, weatherBonus: {} }),
   // Зона persian_gulf_waters (от 85) остаётся пустой: ей нужен залив, а
   // моря в мире нет. Это зафиксировано в spawnPlacement.test.ts как

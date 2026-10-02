@@ -1052,6 +1052,33 @@ export function buildMonsterRig(monsterId: string): Rig {
       // пропуск: отдельное тело для пыли - следующая работа.
       return buildDemon();
 
+    // ── Дальние края: девятый и десятый регионы ──────────────────────────
+    // Решение владельца: за x = ±2350 край стал настоящей землёй. Шестеро
+    // монстров без веток молча уезжали в default - гуманоид в капюшоне с
+    // саблей, - и два мифических босса выглядели бы как рядовой налётчик.
+    case 'mob_east_ridge_watch':
+      // Страж хребта: самая холодная броня на карте, широкий щит, выше всех.
+      // Горы на востоке холодные и каменные, и вид должен быть каменным.
+      return buildHumanoid({ robe: 0x39424f, robeDark: 0x1b212b, hat: 'helmet', hatColor: 0xaebfd2, weapon: 'sword', shield: true, scale: 1.24 });
+    case 'mob_east_road_reaver':
+      // Каменный дорожник: ржавый доспех, топора нет - только рапира, потому
+      // что бьёт вдоль дороги, а не по камню.
+      return buildHumanoid({ robe: 0x6b4a3a, robeDark: 0x3a2721, hat: 'cap', hatColor: 0x8a6a4a, weapon: 'rapier', scale: 1.06 });
+    case 'mob_east_horizon_terror':
+      // Ужас Горизонта: мифическое тело, а не гуманоид. То же тело, что у
+      // гератского Пыльного Владыки, - ограничение сборки, а не пропуск.
+      return buildDemon();
+    case 'mob_west_plain_stalker':
+      // Степной ловчий: самое быстрое тело на западе, без щита и без шлема,
+      // только чалма. Он не дерётся в стойке, он догоняет.
+      return buildHumanoid({ robe: 0x7f7a5c, robeDark: 0x47442f, hat: 'turban', hatColor: 0xbdb487, weapon: 'dagger', scale: 0.98 });
+    case 'mob_west_border_warden':
+      // Смотритель границы: тяжелее всех на западе, с огромным щитом и
+      // посохом - он держит границу, а не догоняет.
+      return buildHumanoid({ robe: 0x3f4a3a, robeDark: 0x212a1f, hat: 'helmet', hatColor: 0x8fa07c, weapon: 'staff', shield: true, scale: 1.28 });
+    case 'mob_west_limit_stalker':
+      // Ловчий Предела: мифическое тело. Самая тёмная окраска на карте.
+      return buildDemon();
     // ── ЧТО БЫЛО ПОД ЭТИМ БЛОКОМ ──────────────────────────────
     // Дальше шёл `default: buildHumanoid({ hood, sword })`. Из двадцати
     // четырёх монстров разбирались одиннадцать, а остальные ТРИНАДЦАТЬ

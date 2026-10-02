@@ -2077,7 +2077,7 @@ export interface RegionTownDef {
   radius: number;
   /** Уровень площадки. Для склонов взята высота в центре якоря. */
   level: number;
-  kind: 'trade' | 'walls' | 'fortress' | 'ruins' | 'oasis' | 'port' | 'gates';
+  kind: 'trade' | 'walls' | 'fortress' | 'ruins' | 'oasis' | 'port' | 'gates' | 'outpost' | 'beacon';
   /** Русское имя — для таблицы в проверке, не для отрисовки. */
   nameRu: string;
 }
@@ -2098,6 +2098,12 @@ export const REGION_TOWNS: RegionTownDef[] = [
   // Герат: восьмой регион, которого не было в мире вовсе. Уровень 0.24 —
   // замеренная высота центра до постройки; ровнялка сама выровняет землю.
   { region: 'herat', x: -700, z: 2250, radius: 44, level: 0.24, kind: 'gates', nameRu: 'Герат' },
+  // Дальние края: девятый и десятый регионы. Места выбраны перебором
+  // края, а не на глаз: на x = 2750 размах высот в окне 400x400 был
+  // 47 метров, и город повис бы на уступе. Здесь 15.4 и 15.0 метров.
+  // Уровень - измеренная высота центра до постройки.
+  { region: 'east_frontier', x: 2950, z: 100, radius: 44, level: 24.68, kind: 'outpost', nameRu: 'Застава' },
+  { region: 'west_frontier', x: -2550, z: 2100, radius: 44, level: 11.29, kind: 'beacon', nameRu: 'Маяк' },
 ];
 
 /**
@@ -2300,6 +2306,75 @@ export function buildRegionTowns(scene: THREE.Scene): void {
           ступень.position.set(0, 0.17 + i * 0.35, 4 + i * 1.6);
           ступень.receiveShadow = true;
           g.add(ступень);
+        }
+        break;
+      }
+      case 'outpost': {
+        // Застава на краю: две глухие стены с севера и юга, одна сторожевая
+        // башня и сигнальный шест. С запада и востока въезд открыт - иначе
+        // застава читалась бы глухой коробкой, а не воротами края.
+        const сторона = t.radius * 0.78;
+        for (const dz of [-1, 1]) {
+          const стена = new THREE.Mesh(new THREE.BoxGeometry(сторона * 2, 3.4, 1.1), MAT.sandstoneDark);
+          стена.position.set(0, 1.7, dz * сторона);
+          стена.castShadow = true;
+          стена.receiveShadow = true;
+          g.add(стена);
+          коллайдер(0, dz * сторона, 1.4);
+        }
+        const башня = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.9, 15, 6), MAT.stone);
+        башня.position.set(-сторона, 7.5, сторона * 0.55);
+        башня.castShadow = true;
+        башня.receiveShadow = true;
+        g.add(башня);
+        коллайдер(-сторона, сторона * 0.55, 2.4);
+        const крыша = new THREE.Mesh(new THREE.ConeGeometry(3.1, 3.6, 6), MAT.sandstone);
+        крыша.position.set(-сторона, 16.8, сторона * 0.55);
+        крыша.castShadow = true;
+        g.add(крыша);
+        // Сигнальный шест: у заставы должен быть знак, что сюда доходят.
+        const шест = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 9, 6), MAT.wood);
+        шест.position.set(сторона * 0.55, 4.5, -сторона * 0.55);
+        шест.castShadow = true;
+        g.add(шест);
+        const флаг = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, 0.1), MAT.clothRed);
+        флаг.position.set(сторона * 0.55 + 1.3, 8.1, -сторона * 0.55);
+        g.add(флаг);
+        коллайдер(сторона * 0.55, -сторона * 0.55, 0.5);
+        break;
+      }
+      case 'beacon': {
+        // Маяк на западе: земля ровная и пустая, и маяк обязан быть единственным
+        // вертикалью на всём горизонте - иначе издалека не видно, что здесь
+        // вообще кто-то живёт.
+        const высотаМаяка = 26;
+        const башня = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 4.4, высотаМаяка, 8), MAT.sandstone);
+        башня.position.set(0, высотаМаяка / 2, 0);
+        башня.castShadow = true;
+        башня.receiveShadow = true;
+        g.add(башня);
+        коллайдер(0, 0, 3.2);
+        // Жаровня: чаша из камня и огонь. Огонь сделан двумя усечёнными
+        // конусами разного размера - иначе это была бы серая пирамида.
+        const чаша = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 2.2, 1.4, 8), MAT.stone);
+        чаша.position.set(0, высотаМаяка + 0.7, 0);
+        чаша.castShadow = true;
+        g.add(чаша);
+        const пламя = new THREE.Mesh(new THREE.ConeGeometry(2.6, 5.2, 7), MAT.gold);
+        пламя.position.set(0, высотаМаяка + 3.8, 0);
+        g.add(пламя);
+        // Кольцо камней по кругу: маяк виден издалека, но к нему надо
+        // подойти, а подход должен чем-то обозначаться.
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          const камень = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 1.8 + rnd() * 1.1, 6), MAT.stone);
+          const rx = Math.cos(a) * t.radius * 0.66;
+          const rz = Math.sin(a) * t.radius * 0.66;
+          камень.position.set(rx, 0.9, rz);
+          камень.castShadow = true;
+          камень.receiveShadow = true;
+          g.add(камень);
+          коллайдер(rx, rz, 1.1);
         }
         break;
       }

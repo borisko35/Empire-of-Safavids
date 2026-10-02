@@ -1429,7 +1429,9 @@
     "mesopotamia": "Месопотамия",
     "khorasan": "Хорасан",
     "persian_gulf": "Персидский залив",
-    "herat": "Герат"
+    "herat": "Герат",
+    "east_frontier": "Крайний восток",
+    "west_frontier": "Крайний запад"
   },
   "achievements": {
     "stats": "Разблокировано: {done} / {total}",
@@ -1493,7 +1495,13 @@
     "persian_gulf_islands": "Острова",
     "herat_gates": "Ворота Герата",
     "herat_city": "Герат",
-    "herat_east": "Восточный Герат"
+    "herat_east": "Восточный Герат",
+    "east_frontier_gates": "Застава дальнего востока",
+    "east_frontier_road": "Дорога на дальний восток",
+    "east_frontier_far": "Край востока",
+    "west_frontier_gates": "Застава дальнего запада",
+    "west_frontier_road": "Дорога на дальний запад",
+    "west_frontier_far": "Край запада"
   },
   "quest_type": {
     "main": "Основной",

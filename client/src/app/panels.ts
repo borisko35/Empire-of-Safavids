@@ -2511,6 +2511,8 @@ const HOUSE_REGIONS = [
   { id: 'mesopotamia', nameKey: 'regions.mesopotamia' },
   { id: 'persian_gulf', nameKey: 'regions.persian_gulf' },
   { id: 'herat',     nameKey: 'regions.herat' },
+  { id: 'east_frontier', nameKey: 'regions.east_frontier' },
+  { id: 'west_frontier', nameKey: 'regions.west_frontier' },
 ];
 
 async function loadHouse(): Promise<void> {

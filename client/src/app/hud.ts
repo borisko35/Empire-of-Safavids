@@ -130,6 +130,8 @@ const REGION_NAMES: Record<string, string> = {
   // Герат — восьмой регион. Без этой строки игрок в Герате видел бы имя зоны
   // и не видел бы имени региона, а путешествовать в него было бы некуда.
   herat: 'regions.herat',
+  east_frontier: 'regions.east_frontier',
+  west_frontier: 'regions.west_frontier',
 };
 
 const ZONE_NAMES: Record<string, string> = {
@@ -144,6 +146,9 @@ const ZONE_NAMES: Record<string, string> = {
   khorasan_oasis: 'zones.khorasan_oasis', khorasan_caravanserai: 'zones.khorasan_caravanserai', khorasan_east: 'zones.khorasan_east',
   persian_gulf_harbor: 'zones.persian_gulf_harbor', persian_gulf_waters: 'zones.persian_gulf_waters', persian_gulf_islands: 'zones.persian_gulf_islands',
   herat_gates: 'zones.herat_gates', herat_city: 'zones.herat_city', herat_east: 'zones.herat_east',
+  east_frontier_gates: 'zones.east_frontier_gates', east_frontier_road: 'zones.east_frontier_road',
+  east_frontier_far: 'zones.east_frontier_far', west_frontier_gates: 'zones.west_frontier_gates',
+  west_frontier_road: 'zones.west_frontier_road', west_frontier_far: 'zones.west_frontier_far',
 };
 
 // ── Рамка цели ───────────────────────────────────────────────
@@ -689,21 +694,26 @@ const MINIMAP_SETTLEMENTS: { x: number; z: number; id: string; nameKey: string; 
 ];
 
 // ── Полосы регионов: границы и названия ─────────────────────────────
-// Считаются из ZONES, а не пишутся числами. Регионы - горизонтальные
-// полосы на всю ширину мира, поэтому граница между ними - горизонтальная
-// линия, и контур получается честным, а не декоративным.
-const ПОЛОСЫ_РЕГИОНОВ: { region: string; z1: number; z2: number }[] = (() => {
-  const карта = new Map<string, { z1: number; z2: number }>();
+// Считаются из ZONES, а не пишутся числами.
+//
+// Раньше полоса несла только z: все прежние регионы были горизонтальными
+// полосами на всю ширину мира. Дальние края - полосы по x, и при старом
+// расчёте подпись «Крайний восток» встала бы посреди карты, будто это
+// горизонтальная полоса. Теперь полоса несёт обе оси.
+const ПОЛОСЫ_РЕГИОНОВ: { region: string; x1: number; x2: number; z1: number; z2: number }[] = (() => {
+  const карта = new Map<string, { x1: number; x2: number; z1: number; z2: number }>();
   for (const з of ZONES) {
     const п = карта.get(з.region);
-    if (!п) карта.set(з.region, { z1: з.bounds.z1, z2: з.bounds.z2 });
+    if (!п) карта.set(з.region, { x1: з.bounds.x1, x2: з.bounds.x2, z1: з.bounds.z1, z2: з.bounds.z2 });
     else {
+      п.x1 = Math.min(п.x1, з.bounds.x1);
+      п.x2 = Math.max(п.x2, з.bounds.x2);
       п.z1 = Math.min(п.z1, з.bounds.z1);
       п.z2 = Math.max(п.z2, з.bounds.z2);
     }
   }
   return [...карта.entries()]
-    .map(([region, п]) => ({ region, z1: п.z1, z2: п.z2 }))
+    .map(([region, п]) => ({ region, ...п }))
     .sort((a, b) => a.z1 - b.z1);
 })();
 
@@ -1075,16 +1085,29 @@ export function drawWorldMap(
       const занятыеНазвания: { x1: number; y1: number; x2: number; y2: number }[] = [];
       const СТОЛБЦЫ = [W / 2, W * 0.25, W * 0.75, W * 0.12, W * 0.88];
       ПОЛОСЫ_РЕГИОНОВ.forEach((полоса) => {
-        const верх = toPx(0, полоса.z1).y;
-        const низ = toPx(0, полоса.z2).y;
+        const левый = toPx(полоса.x1, полоса.z1).x;
+        const верх = toPx(полоса.x1, полоса.z1).y;
+        const правый = toPx(полоса.x2, полоса.z2).x;
+        const низ = toPx(полоса.x2, полоса.z2).y;
+        const ширинаПолосы = Math.abs(правый - левый);
         const высотаПолосы = Math.abs(низ - верх);
-        const кегль = Math.max(9, Math.min(20, Math.round(высотаПолосы - 4)));
+        // Кегль - по меньшей стороне. У полосы по северу-югу узкая сторона
+        // это высота, у полосы с края мира узкая - ширина. Раньше бралась
+        // только высота, и подпись края вышла бы двадцатипиксельной
+        // поверх всей карты.
+        const кегль = Math.max(9, Math.min(20, Math.round(Math.min(ширинаПолосы, высотаПолосы) - 4)));
         c.font = `bold ${кегль}px sans-serif`;
         const надпись = t(`regions.${полоса.region}`);
         const половина = c.measureText(надпись).width / 2 + 4;
         const y = (верх + низ) / 2;
+        // Сначала середина самой полосы: у полосы во всю ширину это W/2,
+        // который и так первый в СТОЛБЦЫ, - поведение прежнее. У полосы с
+        // края это её собственный центр.
+        const центр = (левый + правый) / 2;
+        const кандидаты = [центр,
+          ...СТОЛБЦЫ.filter((с) => с >= левый + половина && с <= правый - половина)];
         let x: number | null = null;
-        for (const столбец of СТОЛБЦЫ) {
+        for (const столбец of кандидаты) {
           const прямоугольник = {
             x1: столбец - половина, y1: y - кегль,
             x2: столбец + половина, y2: y + кегль * 0.4,
