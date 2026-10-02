@@ -1128,6 +1128,15 @@ gameRouter.get('/servers-status', asyncHandler(async (_req: Request, res: Respon
 // ДАНЖИ
 // ============================================================
 
+// POST /api/game/dungeons/:dungeonId/join — присоединиться к чужому
+// заходу { characterId, sessionId }
+gameRouter.post('/dungeons/:dungeonId/join', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await dungeonService.join(req.body.characterId, req.body.sessionId);
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    res.json({ sessionId: result.session.id, attemptsLeft: result.attemptsLeft });
+  })
+);
 // POST /api/game/dungeons/:dungeonId/enter — начать сессию данжа { characterId }
 gameRouter.post('/dungeons/:dungeonId/enter', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {

@@ -379,6 +379,77 @@ export class DungeonService {
     return res.length > 0;
   }
 
+  /**
+   * Присоединиться к чужому заходу.
+   *
+   * ДО ЧЕГО ЭТО БЫЛО. Присоединения не существовало вовсе: members
+   * пополнялся только создателем, а из базы возвращался только лидер.
+   * То есть minPlayers и maxPlayers в описании данжа были надписью, и
+   * зайти можно было только в одиночку. Из-за этого и «лут один на
+   * группу» было негде делить: делить было некому.
+   *
+   * Порядок входа сохраняется: members — это Set, и join добавляет в
+   * конец. На этом стоит раздача добычи по очереди.
+   */
+  async join(characterId: string, sessionId: string): Promise<
+    { ok: true; session: DungeonSession; attemptsLeft: number } | { ok: false; code: string }
+  > {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { ok: false, code: 'dungeon_session_not_found' };
+    if (session.completedAt) return { ok: false, code: 'dungeon_session_closed' };
+    if (session.members.has(characterId)) return { ok: false, code: 'dungeon_already_in_session' };
+
+    const def = DUNGEONS_DATABASE[session.dungeonId];
+    if (!def) return { ok: false, code: 'dungeon_not_found' };
+
+    const existingId = this.characterToSession.get(characterId);
+    if (existingId) {
+      const existing = this.sessions.get(existingId);
+      if (existing && !existing.completedAt) return { ok: false, code: 'dungeon_already_inside' };
+    }
+
+    // Размер группы. Именно эта цифра была недостижимой:
+    // maxPlayers: 8 у гробницы не означал ничего.
+    if (session.members.size >= def.maxPlayers) return { ok: false, code: 'dungeon_full' };
+
+    if (await this.attemptsLeft(characterId, def.id) <= 0) {
+      return { ok: false, code: 'dungeon_attempts_exhausted' };
+    }
+
+    const character = await this.characters.getCharacterById(characterId);
+    if (!character) return { ok: false, code: 'character_not_found' };
+    if (character.level < def.minLevel || character.level > def.maxLevel) {
+      return { ok: false, code: 'dungeon_level_range' };
+    }
+    if (character.region !== def.region) return { ok: false, code: 'dungeon_wrong_region' };
+
+    // Шард. Монстры спавнятся в шарде лидера, и клиент видит только свой
+    // шард: без этой проверки человек вошёл бы в пустой заход и решил бы,
+    // что данж сломан.
+    const shard = character.serverId ?? 'isfahan';
+    if (shard !== session.shardId) return { ok: false, code: 'dungeon_wrong_shard' };
+
+    // Попытка списывается здесь, а не в самом начале: отказ по размеру,
+    // уровню или шарду игрок ничего не получил.
+    if (!(await this.spendAttempt(characterId, def.id))) {
+      return { ok: false, code: 'dungeon_attempts_exhausted' };
+    }
+
+    session.members.add(characterId);
+    this.characterToSession.set(characterId, session.id);
+    await this.db
+      .query(
+        `INSERT INTO dungeon_members (session_id, character_id, role)
+         VALUES ($1, $2, 'member')`,
+        [session.id, characterId]
+      )
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] не удалось записать участника в dungeon_members:', (e as Error).message);
+      });
+    logger.info(`[Dungeon] ${characterId} присоединился к заходу ${session.id} ` +
+      `(${session.members.size}/${def.maxPlayers})`);
+    return { ok: true, session, attemptsLeft: await this.attemptsLeft(characterId, def.id) };
+  }
   /** Выйти из данжа: монстры сессии убираются из мира */
   async leave(characterId: string): Promise<boolean> {
     const sessionId = this.characterToSession.get(characterId);
