@@ -63,15 +63,15 @@ export const INTERIORS: Record<string, InteriorDef> = {
   // ── Новая инфраструктура ─────────────────────────────────────
   arena: {
     id: 'arena', roomCx: 4264, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 4264, spawnZ: 4005.5, doorX: -60.0, doorZ: -40.0, exitX: -62.0, exitZ: -44.0,
+    spawnX: 4264, spawnZ: 4005.5, doorX: -6, doorZ: -24, exitX: -8.5, exitZ: -27.1,
   },
   auction_house: {
     id: 'auction_house', roomCx: 4308, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 4308, spawnZ: 4005.5, doorX: -100.0, doorZ: 10.0, exitX: -102.0, exitZ: 6.0,
+    spawnX: 4308, spawnZ: 4005.5, doorX: 84, doorZ: 76, exitX: 86.8, exitZ: 78.8,
   },
   circus: {
     id: 'circus', roomCx: 4352, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
-    spawnX: 4352, spawnZ: 4005.5, doorX: -50.0, doorZ: 50.0, exitX: -52.0, exitZ: 46.0,
+    spawnX: 4352, spawnZ: 4005.5, doorX: -21, doorZ: 71, exitX: -24.1, exitZ: 73.5,
   },
   // Караван-сарай на дороге Исфахан-Караван-сарай, (505, 55). Дверь у
   // ворот: ворота стоят на z + 14, то есть (505, 69). Слот 4396 =
