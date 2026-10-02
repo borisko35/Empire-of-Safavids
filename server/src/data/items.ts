@@ -345,6 +345,21 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     maxStack: 1,
     price: 0,
   },
+  'qst_secret_dossiers': {
+    id: 'qst_secret_dossiers',
+    name: 'Secret Dossiers',
+    nameRu: 'Тайные донесения',
+    type: ItemType.QUEST,
+    rarity: ItemRarity.RARE,
+    level: 1,
+    description:
+      'Донесения османских соглядатаев, оставленные на смотровой крепости. Тот, кто их унёс, узнаёт то, чего знать не должен был.',
+    iconPath: 'icons/quest/secret_dossiers.png',
+    stackable: false,
+    maxStack: 1,
+    price: 0,
+  },
+
   'qst_hafiz_scroll': {
     id: 'qst_hafiz_scroll',
     name: 'Scroll of Hafiz Verses',

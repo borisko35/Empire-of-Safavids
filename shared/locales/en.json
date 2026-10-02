@@ -1604,6 +1604,11 @@
     "steal_ok": "You took {name}’s purse and got {gold} gold",
     "steal_seen": "{name} turned around and saw you",
     "steal_loud": "Too loud — crouch to steal",
-    "steal_far": "Too far: come right up to the stall"
+    "steal_far": "Too far: come right up to the stall",
+    "document_ok": "You took the dossiers from {name}",
+    "document_far": "Too far from the desk: come right up to it",
+    "document_loud": "Too loud — crouch to take it unnoticed",
+    "document_seen": "The guard spotted you at the desk. Get out of sight",
+    "document_done": "You already have the dossiers — there is nothing left to take"
   }
 }

@@ -1604,6 +1604,11 @@
     "steal_ok": "{name} cüzdanını götürdün, {gold} qızıl qazandın",
     "steal_seen": "{name} döndü və səni gördü",
     "steal_loud": "Çox ucuz — oğrumaq üçün əyləş",
-    "steal_far": "Çox uzaqdır: köşkə yaxınlaş"
+    "steal_far": "Çox uzaqdır: köşkə yaxınlaş",
+    "document_ok": "Sən dönələri masadan götürdün: {name}",
+    "document_far": "Masadan uzaqsan: yaxınlaş",
+    "document_loud": "Çox ucuz — səssiz götürmək üçün əyləş",
+    "document_seen": "Qarəvul səni masada gördü. Görüşdən çıx",
+    "document_done": "Dönələr artıq səndədir — ikinci dəfə götürməyə bir şey yoxdur"
   }
 }

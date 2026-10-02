@@ -540,3 +540,77 @@ export function canPickpocket(thief: Point, target: GuardPost, ctx: SightContext
   if (!ctx.crouch) return false;
   return !canSee(thief, target, ctx);
 }
+// ============================================================
+// ТАЙНЫЕ ДОКУМЕНТЫ: стол на смотровой крепости
+// ============================================================
+
+/**
+ * Предмет, который игрок уносит. Живёт в инвентаре, и этим же проверяется
+ * «взял ли он уже»: новой колонки в базе не нужно, миграция 071 не нужна.
+ */
+export const DOCUMENT_ITEM_ID = 'qst_secret_dossiers';
+
+/** Дотянуться руками до стола. Тот же порядок величины, что кража кошелька (6). */
+export const DOCUMENT_REACH = 5;
+
+export interface DocumentSpot {
+  id: string;
+  /** Комната, в которой стоит стол. Однозначно: интерьер описывает одну комнату. */
+  buildingId: string;
+  nameRu: string;
+  /** Абсолютные координаты стола. */
+  x: number;
+  z: number;
+}
+
+/**
+ * Стол с документами в крепости на перевале.
+ *
+ * Координата выведена из формулы комнат, а не выдумана: комната крепости —
+ * это слот 10, cx = POCKET_X + 10 * ROOM_DX = 4000 + 440 = 4440, cz = 4000.
+ * Стол стоит у юго-восточной стены, в (cx + 7, cz + 3) -> (4447, 4003):
+ * юг там, где дверь (cz + hd), поэтому знак плюс - это юг.
+ * До поста стража (4432, 4006) оттуда 15 единиц — рядом, но не вплотную:
+ * стоя за его спиной не спрячешься, как и не следовало бы.
+ */
+export const DOCUMENT_SPOTS: readonly DocumentSpot[] = [
+  { id: 'desk_fort_watch', buildingId: 'fortress', nameRu: 'Стол смотровой', x: 4447, z: 4003 },
+];
+
+/** Почему документ не взяли. null — взяли. */
+export type DocumentDeny = null | 'far' | 'too_loud' | 'seen' | 'done';
+
+export interface DocumentContext {
+  /** Игрок присел */
+  crouch: boolean;
+  /** Игрок замечен стражем прямо сейчас */
+  spotted: boolean;
+  /** Документ уже лежит в инвентаре */
+  alreadyHas: boolean;
+}
+
+/** Найти стол по id. null, если такого нет. */
+export function documentSpot(id: string): DocumentSpot | null {
+  return DOCUMENT_SPOTS.find((s) => s.id === id) ?? null;
+}
+
+/**
+ * Разрешить ли взять документ.
+ *
+ * Порядок проверок отвечает на вопрос «чего именно не хватило»: сначала
+ * близко ли, потом тихо ли и не видели ли, и только потом — не брал ли уже.
+ * Обратный порядок отвечал бы «уже брал» тому, кто стоит в другой комнате.
+ */
+export function canTakeDocument(
+  игрок: { x: number; z: number },
+  стол: DocumentSpot,
+  ctx: DocumentContext
+): DocumentDeny {
+  const dx = игрок.x - стол.x;
+  const dz = игрок.z - стол.z;
+  if (dx * dx + dz * dz > DOCUMENT_REACH * DOCUMENT_REACH) return 'far';
+  if (ctx.alreadyHas) return 'done';
+  if (ctx.spotted) return 'seen';
+  if (!ctx.crouch) return 'too_loud';
+  return null;
+}

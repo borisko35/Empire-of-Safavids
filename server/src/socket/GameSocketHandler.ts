@@ -53,6 +53,7 @@ import {
   spottedBy, GUARD_POSTS, nightFactor,
   canPickpocket, distanceSq, PICKPOCKET_TARGETS, THEFT_REACH, THEFT_GOLD,
   fortEntrance, checkEntrance,
+  canTakeDocument, DOCUMENT_ITEM_ID, DOCUMENT_SPOTS, DOCUMENT_REACH,
 } from '../../../shared/stealth';
 // Погода берётся из того же источника, что и время суток, которое сервер и
 // так рассылает игрокам (WORLD_TIME), - чтобы клиент и правило считали одно
@@ -383,6 +384,10 @@ export class GameSocketHandler {
       socket.on(SOCKET_EVENTS.STEAL_ATTEMPT, () => {
         void this.handleSteal(socket).catch(() => {});
       });
+      // Шаг 3 стелса, часть вторая: тайные документы со стола смотровой.
+      socket.on(SOCKET_EVENTS.DOCUMENT_ATTEMPT, () => {
+        void this.handleDocument(socket).catch(() => {});
+      });
     });
 
     // Регенерация ресурсов онлайн-игроков раз в 5 секунд (+ синк клиенту)
@@ -401,6 +406,76 @@ export class GameSocketHandler {
    * находясь в порту. Точка берётся из stealthState, который наполняется
    * пакетом движения, уже проверенным античитом на превышение скорости.
    */
+  /**
+   * Попытка забрать тайные документы со стола смотровой.
+   *
+   * Повторяет структуру handleSteal, потому что задача та же самая: действие
+   * без предмета в руке, координаты из проверенного кеша, отказ с причиной.
+   * Разница одна: награда не золото, а предмет в инвентарь.
+   */
+  private async handleDocument(socket: AuthenticatedSocket): Promise<void> {
+    const characterId = socket.characterId;
+    if (!characterId) return;
+
+    // Без пакета движения сервер не знает, где игрок. Молча не выходим:
+    // игрок должен понимать, почему попытка не сработала.
+    const где = this.stealthState.get(characterId);
+    if (!где) {
+      socket.emit(SOCKET_EVENTS.DOCUMENT_RESULT, { ok: false, reason: 'unknown' });
+      return;
+    }
+
+    const игрок = { x: где.x, z: где.z };
+
+    // Ближайший стол в пределах вытянутой руки. Проверяем расстояние ДО
+    // правила, чтобы отличить «далеко» от «не присел»: игроку это разные
+    // ошибки, и он должен знать, какую исправлять.
+    let стол: (typeof DOCUMENT_SPOTS)[number] | null = null;
+    for (const s of DOCUMENT_SPOTS) {
+      if (distanceSq(игрок, s) <= DOCUMENT_REACH * DOCUMENT_REACH) {
+        стол = s;
+        break;
+      }
+    }
+
+    if (!стол) {
+      socket.emit(SOCKET_EVENTS.DOCUMENT_RESULT, { ok: false, reason: 'far' });
+      return;
+    }
+
+    // «Уже брал» - это инвентарь, а не новая колонка. Считаем один раз:
+    // метод hodit v bazu.
+    const количества = await this.characterService
+      .getItemQuantities(characterId)
+      .catch(() => ({}) as Record<string, number>);
+    const ужеЕсть = (количества[DOCUMENT_ITEM_ID] ?? 0) > 0;
+
+    const отказ = canTakeDocument(игрок, стол, {
+      crouch: где.crouch,
+      spotted: this.spottedGuards.get(characterId) != null,
+      alreadyHas: ужеЕсть,
+    });
+    if (отказ) {
+      socket.emit(SOCKET_EVENTS.DOCUMENT_RESULT, {
+        ok: false,
+        reason: отказ,
+        spotId: стол.id,
+        nameRu: стол.nameRu,
+      });
+      return;
+    }
+
+    // Predmet poivaetsya cherez addItems - on zhe edinyy metod dobchi, kotoryy
+    // soobshchayet o predmetah zadaniyam i ne obhodit ih storony.
+    await this.characterService.addItems(characterId, [{ itemId: DOCUMENT_ITEM_ID, qty: 1 }]);
+
+    socket.emit(SOCKET_EVENTS.DOCUMENT_RESULT, {
+      ok: true,
+      itemId: DOCUMENT_ITEM_ID,
+      spotId: стол.id,
+      nameRu: стол.nameRu,
+    });
+  }
   private async handleSteal(socket: AuthenticatedSocket): Promise<void> {
     const characterId = socket.characterId;
     if (!characterId) return;

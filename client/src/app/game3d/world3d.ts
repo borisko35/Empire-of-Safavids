@@ -277,6 +277,10 @@ export class World3D {
 
   /** Шаг 3 стелса: игрок нажал F. Флаг ставится нажатием и снимается чтением. */
   private stealRequested = false;
+  // Zapros na stol s dokumentami. Odnokratnyy i sbрасыvaetsya chteniyem,
+  // rovno kak flag krazhi: inache uderzhanie klavishi slalo by zaprosy
+  // kazhdyy kadr.
+  private documentRequested = false;
 
   /**
    * Забрать запрос на кражу.
@@ -285,6 +289,14 @@ export class World3D {
    * сброса, удержание F слало бы запросы каждый кадр, и сервер получал бы
    * сотни попыток в секунду от одного нажатия.
    */
+  /**
+   * Zabrat li zapros na dokumenty. Flag sbрасыvaetsya chteniyem.
+   */
+  consumeDocumentRequest(): boolean {
+    const byl = this.documentRequested;
+    this.documentRequested = false;
+    return byl;
+  }
   consumeStealRequest(): boolean {
     const был = this.stealRequested;
     this.stealRequested = false;
@@ -655,6 +667,12 @@ export class World3D {
       e.preventDefault();
       this.stealRequested = true;
     }
+    // Dokumenty: E. Klavisha otdelnaya ot F namЕРenno - oba deystviya
+    // primenyayutsya k raznym tselyam, i odno nazhatie ne dolzhno delat oba.
+    if (e.code === 'KeyE') {
+      e.preventDefault();
+      this.documentRequested = true;
+    }
     if (e.code === 'Space' && this.me && this.grounded) {
       e.preventDefault();
       this.vy = JUMP_V;
@@ -766,7 +784,13 @@ export class World3D {
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const hits = ray.intersectObjects(this.doorTargets, false);
     if (!hits.length || hits[0].distance > 22) return false;
-    const ud = hits[0].object.userData as { doorBuilding?: string; doorAction?: string; doorName?: string; entranceId?: string };
+    const ud = hits[0].object.userData as { doorBuilding?: string; doorAction?: string; doorName?: string; entranceId?: string; documentSpot?: string; documentName?: string };
+    // Стол с документами проверяется ДО двери: у него нет doorBuilding, и без
+    // этой ветки клик по столу просто ничего не делал бы.
+    if (ud.documentSpot) {
+      this.documentRequested = true;
+      return true;
+    }
     if (!ud.doorBuilding || (ud.doorAction !== 'enter' && ud.doorAction !== 'exit')) return false;
     this.callbacks?.onDoor?.(ud.doorAction, ud.doorBuilding, ud.doorName ?? ud.doorBuilding, ud.entranceId);
     return true;

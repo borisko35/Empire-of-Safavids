@@ -1505,6 +1505,42 @@ function wireSocket(): void {
     toast(текст, payload.ok ? 'success' : 'error');
   });
 
+  // ── Тайные документы ──
+  // Причины различаются и подсказывают разное действие: «далеко» — подойти,
+  // «шумно» — присесть, «заметили» — отойти, «уже брал» — идти искать, что
+  // теперь с этим делать. Один текст на все четыре ничему не учил бы.
+  socket.on('document:result', (payload: {
+    ok: boolean;
+    reason?: 'unknown' | 'far' | 'seen' | 'too_loud' | 'done';
+    nameRu?: string;
+    itemId?: string;
+  }) => {
+    const map: Record<string, string> = {
+      ok: 'stealth.document_ok',
+      far: 'stealth.document_far',
+      too_loud: 'stealth.document_loud',
+      seen: 'stealth.document_seen',
+      done: 'stealth.document_done',
+      unknown: 'stealth.document_far',
+    };
+    const key = payload.ok ? map.ok : map[payload.reason ?? 'far'] ?? map.far;
+    const шаблон = t(key);
+    // t() при отсутствии ключа возвращает сам путь: показываем нейтральный
+    // текст, но никогда не путь ключа.
+    if (шаблон === key) {
+      toast(payload.ok ? '?' : '-', payload.ok ? 'success' : 'error');
+      return;
+    }
+    const текст = шаблон.split('{name}').join(payload.nameRu ?? '');
+    toast(текст, payload.ok ? 'success' : 'error');
+    // Предмет появился в инвентаре, а события обновления инвентаря у сервера
+    // нет: клиент берёт его через api. Поэтому обновляем сами, иначе донесение
+    // лежало бы в сумке и было бы видно только после перезахода.
+    if (payload.ok) {
+      void loadInventory();
+    }
+  });
+
   socket.on('force:disconnect', ({ reason }: { reason: string }) => {
     showLostScreen(reason);
   });
@@ -2196,6 +2232,12 @@ function loop(now: number): void {
   // игрок объявил бы «стою в четырёх единицах от торговца», находясь в порту.
   if (world3d?.consumeStealRequest()) {
     socket.emit('steal:attempt');
+  }
+  // Запрос документов: координаты сервер берёт сам из последнего проверенного
+  // античитом пакета движения, иначе игрок объявил бы «стою у стола», находясь
+  // в порту.
+  if (world3d?.consumeDocumentRequest()) {
+    socket.emit(SOCKET_EVENTS.DOCUMENT_ATTEMPT);
   }
 
   // ── Выносливость ──

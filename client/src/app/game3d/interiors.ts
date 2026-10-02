@@ -11,6 +11,9 @@
 // телепорта и не верит клиентским координатам (защита от абьюза).
 
 import * as THREE from 'three';
+// Столы с документами берём из правила: сервер проверяет по тем же
+// координатам, иначе игрок увидит одно, а проверят другое.
+import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
@@ -644,6 +647,8 @@ interface Room {
   colliders: { x: number; z: number; r: number }[];
   /** Двери выхода. У крепости их три, у остальных зданий одна. */
   exitDoors: THREE.Object3D[];
+  /** Столы с документами: по ним кликают так же, как по двери. */
+  documentTargets: THREE.Object3D[];
 }
 
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
@@ -747,8 +752,32 @@ caravanserai: furnishCaravanserai,
     { x: cx + hw - 1.6, z: cz - hd + 1.6, r: 0.9 },
   );
 
+  // ── Стол с тайными документами ──
+  // Только для своей комнаты: у остальных десяти зданий таких мест нет.
+  const documentTargets: THREE.Object3D[] = [];
+  for (const place of DOCUMENT_SPOTS) {
+    if (place.buildingId !== def.id) continue;
+    g.add(box(2.2, 0.16, 1.4, M.woodDark, place.x, FLOOR_Y + 0.92, place.z));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x - 0.9, FLOOR_Y + 0.46, place.z - 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x + 0.9, FLOOR_Y + 0.46, place.z - 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x - 0.9, FLOOR_Y + 0.46, place.z + 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x + 0.9, FLOOR_Y + 0.46, place.z + 0.5));
+    // Свиток на столе - vidno, chto zdes chto-to lezhit, inache stol pustoy.
+    const list = box(0.7, 0.08, 0.5, M.hay, place.x, FLOOR_Y + 1.04, place.z);
+    list.rotation.y = 0.4;
+    g.add(list);
+    // Кликабельная цель - stol celikom, a ne svitok: po melkomu celitcaku
+    // misset klik tselkom svitku.
+    const hit = box(2.4, 1.3, 1.6, M.woodDark, place.x, FLOOR_Y + 0.65, place.z);
+    hit.userData = { documentSpot: place.id, documentName: place.nameRu };
+    g.add(hit);
+    documentTargets.push(hit);
+    // Стол - настоящая мебель: он занимает место, в которое нельзя встать.
+    colliders.push({ x: place.x, z: place.z, r: 1.2 });
+  }
+
   scene.add(g);
-  return { def, group: g, colliders, exitDoors };
+  return { def, group: g, colliders, exitDoors, documentTargets };
 }
 
 // ── Хендл ────────────────────────────────────────────────────
@@ -772,6 +801,7 @@ export function createInteriors(scene: THREE.Scene): InteriorsHandle {
     const room = buildRoom(scene, def);
     rooms.set(def.id, room);
     clickTargets.push(...room.exitDoors);
+    clickTargets.push(...room.documentTargets);
   }
   // Двери экстерьеров добавляются через buildTownBuildings (возвращает свои цели).
   let inside: BuildingDef | null = null;

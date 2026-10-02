@@ -119,6 +119,10 @@ export const SOCKET_EVENTS = {
   MOVE_REJECTED: 'move:rejected',
   /** Попытка кражи кошелька. Шаг 3 стелса — клиент просит, сервер решает */
   STEAL_ATTEMPT: 'steal:attempt',
+  // Тайные документы: попытка забрать со стола. Правило в shared/stealth.ts,
+  // координаты сервер берёт из проверенного пакета движения, не из события.
+  DOCUMENT_ATTEMPT: 'document:attempt',
+  DOCUMENT_RESULT: 'document:result',
   /** Ответ на попытку: { ok, reason | gold, total, targetId, nameRu } */
   STEAL_RESULT: 'steal:result',
   /** Решение игрока: где возрождаться (см. RESPAWN_TYPES) */
