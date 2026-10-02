@@ -745,3 +745,146 @@ export function checkCustoms(
 export function customsToll(ctx: CustomsContext): number {
   return ctx.crouch ? 0 : CUSTOMS_TOLL;
 }
+// ============================================================
+// ПЕРЕХОДНЫЕ ЗОНЫ: что и когда происходит на тропе
+// ============================================================
+// Расписание переходных зон: что и когда происходит на тропе.
+//
+// ЧТО ЭТО И ЧЕГО ЭТО НЕ. Владелец просил «патруль/караван/банда на тропе раз
+// в 15–30 минут». Существующий postPosition(post, worldMs) двигает ВЖИВОГО
+// стража по маршруту — это движение, а не событие: привратник стоит всегда.
+// Механизма появления NPC в проекте нет вообще: ни spawnNpc, ни таймера с
+// интервалом в минутах, ни «появления по мировому времени».
+//
+// ПОЧЕМУ БЕЗ СЛУЧАЙНОСТИ. Детерминированного генератора в проекте нет: ноль
+// seededRandom, ноль mulberry32, ноль Math.random в shared/. Правило обязано
+// считаться одинаково на клиенте и сервере, иначе игрок увидит патруль там,
+// где сервер его не ждёт. Расписание считается от мирового времени — того
+// самого, из которого уже считается патруль привратника.
+//
+// ИНТЕРВАЛ. 20 минут — ВЫБОР, середина диапазона 15–30 из задания владельца.
+// Не измерение: в коде такого интервала нигде нет. Меняется одним числом.
+
+/** Интервал между появлениями события. ВЫБОР, не измерение. */
+export const TRANSITION_PERIOD_MS = 20 * 60 * 1000;
+
+export type TransitionKind = 'patrol' | 'caravan' | 'band';
+
+export interface TransitionEvent {
+  kind: TransitionKind;
+  nameRu: string;
+  /**
+   * Смещение по фазе: 0 — первым за цикл, 1/3 — вторым.
+   *
+   * ВЫБОР, не измерение. Три события не должны появляться в один момент: иначе
+   * на тропе разом караван, патруль и банда, и перестаётся быть «раз в 15–30
+   * минут». Разнесение на фазы даёт по событию раз в 20 минут при общей
+   * длительности цикла 20 минут.
+   */
+  phase: number;
+  /** Длительность присутствия, доля цикла. */
+  visibleFraction: number;
+  /** Куда идёт появление: начало и конец отрезка тропы. */
+  fromX: number;
+  fromZ: number;
+  toX: number;
+  toZ: number;
+  /** Насколько заметен: присадка к радиусу обнаружения. */
+  sight: number;
+}
+
+/**
+ * Тропа: от ворот Исфахана (60,32) через базар на юго-запад.
+ *
+ * Координаты продолжены от маршрута привратника (60,32) → (52,26), который уже
+ * измерен и используется. Точка схода (52,26) — начало отрезка, а конец в (0,0)
+ * выбран как центр города: идти мимо ворот и через центр правдоподобнее, чем
+ * уходить в поле.
+ */
+export const TRANSITION_EVENTS: readonly TransitionEvent[] = [
+  {
+    kind: 'patrol',
+    nameRu: 'Патруль',
+    phase: 0,
+    visibleFraction: 0.35,
+    fromX: 60,
+    fromZ: 32,
+    toX: 0,
+    toZ: 0,
+    sight: GUARD_SIGHT,
+  },
+  {
+    kind: 'caravan',
+    nameRu: 'Караван',
+    phase: 1 / 3,
+    visibleFraction: 0.5,
+    fromX: 60,
+    fromZ: 32,
+    toX: 0,
+    toZ: 0,
+    // Караван мирный: он не замечает игрока, иначе стелс перед ним бессмыслен.
+    sight: 0,
+  },
+  {
+    kind: 'band',
+    nameRu: 'Банда',
+    phase: 2 / 3,
+    visibleFraction: 0.25,
+    fromX: 60,
+    fromZ: 32,
+    toX: 0,
+    toZ: 0,
+    // Банда видит дальше стражи: она ищет добычу, а не стоит на посту.
+    sight: GUARD_SIGHT + 6,
+  },
+];
+
+/** Что происходит на тропе в данный момент. */
+export interface TransitionState {
+  kind: TransitionKind;
+  nameRu: string;
+  /** Где событие сейчас, если оно присутствует. null — события нет. */
+  x: number | null;
+  z: number | null;
+  /** 0 — у начала отрезка, 1 — у конца. null — события нет. */
+  progress: number | null;
+  sight: number;
+}
+
+/** Позиция события по ходу цикла. null, если события в этот момент нет. */
+function positionAt(e: TransitionEvent, worldMs: number): { x: number; z: number; progress: number } | null {
+  const cycle = TRANSITION_PERIOD_MS;
+  const t = (((worldMs % cycle) + cycle) % cycle) / cycle;
+  // Фаза сдвигает начало окна присутствия внутри цикла.
+  const local = t - e.phase;
+  if (local < 0) {
+    // До начала фазы этого цикла — но если событие было в конце прошлого.
+    if (local + 1 < e.visibleFraction) {
+      const p = (local + 1) / e.visibleFraction;
+      return { x: e.fromX + (e.toX - e.fromX) * p, z: e.fromZ + (e.toZ - e.fromZ) * p, progress: p };
+    }
+    return null;
+  }
+  if (local >= e.visibleFraction) return null;
+  const p = local / e.visibleFraction;
+  return { x: e.fromX + (e.toX - e.fromX) * p, z: e.fromZ + (e.toZ - e.fromZ) * p, progress: p };
+}
+
+/** Всё, что сейчас на тропе. Пустой массив — ничего не происходит. */
+export function transitionEventsNow(worldMs: number): TransitionState[] {
+  const out: TransitionState[] = [];
+  for (const e of TRANSITION_EVENTS) {
+    const p = positionAt(e, worldMs);
+    if (!p) continue;
+    out.push({ kind: e.kind, nameRu: e.nameRu, x: p.x, z: p.z, progress: p.progress, sight: e.sight });
+  }
+  return out;
+}
+
+/** Есть ли сейчас хоть что-то на тропе. Дешевле, чем собирать список. */
+export function anyTransitionNow(worldMs: number): boolean {
+  for (const e of TRANSITION_EVENTS) {
+    if (positionAt(e, worldMs)) return true;
+  }
+  return false;
+}
