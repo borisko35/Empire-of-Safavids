@@ -15,7 +15,7 @@ import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress';
 
 export interface BuildingDef {
   id: string;
@@ -56,6 +56,15 @@ const SPOTS: {
   // (POCKET_X + i * ROOM_DX), а на сервере зашит числом. Запись выше
   // сдвинет слоты всех, кто ниже, и комнаты разъедутся по координатам.
   { id: 'caravanserai', kind: 'caravanserai', nameKey: 'buildings.caravanserai', icon: '🐫', dx: 505, dz: 69, ex: 505, ez: 73 },
+  // Крепость на перевале. ТОЛЬКО ПОСЛЕ караван-сарая: слот комнаты
+  // считается индексом (POCKET_X + i * ROOM_DX), а на сервере зашит
+  // числом. Вставка выше сдвинет слоты всех, кто ниже, и комнаты
+  // разъедутся по координатам.
+  //
+  // Дверь промерена: FORT (-320,-705) на склоне, вода на юге (waterMask
+  // 0.68), на (-320,-677) сухо (0.000). Выход - 4 единицы от центра, как
+  // у караван-сарая (505,69 -> 505,73). До других дверей 750+ единиц.
+  { id: 'fortress', kind: 'fortress', nameKey: 'buildings.fortress', icon: '🏰', dx: -320, dz: -677, ex: -320, ez: -673 },
 ];
 
 export const POCKET_X = 4000;
@@ -141,6 +150,47 @@ export function buildPocketGround(scene: THREE.Scene): void {
     POCKET_COLLIDERS.push({ x: POCKET_RECT.x0, z, r: 1.5 }, { x: POCKET_RECT.x1, z, r: 1.5 });
   }
 }
+
+function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+    const cols: { x: number; z: number; r: number }[] = [];
+    // ── Казармы: два ряда нар под низкой крышей, посередине проход ──
+    for (const sx of [-7.5, 7.5]) {
+      for (const sz of [-5.5, -1.5, 2.5]) {
+        g.add(box(3.4, 0.22, 1.5, M.wood, cx + sx, FLOOR_Y + 0.11, cz + sz));
+        g.add(box(0.5, 0.9, 1.2, M.hay, cx + sx - (sx > 0 ? 1.5 : -1.5), FLOOR_Y + 0.55, cz + sz));
+      }
+      cols.push({ x: cx + sx, z: cz - 1.5, r: 2.4 });
+    }
+    // ── Арсенал: стойки с копьями у северной стены ──
+    for (let i = 0; i < 3; i++) {
+      const ax = cx - 5 + i * 5;
+      g.add(box(0.3, 1.6, 3.2, M.woodDark, ax - 1.4, FLOOR_Y + 0.8, cz - 6.6));
+      g.add(box(0.3, 1.6, 3.2, M.woodDark, ax + 1.4, FLOOR_Y + 0.8, cz - 6.6));
+      // Копья стоят в стойке пучком: древко тонкое, наконечник золотой.
+      g.add(cyl(0.08, 2.4, 0.08, M.woodDark, ax, FLOOR_Y + 1.2, cz - 6.6));
+      g.add(cyl(0.12, 0.3, 0.12, M.gold, ax, FLOOR_Y + 2.5, cz - 6.6));
+      cols.push({ x: ax, z: cz - 6.6, r: 1.6 });
+    }
+    // ── Темница: три клетки с решётками, отгороженные от коридора ──
+    for (let i = 0; i < 3; i++) {
+      const kx = cx - 6 + i * 4;
+      // Решётка: четыре вертикальных прута и два поперечных.
+      for (let b = 0; b < 4; b++) {
+        g.add(box(0.16, 2.6, 0.16, M.dark, kx - 1.1 + b * 0.73, FLOOR_Y + 1.3, cz + 6.4));
+      }
+      g.add(box(2.4, 0.16, 0.16, M.dark, kx, FLOOR_Y + 2.4, cz + 6.4));
+      g.add(box(2.4, 0.16, 0.16, M.dark, kx, FLOOR_Y + 0.3, cz + 6.4));
+      // Солома на полу клетки и узкое окошко в перегородке.
+      g.add(box(2.2, 0.08, 2.2, M.hay, kx, FLOOR_Y + 0.04, cz + 7.4));
+      cols.push({ x: kx, z: cz + 6.9, r: 1.5 });
+    }
+    // ── Смотровая площадка: каменный помост в углу, смотровая башня ──
+    g.add(box(3.6, 0.7, 3.6, M.stone, cx - 8.2, FLOOR_Y + 0.35, cz + 5.6));
+    g.add(cyl(0.28, 3.4, 0.28, M.stone, cx - 8.2, FLOOR_Y + 1.7, cz + 5.6));
+    cols.push({ x: cx - 8.2, z: cz + 5.6, r: 1.9 });
+    return cols;
+  }
+    
 
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
@@ -636,7 +686,8 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
     arena: furnishArena,
     auction_house: furnishAuctionHouse,
     circus: furnishCircus,
-  caravanserai: furnishCaravanserai,
+caravanserai: furnishCaravanserai,
+    fortress: furnishFortress,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

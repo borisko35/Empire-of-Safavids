@@ -1557,7 +1557,8 @@
     "auction_house": "Аукционный дом",
     "circus": "Цирк Сефевидов",
     "exit": "Выход",
-    "caravanserai": "Караван-сарай"
+    "caravanserai": "Караван-сарай",
+    "fortress": "Крепость на перевале"
   },
   "cutscene": {
     "throne_room": "Тронный зал",

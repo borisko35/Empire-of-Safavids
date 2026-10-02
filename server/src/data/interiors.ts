@@ -82,6 +82,16 @@ export const INTERIORS: Record<string, InteriorDef> = {
     id: 'caravanserai', roomCx: 4396, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
     spawnX: 4396, spawnZ: 4005.5, doorX: 505, doorZ: 69, exitX: 505, exitZ: 73,
   },
+  // Крепость на перевале. Одиннадцатая запись: слот 10 = 4000 + 10 * 44 = 4440.
+  // Запись ТОЛЬКО после караван-сарая: номер слота на сервере совпадает с
+  // индексом в SPOTS на клиенте, и вставка выше сдвинула бы номера.
+  //
+  // Дверь промерена по водяной маске: FORT (-320,-705) на склоне, вода на
+  // юге (waterMask 0.68), на (-320,-677) сухо (0.000). Не на глаз.
+  fortress: {
+    id: 'fortress', roomCx: 4440, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4440, spawnZ: 4005.5, doorX: -320, doorZ: -677, exitX: -320, exitZ: -673,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {
