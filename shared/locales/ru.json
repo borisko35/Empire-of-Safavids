@@ -1468,6 +1468,7 @@
     "explorer": "Исследователь"
   },
   "zones": {
+    "danger": "Опасность",
     "isfahan_center": "Центр",
     "isfahan_outskirts": "Окраины",
     "isfahan_north": "Север",

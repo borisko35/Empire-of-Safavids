@@ -1373,7 +1373,18 @@ function wireSocket(): void {
       // английское имя с сервера, но никогда не русское.
       const key = `zones.${payload.zone.id}`;
       const zoneName = t(key);
-      toast(zoneName === key ? payload.zone.name : zoneName, 'info');
+      // ОПАСНОСТЬ ЗОНЫ. Поле dangerLevel прилетало с самого начала: сервер
+      // шлёт объект зоны целиком, а приёмник брал из него только имя и
+      // молча выбрасывал остальное. Игрок входил в зону пятой опасности и
+      // не получал об этом ни слова.
+      //
+      // Строка собирается из двух частей, а не из шаблона: t() здесь
+      // принимает только путь ключа, подстановок не делает, и плейсхолдер
+      // вида {n} остался бы на экране буквально.
+      const опасность = t('zones.danger');
+      const метка = опасность === 'zones.danger' ? 'Danger' : опасность;
+      const имя = zoneName === key ? payload.zone.name : zoneName;
+      toast(`${имя} — ${метка} ${payload.zone.dangerLevel}/5`, 'info');
     }
   });
 

@@ -1468,6 +1468,7 @@
     "explorer": "Explorer"
   },
   "zones": {
+    "danger": "Danger",
     "isfahan_center": "Center",
     "isfahan_outskirts": "Outskirts",
     "isfahan_north": "North",
