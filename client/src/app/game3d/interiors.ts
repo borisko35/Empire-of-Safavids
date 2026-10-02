@@ -14,6 +14,13 @@ import * as THREE from 'three';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
+// Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
+// глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
+// постом в shared/stealth.ts, а не отдельно от него.
+import { buildHumanoid } from './rig';
+// Фигура стража внутри крепости. Без неё пост в правиле был бы невидимым глазом:
+// игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
+// а не отдельно.
 
 export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress';
 
@@ -188,6 +195,16 @@ function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z
     g.add(box(3.6, 0.7, 3.6, M.stone, cx - 8.2, FLOOR_Y + 0.35, cz + 5.6));
     g.add(cyl(0.28, 3.4, 0.28, M.stone, cx - 8.2, FLOOR_Y + 1.7, cz + 5.6));
     cols.push({ x: cx - 8.2, z: cz + 5.6, r: 1.9 });
+    // ── Страж на смотровой площадке ──
+    // Фигура видимая, и её координата - ровно та, что в правиле стелса:
+    // cx - 8, cz + 6. Проверка fortressWatch.test.ts считает ту же формулу
+    // и сравнивает с постом, поэтому страж не может «отойти» от своего места
+    // молча. В латах он не смотрит на точку схода - взгляд у постов круговой,
+    // направление заведено только для торговца.
+    const guard = buildHumanoid({ robe: 0x6e4a20, robeDark: 0x4a3115, hat: 'helmet', hatColor: 0x8a7a5a, weapon: 'sword', shield: true, scale: 1.04 });
+    guard.group.position.set(cx - 8, FLOOR_Y + 0.7, cz + 6);
+    g.add(guard.group);
+    cols.push({ x: cx - 8, z: cz + 6, r: 1.1 });
     return cols;
   }
     

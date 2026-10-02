@@ -76,7 +76,11 @@ describe('Почётная служба: стража не осталось де
         .filter((l) => /id:\s*'([a-z_]+)'/.test(l))
         .map((l) => /id:\s*'([a-z_]+)'/.exec(l)![1])
     );
-    const безНпс = GUARD_POSTS.map((p) => p.id).filter((id) => !idНпс.has(id));
+    // Посты, которые рисуются НЕ через NPC_GROUPS, а обстановкой интерьера.
+    // Такой страж живёт в комнате за краем мира, куда список NPC не смотрит.
+    // Связь его фигуры с постом держит fortressWatch.test.ts.
+    const ИНТЕРЬЕРНЫЕ = new Set(['npc_fort_watch']);
+    const безНпс = GUARD_POSTS.map((p) => p.id).filter((id) => !idНпс.has(id) && !ИНТЕРЬЕРНЫЕ.has(id));
     must(
       безНпс.length === 0,
       `посты без NPC: ${безНпс.join(', ')} - сервер следит в точке, где никого не видно`
