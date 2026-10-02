@@ -7,7 +7,7 @@
 // открывает связанную панель — маппинг в panel.
 
 import * as THREE from 'three';
-import { buildHumanoid, HumanoidCfg } from './rig';
+import { buildHumanoid, HumanoidCfg, type Rig } from './rig';
 import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight } from './terrain';
 import { GATE } from './terrain';
 
@@ -164,7 +164,7 @@ for (const { origin, npcs } of NPC_GROUPS) {
 import { QUEST_NPC_ALIAS } from '../../../../shared/constants';
 // Патруль: та же функция положения, что и на сервере. Если бы клиент считал
 // позицию по-своему, страж на экране и страж в правиле разошлись бы.
-import { GUARD_POSTS, postPosition, type GuardPost } from '../../../../shared/stealth';
+import { GUARD_POSTS, postPosition, type GuardPost, TRANSITION_EVENTS, transitionEventsNow} from '../../../../shared/stealth';
 
 export { QUEST_NPC_ALIAS };
 
@@ -191,6 +191,36 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   // считает ту же позицию. Список берётся из shared/stealth.ts, поэтому новый
   // патруль не требует правок клиента - модель найдётся по id NPC.
   const walkers: { post: GuardPost; group: THREE.Group }[] = [];
+
+  // ── Фигуры переходных зон ──
+  // Появляются и исчезают по расписанию из shared/stealth.ts. Ни одна из них
+  // не кликабельна и не пишется в COLLIDERS: это проходящие по тропе, а не
+  // жители города, и встать вплотную к патрулю нельзя — он идёт.
+  // Тип позы берём из rig.ts, а не объявляем свой: у update параметр RigPose,
+  // и произвольный объект компилятор справедливо не принимает.
+  type Переход = { kind: string; group: THREE.Group; rig: Rig };
+  const переходные: Переход[] = [];
+  for (const событие of TRANSITION_EVENTS) {
+    // Разный вид по событию: патруль в броне, караван в светлом, банда в тёмном.
+    // Цвет здесь — единственное различие, и его достаточно: по тропе ходят
+    // трое, и перепутать их нельзя.
+    const вид =
+      событие.kind === 'patrol'
+        ? { robe: 0x5a6b52, robeDark: 0x3a4734, hat: 'helmet' as const, hatColor: 0x8a7a5a, weapon: 'sword' as const, shield: true }
+        : событие.kind === 'caravan'
+          ? { robe: 0xb08a4a, robeDark: 0x7d6132, hat: 'turban' as const, hatColor: 0xd8c08a, weapon: 'none' as const }
+          : // БАНДА ВЫДЕЛЕНА ЯВНО, а не как «иначе». С «иначе» четвёртое событие
+            // молча получило бы вид банды, и тропа показала бы двух бандитов.
+            // Проверка transitionSpawn.test.ts требует отдельной ветки на каждый
+            // вид — и нашла это расхождение, а не я.
+            событие.kind === 'band'
+            ? { robe: 0x4a3040, robeDark: 0x2e1e29, hat: 'hood' as const, hatColor: 0x241a22, weapon: 'dagger' as const }
+            : { robe: 0x707070, robeDark: 0x505050, hat: 'cap' as const, hatColor: 0x909090, weapon: 'none' as const };
+    const rig = buildHumanoid(вид);
+    rig.group.visible = false;
+    group.add(rig.group);
+    переходные.push({ kind: событие.kind, group: rig.group, rig });
+  }
   const rigs: { update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void }[] = [];
 
   for (const { origin, npcs } of NPC_GROUPS) {
@@ -256,6 +286,29 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       if (Math.hypot(dx, dz) > 1e-6) {
         w.group.rotation.y = Math.atan2(dx, dz);
       }
+    }
+    // ── Переходные зоны: кто сейчас на тропе ──
+    // Позиция и присутствие берутся из того же расписания, что и правила
+    // стелса, поэтому картинка и правило считают одно число. Проверка
+    // transitionZones.test.ts следит и за долей занятого времени, и за тем,
+    // чтобы каждое событие появлялось за цикл.
+    const сейчас = transitionEventsNow(now);
+    for (const п of переходные) {
+      const найдено = сейчас.find((s) => s.kind === п.kind);
+      if (!найдено || найдено.x === null || найдено.z === null) {
+        п.group.visible = false;
+        continue;
+      }
+      п.group.visible = true;
+      // Лицом по ходу: направление из разницы позиций за миллисекунду —
+      // та же приём, что у патруля, значит разворот получится сам.
+      const было = transitionEventsNow(now - 1).find((s) => s.kind === п.kind);
+      const dx = было && было.x !== null ? найдено.x - было.x : 0;
+      const dz = было && было.z !== null ? найдено.z - было.z : 0;
+      п.group.position.set(найдено.x, groundHeight(найдено.x, найдено.z), найдено.z);
+      if (Math.hypot(dx, dz) > 1e-6) п.group.rotation.y = Math.atan2(dx, dz);
+      // Идут: анимация шага нужна, иначе фигура скользит по земле.
+      п.rig.update(dt, { moving: true, speed: 1.4, grounded: true, crouch: false, block: false, dead: false, swimming: false });
     }
     for (const m of markers) {
       m.sprite.position.y = m.baseY + Math.sin(now / 380 + m.phase) * 0.14;
