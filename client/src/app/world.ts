@@ -1414,6 +1414,29 @@ function wireSocket(): void {
     }
   });
 
+  // Шаг 1 стелса: стража заметил игрока.
+  //
+  // Сервер считает обнаружение сам и присылает событие только при смене
+  // состояния: слать на каждом пакете движения означало бы десятки
+  // сообщений в секунду. Здесь это состояние показывается игроку.
+  //
+  // ШАГ 2 (скрытность) ещё НЕ сделан. Сейчас приседание не помогает, и
+  // сообщение появляется одинаково - стоя и присев. Проверка
+  // guardDetection.test.ts требует именно такого поведения: если кто-то
+  // введёт здесь "а если crouch - не показывать", не заведя правила в
+  // shared/, проверка это не заметит, а игрок получит обещание, которого
+  // правило не держит.
+  socket.on('guard:spotted', (payload: { postId: string; nameRu: string }) => {
+    const key = 'stealth.spotted';
+    const pattern = t(key);
+    // t() при отсутствии ключа возвращает сам путь - тогда показываем имя
+    // с сервера, но никогда не путь ключа (как в обработчике зоны выше).
+    const text = pattern === key
+      ? payload.nameRu + ' spotted you'
+      : pattern.replace('{name}', payload.nameRu);
+    toast(text, 'error');
+  });
+
   socket.on('world:time', (payload: Record<string, unknown>) => {
     setWorldTime(payload);
     const tod = String(payload.timeOfDay ?? '');

@@ -1593,5 +1593,8 @@
     "err_locked": "Too many attempts. Wait a few minutes",
     "err_not_enabled": "Two-factor protection is not enabled",
     "err_no_secret": "Code temporarily unavailable. Try again later"
+  },
+  "stealth": {
+    "spotted": "{name} spotted you"
   }
 }

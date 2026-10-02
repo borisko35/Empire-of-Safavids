@@ -47,6 +47,9 @@ import {
   SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn,
   DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType,
 } from '../../../shared/constants';
+// Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
+// то же самое. Расхождение двух копий уже стоило бага с дверями.
+import { spottedBy } from '../../../shared/stealth';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -125,6 +128,16 @@ export class GameSocketHandler {
   private debuffs = new DebuffService();
   private combatService = new CombatService();
   private antiCheat = new AntiCheatSystem();
+  /**
+   * id поста стража, который заметил игрока; null - не заметил.
+   *
+   * Нужен не для самого обнаружения (оно считается из позиции), а чтобы
+   * не слать событие на каждом пакете движения: пакеты идут десятками в
+   * секунду. Ключ - characterId, значение - id поста, а не флаг: один игрок
+   * может выйти из-под одного стража и тут же попасть в поле зрения другого,
+   * и это смена состояния, о которой клиент должен узнать.
+   */
+  private spottedGuards = new Map<string, string | null>();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
@@ -836,6 +849,23 @@ export class GameSocketHandler {
     // нагрузка; Redis-версия используется только для цели, у которой
     // своего кеша в памяти нет.
     this.defenseStates.setPosition(characterId, data.position);
+
+    // Шаг 1 стелса: обнаружение. Считается здесь, потому что здесь сервер
+    // впервые узнаёт, где находится игрок, - раньше позиция нигде не была.
+    // Правило в shared/stealth.ts, чтобы клиент считал то же самое.
+    // Сообщаем только о смене состояния: пакеты движения идут десятками в
+    // секунду, и без проверки «а было ли уже» клиент получал бы спам.
+    const заметил = spottedBy(data.position);
+    const былЗамечен = this.spottedGuards.get(characterId) ?? null;
+    if (заметил?.id !== былЗамечен) {
+      this.spottedGuards.set(characterId, заметил?.id ?? null);
+      if (заметил) {
+        socket.emit(SERVER_EVENTS.GUARD_SPOTTED, {
+          postId: заметил.id,
+          nameRu: заметил.nameRu,
+        });
+      }
+    }
 
     // В PostgreSQL пишем не чаще раза в 5 секунд (движение генерирует десятки пакетов/сек)
     const now = Date.now();

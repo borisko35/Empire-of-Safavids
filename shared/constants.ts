@@ -191,6 +191,8 @@ export const SERVER_EVENTS = {
   DAILY_TASK_COMPLETED: 'daily:task',  // задача дня закрыта: золото/опыт/предмет начислены
   COMBAT_BLOCKED: 'combat:defense',    // принято активное блок/уклонение
   RESPAWN_ERROR: 'respawn:error',      // отказ в респавне (см. RESPAWN_REJECT)
+  /** Стража заметил игрока: { postId, nameRu }. Шаг 1 стелса — обнаружение */
+  GUARD_SPOTTED: 'guard:spotted',
 } as const;
 
 // ── Смерть и возрождение ──────────────────────────────────────

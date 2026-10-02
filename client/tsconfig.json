@@ -13,5 +13,5 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src/app", "src/assets", "src/ui", "../shared/constants.ts", "../shared/auth.validation.ts", "../shared/auth.types.ts", "vite.config.ts"]
+  "include": ["src/app", "src/assets", "src/ui", "../shared/constants.ts", "../shared/stealth.ts", "../shared/auth.validation.ts", "../shared/auth.types.ts", "vite.config.ts"]
 }

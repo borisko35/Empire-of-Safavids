@@ -1593,5 +1593,8 @@
     "err_locked": "Çox cəhd edildi. Bir neçə dəqiqə gözləyin",
     "err_not_enabled": "İkili faktörlü qoruma açılmayıb",
     "err_no_secret": "Kod müvəqqəti əlçatan deyil. Sonra yenidən yoxlayın"
+  },
+  "stealth": {
+    "spotted": "{name} səni gördü"
   }
 }
