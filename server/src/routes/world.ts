@@ -85,10 +85,14 @@ worldRouter.post('/travel', secureMiddleware, asyncHandler(async (req: Request, 
     return res.json({ character, alreadyThere: true });
   }
 
-  const minLevel = REGION_LEVEL_REQUIREMENTS[region] ?? 1;
-  if (character.level < minLevel) {
-    return res.status(403).json({ error: 'region_locked', minLevel });
-  }
+  // ЗАТВОРА ПО УРОВНЮ НЕТ, и это решение владельца: преграды на пути
+  // игрока не ставим. Если он уверен в себе и рассчитывает справиться с
+  // сильными монстрами - это его право и его решение.
+  //
+  // Раньше здесь стояло сравнение уровня с требованием региона и ответ 403
+  // region_locked. Требование осталось в данных и показывается как
+  // сведения, но не как замок.
+
 
   const oldRegion = character.region;
   const updated = await characterService.updateRegion(character.id, region);

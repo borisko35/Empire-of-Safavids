@@ -321,20 +321,24 @@ export async function loadRegions(): Promise<void> {
     const box = $('regions-list');
     box.innerHTML = '';
     for (const r of regions) {
-      const locked = (session.level ?? 0) < r.minLevel;
+      // Замка нет: кнопка путешествия доступна всегда.
+      // Решение владельца - преграды на пути не ставим. Раньше здесь было
+      // `const locked = (session.level ?? 0) < r.minLevel;`, и кнопка
+      // оставалась серой даже если бы сервер перестал отказывать:
+      // затвор в интерфейсе выглядит как «город закрыт» не хуже серверного.
       const here = r.id === session.character?.region;
       const row = document.createElement('div');
-      row.className = 'region-row' + (here ? ' current' : '') + (locked ? ' locked' : '');
+      row.className = 'region-row' + (here ? ' current' : '');
       row.innerHTML =
         `<div class="rname"><b>${r.nameRu}</b><span class="ronline">${r.onlinePlayers} ${t('world.online')}</span></div>` +
-        `<div class="rdesc">${locked ? '🔒 ' : ''}${r.description}</div>` +
+        `<div class="rdesc">${r.description}</div>` +
         `<div class="rdesc">${t('badges.level')} ${r.minLevel}+</div>`;
       if (!here) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'region-travel';
         btn.dataset.region = r.id;
-        btn.disabled = locked;
+
         btn.textContent = t('world.travel');
         row.append(btn);
       }
