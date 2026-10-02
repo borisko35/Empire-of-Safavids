@@ -162,6 +162,9 @@ for (const { origin, npcs } of NPC_GROUPS) {
  * Единый источник: shared/constants.ts (сервер использует тот же).
  */
 import { QUEST_NPC_ALIAS } from '../../../../shared/constants';
+// Патруль: та же функция положения, что и на сервере. Если бы клиент считал
+// позицию по-своему, страж на экране и страж в правиле разошлись бы.
+import { GUARD_POSTS, postPosition, type GuardPost } from '../../../../shared/stealth';
 
 export { QUEST_NPC_ALIAS };
 
@@ -184,6 +187,10 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   const group = new THREE.Group();
   const clickTargets: THREE.Object3D[] = [];
   const markers: { sprite: THREE.Sprite; phase: number; baseY: number }[] = [];
+  // Сторожевые посты с маршрутом: их тело двигает update, а логика на сервере
+  // считает ту же позицию. Список берётся из shared/stealth.ts, поэтому новый
+  // патруль не требует правок клиента - модель найдётся по id NPC.
+  const walkers: { post: GuardPost; group: THREE.Group }[] = [];
   const rigs: { update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void }[] = [];
 
   for (const { origin, npcs } of NPC_GROUPS) {
@@ -194,6 +201,11 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
 
       const rig = buildHumanoid(def.look);
       rig.group.position.set(x, y, z);
+      // Если этот NPC - сторожевой пост с маршрутом, передаём его тело в
+      // список патрульных. Связь по id: координаты поста и координаты NPC
+      // сверяет проверка постов, поэтому рассинхронизации тут не будет.
+      const пост = GUARD_POSTS.find((p) => p.id === def.id && p.patrol);
+      if (пост) walkers.push({ post: пост, group: rig.group });
       // Лицом к центру поселения
       rig.group.rotation.y = Math.atan2(origin.x - x, origin.z - z) + Math.PI;
       rig.group.traverse(o => {
@@ -226,6 +238,24 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   function update(dt: number, now: number): void {
     for (const r of rigs) {
       r.update(dt, { moving: false, speed: 0, grounded: true, crouch: false, block: false, dead: false, swimming: false });
+    }
+    // Патруль: сторожевой пост с маршрутом идёт. Позиция берётся из
+    // shared/stealth.ts той же формулой, что и на сервере, поэтому картинка и
+    // правило берут одно и то же число. Если бы сервер слал координаты, а
+    // клиент двигал модель у себя, они разошлись бы - ровно как разошлись
+    // двери интерьеров, когда координаты комнат жили в двух списках.
+    for (const w of walkers) {
+      const где = postPosition(w.post, now);
+      w.group.position.set(где.x, groundHeight(где.x, где.z), где.z);
+      // Лицом по ходу движения. Направление берём из разницы позиций за
+      // миллисекунду: та же формула, значит на развороте маршрута страж
+      // развернётся сам, без отдельного условия по фазе.
+      const раньше = postPosition(w.post, now - 1);
+      const dx = где.x - раньше.x;
+      const dz = где.z - раньше.z;
+      if (Math.hypot(dx, dz) > 1e-6) {
+        w.group.rotation.y = Math.atan2(dx, dz);
+      }
     }
     for (const m of markers) {
       m.sprite.position.y = m.baseY + Math.sin(now / 380 + m.phase) * 0.14;

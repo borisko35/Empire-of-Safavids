@@ -970,7 +970,7 @@ export class GameSocketHandler {
       crouch: data.crouch === true,
       night: nightFactor(время.timeOfDay),
       visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
-    });
+    }, Date.now());
     const былЗамечен = this.spottedGuards.get(characterId) ?? null;
     // Шаг 3: запоминаем, где игрок и присел ли он, по тому же пакету, который
     // уже прошёл античит. Событие кражи координат не приносит.

@@ -59,6 +59,42 @@ export interface GuardPost {
   facingZ?: number;
   /** Полная ширина конуса в градусах. По умолчанию WATCHER_FOV_DEG. */
   fov?: number;
+  /**
+   * Маршрут патруля. Если задан — пост ходит между своей точкой и конечной.
+   *
+   * ПОЧЕМУ ПАТРУЛЬ СЧИТАЕТСЯ ИЗ ВРЕМЕНИ, А НЕ ПЕРЕДАЁТСЯ С СЕРВЕРА. Если бы
+   * сервер слал координаты стража, клиент рисовал бы его отдельно, и рано или
+   * поздно они разошлись бы - ровно как разошлись двери интерьеров: сервер
+   * считал бы по своим числам, а игрок видел бы чужие. Здесь позиция выводится
+   * из мировых часов по формуле, одинаковой на обеих сторонах, поэтому и
+   * рисунок, и правило берут одно и то же число.
+   */
+  patrol?: {
+    /** Куда идёт от своей точки */
+    toX: number;
+    toZ: number;
+    /** Полный цикл туда-обратно в миллисекундах */
+    periodMs: number;
+  };
+}
+
+/**
+ * Где находится пост в данный момент.
+ *
+ * Стоящий пост стоит на месте. Патрулирующий идёт по треугольной волне: из
+ * своей точки к конечной и обратно, без рывка на краях.
+ *
+ * Время передаётся в миллисекундах Date.now() у обеих сторон. Расхождение
+ * часов в пределах секунды сдвигает стража на единицы единиц - на глаз
+ * незаметно, а для правила безразлично.
+ */
+export function postPosition(post: GuardPost, worldMs = 0): { x: number; z: number } {
+  const p = post.patrol;
+  if (!p || p.periodMs <= 0) return { x: post.x, z: post.z };
+
+  const cycle = ((worldMs % p.periodMs) + p.periodMs) % p.periodMs / p.periodMs;
+  const t = cycle < 0.5 ? cycle * 2 : 2 - cycle * 2;
+  return { x: post.x + (p.toX - post.x) * t, z: post.z + (p.toZ - post.z) * t };
 }
 
 /**
@@ -112,7 +148,25 @@ export const GUARD_POSTS: readonly GuardPost[] = [
   // Привратник у ворот столицы: CITY (34,26) + (26,6) = (60,32). В 11.7
   // единицах от торговца (49,28) - рядом с лотком, поэтому за ним нужно
   // приседать, а не просто отойти.
-  { id: 'npc_guard_gate', nameRu: 'Привратник', x: 60, z: 32, sight: GUARD_SIGHT },
+  { id: 'npc_guard_gate', nameRu: 'Привратник', x: 60, z: 32, sight: GUARD_SIGHT,
+    // ПАТРУЛЬ. Единственный сторожевой пост, который ходит: остальные стоят,
+    // и стоящий страж не может ни наказать, ни спрятаться - с ним можно
+    // просто уйти в сторону.
+    //
+    // Куда идёт: от ворот (60,32) мимо лотка к (52,26). Расстояние 10
+    // // единиц посчитано, конец маршрута выбран так, чтобы привратник
+    // проходил в 5.4 единицах от торговца (49,28) - достаточно близко, чтобы
+    // кража под ним стала риском, и достаточно далеко, чтобы встать у
+    // края лотка.
+    //
+    // ВЫБОР, НЕ ИЗМЕРЕНИЕ: periodMs = 16000. Весь цикл - 20 единиц пути за
+    // 16 секунд, то есть 1.25 единицы в секунду. Это медленнее ходьбы
+    // игрока (4.2) и медленнее бега (7.6): страж должен обходить лоток
+    // неспешно, а не носиться. Точное число можно менять здесь одним
+    // значением - проверка patrolRoute.test.ts следит, чтобы скорость не
+    // стала быстрее игрока.
+    patrol: { toX: 52, toZ: 26, periodMs: 16000 },
+  },
   // Комендант форта: FORT (-320,-705) + (0,9) = (-320,-696). Наблюдает
   // гарнизон, а не базар, поэтому на кражу не влияет.
   { id: 'npc_fort_commander', nameRu: 'Комендант Ашот', x: -320, z: -696, sight: GUARD_SIGHT },
@@ -226,11 +280,17 @@ export function effectiveSight(post: GuardPost, ctx: SightContext = {}): number 
  * бы «взгляд в спину» вместо честного «слишком далеко», и правило перестало
  * бы объяснять причину.
  */
-export function canSee(player: Point, post: GuardPost, ctx: SightContext = {}): boolean {
+export function canSee(
+  player: Point,
+  post: GuardPost,
+  ctx: SightContext = {},
+  worldMs = 0
+): boolean {
   const radius = effectiveSight(post, ctx);
-  if (distanceSq(player, post) > radius * radius) return false;
+  const здесь = postPosition(post, worldMs);
+  if (distanceSq(player, здесь) > radius * radius) return false;
   if (post.facingX === undefined || post.facingZ === undefined) return true;
-  return inCone(player, post);
+  return inCone(player, post, здесь);
 }
 
 /**
@@ -244,14 +304,14 @@ export function canSee(player: Point, post: GuardPost, ctx: SightContext = {}): 
  * прятаться в такой точке нельзя. Иначе ошибка в данных тихо сделала бы
  * стража слепым.
  */
-function inCone(player: Point, post: GuardPost): boolean {
+function inCone(player: Point, post: GuardPost, позиция: Point): boolean {
   const fx = post.facingX ?? 0;
   const fz = post.facingZ ?? 0;
   const len = Math.hypot(fx, fz);
   if (len === 0) return true;
 
-  const px = player.x - post.x;
-  const pz = player.z - post.z;
+  const px = player.x - позиция.x;
+  const pz = player.z - позиция.z;
   const plen = Math.hypot(px, pz);
   if (plen === 0) return true;
 
@@ -273,10 +333,11 @@ function inCone(player: Point, post: GuardPost): boolean {
 export function spottedBy(
   player: Point,
   posts: readonly GuardPost[] = GUARD_POSTS,
-  ctx: SightContext = {}
+  ctx: SightContext = {},
+  worldMs = 0
 ): GuardPost | null {
   for (const post of posts) {
-    if (canSee(player, post, ctx)) return post;
+    if (canSee(player, post, ctx, worldMs)) return post;
   }
   return null;
 }
