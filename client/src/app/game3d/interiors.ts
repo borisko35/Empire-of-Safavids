@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine';
 
 export interface BuildingDef {
   id: string;
@@ -84,6 +84,8 @@ const SPOTS: {
   { id: 'weaver', kind: 'weaver', nameKey: 'buildings.weaver', icon: '🧵', dx: 820, dz: -260, ex: 820, ez: -256 },
   // Таможенный двор. Западнее города: проверяет идущих снаружи внутрь.
   { id: 'customs', kind: 'customs', nameKey: 'buildings.customs', icon: '⚖️', dx: -900, dz: 800, ex: -900, ez: 804 },
+  // Зороастрийское святилище. Юго-восток карты, дальше всех построек.
+  { id: 'shrine', kind: 'shrine', nameKey: 'buildings.shrine', icon: '🔥', dx: 1200, dz: 1200, ex: 1200, ez: 1204 },
 ];
 
 export const POCKET_X = 4000;
@@ -131,7 +133,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4660, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4704, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -456,6 +458,62 @@ function furnishCustoms(g: THREE.Group, cx: number, cz: number): { x: number; z:
     }
   }
   cols.push({ x: cx - 9.8, z: cz + 2, r: 1.5 });
+  return cols;
+}
+
+// Зороастрийское святилище: проломы в стенах, обломки, рельефы с фресками,
+// алтарь с огнём.
+//
+// Что просили: полуразрушенные стены, рельефы; ниши, фрески; ловушки,
+// артефакты, проклятые предметы. Здесь первое: стены с проломами, обломки
+// у основания, четыре рельефа и ниши с фресками. Ловушки и проклятия — это
+// механика, а не мебель, и их здесь нет.
+function furnishShrine(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Обломки у основания: провалившиеся куски стены ──
+  // Лежат куском, а не ровным рядом: стена рушилась сверху.
+  for (const [rx, rz, rot] of [[-7, -7, 0.4], [-5.6, -8.2, 1.1], [6.8, -6.4, 0.7], [8, -8, 2.1], [-8.2, 4, 0.2]] as const) {
+    const r = box(2.2, 0.9, 1.6, M.stone, cx + rx, FLOOR_Y + 0.45, cz + rz);
+    r.rotation.y = rot;
+    g.add(r);
+  }
+  // ── Полуразрушенная стена с проломом у входа ──
+  // Пролом шире ворот: войти можно, но стена всё равно читается как стена.
+  g.add(box(7, 3.2, 0.7, M.stone, cx - 7, FLOOR_Y + 1.6, cz - 10.2));
+  g.add(box(4.4, 2.2, 0.7, M.stone, cx + 7.8, FLOOR_Y + 1.1, cz - 10.2));
+  cols.push({ x: cx - 7, z: cz - 10.2, r: 1.8 });
+  cols.push({ x: cx + 7.8, z: cz - 10.2, r: 1.8 });
+  // ── Рельефы с фресками в нишах боковых стен ──
+  // Ниша, рельеф, рамка: рельеф светлее стены, иначе его не разглядеть.
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.9;
+    g.add(box(0.6, 3.6, 3.2, M.dark, px, FLOOR_Y + 1.8, cz - 2));
+    g.add(box(0.35, 2.6, 2.2, M.gold, px, FLOOR_Y + 1.8, cz - 2));
+    g.add(box(0.8, 4, 0.8, M.stone, px, FLOOR_Y + 2, cz - 3.9));
+    g.add(box(0.8, 4, 0.8, M.stone, px, FLOOR_Y + 2, cz - 0.1));
+    cols.push({ x: px, z: cz - 2, r: 1.5 });
+  }
+  // ── Алтарь с огнём в глубине ──
+  // Огонь обязателен: зороастрийский культ держится на священном пламени,
+  // и алтарь без огня — просто камень.
+  g.add(box(4.4, 1.2, 2.2, M.stone, cx, FLOOR_Y + 0.6, cz - 7));
+  g.add(box(3.4, 0.2, 1.4, M.gold, cx, FLOOR_Y + 1.3, cz - 7));
+  g.add(cyl(0.5, 0.9, 0.5, M.gold, cx, FLOOR_Y + 1.75, cz - 7, 10));
+  // Пламя: два конуса, малый в большом.
+  g.add(cyl(0.75, 1.3, 0.75, M.red, cx, FLOOR_Y + 2.35, cz - 7, 8));
+  g.add(cyl(0.45, 1.9, 0.45, M.gold, cx, FLOOR_Y + 2.6, cz - 7, 8));
+  cols.push({ x: cx, z: cz - 7, r: 2.2 });
+  // ── Артефакты на постаментах: то, что сохранилось ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 4.6;
+    g.add(box(1.1, 1.1, 1.1, M.stone, px, FLOOR_Y + 0.55, cz - 4.4));
+    g.add(box(0.5, 0.6, 0.5, M.gold, px, FLOOR_Y + 1.4, cz - 4.4));
+    cols.push({ x: px, z: cz - 4.4, r: 0.9 });
+  }
+  // ── Заросли: трава пролзла через руины ──
+  for (const [gx, gz] of [[-4, 2], [3.4, 4.4], [-6, 7.4], [5.4, 1.6]] as const) {
+    g.add(box(0.5, 0.7, 0.5, M.hay, cx + gx, FLOOR_Y + 0.35, cz + gz));
+  }
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -991,6 +1049,7 @@ caravanserai: furnishCaravanserai,
     mosque: furnishMosque,
     weaver: furnishWeaver,
     customs: furnishCustoms,
+    shrine: furnishShrine,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

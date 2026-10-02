@@ -131,6 +131,17 @@ export const INTERIORS: Record<string, InteriorDef> = {
     // Дверь в мире: промерено waterMask, сухо 0.0000.
     doorX: -900, doorZ: 800, exitX: -900, exitZ: 804,
   },
+  // Зороастрийское святилище. Разрушено, но цело: проломы в стенах,
+  // обломки у основания, рельефы и ниши с фресками уцелели. Слот 15,
+  // cx = 4000 + 15 * 44 = 4660.
+  shrine: {
+    id: 'shrine', roomCx: 4660, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Игрок попадает у пролома: войти через дыру в стене и осмысленно,
+    // и заранее видно, что здание разрушено.
+    spawnX: 4660, spawnZ: 4009.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: 1200, doorZ: 1200, exitX: 1200, exitZ: 1204,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {
