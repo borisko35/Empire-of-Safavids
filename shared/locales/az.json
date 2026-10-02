@@ -1595,6 +1595,10 @@
     "err_no_secret": "Kod müvəqqəti əlçatan deyil. Sonra yenidən yoxlayın"
   },
   "stealth": {
-    "spotted": "{name} səni gördü"
+    "spotted": "{name} səni gördü",
+    "steal_ok": "{name} cüzdanını götürdün, {gold} qızıl qazandın",
+    "steal_seen": "{name} döndü və səni gördü",
+    "steal_loud": "Çox ucuz — oğrumaq üçün əyləş",
+    "steal_far": "Çox uzaqdır: köşkə yaxınlaş"
   }
 }

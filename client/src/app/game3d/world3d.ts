@@ -275,6 +275,22 @@ export class World3D {
    */
   get crouching() { return this.crouch; }
 
+  /** Шаг 3 стелса: игрок нажал F. Флаг ставится нажатием и снимается чтением. */
+  private stealRequested = false;
+
+  /**
+   * Забрать запрос на кражу.
+   *
+   * Возвращает true ровно один раз на нажатие. Если бы возвращал флаг без
+   * сброса, удержание F слало бы запросы каждый кадр, и сервер получал бы
+   * сотни попыток в секунду от одного нажатия.
+   */
+  consumeStealRequest(): boolean {
+    const был = this.stealRequested;
+    this.stealRequested = false;
+    return был;
+  }
+
   /**
    * Экипировка своего персонажа для 3D-рига.
    *
@@ -631,6 +647,14 @@ export class World3D {
     if (this.keys.has(e.code)) return;
     this.keys.add(e.code);
     this.maybeDodge(e.code);
+    // Шаг 3 стелса: F - попытка кражи кошелька. Здесь только флаг: сокет в
+    // этом классе недоступен, поэтому запрос уходит из world.ts в игровом
+    // цикле. Флаг одноразовый и сбрасывается чтением - иначе удержание F
+    // слало бы по попытке в секунду.
+    if (e.code === 'KeyF') {
+      e.preventDefault();
+      this.stealRequested = true;
+    }
     if (e.code === 'Space' && this.me && this.grounded) {
       e.preventDefault();
       this.vy = JUMP_V;

@@ -1455,6 +1455,45 @@ function wireSocket(): void {
     toast(reason ?? 'move rejected', 'error');
   });
 
+  // Ответ на попытку кражи кошелька. Причины различаются намеренно: «далеко»
+  // значит «подойди ближе», «слишком шумно» значит «присядь», «заметили» значит
+  // «зайди за спину». Одно сообщение на все три не научило бы ничему.
+  socket.on('steal:result', (payload: {
+    ok: boolean;
+    reason?: 'unknown' | 'far' | 'seen' | 'too_loud';
+    gold?: number;
+    total?: number;
+    nameRu?: string;
+  }) => {
+    let key: string;
+    const подстановки: Record<string, string> = {};
+    if (payload.ok) {
+      key = 'stealth.steal_ok';
+      подстановки.name = payload.nameRu ?? '';
+      подстановки.gold = String(payload.gold ?? 0);
+    } else if (payload.reason === 'seen') {
+      key = 'stealth.steal_seen';
+      подстановки.name = payload.nameRu ?? '';
+    } else if (payload.reason === 'too_loud') {
+      key = 'stealth.steal_loud';
+      подстановки.name = payload.nameRu ?? '';
+    } else {
+      key = 'stealth.steal_far';
+    }
+    const шаблон = t(key);
+    // t() при отсутствии ключа возвращает сам путь - тогда показываем
+    // нейтральный текст, но никогда не путь ключа.
+    if (шаблон === key) {
+      toast(payload.ok ? `+${payload.gold ?? 0}` : payload.nameRu ?? '-', payload.ok ? 'success' : 'error');
+      return;
+    }
+    let текст = шаблон;
+    for (const имя of Object.keys(подстановки)) {
+      текст = текст.split(`{${имя}}`).join(подстановки[имя]);
+    }
+    toast(текст, payload.ok ? 'success' : 'error');
+  });
+
   socket.on('force:disconnect', ({ reason }: { reason: string }) => {
     showLostScreen(reason);
   });
@@ -2134,6 +2173,18 @@ function loop(now: number): void {
       // максимум на 5 единиц видимости, и цена этого - бан за скорость.
       crouch: world3d?.crouching ?? false,
     });
+  }
+
+  // Шаг 3 стелса: попытка кражи кошелька. Отправляется из игрового цикла, а
+  // не прямо из обработчика клавиш: сокет доступен здесь, а движок о нём не
+  // знает. Флаг одноразовый, поэтому удержание F не превращается в поток
+  // запросов.
+  //
+  // Отдельно от пакета движения и по той же причине: координаты не передаются.
+  // Их сервер берёт сам из последнего проверенного античитом пакета, иначе
+  // игрок объявил бы «стою в четырёх единицах от торговца», находясь в порту.
+  if (world3d?.consumeStealRequest()) {
+    socket.emit('steal:attempt');
   }
 
   // ── Выносливость ──

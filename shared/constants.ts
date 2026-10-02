@@ -117,6 +117,10 @@ export const SOCKET_EVENTS = {
   PLAYER_DIED: 'player:died',
   PLAYER_RESPAWNED: 'player:respawned',
   MOVE_REJECTED: 'move:rejected',
+  /** Попытка кражи кошелька. Шаг 3 стелса — клиент просит, сервер решает */
+  STEAL_ATTEMPT: 'steal:attempt',
+  /** Ответ на попытку: { ok, reason | gold, total, targetId, nameRu } */
+  STEAL_RESULT: 'steal:result',
   /** Решение игрока: где возрождаться (см. RESPAWN_TYPES) */
   RESPAWN: 'respawn',
 

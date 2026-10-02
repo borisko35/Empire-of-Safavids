@@ -49,7 +49,10 @@ import {
 } from '../../../shared/constants';
 // Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
 // то же самое. Расхождение двух копий уже стоило бага с дверями.
-import { spottedBy, GUARD_POSTS, nightFactor } from '../../../shared/stealth';
+import {
+  spottedBy, GUARD_POSTS, nightFactor,
+  canPickpocket, distanceSq, PICKPOCKET_TARGETS, THEFT_REACH, THEFT_GOLD,
+} from '../../../shared/stealth';
 // Погода берётся из того же источника, что и время суток, которое сервер и
 // так рассылает игрокам (WORLD_TIME), - чтобы клиент и правило считали одно
 // и то же. WEATHER_EFFECTS - справочник модификаторов, из него берётся
@@ -143,6 +146,16 @@ export class GameSocketHandler {
    * и это смена состояния, о которой клиент должен узнать.
    */
   private spottedGuards = new Map<string, string | null>();
+
+  /**
+   * Где игрок и присел ли он сейчас.
+   *
+   * Нужно шагу 3 (кража кошелька): попытка приходит отдельным событием и не
+   * приносит позицию - иначе игрок сказал бы серверу «я в 4 единицах от
+   * торговца», находясь в порту. Позиция и приседание берутся из уже проверенного
+   * античитом пакета движения, а не из нового недоверенного поля.
+   */
+  private stealthState = new Map<string, { x: number; z: number; crouch: boolean }>();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
@@ -362,10 +375,90 @@ export class GameSocketHandler {
       socket.on('disconnect', async () => {
         await this.handleDisconnect(socket);
       });
+
+      // Шаг 3 стелса: попытка кражи кошелька.
+      socket.on(SOCKET_EVENTS.STEAL_ATTEMPT, () => {
+        void this.handleSteal(socket).catch(() => {});
+      });
     });
 
     // Регенерация ресурсов онлайн-игроков раз в 5 секунд (+ синк клиенту)
     void setInterval(() => { this.regenTick().catch(() => {}); }, 5000);
+  }
+
+  /**
+   * Попытка кражи кошелька.
+   *
+   * Правило целиком в shared/stealth.ts (canPickpocket), потому что клиент
+   * должен понимать то же самое: иначе игрок присел бы за спиной торговца,
+   * увидел бы отказ и не смог бы объяснить почему.
+   *
+   * ПОЧЕМУ КООРДИНАТЫ БЕРУТСЯ ИЗ КЕША, А НЕ ИЗ СОБЫТИЯ. Событие кражи не
+   * приносит позицию: иначе игрок прислал бы «я в 4 единицах от торговца»,
+   * находясь в порту. Точка берётся из stealthState, который наполняется
+   * пакетом движения, уже проверенным античитом на превышение скорости.
+   */
+  private async handleSteal(socket: AuthenticatedSocket): Promise<void> {
+    const characterId = socket.characterId;
+    if (!characterId) return;
+
+    // Без пакета движения сервер не знает, где игрок. Молча не выходим:
+    // клиент должен понимать, почему попытка не сработала.
+    const где = this.stealthState.get(characterId);
+    if (!где) {
+      socket.emit(SOCKET_EVENTS.STEAL_RESULT, { ok: false, reason: 'unknown' });
+      return;
+    }
+
+    const время = GameLoop.getInstance().getWorldTime();
+    const ctx = {
+      crouch: где.crouch,
+      night: nightFactor(время.timeOfDay),
+      visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
+    };
+    const вор = { x: где.x, z: где.z };
+
+    // Цель - ближайшая, до которой можно дотянуться руками. Проверяем
+    // расстояние ДО правила, чтобы отличить «далеко» от «заметили»: игроку
+    // это разные ошибки, и он должен знать, какую исправлять.
+    let цель: (typeof PICKPOCKET_TARGETS)[number] | null = null;
+    for (const t of PICKPOCKET_TARGETS) {
+      if (distanceSq(вор, t) <= THEFT_REACH * THEFT_REACH) {
+        цель = t;
+        break;
+      }
+    }
+
+    if (!цель) {
+      socket.emit(SOCKET_EVENTS.STEAL_RESULT, { ok: false, reason: 'far' });
+      return;
+    }
+
+    // Дотянулись, но не вышло: либо заметили, либо не присел.
+    if (!canPickpocket(вор, цель, ctx)) {
+      socket.emit(SOCKET_EVENTS.STEAL_RESULT, {
+        ok: false,
+        reason: где.crouch ? 'seen' : 'too_loud',
+        targetId: цель.id,
+        nameRu: цель.nameRu,
+      });
+      return;
+    }
+
+    // Именно addGoldReward, а не addGold. В этом файле прямая награда запрещена:
+    // addGold не учитывает сезонный множитель, и игрок, крадущий кошелёк в
+    // сезон ивента, получил бы меньше, чем за любую другую награду. Правило
+    // держит проверка «все источники золотой награды переведены на новый
+    // метод», и первая версия шага 3 её на себе и упала.
+    const всего = await this.characterService.addGoldReward(characterId, THEFT_GOLD);
+    socket.emit(SOCKET_EVENTS.STEAL_RESULT, {
+      ok: true,
+      gold: THEFT_GOLD,
+      total: всего,
+      targetId: цель.id,
+      nameRu: цель.nameRu,
+    });
+    socket.emit(SERVER_EVENTS.RESOURCES, { gold: всего });
   }
 
   /** Медленная регенерация hp/маны/стамины онлайн-игроков + синк состояния */
@@ -879,6 +972,13 @@ export class GameSocketHandler {
       visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
     });
     const былЗамечен = this.spottedGuards.get(characterId) ?? null;
+    // Шаг 3: запоминаем, где игрок и присел ли он, по тому же пакету, который
+    // уже прошёл античит. Событие кражи координат не приносит.
+    this.stealthState.set(characterId, {
+      x: data.position.x,
+      z: data.position.z,
+      crouch: data.crouch === true,
+    });
     if (заметил?.id !== былЗамечен) {
       this.spottedGuards.set(characterId, заметил?.id ?? null);
       if (заметил) {

@@ -1595,6 +1595,10 @@
     "err_no_secret": "Code temporarily unavailable. Try again later"
   },
   "stealth": {
-    "spotted": "{name} spotted you"
+    "spotted": "{name} spotted you",
+    "steal_ok": "You took {name}’s purse and got {gold} gold",
+    "steal_seen": "{name} turned around and saw you",
+    "steal_loud": "Too loud — crouch to steal",
+    "steal_far": "Too far: come right up to the stall"
   }
 }
