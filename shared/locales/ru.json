@@ -775,7 +775,10 @@
     "friend_sent": "Запрос отправлен: {name}",
     "friend_add": "Добавить",
     "friends_unavailable": "Друзья недоступны",
-    "error_msg": "Ошибка: {msg}"
+    "error_msg": "Ошибка: {msg}",
+    "join_raid": "Вступить",
+    "joined_raid": "Вы вступили в заход",
+    "raid_open": "Открытый заход:"
   },
   "settings": {
     "title": "⚙ Настройки",

@@ -463,6 +463,29 @@ export class DungeonService {
    * раздали бы добычу. Postgres обновляет строку один раз: второй вызов
    * увидит признак уже проставленным и вернёт ноль строк.
    */
+
+  /**
+   * Открытые заходы по данжу. Для кнопки «вступить».
+   *
+   * Отдаём только то, что нужно для выбора: сколько человек и сколько мест
+   * осталось. Лидер и состав группы не отдаются — это лишние данные, и без них
+   * кнопка работает.
+   *
+   * Заходы берутся из памяти, а не из базы: в базе остались бы и завершённые,
+   * и кнопка предлагала бы войти в закрытый заход.
+   */
+  listOpenSessions(dungeonId: string): { sessionId: string; members: number; maxPlayers: number }[] {
+    const def = DUNGEONS_DATABASE[dungeonId];
+    if (!def) return [];
+    return [...this.sessions.values()]
+      .filter((сессия) => сессия.dungeonId === dungeonId && !сессия.completedAt)
+      .map((сессия) => ({
+        sessionId: сессия.id,
+        members: сессия.members.size,
+        maxPlayers: def.maxPlayers,
+      }));
+  }
+
   private async claimLoot(sessionId: string): Promise<boolean> {
     const res = await this.db.query<{ id: string }>(
       `UPDATE dungeon_sessions

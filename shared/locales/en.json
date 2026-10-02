@@ -775,7 +775,10 @@
     "friend_sent": "Request sent: {name}",
     "friend_add": "Add",
     "friends_unavailable": "Friends are unavailable",
-    "error_msg": "Error: {msg}"
+    "error_msg": "Error: {msg}",
+    "join_raid": "Join",
+    "joined_raid": "You joined the run",
+    "raid_open": "Open run:"
   },
   "settings": {
     "title": "⚙ Settings",

@@ -1128,6 +1128,16 @@ gameRouter.get('/servers-status', asyncHandler(async (_req: Request, res: Respon
 // ДАНЖИ
 // ============================================================
 
+// GET /api/game/dungeons/:dungeonId/sessions — открытые заходы, к которым
+// можно присоединиться. Без этого кнопка «вступить» не знает, к кому идти.
+gameRouter.get(
+  '/dungeons/:dungeonId/sessions',
+  secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    res.json({ sessions: dungeonService.listOpenSessions(req.params.dungeonId) });
+  })
+);
+
 // POST /api/game/dungeons/:dungeonId/join — присоединиться к чужому
 // заходу { characterId, sessionId }
 gameRouter.post('/dungeons/:dungeonId/join', secureMiddleware, requireCharacterOwnership(),

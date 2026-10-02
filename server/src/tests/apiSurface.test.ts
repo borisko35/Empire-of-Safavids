@@ -311,11 +311,6 @@ describe('Каждый вызов клиента обеспечен маршру
       'POST /api/game/guilds/:/withdraw-item',
       'GET /api/game/quests/:',
       'GET /api/game/dungeons/:',
-      // Присоединение к чужому заходу. Маршрут рабочий, но кнопки на клиенте
-      // ещё нет: клиент не знает, какой заход к нему относится, потому что
-      // списка заходов и приглашений тоже нет. Это осознанная заготовка под
-      // групповой заход, а не забытый маршрут.
-      'POST /api/game/dungeons/:/join',
       'GET /api/game/world-bosses',
       'GET /api/guilds/territories',
       'POST /api/media/gallery',

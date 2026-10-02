@@ -135,6 +135,26 @@ export async function loadDungeons(): Promise<void> {
           await loadDungeons();
         }));
       }
+      // Присоединение к чужому заходу. Список открытых заходов берётся по
+      // этому данжу; кнопка появляется только если есть куда идти.
+      if (!status.active) {
+        const открытые = await api.dungeonSessions(d.id).catch(() => ({ sessions: [] as never[] }));
+        for (const заход of открытые.sessions) {
+          const строка = rowEl('inv-item');
+          const подпись = document.createElement('span');
+          подпись.className = 'inv-name';
+          подпись.textContent = `${t('panels.raid_open')} ${заход.members}/${заход.maxPlayers}`;
+          строка.append(подпись);
+          строка.append(
+            actionButton(t('panels.join_raid'), async () => {
+              await api.dungeonJoin(d.id, заход.sessionId, cid());
+              toast(t('panels.joined_raid'), 'success');
+              await loadDungeons();
+            }),
+          );
+          box.append(строка);
+        }
+      }
       box.append(row);
     }
   } catch {

@@ -473,6 +473,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
+  /** Открытые заходы по данжу: к кому можно присоединиться */
+  dungeonSessions: (dungeonId: string) =>
+    req<{ sessions: { sessionId: string; members: number; maxPlayers: number }[] }>(
+      `/api/game/dungeons/${dungeonId}/sessions`
+    ),
+
+  dungeonJoin: (dungeonId: string, sessionId: string, characterId: string) =>
+    req<{ sessionId: string; attemptsLeft: number }>(
+      `/api/game/dungeons/${dungeonId}/join`,
+      { method: 'POST', body: JSON.stringify({ characterId, sessionId }) },
+    ),
+
   dungeonLeave: (characterId: string) =>
     req<{ success: boolean }>('/api/game/dungeons/leave', {
       method: 'POST',
