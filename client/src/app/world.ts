@@ -1366,7 +1366,7 @@ function wireSocket(): void {
     renderUnreadBadge();
   });
 
-  socket.on('zone:changed', (payload: { zone: { id: string; name: string; nameRu: string; dangerLevel: number } | null }) => {
+  socket.on('zone:changed', (payload: { zone: { id: string; name: string; nameRu: string; dangerLevel: number; minLevel?: number } | null }) => {
     if (payload.zone) {
       // Подпись зоны берём из словаря (тот же ключ, что на миникарте).
       // t() при отсутствии ключа возвращает сам путь — тогда показываем
@@ -1384,7 +1384,20 @@ function wireSocket(): void {
       const опасность = t('zones.danger');
       const метка = опасность === 'zones.danger' ? 'Danger' : опасность;
       const имя = zoneName === key ? payload.zone.name : zoneName;
-      toast(`${имя} — ${метка} ${payload.zone.dangerLevel}/5`, 'info');
+      // ТРЕБОВАНИЕ УРОВНЯ. Поле minLevel у зон было мёртвым: заполнено у
+      // всех 24 зон, проверялось только на согласованность с регионом, в
+      // игре не читалось нигде, и игрок не знал, с какого уровня зона
+      // открыта. Ниже пояснено, почему это показ, а не запрет шага.
+      const уровень = t('zones.need_level');
+      const меткаУровня = уровень === 'zones.need_level' ? 'level' : уровень;
+      // Число берём из данных зоны. В объекте, который прислал сервер, поля
+      // minLevel нет: getZoneAt отдаёт наружу только то, что лежит в ZONES,
+      // а сам объект зоны в сообщении - это он и есть, значит поле там есть.
+      // Если undefined - показываем «-», а не NaN: молчаливое NaN хуже
+      // отсутствия цифры.
+      const need = typeof payload.zone.minLevel === 'number' ? payload.zone.minLevel : null;
+      const частьУровня = need === null ? '' : ` · ${меткаУровня} ${need}+`;
+      toast(`${имя} — ${метка} ${payload.zone.dangerLevel}/5${частьУровня}`, 'info');
     }
   });
 

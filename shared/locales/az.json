@@ -1468,6 +1468,7 @@
     "explorer": "Kəşfiyatçı"
   },
   "zones": {
+    "need_level": "səviyyə",
     "danger": "Təhlükə",
     "isfahan_center": "Mərkəz",
     "isfahan_outskirts": "Ətraf",
