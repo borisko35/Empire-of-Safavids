@@ -1565,7 +1565,8 @@
     "fortress": "Fortress at the Pass",
     "palace": "Palace of Forty Columns",
     "mosque": "Mosque and Madrasa",
-    "weaver": "Weaving House and Store"
+    "weaver": "Weaving House and Store",
+    "customs": "Customs Yard"
   },
   "cutscene": {
     "throne_room": "Throne Room",

@@ -122,6 +122,15 @@ export const INTERIORS: Record<string, InteriorDef> = {
     // Дверь в мире: промерено waterMask, сухо 0.0000.
     doorX: 820, doorZ: -260, exitX: 820, exitZ: -256,
   },
+  // Таможенный двор. Слот 14, cx = 4000 + 14 * 44 = 4616.
+  // Стоит западнее города: досматривают тех, кто идёт снаружи внутрь.
+  customs: {
+    id: 'customs', roomCx: 4616, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Выходит игрок у шлагбаума, а не в глубине двора.
+    spawnX: 4616, spawnZ: 4008.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: -900, doorZ: 800, exitX: -900, exitZ: 804,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {

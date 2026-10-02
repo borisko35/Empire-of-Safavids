@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs';
 
 export interface BuildingDef {
   id: string;
@@ -82,6 +82,8 @@ const SPOTS: {
   { id: 'mosque', kind: 'mosque', nameKey: 'buildings.mosque', icon: '🕌', dx: -20, dz: -480, ex: -20, ez: -476 },
   // Ткацкая с кладовой: восточнее дворца, там, где сухо по замеру.
   { id: 'weaver', kind: 'weaver', nameKey: 'buildings.weaver', icon: '🧵', dx: 820, dz: -260, ex: 820, ez: -256 },
+  // Таможенный двор. Западнее города: проверяет идущих снаружи внутрь.
+  { id: 'customs', kind: 'customs', nameKey: 'buildings.customs', icon: '⚖️', dx: -900, dz: 800, ex: -900, ez: 804 },
 ];
 
 export const POCKET_X = 4000;
@@ -129,7 +131,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4616, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4660, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -389,6 +391,71 @@ function furnishWeaver(g: THREE.Group, cx: number, cz: number): { x: number; z: 
     g.add(mot);
   }
   cols.push({ x: cx + 3, z: cz + 1, r: 2.2 });
+  return cols;
+}
+
+// Таможенный двор: стойка досмотра, шлагбаум, весы, конфискат, архив.
+//
+// Что просили: вышки, шлагбаум, навесы; комната стражника, склад
+// конфиската, архив. Здесь всё, кроме вышек — они снаружи, как и у
+// крепости. Одна комната: переходов между комнатами в модели нет.
+function furnishCustoms(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Шлагбаум поперёк прохода: столб с перекладиной ──
+  // Стоит у северной стены: въезд, откуда игрок входит.
+  g.add(cyl(0.3, 3.4, 0.3, M.woodDark, cx - 3.4, FLOOR_Y + 1.7, cz - 9));
+  g.add(box(6.8, 0.24, 0.24, M.red, cx, FLOOR_Y + 3.2, cz - 9));
+  cols.push({ x: cx - 3.4, z: cz - 9, r: 0.9 });
+  // ── Стойка досмотра: стол с разборчивым ящиком и весами ──
+  g.add(box(3.4, 0.16, 1.4, M.woodDark, cx - 2.2, FLOOR_Y + 0.9, cz - 3.4));
+  for (const lx of [-1.5, 1.5]) {
+    g.add(box(0.18, 0.9, 0.18, M.woodDark, cx - 2.2 + lx, FLOOR_Y + 0.45, cz - 3.4));
+  }
+  g.add(box(1, 0.3, 0.7, M.dark, cx - 2.2, FLOOR_Y + 1.13, cz - 3.4));
+  // Весы: чаша на столбе. Именно веса, а не гиря: караул взвешивает.
+  g.add(cyl(0.08, 0.9, 0.08, M.gold, cx - 3.6, FLOOR_Y + 1.45, cz - 3.2, 8));
+  g.add(box(1.2, 0.1, 0.1, M.gold, cx - 3.6, FLOOR_Y + 1.85, cz - 3.2));
+  g.add(box(0.7, 0.14, 0.7, M.gold, cx - 4.1, FLOOR_Y + 1.5, cz - 3.2));
+  cols.push({ x: cx - 2.2, z: cz - 3.4, r: 1.8 });
+  // ── Стол стражника у восточной стены: книга, перо, фонарь ──
+  g.add(box(2.6, 0.14, 1.1, M.wood, cx + 7.4, FLOOR_Y + 0.9, cz - 2));
+  for (const lz of [-0.8, 0.8]) {
+    g.add(box(0.16, 0.9, 0.16, M.woodDark, cx + 7.4, FLOOR_Y + 0.45, cz - 2 + lz));
+  }
+  g.add(box(0.7, 0.08, 0.5, M.hay, cx + 7.1, FLOOR_Y + 1.01, cz - 2));
+  g.add(cyl(0.06, 0.5, 0.06, M.gold, cx + 7.9, FLOOR_Y + 1.24, cz - 2, 8));
+  cols.push({ x: cx + 7.4, z: cz - 2, r: 1.5 });
+  // ── Навес над стойкой: четыре столба и крыша ──
+  // Без навеса караул стоит под открытым небом, а дождь срывает досмотр.
+  for (const px of [-5.4, 1]) {
+    for (const pz of [-6.4, -0.6]) {
+      g.add(cyl(0.16, 3, 0.16, M.wood, cx + px, FLOOR_Y + 1.5, cz + pz, 8));
+    }
+  }
+  g.add(box(7.6, 0.2, 6.4, M.woodDark, cx - 2.2, FLOOR_Y + 3.1, cz - 3.5));
+  // ── Склад конфиската у дальней стены: ящики и бочки под пломбой ──
+  for (const [bx, bz] of [[-6, 6], [-3.6, 6.6], [-6, 8.4], [-3.6, 9], [-1.2, 6.4], [-1.2, 8.8]] as const) {
+    g.add(box(1.8, 1.2, 1.4, M.wood, cx + bx, FLOOR_Y + 0.6, cz + bz));
+    // Пломба: тонкая доска поперёк ящика.
+    g.add(box(1.9, 0.1, 0.2, M.gold, cx + bx, FLOOR_Y + 1.05, cz + bz));
+  }
+  cols.push({ x: cx - 3.6, z: cz + 7.5, r: 2.6 });
+  for (const [kx, kz] of [[2, 6.6], [4.4, 8.4]] as const) {
+    g.add(cyl(0.8, 0.9, 1.4, M.woodDark, cx + kx, FLOOR_Y + 0.7, cz + kz, 10));
+    cols.push({ x: cx + kx, z: cz + kz, r: 0.9 });
+  }
+  // ── Архив у западной стены: стеллажи со свитками ──
+  // Свитки, а не книги: в архиве таможни лежат списки и квитанции.
+  g.add(box(1.1, 3.2, 7, M.woodDark, cx - 9.8, FLOOR_Y + 1.6, cz + 2));
+  for (let s = 0; s < 3; s++) {
+    g.add(box(1, 0.12, 6.4, M.wood, cx - 9.8, FLOOR_Y + 0.7 + s * 1.1, cz + 2));
+    for (let r = 0; r < 4; r++) {
+      const sv = cyl(0.16, 1.2, 0.16, M.hay, cx - 9.8, FLOOR_Y + 0.9 + s * 1.1, cz - 0.6 + r * 1.7, 8);
+      sv.rotation.z = Math.PI / 2;
+      g.add(sv);
+    }
+  }
+  cols.push({ x: cx - 9.8, z: cz + 2, r: 1.5 });
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -923,6 +990,7 @@ caravanserai: furnishCaravanserai,
     palace: furnishPalace,
     mosque: furnishMosque,
     weaver: furnishWeaver,
+    customs: furnishCustoms,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 
