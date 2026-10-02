@@ -642,7 +642,8 @@ interface Room {
   group: THREE.Group;
   /** Статичные круги комнаты (стены + мебель) — копируются при входе. */
   colliders: { x: number; z: number; r: number }[];
-  exitDoor: THREE.Object3D;
+  /** Двери выхода. У крепости их три, у остальных зданий одна. */
+  exitDoors: THREE.Object3D[];
 }
 
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
@@ -676,16 +677,46 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
   wallRun(cx - hw, cz - hd, cx - hw, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
   wallRun(cx + hw, cz - hd, cx + hw, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
   const gap = ROOM_DOOR_GAP / 2;
-  wallRun(cx - hw, cz + hd, cx - gap, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
-  wallRun(cx + gap, cz + hd, cx + hw, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
+  // ТРИ ДВЕРИ У КРЕПОСТИ, ОДНА У ВСЕХ ОСТАЛЬНЫХ. Проёмы перечислены явно,
+  // чтобы у десяти других зданий поведение осталось прежним: сдвиг стены у
+  // них изменил бы комнаты, которые уже работают и уже проверены.
+  // Смещения -7, 0, +7 те же, что в FORT_ENTRANCES (shared/stealth.ts);
+  // fortressDoor.test.ts сверяет, что числа не разошлись.
+  const проемы: number[] = def.id === 'fortress' ? [-7, 0, 7] : [0];
+  // Участки стены: от левого края до первого проёма, между проёмами, до правого.
+  let край = -hw;
+  for (const s of проемы) {
+    const g2 = s - gap;
+    if (g2 > край) wallRun(cx + край, cz + hd, cx + g2, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
+    край = s + gap;
+  }
+  if (край < hw) wallRun(cx + край, cz + hd, cx + hw, cz + hd, M.wall, ROOM_WALL_H, ROOM_WALL_T);
+  // Перемычка над каждым проёмом.
+  for (const s of проемы) {
+    g.add(box(ROOM_DOOR_GAP + 1.2, ROOM_WALL_H - 3.4, ROOM_WALL_T, M.wall, cx + s, FLOOR_Y + 3.4, cz + hd));
+  }
   // Перемычка над проёмом
   g.add(box(ROOM_DOOR_GAP + 1.2, ROOM_WALL_H - 3.4, ROOM_WALL_T, M.wall, cx, FLOOR_Y + 3.4 + (ROOM_WALL_H - 3.4) / 2, cz + hd));
 
   // Дверь выхода (клик = выйти). Круг в проёме не даёт выйти пешком —
   // только кликом: иначе игрок окажется в пустоте кармана.
-  const exitDoor = box(2.4, 3.2, 0.25, M.woodDark, cx, FLOOR_Y + 1.6, cz + hd);
-  exitDoor.userData = { doorBuilding: def.id, doorAction: 'exit', doorName: t(def.nameKey) };
-  g.add(exitDoor);
+  // ── Двери: у крепости три, у остальных одна ──
+  // entranceId едет в запрос входа. Без него сервер не знает, через какую
+  // дверь вошёл игрок, и правила (присед, золото) не к чему привязать - три
+  // двери были бы декорацией.
+  const номераВходов: string[] = def.id === 'fortress' ? ['gate', 'gap', 'lever'] : [''];
+  const exitDoors: THREE.Object3D[] = [];
+  for (let i = 0; i < проемы.length; i++) {
+    const d = box(2.4, 3.2, 0.25, M.woodDark, cx + проемы[i], FLOOR_Y + 1.6, cz + hd);
+    d.userData = {
+      doorBuilding: def.id,
+      doorAction: 'exit',
+      doorName: t(def.nameKey),
+      entranceId: номераВходов[i] ?? '',
+    };
+    g.add(d);
+    exitDoors.push(d);
+  }
   colliders.push({ x: cx, z: cz + hd, r: 1.4 });
   const exitSign = signMesh(t('buildings.exit'));
   exitSign.position.set(cx, FLOOR_Y + 3.9, cz + hd - 0.4);
@@ -717,7 +748,7 @@ caravanserai: furnishCaravanserai,
   );
 
   scene.add(g);
-  return { def, group: g, colliders, exitDoor };
+  return { def, group: g, colliders, exitDoors };
 }
 
 // ── Хендл ────────────────────────────────────────────────────
@@ -740,7 +771,7 @@ export function createInteriors(scene: THREE.Scene): InteriorsHandle {
   for (const def of BUILDINGS) {
     const room = buildRoom(scene, def);
     rooms.set(def.id, room);
-    clickTargets.push(room.exitDoor);
+    clickTargets.push(...room.exitDoors);
   }
   // Двери экстерьеров добавляются через buildTownBuildings (возвращает свои цели).
   let inside: BuildingDef | null = null;

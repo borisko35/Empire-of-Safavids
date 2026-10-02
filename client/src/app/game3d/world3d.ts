@@ -35,7 +35,7 @@ export interface World3DCallbacks {
   /** Клик по NPC: открыть связанную панель */
   onNpc?: (panel: string, nameRu: string, npcId: string) => void;
   /** Клик по двери здания: войти/выйти (мир уже телепортирован, нужен только тост). */
-  onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string) => void;
+  onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string, entranceId?: string) => void;
 }
 
 /** Экипировка своего персонажа, видимая на 3D-аватаре */
@@ -766,9 +766,9 @@ export class World3D {
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const hits = ray.intersectObjects(this.doorTargets, false);
     if (!hits.length || hits[0].distance > 22) return false;
-    const ud = hits[0].object.userData as { doorBuilding?: string; doorAction?: string; doorName?: string };
+    const ud = hits[0].object.userData as { doorBuilding?: string; doorAction?: string; doorName?: string; entranceId?: string };
     if (!ud.doorBuilding || (ud.doorAction !== 'enter' && ud.doorAction !== 'exit')) return false;
-    this.callbacks?.onDoor?.(ud.doorAction, ud.doorBuilding, ud.doorName ?? ud.doorBuilding);
+    this.callbacks?.onDoor?.(ud.doorAction, ud.doorBuilding, ud.doorName ?? ud.doorBuilding, ud.entranceId);
     return true;
   }
 

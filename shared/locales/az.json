@@ -278,7 +278,11 @@
     "qj_no_char": "Personaj yoxdur",
     "qj_empty": "Aktiv tapşırıq yoxdur",
     "qj_empty_hint": "Tapşırıq almaq üçün NPC ilə danışın",
-    "qj_error": "Tapşırıqları yükləmək olmadı"
+    "qj_error": "Tapşırıqları yükləmək olmadı",
+    "entrance_loud": "Çox ucuz — səssiz keçmək üçün əyləş",
+    "entrance_seen": "Səni gördülər. Görüşdən çıx",
+    "entrance_gold": "Qaldıraq 50 qızıl tələb edir",
+    "entrance_closed": "Bu giriş bağlıdır"
   },
   "chat": {
     "cooldown": "Çox tez. {sec} saniye gözləyin.",

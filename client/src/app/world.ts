@@ -377,7 +377,7 @@ function fillMenuInfo(): void {
  * трекинг, и античит выкинет за спидхак. Поэтому клик только спрашивает
  * сервер, а перемещение происходит в ответе на его «да».
  */
-function enterOrExitBuilding(action: string, buildingId: string, nameRu: string): void {
+function enterOrExitBuilding(action: string, buildingId: string, nameRu: string, entranceId?: string): void {
   if (!world3d) return;
   // Ссылку берём в локальную переменную: внутри обратного вызова сервера
   // TypeScript уже не видит сужения «world3d не пуст», полученного выше, —
@@ -402,18 +402,29 @@ function enterOrExitBuilding(action: string, buildingId: string, nameRu: string)
   window.setTimeout(() => {
     if (settled) return;
     done();
+    // Причина отказа от входа: сервер различает три случая, и каждый
+// требует своего действия от игрока.
     toast(t('world.inside_failed'), 'error');
   }, 6000);
 
   socket.emit(
     event,
-    { buildingId },
-    (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => {
+    { buildingId, entranceId },
+    (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string; deny?: string }) => {
       done();
       if (!res?.ok) {
         // Причины сервер отдаёт по-английски. Показываем перевод по
         // смыслу, а не сырую строку: игрок не должен видеть служебный текст
+        // Отказы правил входа приходят полем deny с машиночитаемым значением.
+        // Здесь оно переводится в текст: игрок не должен видеть служебные строки.
         const map: Record<string, string> = {
+          entrance_denied: res.deny === 'too_loud'
+            ? t('world.entrance_loud')
+            : res.deny === 'seen'
+            ? t('world.entrance_seen')
+            : res.deny === 'no_gold'
+            ? t('world.entrance_gold')
+            : t('world.entrance_closed'),
           'Too far from the door': t('world.inside_far'),
           'Not inside': t('world.inside_not_inside'),
           'Unknown building': t('world.inside_unknown'),
@@ -594,7 +605,7 @@ export async function enterWorld(character: Character): Promise<void> {
       // Диалог: ветвящаяся беседа, тон/дружба, засчитывает talk-цели квестов
       if (npcId) void openNpcDialogue(npcId).catch(() => {});
     },
-    onDoor: (action, buildingId, nameRu) => void enterOrExitBuilding(action, buildingId, nameRu),
+    onDoor: (action, buildingId, nameRu, entranceId) => void enterOrExitBuilding(action, buildingId, nameRu, entranceId),
   });
 
   me = {

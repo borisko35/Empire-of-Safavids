@@ -52,6 +52,7 @@ import {
 import {
   spottedBy, GUARD_POSTS, nightFactor,
   canPickpocket, distanceSq, PICKPOCKET_TARGETS, THEFT_REACH, THEFT_GOLD,
+  fortEntrance, checkEntrance,
 } from '../../../shared/stealth';
 // Погода берётся из того же источника, что и время суток, которое сервер и
 // так рассылает игрокам (WORLD_TIME), - чтобы клиент и правило считали одно
@@ -359,10 +360,12 @@ export class GameSocketHandler {
       // Клиент телепортируется ТОЛЬКО по ack — иначе первый же пакет
       // движения из кармана прилетает раньше сброса трекинга и даёт кик.
       socket.on(SOCKET_EVENTS.INTERIOR_ENTER, async (
-        data: { buildingId: string },
-        ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string }) => void,
+        data: { buildingId: string; entrance?: string },
+        ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string; deny?: string }) => void,
       ) => {
-        await this.handleInterior(socket, data?.buildingId, 'enter', ack);
+        // ВХОД. Поле entrance необязательное: старый клиент его не шлёт,
+        // и для него остаётся обычный вход через ворота.
+        await this.handleInteriorEnter(socket, data?.buildingId, data?.entrance, ack);
       });
       socket.on(SOCKET_EVENTS.INTERIOR_EXIT, async (
         data: { buildingId: string },
@@ -2327,6 +2330,69 @@ export class GameSocketHandler {
    * Легитимный телепорт сбрасывает античит-трекинг (как travel/respawn),
    * итог возвращается через ack — клиент двигается только после него.
    */
+  /**
+   * Вход в здание с проверкой правила входа.
+   *
+   * Обычный вход идёт безусловно - так работал всегда. Разделение на входы
+   * касается только крепости: у неё три двери, и каждая требует своего.
+   * Поле entrance необязательное специально: клиент в кэше браузера ещё
+   * неделю будет старый, и он должен продолжать входить через ворота, а не
+   * получать отказ по незнакомой причине.
+   */
+  private async handleInteriorEnter(
+    socket: AuthenticatedSocket,
+    buildingId: string | undefined,
+    entranceId: string | undefined,
+    ack?: (res: { ok: boolean; target?: { x: number; y: number; z: number }; reason?: string; deny?: string }) => void,
+  ): Promise<void> {
+    if (!buildingId || buildingId !== 'fortress' || !entranceId) {
+      // handleInterior сам разбирается с отсутствующим id и ответит отказом,
+      // поэтому здесь достаточно пустой строки вместо undefined.
+      await this.handleInterior(socket, buildingId ?? '', 'enter', ack);
+      return;
+    }
+
+    const вход = fortEntrance(entranceId);
+    if (!вход) {
+      ack?.({ ok: false, reason: 'unknown_entrance', deny: 'unknown' });
+      return;
+    }
+
+    const characterId = socket.characterId;
+    if (!characterId) {
+      ack?.({ ok: false, reason: 'no_character' });
+      return;
+    }
+
+    // Состояние для правила берём из проверенного античитом пакета движения.
+    const где = this.stealthState.get(characterId);
+    // Золото берём из существующего getCharacterById: отдельного getGold в
+    // проекте нет, а Character уже несёт поле gold.
+    const золото = (await this.characterService.getCharacterById(characterId).catch(() => null))?.gold ?? 0;
+    const отказ = checkEntrance(вход, {
+      crouch: где?.crouch === true,
+      spotted: где ? this.spottedGuards.get(characterId) != null : false,
+      gold: золото,
+    });
+    if (отказ) {
+      ack?.({ ok: false, reason: 'entrance_denied', deny: отказ });
+      return;
+    }
+
+    // Рычаг оплачивается ЗДЕСЬ и только здесь: проверка прошла, значит золота
+    // хватает. spendGold сам откатывает при нехватке (WHERE gold >= amount),
+    // в отличие от addGold с отрицательным числом, который даёт ноль.
+    if (вход.cost > 0) {
+      const осталось = await this.characterService.spendGold(characterId, вход.cost).catch(() => 0);
+      if (осталось <= 0 && золото >= вход.cost) {
+        ack?.({ ok: false, reason: 'gold_spend_failed', deny: 'no_gold' });
+        return;
+      }
+      socket.emit(SERVER_EVENTS.RESOURCES, { gold: осталось });
+    }
+
+    await this.handleInterior(socket, buildingId, 'enter', ack);
+  }
   private async handleInterior(
     socket: AuthenticatedSocket,
     buildingId: string,

@@ -186,6 +186,101 @@ export const GUARD_POSTS: readonly GuardPost[] = [
   { id: 'npc_fort_commander', nameRu: 'Комендант Ашот', x: -320, z: -696, sight: GUARD_SIGHT },
 ];
 
+// ============================================================
+// ТРИ ВХОДА В КРЕПОСТЬ: правила допуска
+// ============================================================
+// ── Входы ─────────────────────────────────────────────────────────────────
+
+export type FortEntranceId = 'gate' | 'gap' | 'lever';
+
+export interface FortEntrance {
+  id: FortEntranceId;
+  /** Имя для отладки; игроку показывается переводом */
+  nameRu: string;
+  /** Смещение двери по X внутри южной стены относительно центра комнаты */
+  dx: number;
+  /** Правило допуска */
+  rule: 'open' | 'needCrouch' | 'needLever';
+  /** Золото за вход, если правило его требует */
+  cost: number;
+}
+
+/**
+ * Три входа крепости.
+ *
+ * Смещения по X: -7, 0, +7. Комната шириной 22 (ROOM_W), полустена 11, проём
+ * двери 3.2 - при таком шаге двери не сливаются и остаются по краям от центра.
+ */
+export const FORT_ENTRANCES: readonly FortEntrance[] = [
+  {
+    id: 'gate',
+    nameRu: 'Ворота',
+    dx: -7,
+    rule: 'open',
+    cost: 0,
+  },
+  {
+    id: 'gap',
+    nameRu: 'Проём',
+    dx: 0,
+    rule: 'needCrouch',
+    cost: 0,
+  },
+  {
+    id: 'lever',
+    nameRu: 'Рычаг',
+    dx: 7,
+    rule: 'needLever',
+    // ВЫБОР, НЕ ИЗМЕРЕНИЕ. Сумма взята по порядку величины: сундук в этой
+    // игре стоит единицы десятков золота, и вход в крепость должен быть
+    // заметной платой, а не мелочью. Меняется здесь одним числом.
+    cost: 50,
+  },
+];
+
+/** Почему вход не разрешён. null - разрешён. */
+export type EntranceDeny = null | 'seen' | 'too_loud' | 'no_gold';
+
+export interface EntranceContext {
+  /** Игрок присел */
+  crouch: boolean;
+  /** Игрок замечен стражем снаружи прямо сейчас */
+  spotted: boolean;
+  /** Золота у игрока сколько есть на самом деле */
+  gold: number;
+}
+
+/** Найти вход по id. null, если такого входа нет. */
+export function fortEntrance(id: string): FortEntrance | null {
+  return FORT_ENTRANCES.find((e) => e.id === id) ?? null;
+}
+
+/**
+ * Разрешить ли вход.
+ *
+ * Порядок проверок отвечает на вопрос «чего именно не хватило»: сначала
+ * видно ли игрока, потом тихо ли он, потом есть ли золото. Иначе игрок с пустым
+ * кошельком получил бы отказ «слишком шумно» и не понял бы почему.
+ *
+ * Порог «рычага» - 50 золота, и он совпадает с FORT_ENTRANCES. Проверка
+ * fortEntrances.test.ts требует, чтобы числа не разошлись.
+ */
+export function checkEntrance(
+  entrance: FortEntrance,
+  ctx: EntranceContext
+): EntranceDeny {
+  if (entrance.rule === 'needCrouch') {
+    if (ctx.spotted) return 'seen';
+    if (!ctx.crouch) return 'too_loud';
+    return null;
+  }
+  if (entrance.rule === 'needLever') {
+    if (ctx.gold < entrance.cost) return 'no_gold';
+    return null;
+  }
+  return null;
+}
+
 /** Точка на плоскости. Общий тип для игрока и стража. */
 export interface Point {
   x: number;

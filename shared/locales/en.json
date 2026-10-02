@@ -278,7 +278,11 @@
     "qj_no_char": "No character",
     "qj_empty": "No active quests",
     "qj_empty_hint": "Talk to an NPC to get quests",
-    "qj_error": "Failed to load quests"
+    "qj_error": "Failed to load quests",
+    "entrance_loud": "Too loud — crouch to sneak through",
+    "entrance_seen": "You were spotted. Get out of sight",
+    "entrance_gold": "The lever costs 50 gold",
+    "entrance_closed": "This entrance is closed"
   },
   "chat": {
     "cooldown": "Too fast. Wait {sec} sec.",
