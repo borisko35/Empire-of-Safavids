@@ -35,6 +35,16 @@ import { guildMissionService } from '../services/GuildMissionService';
  */
 const DUNGEON_ATTEMPTS_PER_DAY = 3;
 
+/**
+ * Дневной лимит попыток для конкретного данжа.
+ *
+ * Общее число остаётся значением по умолчанию. Исключения — в описании
+ * данжа, а не здесь.
+ */
+function attemptsLimit(dungeonId: string): number {
+  return DUNGEONS_DATABASE[dungeonId]?.attemptsPerDay ?? DUNGEON_ATTEMPTS_PER_DAY;
+}
+
 export interface DungeonSession {
   id: string;
   dungeonId: string;
@@ -339,7 +349,7 @@ export class DungeonService {
       logger.error('[Dungeon] не удалось прочитать число попыток:', (e as Error).message);
       throw new Error('DUNGEON_ATTEMPTS_UNREADABLE');
     });
-    return Math.max(0, DUNGEON_ATTEMPTS_PER_DAY - (Number(row?.attempts) || 0));
+    return Math.max(0, attemptsLimit(dungeonId) - (Number(row?.attempts) || 0));
   }
 
   /**
@@ -364,7 +374,7 @@ export class DungeonService {
          SET attempts = dungeon_attempts.attempts + 1
        WHERE dungeon_attempts.reset_date = CURRENT_DATE AND dungeon_attempts.attempts < $3
        RETURNING attempts`,
-      [characterId, dungeonId, DUNGEON_ATTEMPTS_PER_DAY]
+      [characterId, dungeonId, attemptsLimit(dungeonId)]
     );
     return res.length > 0;
   }

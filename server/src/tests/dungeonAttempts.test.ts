@@ -21,12 +21,45 @@ describe('Лимит попыток: сервис', () => {
     expect(service).toMatch(/INSERT INTO dungeon_attempts/);
   });
 
-  it('лимит — одна константа, а не число в трёх местах', () => {
+  it('лимит по умолчанию — одна константа, а не число в трёх местах', () => {
     expect(service).toMatch(/const DUNGEON_ATTEMPTS_PER_DAY = \d+;/);
     const n = (service.match(/DUNGEON_ATTEMPTS_PER_DAY/g) ?? []).length;
-    // определение + attemptsLeft + spendAttempt: где-то ещё — значит
-    // правкой одного числа можно разъехаться с остальными
-    expect({ упоминаний: n }).toEqual({ упоминаний: 3 });
+    // Определение + единственное место расчёта attemptsLimit. Больше нигде:
+    // attemptsLeft и spendAttempt обязаны звать расчёт, а не константу.
+    expect({ упоминаний: n }).toEqual({ упоминаний: 2 });
+  });
+
+  // Правило изменилось: гробнице Имамзаде нужен один вход в сутки. Старая
+  // проверка требовала, чтобы константа была одна на ВСЕ данжи, и запрещала
+  // исключения — то есть запрещала само то, что владелец попросил.
+  it('списание и проверка остатка берут один и тот же расчёт лимита', () => {
+    // Самое опасное здесь — разъезд двух мест. Если остаток считается через
+    // attemptsLimit, а списание по константе, игрок увидит «осталось 1»,
+    // а гробница откроется ещё дважды: списание идёт SQL-условием
+    // «attempts < лимит» в параметре $3.
+    expect(service).toMatch(
+      /return Math\.max\(0, attemptsLimit\(dungeonId\) - \(Number\(row\?\.attempts\) \|\| 0\)\);/
+    );
+    expect(service).toMatch(/\[characterId, dungeonId, attemptsLimit\(dungeonId\)\]/);
+    // Число упоминаний константы считает соседняя проверка — здесь важно
+    // другое: оба места обязаны звать расчёт, а не константу напрямую.
+  });
+
+  it('исключение живёт в описании данжа, а не в сервисе', () => {
+    // Если сервис начнёт знать про гробницу лично, второе исключение
+    // превратит его в список частных случаев, и правило снова разъедется.
+    expect(service).not.toMatch(/dungeon_shiraz_tomb/);
+    expect(service).toMatch(
+      /return DUNGEONS_DATABASE\[dungeonId\]\?\.attemptsPerDay \?\? DUNGEON_ATTEMPTS_PER_DAY;/
+    );
+  });
+
+  it('описание данжа умеет хранить свой лимит', () => {
+    const данж = src('server/src/data/dungeons.ts');
+    expect(данж).toMatch(/attemptsPerDay\?: number;/);
+    // Необязательное поле: иначе пришлось бы проставлять лимит всем подряд
+    // и каждый новый данж был бы обязан повторить общее число.
+    expect(данж).toMatch(/attemptsPerDay\?:/);
   });
 
   it('сутки считает база, а не код', () => {
@@ -50,6 +83,46 @@ describe('Лимит попыток: сервис', () => {
     expect(service).toMatch(/WHERE dungeon_attempts\.reset_date = CURRENT_DATE AND dungeon_attempts\.attempts < \$3/);
     expect(service).not.toMatch(/WHERE reset_date/);
     expect(service).toMatch(/RETURNING attempts/);
+  });
+});
+
+// Правило поменялось с «одно число на все данжи» на «одно число по умолчанию
+// плюс исключение у данного данжа». Ниже — что именно изменилось.
+describe('Лимит попыток: свой лимит у данного данжа', () => {
+  it('гробница в сутки открывается один раз', () => {
+    const данж = src('server/src/data/dungeons.ts');
+    const начало = данж.indexOf("'dungeon_shiraz_tomb': {");
+    // Запись может быть не найдена вовсе — тогда и проверять нечего, а падать
+    // надо по делу, а не «не нашёл кусок текста».
+    expect(начало).toBeGreaterThan(0);
+    const блок = данж.slice(начало, начало + 3000);
+    expect(блок).toMatch(/attemptsPerDay: 1,/);
+  });
+
+  it('у остальных данжей лимит прежний', () => {
+    // Исключение — одно. Если завтра их станет пять, правило начнёт
+    // разъезжаться: проще сделать каждому данжу своё поле и забыть общее.
+    const данж = src('server/src/data/dungeons.ts');
+    const исключения = (данж.match(/attemptsPerDay: \d+/g) ?? []).length;
+    expect({ исключений: исключения }).toEqual({ исключений: 1 });
+    // Общее число не должно съехать: у остальных данжей остаётся 3.
+    expect(service).toMatch(/const DUNGEON_ATTEMPTS_PER_DAY = 3;/);
+  });
+
+  it('нечисловой лимит не пройдёт как валидный', () => {
+    // Поле необязательное и числовое: «одна попытка» словами в данных
+    // превратилась бы в NaN, и лимит молча стал бы NaN — а сравнение
+    // attempts < NaN не проходит никогда, то есть вход закрывался бы у всех.
+    const данж = src('server/src/data/dungeons.ts');
+    const значения = [...данж.matchAll(/attemptsPerDay: ([^,\n]+)/g)].map((м) => м[1].trim());
+    for (const значение of значения) {
+      expect({ значение, число: Number.isInteger(Number(значение)) }).toEqual({
+        значение,
+        число: true,
+      });
+    }
+    // Пустой набор — тоже провал: проверка обязана что-то видеть.
+    expect({ значений: значения.length }).toEqual({ значений: 1 });
   });
 });
 

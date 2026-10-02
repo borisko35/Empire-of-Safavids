@@ -29,6 +29,14 @@ export interface DungeonDefinition {
   difficulties: DungeonDifficulty[];
   rooms: DungeonRoom[];
   timeLimit: number; // минуты
+  /**
+   * Свой дневной лимит входа. Не задано — берётся общий
+   * DUNGEON_ATTEMPTS_PER_DAY из DungeonService.
+   *
+   * Исключение живёт здесь, а не в сервисе: сервис не должен знать про
+   * гробницу лично, иначе второе исключение превратит его в список.
+   */
+  attemptsPerDay?: number;
   rewards: {
     experience: number;
     gold: { min: number; max: number };
@@ -285,6 +293,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     maxPlayers: 8,
     difficulties: ['normal', 'hard', 'heroic', 'mythic'],
     timeLimit: 70,
+    // Один вход в сутки: гробницу вскрывают один раз, и три попытки
+    // в день превращали бы её в обычный данж.
+    attemptsPerDay: 1,
     rooms: [
       {
         id: 'room_tomb_stair',
