@@ -73,6 +73,11 @@ export interface DungeonSession {
 }
 
 export interface DungeonCompleteInfo {
+  // Сколько человек разделило добычу и сколько золота досталось каждому.
+  // gold в отчёте остаётся общей суммой захода: клиент показывает
+  // итог захода, а «свой кусок» показывает этим числом.
+  participants: number;
+  goldEach: number;
   sessionId: string;
   dungeonId: string;
   dungeonNameRu: string;
@@ -450,6 +455,24 @@ export class DungeonService {
       `(${session.members.size}/${def.maxPlayers})`);
     return { ok: true, session, attemptsLeft: await this.attemptsLeft(characterId, def.id) };
   }
+  /**
+   * Забрать право на раздачу добычи. Возвращает false, если уже выдавали.
+   *
+   * UPDATE с условием «признак ещё пуст», а не SELECT и потом UPDATE:
+   * две одновременные победы над боссом обе прочитали бы «пусто» и обе
+   * раздали бы добычу. Postgres обновляет строку один раз: второй вызов
+   * увидит признак уже проставленным и вернёт ноль строк.
+   */
+  private async claimLoot(sessionId: string): Promise<boolean> {
+    const res = await this.db.query<{ id: string }>(
+      `UPDATE dungeon_sessions
+          SET loot_claimed_at = NOW()
+        WHERE id = $1 AND loot_claimed_at IS NULL
+        RETURNING id`,
+      [sessionId]
+    );
+    return res.length > 0;
+  }
   /** Выйти из данжа: монстры сессии убираются из мира */
   async leave(characterId: string): Promise<boolean> {
     const sessionId = this.characterToSession.get(characterId);
@@ -507,10 +530,36 @@ export class DungeonService {
     const def = DUNGEONS_DATABASE[session.dungeonId];
     const gold = def.rewards.gold.min + Math.floor(Math.random() * (def.rewards.gold.max - def.rewards.gold.min + 1));
 
-    await this.characters.addExperience(killerId, def.rewards.experience).catch(() => {});
-    await this.characters.addGoldReward(killerId, gold).catch(() => {});
-    for (const itemId of def.rewards.guaranteedItems) {
-      await this.characters.addItems(killerId, [{ itemId, qty: 1 }]).catch(() => {});
+    // Добыча делится на весь заход и выдаётся один раз. Порядок обхода
+    // members — это порядок входа: на нём стоит остаток золота лидеру и
+    // очередь предметов.
+    const участники = [...session.members];
+    const народу = Math.max(1, участники.length);
+    const каждому = Math.floor(gold / народу);
+    const остаток = gold - каждому * народу;
+
+    // Предметы идут по кругу участников: каждый достаётся ровно один раз.
+    // Формула «предмет i достаётся участнику i» отдавала бы лишние
+    // предметы НИКОМУ — при двух людях и трёх предметах третий исчезал бы.
+    // По кругу он достаётся лидеру, и ни одна добыча не пропадает.
+    const получили = участники.map((characterId, порядок) => ({
+      characterId,
+      experience: def.rewards.experience,
+      // Остаток от деления золота — лидеру захода, он первый во входе.
+      gold: каждому + (порядок === 0 ? остаток : 0),
+      items: def.rewards.guaranteedItems.filter((_, i) => i % народу === порядок),
+    }));
+
+    if (await this.claimLoot(session.id)) {
+      for (const доля of получили) {
+        await this.characters
+          .addExperience(доля.characterId, доля.experience)
+          .catch(() => {});
+        await this.characters.addGoldReward(доля.characterId, доля.gold).catch(() => {});
+        for (const itemId of доля.items) {
+          await this.characters.addItems(доля.characterId, [{ itemId, qty: 1 }]).catch(() => {});
+        }
+      }
     }
 
     const info: DungeonCompleteInfo = {
@@ -520,6 +569,8 @@ export class DungeonService {
       experience: def.rewards.experience,
       gold,
       items: def.rewards.guaranteedItems,
+      participants: участники.length,
+      goldEach: каждому,
     };
     logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${def.rewards.experience}xp, +${gold}g)`);
     // Репутация за данж — заметный поступок, а не рядовой бой
