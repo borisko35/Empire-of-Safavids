@@ -107,8 +107,11 @@ describe('Мечеть: слот и дверь совпадают на клие�
     const прямоугольник = /POCKET_RECT = \{ x0: (-?\d+), x1: (\d+), z0: (-?\d+), z1: (\d+) \}/.exec(клиент);
     must(прямоугольник !== null, 'POCKET_RECT не найден');
     must(
-      Number(прямоугольник![2]) >= INTERIORS.mosque!.roomCx,
-      `правый край кармана ${прямоугольник![2]}, а центр комнаты мечети ${INTERIORS.mosque!.roomCx}`
+      // Правый край комнаты, а не центр: полкомнаты 16.
+      Number(прямоугольник![2]) >=
+        INTERIORS.mosque!.roomCx + INTERIORS.mosque!.roomHalf,
+      `правый край кармана ${прямоугольник![2]}, а правый край комнаты ` +
+        `${INTERIORS.mosque!.roomCx + INTERIORS.mosque!.roomHalf}: под комнатой нет земли`
     );
   });
 });

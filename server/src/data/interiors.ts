@@ -114,6 +114,14 @@ export const INTERIORS: Record<string, InteriorDef> = {
     // Дверь в мире: промерено waterMask, сухо 0.0000.
     doorX: -20, doorZ: -480, exitX: -20, exitZ: -476,
   },
+  // Ткацкая и кладовая. Кузница деревни уже есть: это workshop.
+  // Слот 13, cx = 4000 + 13 * 44 = 4572.
+  weaver: {
+    id: 'weaver', roomCx: 4572, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4572, spawnZ: 4008.5,
+    // Дверь в мире: промерено waterMask, сухо 0.0000.
+    doorX: 820, doorZ: -260, exitX: 820, exitZ: -256,
+  },
 };
 
 export function getInterior(id: string): InteriorDef | undefined {

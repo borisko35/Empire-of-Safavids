@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver';
 
 export interface BuildingDef {
   id: string;
@@ -80,6 +80,8 @@ const SPOTS: {
   { id: 'palace', kind: 'palace', nameKey: 'buildings.palace', icon: '👑', dx: 620, dz: -300, ex: 620, ez: -296 },
   // Мечеть. Ставится севернее города, ближе всех прочих сухих точек:
   { id: 'mosque', kind: 'mosque', nameKey: 'buildings.mosque', icon: '🕌', dx: -20, dz: -480, ex: -20, ez: -476 },
+  // Ткацкая с кладовой: восточнее дворца, там, где сухо по замеру.
+  { id: 'weaver', kind: 'weaver', nameKey: 'buildings.weaver', icon: '🧵', dx: 820, dz: -260, ex: 820, ez: -256 },
 ];
 
 export const POCKET_X = 4000;
@@ -127,7 +129,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4572, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4616, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -333,6 +335,60 @@ function furnishMosque(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   // ── Жаровни у входа ──
   brazier(g, cx - 9.6, cz + 9.4, FLOOR_Y);
   brazier(g, cx + 9.6, cz + 9.4, FLOOR_Y);
+  return cols;
+}
+
+// Ткацкая и кладовая: станки, рулоны ткани, мешки и полки.
+//
+// Кузница деревни — это workshop, она уже построена. Здесь вторая часть:
+// ткацкая и кладовая рядом, потому что ткань снимают со станка и сразу
+// убирают в мешки на полки. Одна комната — как и все прочие.
+function furnishWeaver(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Станки у дальней стены: рама, основание, вал и нити основы ──
+  for (let i = 0; i < 3; i++) {
+    const px = cx - 6 + i * 6;
+    g.add(box(3.2, 0.24, 1.2, M.woodDark, px, FLOOR_Y + 0.12, cz - 7));
+    // Вертикальные стойки рамы.
+    for (const sx of [-1.4, 1.4]) {
+      g.add(box(0.18, 2.6, 0.18, M.wood, px + sx, FLOOR_Y + 1.4, cz - 7));
+    }
+    // Верхний вал и натянутые нити: нити тонкие и светлые.
+    g.add(cyl(0.14, 3.2, 0.14, M.woodDark, px, FLOOR_Y + 2.5, cz - 7, 8));
+    g.add(box(3, 2.2, 0.05, M.hay, px, FLOOR_Y + 1.5, cz - 7));
+    // Готовый кусок ткани свисает с вала.
+    g.add(box(2.6, 1.2, 0.08, M.red, px, FLOOR_Y + 1.2, cz - 6.4));
+    cols.push({ x: px, z: cz - 7, r: 2.1 });
+  }
+  // ── Стеллаж с рулонами ткани у боковой стены ──
+  g.add(box(1.2, 3, 7, M.woodDark, cx - 9.8, FLOOR_Y + 1.5, cz + 1));
+  for (let s = 0; s < 3; s++) {
+    g.add(box(1.1, 0.12, 6.4, M.wood, cx - 9.8, FLOOR_Y + 0.7 + s * 1.1, cz + 1));
+    // Рулоны лежат вдоль полки — видно их торцами.
+    for (let r = 0; r < 3; r++) {
+      const roll = cyl(0.34, 1.9, 0.34, r % 2 ? M.red : M.gold, cx - 9.8, FLOOR_Y + 1.1 + s * 1.1, cz - 1.2 + r * 2.2, 8);
+      roll.rotation.x = Math.PI / 2;
+      g.add(roll);
+    }
+  }
+  cols.push({ x: cx - 9.8, z: cz + 1, r: 1.6 });
+  // ── Кладовая: мешки и корзины у порога ──
+  // Ближе к двери: занятого снегут первым, и видно от входа.
+  for (const [mx, mz] of [[7.2, 6.5], [8.8, 5.2], [6.4, 8.2], [9.6, 7.4]] as const) {
+    g.add(box(1.2, 1.1, 1.0, M.hay, cx + mx, FLOOR_Y + 0.55, cz + mz));
+    cols.push({ x: cx + mx, z: cz + mz, r: 0.8 });
+  }
+  // ── Рабочий стол с ножницами и мотками ──
+  g.add(box(4, 0.16, 1.6, M.wood, cx + 3, FLOOR_Y + 0.9, cz + 1));
+  for (const sx of [-1.6, 1.6]) {
+    g.add(box(0.2, 0.9, 0.2, M.woodDark, cx + 3 + sx, FLOOR_Y + 0.45, cz + 1));
+  }
+  for (let i = 0; i < 4; i++) {
+    const mot = cyl(0.22, 0.22, 0.3, i % 2 ? M.gold : M.red, cx + 1.4 + i * 0.9, FLOOR_Y + 1.08, cz + 1, 8);
+    mot.rotation.z = Math.PI / 2;
+    g.add(mot);
+  }
+  cols.push({ x: cx + 3, z: cz + 1, r: 2.2 });
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -866,6 +922,7 @@ caravanserai: furnishCaravanserai,
     fortress: furnishFortress,
     palace: furnishPalace,
     mosque: furnishMosque,
+    weaver: furnishWeaver,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

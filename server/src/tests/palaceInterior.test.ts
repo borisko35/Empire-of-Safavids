@@ -103,9 +103,10 @@ describe('Дворец: слот и дверь совпадают на клие�
     const x1 = Number(прямоугольник![2]);
     // Граница — центр последней комнаты, а не её край: так было и раньше.
     must(
-      x1 >= INTERIORS.palace!.roomCx,
-      `правый край кармана ${x1}, а центр комнаты дворца ${INTERIORS.palace!.roomCx}: ` +
-        'под половиной комнаты не будет земли'
+      // Правый край комнаты, а не центр: полкомнаты 16.
+      x1 >= INTERIORS.palace!.roomCx + INTERIORS.palace!.roomHalf,
+      `правый край кармана ${x1}, а правый край комнаты ` +
+        `${INTERIORS.palace!.roomCx + INTERIORS.palace!.roomHalf}: под комнатой нет земли`
     );
   });
 });
