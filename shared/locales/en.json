@@ -1581,7 +1581,9 @@
     "tomb": "Sheikh's Tomb",
     "hanza": "Library House",
     "catacombs": "Tabriz Catacombs",
-    "palace_dungeon": "Palace of Forty Columns (dungeon)"
+    "palace_dungeon": "Palace of Forty Columns (dungeon)",
+    "khorasan_caves": "Khorasan Caves",
+    "caucasus_fort": "Caucasus Fortress"
   },
   "cutscene": {
     "throne_room": "Throne Room",

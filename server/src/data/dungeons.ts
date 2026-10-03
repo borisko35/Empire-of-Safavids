@@ -37,6 +37,17 @@ export interface DungeonDefinition {
    */
   entryX: number;
   entryZ: number;
+  /**
+   * Ключ интерьера, в котором подземелье живёт.
+   *
+   * Стоит рядом с entryX/entryZ не для красоты: у гробницы интерьер уже был
+   * построен (слот 16, комната 4704), а точка входа указывала на 4968 — комнату,
+   * которой нет. Монстры появлялись в пустом кармане за 264 единицы от
+   * гробницы, и заход нельзя было пройти. Сверять надо не «вход в кармане», а
+   * «вход совпадает с комнатой СВОЕГО интерьера», и поле делает сверку
+   * возможной без таблицы в проверке.
+   */
+  interiorId: string;
   timeLimit: number; // минуты
   /**
    * Свой дневной лимит входа. Не задано — берётся общий
@@ -67,6 +78,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
     entryX: 4792,
     entryZ: 4000,
+    interiorId: 'catacombs',
     minLevel: 5,
     // Было 5–25. Расширение, а не урезание: выше двадцатого в катакомбах
     // всё равно нет ничего, а полоса 26–29 закрывается кавказским данжем
@@ -136,6 +148,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
     entryX: 4836,
     entryZ: 4000,
+    interiorId: 'palace_dungeon',
     minLevel: 40,
     maxLevel: 60,
     minPlayers: 3,
@@ -187,6 +200,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
     entryX: 4880,
     entryZ: 4000,
+    interiorId: 'khorasan_caves',
     minLevel: 60,
     maxLevel: 85,
     minPlayers: 5,
@@ -241,6 +255,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
     entryX: 4924,
     entryZ: 4000,
+    interiorId: 'caucasus_fort',
     minLevel: 30,
     maxLevel: 52,
     minPlayers: 3,
@@ -309,8 +324,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     description: 'В горах Шираза открылась гробница, откуда выходят мертвецы. Святилище закрыто снаружи - и медленно перестало закрываться изнутри.',
     region: Region.SHIRAZ,
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: 4968,
+    entryX: 4704,
     entryZ: 4000,
+    interiorId: 'tomb',
     minLevel: 45,
     maxLevel: 70,
     minPlayers: 3,

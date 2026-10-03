@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort';
 
 export interface BuildingDef {
   id: string;
@@ -95,6 +95,10 @@ const SPOTS: {
   { id: 'catacombs', kind: 'catacombs', nameKey: 'buildings.catacombs', icon: '🕳', dx: -520, dz: -340, ex: -520, ez: -336 },
   // Дворец Сорока Колонн как подземелье: сад с янычарами и тронный зал.
   { id: 'palace_dungeon', kind: 'palace_dungeon', nameKey: 'buildings.palace_dungeon', icon: '🏛', dx: -160, dz: 240, ex: -160, ez: 244 },
+  // Пещеры Хорасана: вход в пещеру и зал вечного огня с арззангом.
+  { id: 'khorasan_caves', kind: 'khorasan_caves', nameKey: 'buildings.khorasan_caves', icon: '🕯', dx: 780, dz: -620, ex: 780, ez: -616 },
+  // Крепость Кавказа: ворота, стена и башня бури с джиннами.
+  { id: 'caucasus_fort', kind: 'caucasus_fort', nameKey: 'buildings.caucasus_fort', icon: '🛡', dx: -880, dz: 520, ex: -880, ez: 524 },
 ];
 
 export const POCKET_X = 4000;
@@ -142,7 +146,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4880, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4968, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -830,6 +834,162 @@ function furnishPalaceDungeon(
   }
   return cols;
 }
+
+// Пещеры Хорасана: вход в пещеру и зал вечного огня.
+//
+// Зоны из замера: входная комната получает z = +7.5, огненный зал — z = −7.5.
+// Арззанг в данных стоит в z = 25…40, а он и есть опорная точка боссовой
+// комнаты, поэтому после раскладки он оказывается у дальней стены (z = −15).
+// Значит алтарь огня ставится у стены, а не в середине зала.
+function furnishKhorasanCaves(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Зона 1. Вход в Пещеру: три монстра, два сундука ──
+  // Свод из сталактитов, узкий проход вниз, вода на дне.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const px = cx + side * (5 + i * 3.5);
+      const pz = cz + 5.5 - i * 2.5;
+      g.add(cyl(0.5, 3.2 - i * 0.6, 0.5, M.stone, px, FLOOR_Y + (3.2 - i * 0.6) / 2, pz, 8));
+      cols.push({ x: px, z: pz, r: 0.8 });
+    }
+  }
+  // Лужа на дне пещеры: видно, что вода тут стоит.
+  g.add(box(5.4, 0.1, 3.4, M.water, cx - 2.4, FLOOR_Y + 0.05, cz + 9.4));
+  cols.push({ x: cx - 2.4, z: cz + 9.4, r: 2 });
+  // Ступени вниз: в пещеру спускаются, а не входят с улицы.
+  for (let i = 0; i < 4; i++) {
+    g.add(box(3, 0.18, 0.5, M.stone, cx + 4.4, FLOOR_Y + 0.09 - i * 0.18, cz + 12.4 - i * 0.5));
+  }
+  cols.push({ x: cx + 4.4, z: cz + 12.4, r: 1.5 });
+  // Сундуки входа: по данным 2
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 7.4, FLOOR_Y + 0.4, cz + 12.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 8.4, FLOOR_Y + 0.4, cz + 6.4));
+  cols.push({ x: cx - 7.4, z: cz + 12.4, r: 1 });
+  cols.push({ x: cx + 8.4, z: cz + 6.4, r: 1 });
+  // ── Зона 2. Зал Вечного Огня: семь монстров, шесть сундуков ──
+  // Алтарь В СЕРЕДИНЕ ЗОНЫ (z = −7.5), а не у дальней стены.
+  // Причина: опорная точка боссовой комнаты — сам босс, поэтому босс всегда
+  // встаёт в середину зоны. Арззанг встаёт в (0, −7.5); алтарь в −13 был
+  // в шести единицах позади него. Я ставил алтарь по своему замеру по
+  // тексту данных, где ошибочно сдвинул босса ещё раз.
+  g.add(box(3.4, 0.6, 2.2, M.stone, cx, FLOOR_Y + 0.3, cz - 7.5));
+  g.add(box(2.4, 1.4, 1.6, M.stone, cx, FLOOR_Y + 1.3, cz - 7.5));
+  // Огонь в жаровне на алтаре: зал назван вечным огнём, огонь и должен гореть.
+  g.add(cyl(0.7, 0.4, 0.7, M.fire, cx, FLOOR_Y + 2.2, cz - 7.5, 10));
+  cols.push({ x: cx, z: cz - 7.5, r: 2.2 });
+  // Сталактиты по бокам зала: пещера читается сводом, а не комнатой.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const px = cx + side * (8.5 + i * 0.6);
+      const pz = cz - 4 - i * 4;
+      const h = 2.6 + (i % 2) * 0.8;
+      g.add(cyl(0.45, h, 0.45, M.stone, px, FLOOR_Y + h / 2, pz, 8));
+      cols.push({ x: px, z: pz, r: 0.7 });
+    }
+  }
+  // Жаровни по краям зала: свет по всему залу, а не в одном углу.
+  for (const [px, pz] of [
+    [cx - 11.4, cz - 2.4],
+    [cx + 11.4, cz - 2.4],
+    [cx - 11.4, cz - 10.4],
+    [cx + 11.4, cz - 10.4],
+  ] as [number, number][]) {
+    g.add(cyl(0.5, 0.9, 0.5, M.iron, px, FLOOR_Y + 0.45, pz, 8));
+    g.add(cyl(0.28, 0.36, 0.28, M.fire, px, FLOOR_Y + 1.05, pz, 8));
+    cols.push({ x: px, z: pz, r: 0.8 });
+  }
+  // Сундуки огненного зала: по данным 6
+  const местаСундуков: [number, number][] = [
+    [cx - 4.6, cz - 2.4],
+    [cx + 4.6, cz - 2.4],
+    [cx - 7.4, cz - 3.4],
+    [cx + 7.4, cz - 3.4],
+    [cx - 3.6, cz - 12.4],
+    [cx + 3.6, cz - 12.4],
+  ];
+  for (const [px, pz] of местаСундуков) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  return cols;
+}
+
+// Крепость Кавказа: ворота крепости, стена и башня бури.
+//
+// Зоны из замера: ворота z = +10, стена z = 0, башня бури z = −10.
+// Джиннов двое (mob_storm_djinn, count 2) и их позиции z = 10 и 22, а
+// опорной точкой боссовой комнаты служит босс: центр 16 → после сдвига они
+// стоят в z = −16 и −4. Значит башня глубокая, и оба джинна у её дальней
+// стены, а не один в центре.
+function furnishCaucasusFort(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Зона 1. Ворота крепости: семь монстров, один сундук ──
+  // Арка ворот, кованые решётки, два сторожевых поста у входа.
+  for (const side of [-1, 1]) {
+    g.add(box(1.4, 4.6, 1.4, M.stone, cx + side * 3.6, FLOOR_Y + 2.3, cz + 14));
+  }
+  g.add(box(8.6, 1.2, 1.4, M.stone, cx, FLOOR_Y + 4.4, cz + 14));
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      g.add(box(0.16, 2.6, 0.16, M.iron, cx + side * (1 + i * 0.9), FLOOR_Y + 1.3, cz + 13.4));
+    }
+    cols.push({ x: cx + side * 2.4, z: cz + 13.4, r: 1.2 });
+  }
+  // Сторожевые посты с факелами по краям ворот.
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.4;
+    g.add(cyl(0.16, 2.2, 0.16, M.iron, px, FLOOR_Y + 1.1, cz + 11.4, 8));
+    g.add(cyl(0.3, 0.42, 0.3, M.fire, px, FLOOR_Y + 2.35, cz + 11.4, 8));
+    cols.push({ x: px, z: cz + 11.4, r: 0.8 });
+  }
+  // Сундук ворот: по данным 1
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx, FLOOR_Y + 0.4, cz + 6.4));
+  cols.push({ x: cx, z: cz + 6.4, r: 1 });
+  // ── Зона 2. Стена: пять монстров, два сундука ──
+  // Ступенчатый парапет с зубцами: стена читается стеной, а не полкой.
+  for (let i = 0; i < 3; i++) {
+    g.add(box(14 - i * 1.4, 0.7, 1.2, M.stone, cx, FLOOR_Y + 0.35 + i * 0.7, cz + 2.5 - i * 1.6));
+  }
+  for (let i = 0; i < 7; i++) {
+    const bx = cx - 5.4 + i * 1.8;
+    g.add(box(0.8, 0.7, 0.8, M.stone, bx, FLOOR_Y + 2.6, cz + 2.5));
+  }
+  cols.push({ x: cx, z: cz + 2.5, r: 2 });
+  // Козырёк над стеной: укрытие для тех, кто за ней стоит.
+  g.add(box(3.4, 0.3, 1.8, M.stone, cx - 8.4, FLOOR_Y + 2.2, cz - 1.4));
+  g.add(box(0.3, 2.2, 0.3, M.woodDark, cx - 8.4, FLOOR_Y + 1.1, cz - 1.4));
+  cols.push({ x: cx - 8.4, z: cz - 1.4, r: 1 });
+  // Сундуки стены: по данным 2
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 8.4, FLOOR_Y + 0.4, cz - 4.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 8.4, FLOOR_Y + 0.4, cz - 8.4));
+  cols.push({ x: cx + 8.4, z: cz - 4.4, r: 1 });
+  cols.push({ x: cx + 8.4, z: cz - 8.4, r: 1 });
+  // ── Зона 3. Башня бури: два джинна у дальней стены, четыре сундука ──
+  // Площадка башни во всю глубину зоны: джинны стоят в z = −16 и −4, то есть
+  // вразнобой, и одна точка была бы ровно посередине между ними.
+  // Площадка по глубине двоих джиннов: от −15 до −4, середина −9.5.
+  g.add(box(12.4, 0.4, 12.4, M.stone, cx, FLOOR_Y + 0.2, cz - 9.5));
+  // Молния и кольца — ПОД САМИМИ ДЖИННАМИ, а не по всей площадке.
+  // Замер: джинны встают в (0, −15) и (0, −4) — на одной оси, расстояние 11.
+  // Молния в третьей точке была бы ни под кем.
+  for (const dz of [-15, -4]) {
+    g.add(box(0.3, 3.4, 0.3, M.gold, cx, FLOOR_Y + 1.9, cz + dz, 8));
+    g.add(cyl(1.1, 0.14, 1.1, M.gold, cx, FLOOR_Y + 0.5, cz + dz, 12));
+    cols.push({ x: cx, z: cz + dz, r: 1.4 });
+  }
+  // Сундуки башни: по данным 4
+  const местаСундуков: [number, number][] = [
+    [cx - 5.4, cz - 13.4],
+    [cx + 5.4, cz - 13.4],
+    [cx - 5.4, cz - 5.6],
+    [cx + 5.4, cz - 5.6],
+  ];
+  for (const [px, pz] of местаСундуков) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  return cols;
+}
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
   const n = Math.hypot(s.lx ?? 0, s.lz ?? 0) || 1;
@@ -1368,6 +1528,8 @@ caravanserai: furnishCaravanserai,
     hanza: furnishHanza,
     catacombs: furnishCatacombs,
     palace_dungeon: furnishPalaceDungeon,
+    khorasan_caves: furnishKhorasanCaves,
+    caucasus_fort: furnishCaucasusFort,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

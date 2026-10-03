@@ -193,6 +193,28 @@ export const INTERIORS: Record<string, InteriorDef> = {
     spawnX: 4836, spawnZ: 4009.5,
     doorX: -160, doorZ: 240, exitX: -160, exitZ: 244,
   },
+
+  // Пещеры Хорасана: подземелье с зонами по замеру.
+  // Слот 20, cx = 4000 + 20 * 44 = 4880. Комната 0 «Вход в Пещеру»
+  // получает зону z = +7.5, комната 1 «Зал Вечного Огня» — z = −7.5,
+  // и арззанг встаёт у дальней стены в z = −15.
+  khorasan_caves: {
+    id: 'khorasan_caves', roomCx: 4880, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    // Спавн у входа в пещеру: входная комната у этого края зала.
+    spawnX: 4880, spawnZ: 4012.5,
+    doorX: 780, doorZ: -620, exitX: 780, exitZ: -616,
+  },
+
+  // Крепость Кавказа: подземелье с зонами по замеру.
+  // Слот 21, cx = 4000 + 21 * 44 = 4924. Ворота получают зону z = +10,
+  // стена — z = 0, башня бури — z = −10 с джиннами у дальней стены.
+  caucasus_fort: {
+    id: 'caucasus_fort', roomCx: 4924, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,
+    spawnX: 4924, spawnZ: 4013.5,
+    doorX: -880, doorZ: 520, exitX: -880, exitZ: 524,
+  },
+
+
 };
 
 export function getInterior(id: string): InteriorDef | undefined {

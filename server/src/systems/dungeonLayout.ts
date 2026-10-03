@@ -1,4 +1,4 @@
-import { ROOM_HALF } from '../data/interiors';
+import { ROOM_HALF, INTERIORS } from '../data/interiors';
 import type { DungeonDefinition, DungeonRoom } from '../data/dungeons';
 
 /**
@@ -22,6 +22,20 @@ import type { DungeonDefinition, DungeonRoom } from '../data/dungeons';
  *      подземелья, включая те, которых ещё нет.
  */
 export const ROOM_MARGIN = 1;
+
+/**
+ * Зазор у края, где появляется игрок.
+ *
+ * Игрок входит в подземелье и возникает у двери, то есть у края зала. У
+ * входной комнаты монстры вставали вплотную к этому краю: у крепости
+ * четверо стояли в z = 15, а у пещер один демон — ровно в точке спавна.
+ * Причина в данных: у входных комнат размах по глубине 15 единиц, а на
+ * три комнаты зал делится на 32, и места за ними нет. Поэтому у входной
+ * комнаты монстрам запрещено подходить к краю игрока ближе этого зазора.
+ * Правило общее и работает для любого подземелья, включая те, которых ещё
+ * нет; остальные комнаты оно не трогает — игрока там нет.
+ */
+export const SPAWN_GAP = 2;
 
 export interface PlannedMonster {
   monsterId: string;
@@ -115,11 +129,24 @@ export function roomAnchor(room: DungeonRoom): { x: number; z: number } {
  */
 export function planDungeonRooms(def: DungeonDefinition): PlannedRoom[] {
   const count = def.rooms.length;
-  const minX = def.entryX - ROOM_HALF + ROOM_MARGIN;
-  const maxX = def.entryX + ROOM_HALF - ROOM_MARGIN;
-  const minZ = def.entryZ - ROOM_HALF + ROOM_MARGIN;
-  const maxZ = def.entryZ + ROOM_HALF - ROOM_MARGIN;
   return def.rooms.map((room, index) => {
+    // Границы считаются внутри map: зазор игрока зависит от номера комнаты.
+    const minX = def.entryX - ROOM_HALF + ROOM_MARGIN;
+    const maxX = def.entryX + ROOM_HALF - ROOM_MARGIN;
+    const minZ = def.entryZ - ROOM_HALF + ROOM_MARGIN;
+    // У входной комнаты верхняя граница по z — на зазор игрока ближе: игрок
+    // появляется у этого края, и монстр вплотную к нему означает появление
+    // игрока внутри врага.
+    // Граница входной комнаты — это ТОЧКА СПАВНА минус зазор, а не край зала.
+    // От края зала зазор получался неточным: игрок появляется у края, но не
+    // вплотную к нему, и монстры всё равно оказывались в точке появления. У
+    // пещер монстр стоял в z = 12.5 при спавне 12.5.
+    const зал = INTERIORS[def.interiorId];
+    const спавнZ = зал ? зал.spawnZ - def.entryZ : def.entryZ;
+    const maxZ =
+      index === 0 && зал
+        ? def.entryZ + спавнZ - SPAWN_GAP
+        : def.entryZ + ROOM_HALF - ROOM_MARGIN;
     const zoneZ = def.entryZ + zoneShift(index, count);
     const anchor = roomAnchor(room);
     // Сдвиг считается ОТНОСИТЕЛЬНО точки входа. Если сложить entryX ещё раз в
