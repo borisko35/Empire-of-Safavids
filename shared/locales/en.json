@@ -1578,7 +1578,8 @@
     "weaver": "Weaving House and Store",
     "customs": "Customs Yard",
     "shrine": "Zoroastrian Shrine",
-    "tomb": "Sheikh's Tomb"
+    "tomb": "Sheikh's Tomb",
+    "hanza": "Library House"
   },
   "cutscene": {
     "throne_room": "Throne Room",

@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza';
 
 export interface BuildingDef {
   id: string;
@@ -88,6 +88,8 @@ const SPOTS: {
   { id: 'shrine', kind: 'shrine', nameKey: 'buildings.shrine', icon: '🔥', dx: 1200, dz: 1200, ex: 1200, ez: 1204 },
   // Гробница Шеиха. Юго-восток, дальше святилища: своё место, не чужой зал.
   { id: 'tomb', kind: 'tomb', nameKey: 'buildings.tomb', icon: '⚰️', dx: 1400, dz: 1400, ex: 1400, ez: 1404 },
+  // Ханжа: «Рассказ через детали». Северо-восток от святилища.
+  { id: 'hanza', kind: 'hanza', nameKey: 'buildings.hanza', icon: '📜', dx: 1600, dz: 1000, ex: 1600, ez: 1004 },
 ];
 
 export const POCKET_X = 4000;
@@ -135,7 +137,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4748, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4792, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -572,6 +574,85 @@ function furnishTomb(g: THREE.Group, cx: number, cz: number): { x: number; z: nu
     g.add(cyl(0.3, 0.5, 0.3, M.gold, px, FLOOR_Y + 2.4, cz - 7.6, 8));
     cols.push({ x: px, z: cz - 7.6, r: 0.9 });
   }
+  return cols;
+}
+
+// Ханжа: «Рассказ через детали». Столы со свитками, стеллажи, надписи,
+// письма, сломанные весы, следы копыт.
+//
+// Что просили: надписи на персидском, письма, сломанные весы, следы копыт.
+// Здесь построено МЕСТО и детали в нём. ПРАВИЛА ОСМОТРА НЕТ — оно
+// требует системы улик (сбор, вывод, связь с NPC), и это следующий шаг.
+// Мебель замкнута на весы и надписи: это и есть улики, по которым
+// «рассказывают детали».
+function furnishHanza(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Столы со свитками: читают, разбирают письма ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 7.5;
+    g.add(box(2.6, 0.16, 1.5, M.wood, px, FLOOR_Y + 0.92, cz + 3.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, px - 1.1, FLOOR_Y + 0.45, cz + 3.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, px + 1.1, FLOOR_Y + 0.45, cz + 3.5));
+    for (let i = 0; i < 2; i++) {
+      const свиток = cyl(0.12, 0.9, 0.12, M.hay, px - 0.5 + i * 1, FLOOR_Y + 1.03, cz + 3.5, 8);
+      свиток.rotation.x = Math.PI / 2;
+      g.add(свиток);
+    }
+    cols.push({ x: px, z: cz + 3.5, r: 1.7 });
+  }
+  // ── Стеллажи со свитками в два яруса ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 10.4;
+    g.add(box(0.5, 2.6, 3.2, M.wood, px, FLOOR_Y + 1.3, cz - 1));
+    for (const y of [0.8, 1.7]) {
+      for (let i = 0; i < 3; i++) {
+        const свиток = cyl(0.11, 1.1, 0.11, M.hay, px - 0.28, FLOOR_Y + y, cz - 2.2 + i * 1.1, 8);
+        свиток.rotation.x = Math.PI / 2;
+        g.add(свиток);
+      }
+    }
+    cols.push({ x: px, z: cz - 1, r: 1.9 });
+  }
+  // ── Надписи на персидском: плиты на стене, разной высоты ──
+  // Разная высота и наклон — читается как надписи, а не как обои.
+  for (let i = 0; i < 6; i++) {
+    const bx = cx - 6.5 + i * 2.6;
+    const высота = 1.9 + (i % 3) * 0.55;
+    const плита = box(1.9, высота, 0.14, M.stone, bx, FLOOR_Y + высота / 2, cz - 8.4);
+    плита.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.04;
+    g.add(плита);
+  }
+  cols.push({ x: cx, z: cz - 8.4, r: 2.2 });
+  // ── Сломанные весы: чаша, стрелка и гиря на полу ──
+  // Разбиты: чаша лежит на боку, стрелка упала отдельно. Именно сломанные
+  // весы — улика, а не часть обстановки.
+  const чаша = cyl(1.1, 0.3, 1.1, M.gold, cx - 2.6, FLOOR_Y + 0.3, cz + 0.4, 10);
+  чаша.rotation.z = Math.PI / 2;
+  чаша.rotation.x = 0.4;
+  g.add(чаша);
+  g.add(cyl(0.14, 1.2, 0.14, M.iron, cx - 1.2, FLOOR_Y + 0.1, cz + 1.3, 8));
+  g.add(box(1.4, 0.08, 0.22, M.gold, cx - 1.4, FLOOR_Y + 0.08, cz + 1.9));
+  g.add(box(0.5, 0.5, 0.5, M.gold, cx - 3.8, FLOOR_Y + 0.25, cz + 1.6));
+  g.add(box(0.4, 0.4, 0.4, M.gold, cx - 3.2, FLOOR_Y + 0.2, cz + 2.1));
+  cols.push({ x: cx - 2.6, z: cz + 0.9, r: 2 });
+  // ── Следы копыт: отпечатки в пыли, ведут к выходу ──
+  // Раскладываются по дуге, а не по прямой: след ведёт к двери.
+  for (let i = 0; i < 7; i++) {
+    const side = i % 2 === 0 ? 1 : -1;
+    g.add(
+      box(0.34, 0.05, 0.5, M.cream, cx + side * (2.2 + i * 0.3), FLOOR_Y + 0.03, cz + 4.4 + i * 1.15)
+    );
+  }
+  // ── Лампада: в ханже читают при свете ──
+  for (const side of [-1, 1]) {
+    const px = cx + side * 4.4;
+    g.add(cyl(0.12, 1.9, 0.12, M.gold, px, FLOOR_Y + 0.95, cz - 5.6, 8));
+    g.add(cyl(0.34, 0.44, 0.34, M.gold, px, FLOOR_Y + 2.06, cz - 5.6, 8));
+    cols.push({ x: px, z: cz - 5.6, r: 0.9 });
+  }
+  // ── Ящик с письмами ──
+  g.add(box(1.3, 0.8, 0.9, M.wood, cx + 5.2, FLOOR_Y + 0.4, cz - 6.2));
+  cols.push({ x: cx + 5.2, z: cz - 6.2, r: 1.1 });
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -1109,6 +1190,7 @@ caravanserai: furnishCaravanserai,
     customs: furnishCustoms,
     shrine: furnishShrine,
     tomb: furnishTomb,
+    hanza: furnishHanza,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 
@@ -1221,3 +1303,4 @@ export function createInteriors(scene: THREE.Scene): InteriorsHandle {
     },
   };
 }
+
