@@ -521,22 +521,38 @@ export class CharacterService {
    * расходуется. Раньше она regen'илась одинаково для стоящего, бегущего
    * и плывущего — плыть можно было бесконечно.
    */
-  async regenResources(characterId: string, inWater = false): Promise<{
+  /**
+   * Медленный отдых и расход выносливости онлайн-игроков.
+   *
+   * sprinting — бежал ли игрок в это окно регенерации (5 секунд). Определяется
+   * по измеренной скорости между двумя тиками, а не по словам клиента: иначе
+   подделать можно «не отправляй пакет движения», ровно как с «я не в воде».
+   *
+   * Окно считается целиком: за пять секунд игрок может начать бег и остановиться
+   * посередине, а сервер знает только две точки. Точную картину ведёт клиент, у
+   * которого Shift нажат в каждый момент, здесь же — грубая страховка от
+   * бесплатного бега.
+   */
+  async regenResources(characterId: string, inWater = false, sprinting = false): Promise<{
     hp: number; maxHp: number; mana: number; maxMana: number;
     stamina: number; maxStamina: number; level: number; experience: number; gold: number;
   } | null> {
+    // В воде расход за бег не имеет смысла: там своя, более дорогая строка.
+    const бег = inWater ? false : sprinting === true;
     const row = await this.db.queryOne<Record<string, number>>(
       `UPDATE characters SET
          hp      = LEAST(max_hp,      hp + GREATEST(1, FLOOR(max_hp * 0.012) * 5)),
          mana    = LEAST(max_mana,    mana + GREATEST(1, FLOOR(max_mana * 0.02) * 5)),
          stamina = CASE WHEN $2::boolean
                         THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $3) * 5))
+                        WHEN $4::boolean
+                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $5) * 5))
                         ELSE LEAST(max_stamina, stamina + GREATEST(1, FLOOR(max_stamina * 0.04) * 5))
                    END,
          updated_at = NOW()
        WHERE id = $1
        RETURNING hp, max_hp, mana, max_mana, stamina, max_stamina, level, experience, gold`,
-      [characterId, inWater, STAMINA.SWIM_DRAIN_PER_5S]
+      [characterId, inWater, STAMINA.SWIM_DRAIN_PER_5S, бег, STAMINA.SPRINT_DRAIN_PER_5S]
     );
     if (!row) return null;
     return {

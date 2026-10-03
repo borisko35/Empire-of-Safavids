@@ -342,6 +342,19 @@ export class World3D {
     this.localGear = gear;
   }
 
+  /**
+   * Бежит ли игрок прямо сейчас.
+   *
+   * Повторяет те же условия, что и выбор скорости в кадре: без Shift, без
+   * «присесть» и без воды бега нет, а при нулевой выносливости бег
+   * выключен. Иначе полоса убывала бы, когда игрок стоит, и не убывала бы,
+   * когда он действительно бежит.
+   */
+  isSprinting(): boolean {
+    if (!this.sprintAllowed || !this.me || this.crouch || this.swimming) return false;
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+  }
+
   /** Время замаха в секундах: из данных оружия, делённое на скорость стойки. */
   private swingSeconds(): number {
     const оружие = this.localGear?.swingSeconds ?? ЗАМАХ_ПУСТЫМИ_РУКАМИ;

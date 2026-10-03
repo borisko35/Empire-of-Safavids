@@ -45,7 +45,7 @@ import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
 import {
   SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn,
-  DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType,
+  DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType, STAMINA,
 } from '../../../shared/constants';
 // Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
 // то же самое. Расхождение двух копий уже стоило бага с дверями.
@@ -212,6 +212,11 @@ export class GameSocketHandler {
   // Откат держал только клиент, поэтому правкой клиента можно было слать
   // по 30 ударов в секунду - лимит пакетов (30/с) это пропускал.
   private lastAttackAt = new Map<string, number>();
+  /**
+   * Позиция игрока на прошлом тике регенерации и время: по ним считается,
+   * бежал ли он, чтобы выносливость за бег нельзя было получить бесплатно.
+   */
+  private lastRegenPos = new Map<string, { x: number; z: number; at: number }>();
   // Скакун: characterId -> { mountId, speed } — последняя известная серверу
   // скорость. Кэш, а не источник истины: истина в character_mounts, но
   // античит спрашивает скорость на каждом пакете движения (десятки в
@@ -543,6 +548,37 @@ export class GameSocketHandler {
     socket.emit(SERVER_EVENTS.RESOURCES, { gold: всего });
   }
 
+  /**
+   * Бежал ли игрок между прошлым и этим тиком регенерации.
+   *
+   * Сравнивается средняя скорость, а не отдельный шаг: окно пять секунд, шагов
+   * за него десятки, и одна покачивающаяся пара соседних точек ничего бы не
+   * сказала. Порог стоит между ходьбой и бегом (STAMINA.SPRINT_SPEED_MIN),
+   * поэтому обычный шаг бегом не считается, а езда верхом обрабатывается
+   * отдельно и пока не тратит выносливость.
+   *
+   * Первый тик после входа ответа не даёт: сравнивать не с чем, и платить за
+   * бег, которого ещё не было, нечестно.
+   */
+  private бежалЗаОкно(
+    characterId: string,
+    pos: { x: number; z: number } | null,
+    inWater: boolean
+  ): boolean {
+    if (!pos || inWater) {
+      this.lastRegenPos.delete(characterId);
+      return false;
+    }
+    const теперь = Date.now();
+    const прошлая = this.lastRegenPos.get(characterId);
+    this.lastRegenPos.set(characterId, { x: pos.x, z: pos.z, at: теперь });
+    if (!прошлая) return false;
+    const секунды = (теперь - прошлая.at) / 1000;
+    if (секунды <= 0) return false;
+    const расстояние = Math.hypot(pos.x - прошлая.x, pos.z - прошлая.z);
+    return расстояние / секунды > STAMINA.SPRINT_SPEED_MIN;
+  }
+
   /** Медленная регенерация hp/маны/стамины онлайн-игроков + синк состояния */
   private async regenTick(): Promise<void> {
     for (const socket of this.activePlayers.values()) {
@@ -558,7 +594,9 @@ export class GameSocketHandler {
         const pos = await this.redis.getPlayerPosition(socket.characterId).catch(() => null) as
           { x: number; z: number } | null;
         const inWater = !!pos && isDeepWater(pos.x, pos.z);
-        const res = await this.characterService.regenResources(socket.characterId, inWater);
+        // Бежал ли игрок в это окно: скорость между прошлым тиком и этим.
+        const бежал = this.бежалЗаОкно(socket.characterId, pos, inWater);
+        const res = await this.characterService.regenResources(socket.characterId, inWater, бежал);
         if (res) socket.emit(SERVER_EVENTS.RESOURCES, res);
         // ТУТ БЫЛА ПУСТАЯ ТАБЛИЦА РЕЙТИНГА. LeaderboardService.updateStats
         // не вызывался НИ ОТКУДА: единственный INSERT INTO leaderboard во

@@ -2317,9 +2317,17 @@ function loop(now: number): void {
     p.x = me.pos.x; p.z = me.pos.z;
   }
   const swimming = world3d?.isSwimming ?? false;
+  // Три взаимоисключающих ветки: вода, бег, суша. Раньше их было две, и при
+  // спринте на суше выполнялась вторая — то есть выносливость не только не
+  // тратилась, но и полностью восстанавливалась, а удержание Shift было
+  // бесплатным: от монстров можно было убегать вечно.
   if (swimming) {
     const drain = STAMINA.SWIM_DRAIN_PER_SEC * (1 - (world3d?.waterStaminaSave ?? 0));
     session.stamina = Math.max(0, session.stamina - session.maxStamina * drain * dt);
+  } else if (world3d?.isSprinting()) {
+    // Дно равно нулю: пока полоса не кончилась, спринт невозможен, и при
+    // удержании Shift игра честно ждёт отдыха вместо отрицательной полоски.
+    session.stamina = Math.max(0, session.stamina - session.maxStamina * STAMINA.SPRINT_DRAIN_PER_SEC * dt);
   } else {
     const rate = session.stamina < session.maxStamina * 0.6
       ? STAMINA.LAND_REGEN_PER_SEC
