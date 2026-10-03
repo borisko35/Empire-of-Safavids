@@ -640,7 +640,8 @@
     "invalid_state": "Daxil olma sorğusu köhnəlib. Yenidən cəhd edin",
     "provider_error": "Xarici xidmət vasitəsilə daxil olmaq mümkün olmadı",
     "name_taken": "Bu ad artıq başqa oyunçu tərəfindən tutulub",
-    "quest_karma_mismatch": "Belə bir iş yalnız qaranlıq karması olanlara verilir"
+    "quest_karma_too_high": "Bu iş qaranlıq karması olanlar üçündür",
+    "quest_karma_too_low": "Sənə hələ bu cür işi verməyəcək qədər etibar etmirlər"
   },
   "panels": {
     "character": "Personaj",

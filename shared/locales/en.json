@@ -640,7 +640,8 @@
     "invalid_state": "Sign-in request expired. Please try again",
     "provider_error": "Could not sign in with the external service",
     "name_taken": "This name is already taken by another player",
-    "quest_karma_mismatch": "Such a job is given only to those with dark karma"
+    "quest_karma_too_high": "This job is for those with dark karma",
+    "quest_karma_too_low": "You are not yet trusted enough for such a job"
   },
   "panels": {
     "character": "Character",

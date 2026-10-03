@@ -38,7 +38,7 @@ export interface CompletedQuestInfo {
 
 export type AcceptQuestResult =
   | { ok: true }
-  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_karma_mismatch' | 'quest_already_completed' | 'character_not_found' };
+  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_karma_too_high' | 'quest_karma_too_low' | 'quest_already_completed' | 'character_not_found' };
 
 export class QuestService {
   private db = DatabaseService.getInstance();
@@ -92,9 +92,17 @@ export class QuestService {
     // Личный квест по тёмной карме. Условие есть и в списке доступных, но
     // там оно фильтр, а здесь — правило: иначе квест можно взять ручным
     // запросом, минуя список.
-    if (def.requiresKarmaAtMost !== undefined) {
+    if (def.requiresKarmaAtMost !== undefined || def.requiresKarmaAtLeast !== undefined) {
       const карма = await this.characters.getKarma(characterId);
-      if (карма > def.requiresKarmaAtMost) return { ok: false, code: 'quest_karma_mismatch' };
+      // Два разных отказа, а не один: «заказ слишком чистый для тебя» и
+      // «тебе ещё не доверяют» — противоположные вещи, и игрок должен
+      // понимать, что именно его не пускает.
+      if (def.requiresKarmaAtMost !== undefined && карма > def.requiresKarmaAtMost) {
+        return { ok: false, code: 'quest_karma_too_high' };
+      }
+      if (def.requiresKarmaAtLeast !== undefined && карма < def.requiresKarmaAtLeast) {
+        return { ok: false, code: 'quest_karma_too_low' };
+      }
     }
 
     const state = await this.getState(characterId);

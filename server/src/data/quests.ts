@@ -55,6 +55,14 @@ export interface QuestDefinition {
    * поля с незаполненным смыслом в данных не заводим.
    */
   requiresKarmaAtMost?: number;
+  /**
+   * Светлая ветка: квест доступен только если карма НЕ НИЖЕ этого числа.
+   *
+   * Обратная сторона тёмного условия: добрым и святым адресованы другие
+   * заказы, и выдавать их красному нельзя — он их и не выполнит так, как
+   * их ждут.
+   */
+  requiresKarmaAtLeast?: number;
   prerequisites: string[];  // id предыдущих квестов
   objectives: QuestObjectiveDef[];
   rewards: QuestRewardDef;
@@ -74,6 +82,14 @@ export interface QuestDefinition {
  * проверка укажет на расхождение, а не промолчит.
  */
 export const PERSONAL_KARMA_MAX = -2001;
+
+/**
+ * Граница светлой ветки: 1000 и выше — это «добрый» и выше.
+ *
+ * Намерена по getKarmaStatus: `karma >= 1000` — уже добрый. Проверка сверяет
+ * это число со статусом так же, как тёмную границу.
+ */
+export const PERSONAL_KARMA_GOOD_MIN = 1000;
 
 export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
 
@@ -116,6 +132,44 @@ export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
     repeatable: false,
   },
 
+
+  // ── Личные квесты: светлая ветка ─────────────────────────────────────
+  // Их даёт старец в Тебризе. Тот же город, что и у охотника, и та же работа —
+  // только по другой причине: добрым её доверяют, красному платят.
+  'personal_101_wolves': {
+    id: 'personal_101_wolves',
+    title: 'Wolves at the Fence',
+    titleRu: 'Волки у загона',
+    description: 'Старец говорит просто: волки выбирали деревню дважды, а стража смотрит в другую сторону. Дрова, скотина и дети — всё это волкам, и других доводов у них нет.',
+    type: 'personal',
+    minLevel: 4,
+    requiresKarmaAtLeast: PERSONAL_KARMA_GOOD_MIN,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_personal_wolves', type: 'kill', description: 'Перебить волков у деревни', target: 'mob_wolf', required: 8, optional: false },
+    ],
+    rewards: { experience: 450, gold: 120, items: [] },
+    npcGiver: 'npc_village_elder',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
+  },
+  'personal_102_trail': {
+    id: 'personal_102_trail',
+    title: 'The Trail',
+    titleRu: 'След',
+    description: 'Старец не верит в случайность: волков звали. На дороге нашлись следы дозорных бандитов — и тех, кто их оставлял, лучше встретить раньше, чем они придут снова.',
+    type: 'personal',
+    minLevel: 8,
+    requiresKarmaAtLeast: PERSONAL_KARMA_GOOD_MIN,
+    prerequisites: ['personal_101_wolves'],
+    objectives: [
+      { id: 'obj_personal_scouts', type: 'kill', description: 'Снять дозорных бандитов с дороги', target: 'mob_bandit_scout', required: 5, optional: false },
+    ],
+    rewards: { experience: 950, gold: 350, items: [] },
+    npcGiver: 'npc_village_elder',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
+  },
 
   // ── ОСНОВНОЙ СЮЖЕТ ──────────────────────────────────────────────
   'main_001_awakening': {
@@ -1032,6 +1086,10 @@ export function getAvailableQuests(
     // Личный квест по тёмной карме: добрым он не адресован.
     if (q.requiresKarmaAtMost !== undefined) {
       if (karma === undefined || karma > q.requiresKarmaAtMost) return false;
+    }
+    // Светлая ветка: та же проверка с другой стороны.
+    if (q.requiresKarmaAtLeast !== undefined) {
+      if (karma === undefined || karma < q.requiresKarmaAtLeast) return false;
     }
     return true;
   });
