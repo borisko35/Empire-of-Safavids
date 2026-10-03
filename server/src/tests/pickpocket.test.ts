@@ -210,8 +210,11 @@ describe('Кража: подключена с обеих сторон', () => {
 
   it('сервер не верит присланным координатам', () => {
     const socket = читать('server/src/socket/GameSocketHandler.ts');
-    must(/stealthState\.get\(/.test(socket), 'сервер не берёт позицию из кеша движений');
-    must(/stealthState\.set\(/.test(socket), 'кеш позиции не наполняется');
+    // stealthStates - общий кеш (server/src/systems/StealthStates.ts), а не
+    // приватная карта сокета: с прошлого шага его читает ещё и тик стражи.
+    // Проверка ищет обращение к кешу, а не конкретное поле.
+    must(/stealthStates\.get\(/.test(socket), 'сервер не берёт позицию из кеша движений');
+    must(/stealthStates\.set\(/.test(socket), 'кеш позиции не наполняется');
     const обработчик = socket.slice(
       socket.indexOf('private async handleSteal'),
       socket.indexOf('private async regenTick')

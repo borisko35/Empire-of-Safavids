@@ -1181,7 +1181,13 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number; debuff?: { id: string; kind: string; durationMs: number } | null }) => {
+  socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number; debuff?: { id: string; kind: string; durationMs: number } | null;
+    /** Удар стража, а не монстра */
+    guardStrike?: boolean;
+    /** Имя стража для подписи, чтобы игрок знал, кто ударил */
+    guardName?: string;
+    /** Изменение кармы за удар. Минус - город загоняет тёмного глубже */
+    karmaDelta?: number }) => {
     session.hp = r.hp;
     session.maxHp = r.maxHp;
     if (world && me) {
@@ -1199,6 +1205,25 @@ function wireSocket(): void {
       } else {
         world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
         audio.hit();
+        // Удар стража: кроме урона уезжает карма, и без этой строки игрок
+        // видел бы минус 60 и не понимал бы, за что. Имя стража и потеря
+        // кармы показываются в тот же миг, что и урон, а не отдельным
+        // сообщением: тот же приём, что с иконкой эффекта. Отдельный пакет
+        // пришёл бы на секунду позже и потерялся бы в серии ударов.
+        if (r.guardStrike) {
+          const карма = Math.abs(Number(r.karmaDelta ?? 0));
+          if (карма > 0) {
+            world.addFloater(
+              me.pos.x,
+              me.pos.z - 2,
+              t('stealth.strike_karma').replace('{karma}', String(карма)),
+              '#b58ad6'
+            );
+          }
+          if (r.guardName) {
+            toast(t('stealth.strike').replace('{name}', r.guardName), 'error');
+          }
+        }
         // Эффект приезжает вместе с ударом, а не отдельным пакетом:
         // иконка должна появиться в тот же миг, что и число урона.
         // Отдельное сообщение пришло бы на секунду позже и затерялось бы

@@ -1637,6 +1637,8 @@
     "document_far": "Too far from the desk: come right up to it",
     "document_loud": "Too loud — crouch to take it unnoticed",
     "document_seen": "The guard spotted you at the desk. Get out of sight",
-    "document_done": "You already have the dossiers — there is nothing left to take"
+    "document_done": "You already have the dossiers — there is nothing left to take",
+    "strike": "{name} is hitting you",
+    "strike_karma": "Karma: −{karma}"
   }
 }

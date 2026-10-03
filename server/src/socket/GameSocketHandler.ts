@@ -27,6 +27,7 @@ import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
+import { StealthStates } from '../systems/StealthStates';
 import { skillsService } from '../services/SkillsService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
 import { professionOf } from '../services/ProfessionService';
@@ -161,8 +162,12 @@ export class GameSocketHandler {
    * приносит позицию - иначе игрок сказал бы серверу «я в 4 единицах от
    * торговца», находясь в порту. Позиция и приседание берутся из уже проверенного
    * античитом пакета движения, а не из нового недоверенного поля.
+   *
+   * Теперь это общий StealthStates, а не приватная карта: приседание нужно ещё
+   * и тику стражи в GameLoop, а удар стража должен приходить по времени, а не по
+   * пакетам движения - у стоящего игрока их нет.
    */
-  private stealthState = new Map<string, { x: number; z: number; crouch: boolean }>();
+  private stealthStates = StealthStates.getInstance();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
@@ -429,7 +434,7 @@ export class GameSocketHandler {
 
     // Без пакета движения сервер не знает, где игрок. Молча не выходим:
     // игрок должен понимать, почему попытка не сработала.
-    const где = this.stealthState.get(characterId);
+    const где = this.stealthStates.get(characterId);
     if (!где) {
       socket.emit(SOCKET_EVENTS.DOCUMENT_RESULT, { ok: false, reason: 'unknown' });
       return;
@@ -492,7 +497,7 @@ export class GameSocketHandler {
 
     // Без пакета движения сервер не знает, где игрок. Молча не выходим:
     // клиент должен понимать, почему попытка не сработала.
-    const где = this.stealthState.get(characterId);
+    const где = this.stealthStates.get(characterId);
     if (!где) {
       socket.emit(SOCKET_EVENTS.STEAL_RESULT, { ok: false, reason: 'unknown' });
       return;
@@ -676,6 +681,14 @@ export class GameSocketHandler {
               isBlocked: Boolean(msg.isBlocked),
               hp: Number(msg.hp),
               maxHp: Number(msg.maxHp),
+              // Удар стража. Без этих трёх полей клиент показал бы только
+              // число урона: игрок не понял бы, кто ударил и почему у него
+              // уехала карма. Само событие приходит тем же каналом, что и
+              // удар монстра - отдельный канал ради одного поля заставил бы
+              // подписываться на вторую ветку в двух местах.
+              guardStrike: Boolean(msg.guardStrike),
+              guardName: msg.guardName ? String(msg.guardName) : '',
+              karmaDelta: Number(msg.karmaDelta ?? 0),
             });
           }
           this.io.to(room).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
@@ -1095,7 +1108,7 @@ export class GameSocketHandler {
     const былЗамечен = this.spottedGuards.get(characterId) ?? null;
     // Шаг 3: запоминаем, где игрок и присел ли он, по тому же пакету, который
     // уже прошёл античит. Событие кражи координат не приносит.
-    this.stealthState.set(characterId, {
+    this.stealthStates.set(characterId, {
       x: data.position.x,
       z: data.position.z,
       crouch: data.crouch === true,
@@ -2645,7 +2658,7 @@ export class GameSocketHandler {
     }
 
     // Состояние для правила берём из проверенного античитом пакета движения.
-    const где = this.stealthState.get(characterId);
+    const где = this.stealthStates.get(characterId);
     // Золото берём из существующего getCharacterById: отдельного getGold в
     // проекте нет, а Character уже несёт поле gold.
     const золото = (await this.characterService.getCharacterById(characterId).catch(() => null))?.gold ?? 0;
@@ -2801,6 +2814,11 @@ export class GameSocketHandler {
     // Задержки чата тоже: иначе карта росла бы на каждого зашедшего игрока
     // и держала в памяти его id до перезапуска сервера
     this.chatLastSent.delete(socket.characterId);
+    // Скрытность: без этого карта помнила бы каждого зашедшего игрока до
+    // перезапуска. И то, кого страж уже заметил, - иначе вернувшийся игрок
+    // считал бы себя заметным, пока не пришлёт следующий пакет движения.
+    this.stealthStates.cleanup(socket.characterId);
+    this.spottedGuards.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
     // Состояние смерти здесь НЕ снимаем: страховочный таймер обязан

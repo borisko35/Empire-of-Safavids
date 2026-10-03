@@ -189,6 +189,9 @@ describe('События сервера доходят до клиента', () 
       'dungeon.completed',
       'dungeon.completed_generic',
       'karma.status_changed',
+      // Удар стража: клиент показывает имя стража и потерю кармы
+      'stealth.strike',
+      'stealth.strike_karma',
       'world_event.boss_started',
       'world_event.boss_defeated',
       // Партия, аукцион, баунти, админские действия

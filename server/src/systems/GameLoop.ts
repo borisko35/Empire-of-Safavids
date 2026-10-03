@@ -8,9 +8,10 @@
 import { Region } from '../types/game.types';
 import { SpawnSystem } from './SpawnSystem';
 import { TargetPlayer } from './AISystem';
-import { KarmaSystem, isNpcHostile } from './KarmaSystem';
-import { WorldTimeSystem } from './WorldTimeSystem';
+import { KarmaSystem, isNpcHostile, isGuardTarget } from './KarmaSystem';
+import { WorldTimeSystem, WEATHER_EFFECTS } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
+import { StealthStates } from './StealthStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
 import { SiegeSystem } from './SiegeSystem';
@@ -26,6 +27,7 @@ import { DebuffService } from '../services/DebuffService';
 import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
+import { GUARD_POSTS, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -54,6 +56,16 @@ export class GameLoop {
   private defenseStates = DefenseStates.getInstance();
   private equipment = EquipmentCache.getInstance();
   private auction = new AuctionService();
+  private stealthStates = StealthStates.getInstance();
+  /**
+   * Когда игрока последний раз ударил страж: characterId -> миллисекунды.
+   *
+   * Кулдаун держится на игрока, а не на посте: постов в зоне может быть
+   * несколько (два стражника у ворот стоят в 7 единицах друг от друга), и
+   * кулдаун на каждом дал бы два удара за раз. Здесь он один на всех стражей
+   * сразу - ровно столько, сколько согласовано с владельцем.
+   */
+  private guardLastStrike = new Map<string, number>();
   private worldEventBroadcaster: ((payload: Record<string, unknown>) => void) | null = null;
   private dailyTaskService = new DailyTaskService();
 
@@ -225,6 +237,15 @@ export class GameLoop {
       }
     }
 
+    // Кого в принципе бьёт стража. Карта остаётся пустой, если база
+    // недоступна, - тогда стражи просто не бьют никого.
+    //
+    // Отдельная карта, а не флаг на TargetPlayer: там уже лежит npcHostile, и
+    // две разные карты стоят одного лишнего поля в горячем пути. Читается из
+    // той же строки кармы, что и враждебность монстров, - второго запроса в
+    // базу не появляется.
+    const guardTargetById = new Map<string, boolean>();
+
     // Реальный HP и карма одним запросом: ИИ не должен таргетить павших, а
     // враждебность берётся из кармы. Отдельный запрос на карму означал бы
     // ещё один обход базы на каждом тике (тик идёт раз в 200 мс).
@@ -240,6 +261,14 @@ export class GameLoop {
       const hostileById = new Map(
         rows.map(r => [r.id, isNpcHostile(Number(r.karma ?? 0))]),
       );
+      // Поле guardAttack было объявлено в таблице последствий у красного и
+      // изгоя и не читалось НИГДЕ: город обещал наказание тёмному игроку, а
+      // наказывать было некому. Теперь его читает isGuardTarget - вторая
+      // дверь в ту же таблицу, рядом с isNpcHostile. Таблица читается только
+      // изнутри KarmaSystem, и это проверяет karmaNpcHostile.
+      for (const r of rows) {
+        guardTargetById.set(r.id, isGuardTarget(Number(r.karma ?? 0)));
+      }
       for (const players of nearbyPlayers.values()) {
         for (let i = players.length - 1; i >= 0; i--) {
           const hp = hpById.get(players[i].id) ?? 0;
@@ -382,8 +411,133 @@ export class GameLoop {
           : null,
       }).catch(() => {});
     }
+
+    // Стража. Отдельным проходом, а не внутри разбора атак монстров: удар
+    // стража идёт по своему кулдауну, а не по тику чужого монстра, и попадать
+    // в разбор атак значило бы ждать, когда какой-нибудь монстр решит ударить.
+    await this.tickGuards(nearbyPlayers, guardTargetById);
     } catch (error) {
       logger.error('[GameLoop] tickAI error:', error);
+    }
+  }
+
+  /**
+   * Стража бьёт тёмных.
+   *
+   * ЧТО БЫЛО. Поле guardAttack в таблице последствий кармы было объявлено у
+   * рангов «красный» и «изгой» и не читалось нигде: стражи умели только
+   * замечать игрока (шаг 1-3 стелса в shared/stealth.ts). То есть город
+   * обещал наказание тёмному игроку, а наказывать было некому.
+   *
+   * ЧТО ТЕПЕРЬ. Того, кого страж видит и достаёт, он бьёт: 60 урона раз в 2
+   * секунды и минус 100 кармы за удар - решение владельца, числа лежат в
+   * GUARD_STRIKE, чтобы правило читалось и проверялось одним местом.
+   *
+   * ПОЧЕМУ ЗДЕЛЬКО, А НЕ В СОКЕТ-ОБРАБОТЧИКЕ. Удар должен приходить по времени.
+   * Считали бы мы его в пакете движения, стоящий у поста игрок не получил бы
+   * ни одного удара: стоя он пакетов не шлёт. Тик ИИ идёт раз в 2 секунды, и
+   * GUARD_STRIKE.COOLDOWN_MS с ним совпадает.
+   *
+   * ПОЧЕМУ ОДИН УДАР ЗА ЦИКЛ. Постов рядом может быть несколько: два
+   * стражника у ворот стоят в 7 единицах друг от друга. Кулдаун держится на
+   * игрока (guardLastStrike), а не на посте, иначе под двумя стражами прилетело
+   * бы вдвое больше договорённого.
+   */
+  private async tickGuards(
+    nearbyPlayers: Map<string, TargetPlayer[]>,
+    guardTargetById: Map<string, boolean>,
+  ): Promise<void> {
+    if (!guardTargetById.size) return;
+
+    const теперь = Date.now();
+    // Ночь и погода — те же, что при обнаружении в сокет-обработчике, из
+    // того же источника. Если бы тик считал иначе, игрок был бы «невидим»
+    // клиенту и «видим» серверу, и страж бил бы того, кого не бьют по экрану.
+    const время = this.getWorldTime();
+    const ctx = {
+      night: nightFactor(время.timeOfDay),
+      visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
+    };
+
+    for (const [ключ, игроки] of nearbyPlayers) {
+      if (!игроки.length) continue;
+      for (const игрок of игроки) {
+        if (guardTargetById.get(игрок.id) !== true) continue;
+
+        // Кулдаун на игрока: стражей рядом может быть несколько.
+        const прошлый = this.guardLastStrike.get(игрок.id) ?? 0;
+        if (теперь - прошлый < GUARD_STRIKE.COOLDOWN_MS) continue;
+
+        // Приседание знает только сокет-обработчик: пакет движения - единственный
+        // источник, которому можно верить (и он уже прошёл античит).
+        const скрытность = this.stealthStates.get(игрок.id);
+        const пост = strikingGuard(
+          игрок.position,
+          GUARD_POSTS,
+          { crouch: скрытность?.crouch === true, ...ctx },
+          теперь,
+        );
+        if (!пост) continue;
+
+        // Кулдаун ставим ДО похода в базу: если запрос упадёт, игрок всё равно
+        // не должен получить серию ударов в следующем тике.
+        this.guardLastStrike.set(игрок.id, теперь);
+
+        // Ключ nearbyPlayers устроен как «шард:регион». Регион нужен системе
+        // кармы для её правила PvP-зон, а шард - каналу публикации.
+        const двоеточие = ключ.indexOf(':');
+        const шард = ключ.slice(0, двоеточие);
+        const регион = ключ.slice(двоеточие + 1);
+
+        // Урон считается так же, как у монстра: сырое число минус защита цели.
+        // Защита из выносливости и брони - то же, что в monsterDamage.
+        const жертва = await this.characters.getCharacterById(игрок.id).catch(() => null);
+        if (!жертва) continue;
+        const статы = await this.equipment.getStats(игрок.id);
+        const защита = жертва.stats.endurance * 0.75 + статы.endurance * 0.75;
+
+        // Активная защита игрока работает и здесь: уклонение отменяет удар
+        // целиком, а вместе с ним и карму - за что не ударили, то и не берут.
+        const множитель = this.defenseStates.getIncomingMultiplier(игрок.id);
+        const уклонён = множитель === 0;
+        const урон = уклонён
+          ? 0
+          : Math.max(1, Math.round(Math.max(3, GUARD_STRIKE.DAMAGE - защита) * множитель));
+
+        const применён = await this.characters.applyDamage(игрок.id, урон).catch(() => null);
+        if (!применён) continue;
+        if (применён.died) DungeonService.getInstance().recordDeath(игрок.id);
+
+        if (!уклонён) {
+          // Регион нужен системе кармы для её правила PvP-зон; берём его из
+          // ключа nearbyPlayers, а не из данных монстра.
+          await this.karmaSystem
+            .applyKarmaEvent(игрок.id, 'guard_strike', регион)
+            .catch((e) => logger.error('[GameLoop] карма за удар стража не применена:', e));
+        }
+
+        // Тем же каналом, что и удар монстра: клиент рисует число по позиции
+        // самого игрока, поэтому отдельный канал ради трёх полей заставил бы
+        // подписываться на вторую ветку в двух местах.
+        await this.redis.publish(
+          REDIS_CHANNELS.REGION_MONSTER_HIT(шард, регион),
+          {
+            characterId: игрок.id,
+            instanceId: пост.id,
+            skillId: null,
+            damage: урон,
+            hp: применён.hp,
+            maxHp: применён.maxHp,
+            isDodged: уклонён,
+            isBlocked: !уклонён && множитель < 1,
+            died: применён.died,
+            debuff: null,
+            guardStrike: true,
+            guardName: пост.nameRu,
+            karmaDelta: уклонён ? 0 : GUARD_STRIKE.KARMA,
+          },
+        ).catch(() => {});
+      }
     }
   }
 

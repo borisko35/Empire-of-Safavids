@@ -1637,6 +1637,8 @@
     "document_far": "Masadan uzaqsan: yaxınlaş",
     "document_loud": "Çox ucuz — səssiz götürmək üçün əyləş",
     "document_seen": "Qarəvul səni masada gördü. Görüşdən çıx",
-    "document_done": "Dönələr artıq səndədir — ikinci dəfə götürməyə bir şey yoxdur"
+    "document_done": "Dönələr artıq səndədir — ikinci dəfə götürməyə bir şey yoxdur",
+    "strike": "{name} səni vurur",
+    "strike_karma": "Karma: −{karma}"
   }
 }

@@ -15,11 +15,12 @@ export interface KarmaEvent {
        | 'bounty_kill'   // Убийство игрока с наградой
        | 'npc_kill'      // Убийство NPC-стражника
        | 'quest_good'    // Выполнение доброго квеста
-       | 'quest_evil';   // Выполнение злого квеста
+       | 'quest_evil'    // Выполнение злого квеста
+       | 'guard_strike'; // Удар стража по тёмному игроку
   delta: number;
 }
 
-const KARMA_EVENTS: Record<KarmaEvent['type'], number> = {
+export const KARMA_EVENTS: Record<KarmaEvent['type'], number> = {
   pk_kill:    -300,
   pk_kill_red: +100,
   pvp_kill:   +10,
@@ -27,6 +28,11 @@ const KARMA_EVENTS: Record<KarmaEvent['type'], number> = {
   npc_kill:   -50,
   quest_good: +100,
   quest_evil: -150,
+  // Удар стража. Раньше поле guardAttack в таблице последствий было объявлено
+  // у красного и изгоя и не читалось нигде: город обещал наказание, а наказывать
+  // было некому. Теперь читает его GameLoop, а число взято из
+  // GUARD_STRIKE.KARMA в shared/stealth.ts - проверка guardStrike сверяет их.
+  guard_strike: -100,
 };
 
 export type KarmaStatus = 'saint' | 'good' | 'neutral' | 'chaotic' | 'red' | 'outlaw';
@@ -68,6 +74,22 @@ export const KARMA_PENALTIES: Record<KarmaStatus, {
  */
 export function isNpcHostile(karma: number): boolean {
   return KARMA_PENALTIES[getKarmaStatus(karma)].npcHostile;
+}
+
+/**
+ * Бьёт ли такого персонажа стража.
+ *
+ * Истина у «красного» и «изгоя»: в таблице последствий у них guardAttack, и
+ * только у них. Поле было объявлено и не читалось нигде, покаGameLoop не
+ * начал звать эту функцию.
+ *
+ * Вторая дверь в ту же таблицу рядом с isNpcHostile, а не чтение таблицы из
+ * GameLoop: читать KARMA_PENALTIES из игрового цикла запрещено проверкой
+ * karmaNpcHostile («таблица последствий читается в одном месте»), и правильно -
+ * пороги ранга должны читаться из одного файла.
+ */
+export function isGuardTarget(karma: number): boolean {
+  return KARMA_PENALTIES[getKarmaStatus(karma)].guardAttack;
 }
 
 
