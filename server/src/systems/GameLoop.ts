@@ -295,6 +295,61 @@ export class GameLoop {
       // await: тик не должен ждать счётчик.
       if (applied.died) DungeonService.getInstance().recordDeath(target.id);
 
+      // Площадь элитных и боссов: урон по всем игрокам в радиусе способности.
+      // Решение владельца — обычные монстры бьют выбранную цель, группа
+      // страдает только от боссов и элитных. Иначе обычный разбойник снимал
+      // пати, а у «Землетрясения» (радиус 50) и бури Симурга (40) не было бы
+      // смысла вовсе.
+      //
+      // Центр — цель, а не сам монстр: удар накрывает то место, куда бьют.
+      // Эффект (замедление, яд, оглушение) остаётся только на цели: применять
+      // его по всей группе — отдельное решение владельца.
+      const радиусПлощади = this.monsterAoeRadius(atk);
+      if (радиусПлощади > 0) {
+        const список = nearbyPlayers.get(`${atk.shardId}:${atk.region}`) ?? [];
+        for (const сосед of список) {
+          if (сосед.id === target.id) continue;
+          const расстояние = Math.hypot(
+            сосед.position.x - target.position.x,
+            сосед.position.z - target.position.z
+          );
+          if (расстояние > радиусПлощади) continue;
+
+          // У каждого своя защита и своя реакция: уклонение и блок считаются
+          // отдельно, иначе площадь была бы сильнее любого одиночного удара.
+          const жертва = await this.characters.getCharacterById(сосед.id).catch(() => null);
+          if (!жертва) continue;
+          const статы = await this.equipment.getStats(сосед.id);
+          const защита = жертва.stats.endurance * 0.75 + статы.endurance * 0.75;
+          const множитель = this.defenseStates.getIncomingMultiplier(сосед.id);
+          const уклонён = множитель === 0;
+          const уронСоседа = Math.max(
+            уклонён ? 0 : 1,
+            Math.floor(this.monsterDamage(atk, защита) * множитель)
+          );
+          if (уклонён || уронСоседа <= 0) continue;
+          const применён = await this.characters.applyDamage(сосед.id, уронСоседа).catch(() => null);
+          if (!применён) continue;
+          if (применён.died) DungeonService.getInstance().recordDeath(сосед.id);
+          await this.redis.publish(
+            REDIS_CHANNELS.REGION_MONSTER_HIT(atk.shardId, atk.region),
+            {
+              characterId: сосед.id,
+              instanceId: atk.instanceId,
+              skillId: atk.skillId ?? null,
+              damage: уронСоседа,
+              hp: применён.hp,
+              maxHp: применён.maxHp,
+              isDodged: false,
+              isBlocked: множитель < 1,
+              died: применён.died,
+              debuff: null,
+              aoeSplash: true,
+            }
+          ).catch(() => {});
+        }
+      }
+
       // Эффект из данных монстра. Раньше `effect` и `effectDuration` были
       // объявлены у одиннадцати способностей и не читались нигде: монстр
       // бил числом и забывал, что у него написано. «Землетрясение» с
@@ -330,6 +385,25 @@ export class GameLoop {
     } catch (error) {
       logger.error('[GameLoop] tickAI error:', error);
     }
+  }
+
+  /**
+   * Радиус площади монстра — и ноль, если площадью он бить не должен.
+   *
+   * Правило владельца: площадью бьют только элитные и боссы. Обычный монстр
+   * бьёт выбранную цель, чтобы группа не снималась случайным разбойником.
+   * Возвращается ноль, а не радиус: ноль означает «свой круг не трогаем», и
+   * шаг площади просто не выполняется.
+   */
+  private monsterAoeRadius(atk: { skillId?: string; instanceId: string }): number {
+    if (!atk.skillId) return 0;
+    const ctx = this.spawnSystem.getAI().getContext(atk.instanceId);
+    if (!ctx) return 0;
+    const тип = ctx.definition.type;
+    if (тип !== 'elite' && тип !== 'boss' && тип !== 'world_boss') return 0;
+    const skill = ctx.definition.skills?.find(s => s.id === atk.skillId);
+    if (!skill?.aoe || !skill.aoeRadius) return 0;
+    return skill.aoeRadius;
   }
 
   /**
