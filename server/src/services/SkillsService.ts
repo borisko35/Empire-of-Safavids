@@ -326,7 +326,15 @@ export class SkillsService {
       for (const r of rows) {
         const def = SKILLS.find(s => s.id === r.skill_id);
         if (!def?.passive) continue;
-        damage *= def.passive.damage;
+        // Поле passive.damage записано как ДОЛЯ надбавки (0.15 = «+15%»),
+        // поэтому к единице прибавляется единица, а не сама доля.
+        //
+        // Раньше здесь стояло damage *= def.passive.damage, и «Аламы» не
+        // увеличивали урон, а уменьшали его в семь раз: дервиш с этим
+        // навыком бил на 15 процентов вместо 115. Досягаемость рядом
+        // записана множителем (1.25) и умножается напрямую — это другое
+        // поле, его трогать не надо.
+        damage *= 1 + def.passive.damage;
         reach *= def.passive.reach;
       }
     } catch {

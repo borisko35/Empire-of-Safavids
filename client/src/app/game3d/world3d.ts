@@ -177,9 +177,19 @@ export class World3D {
   private lastTap = new Map<string, number>();
   /** Два нажатия этой клавиши за меньше, чем столько, считаются рывком */
   private static readonly DOUBLE_TAP_MS = 260;
-  /** Скорость рывка по осям мира; гаснет линейно до нуля */
-  private dodgeVx = 0;
-  private dodgeVz = 0;
+  /**
+   * Рывок: точка старта, момент старта и единичное направление.
+   *
+   * Движение считается аналитически (смещение = v*t минус v*t²/2), а не
+   * складыванием шагов по кадрам: складывание давало 2.26 метра на 30 кадрах
+   * и 1.75 на 144, то есть на слабом компьютере игрока кидало вдвое дальше.
+   */
+  private dodgeStartAt = 0;
+  private dodgeT = 0;
+  private dodgeOx = 0;
+  private dodgeOz = 0;
+  private dodgeDx = 0;
+  private dodgeDz = 0;
   private dodgeUntil = 0;
 
   // Служебное
@@ -647,10 +657,20 @@ export class World3D {
     const dz = ix !== 0 || iz !== 0 ? iz : Math.cos(this.yaw);
     const len = Math.hypot(dx, dz) || 1;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-    // Тот же поворот, что и у ходьбы: ix/iz задаются в осях камеры
-    this.dodgeVx += ((dx / len) * cos - (dz / len) * sin) * DODGE_SPEED;
-    this.dodgeVz += (-(dx / len) * sin - (dz / len) * cos) * DODGE_SPEED;
-    this.dodgeUntil = Date.now() + DODGE_TIME_MS;
+    // Тот же поворот, что и у ходьбы: ix/iz задаются в осях камеры.
+    // Раньше тут стояло «+=», то есть два рывка подряд складывали скорость:
+    // второй удар уносил вдвое дальше первого.
+    this.dodgeDx = (dx / len) * cos - (dz / len) * sin;
+    this.dodgeDz = -(dx / len) * sin - (dz / len) * cos;
+    // Точка старта берётся у живого игрока: без него (выгрузка сцены) рывок
+    // считать не от чего, и проверка бежит дальше с нулевым смещением.
+    if (this.me) {
+      this.dodgeOx = this.me.pos.x;
+      this.dodgeOz = this.me.pos.z;
+    }
+    this.dodgeStartAt = Date.now();
+    this.dodgeT = 0;
+    this.dodgeUntil = this.dodgeStartAt + DODGE_TIME_MS;
     audio.whoosh();
   }
 
@@ -1144,8 +1164,13 @@ export class World3D {
       : this.crouch ? CROUCH_SPEED : shifting ? landRun : landWalk)
       * (wading ? wadeMult : 1);
     // Направление камеры в мире (нужно и для поворота рига ниже)
+    // Пока идёт рывок, ходьба не применяется: рывок идёт отдельным
+    // перемещением, а не добавкой к бегу. Иначе пик скорости становится
+    // DODGE_SPEED + RUN_SPEED = 22.6 при пределе анти-чита 15.6, и честный
+    // рывок объявляется читерством. Проверяется числами в dodgeFeel.test.ts.
+    const бежитРывок = Date.now() < this.dodgeUntil && (this.dodgeDx !== 0 || this.dodgeDz !== 0);
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-    if (len > 0) {
+    if (len > 0 && !бежитРывок) {
       ix /= len; iz /= len;
       const wx = ix * cos - iz * sin;
       const wz = -ix * sin - iz * cos;
@@ -1166,20 +1191,27 @@ export class World3D {
     // Скорость гаснет линейно до конца рывка. Рывок применяется и без
     // нажатых клавиш, поэтому движение считается не «ходьба плюс рывок»,
     // а отдельным смещением поверх.
-    if (Date.now() < this.dodgeUntil && (this.dodgeVx !== 0 || this.dodgeVz !== 0)) {
-      me.pos.x += this.dodgeVx * dt;
-      me.pos.z += this.dodgeVz * dt;
-      const fall = 1 - Math.min(1, (this.dodgeUntil - Date.now()) / DODGE_TIME_MS);
-      this.dodgeVx *= Math.max(0, fall);
-      this.dodgeVz *= Math.max(0, fall);
+    if (бежитРывок) {
+      // Путь рывка по прошедшей доле времени: p(t) = v*T*(t - t²/2).
+      // За кадр берётся РАЗНОСТЬ пути, а не прибавление шага, поэтому длина
+      // одинакова при 30 и при 144 кадрах: ровно v*T/2 = 1.65 метра.
+      const t = Math.min(1, Math.max(0, (Date.now() - this.dodgeStartAt) / DODGE_TIME_MS));
+      const путь = (доля: number): number =>
+        DODGE_SPEED * (DODGE_TIME_MS / 1000) * (доля - (доля * доля) / 2);
+      const смещение = путь(t) - путь(this.dodgeT);
+      this.dodgeT = t;
+      me.pos.x = this.dodgeOx + this.dodgeDx * смещение;
+      me.pos.z = this.dodgeOz + this.dodgeDz * смещение;
       if (!this.interiors.isInside()) {
         me.pos.x = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.x));
         me.pos.z = Math.min(WORLD_HALF - 30, Math.max(-WORLD_HALF + 30, me.pos.z));
       }
+      // Для анимации нужна мгновенная скорость — производная пути: v*(1 - t).
+      const скорость = DODGE_SPEED * (1 - t);
       this.lastDir = {
-        x: this.dodgeVx,
+        x: this.dodgeDx * скорость,
         y: 0,
-        z: this.dodgeVz,
+        z: this.dodgeDz * скорость,
       };
     }
 

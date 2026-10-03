@@ -146,7 +146,48 @@ export class CombatService {
    * как законный урон в 1.25 раза больше базы - и на трёхсотом ударе
    * сработал бы порог. Поэтому база считается тем же способом, что и урон.
    */
-  getBaseDamageWithWeapon(character: Character, weapon: WeaponProfile | null): number {
-    return this.getBaseDamage(character, { actionType: 'attack' } as CombatAction, weapon);
+  getBaseDamageWithWeapon(
+    character: Character,
+    weapon: WeaponProfile | null,
+    action?: CombatAction
+  ): number {
+    return this.getBaseDamage(
+      character,
+      action ?? ({ actionType: 'attack' } as CombatAction),
+      weapon
+    );
+  }
+
+  /**
+   * База анти-чита: ровно то, из чего считался урон.
+   *
+   * Должна быть тем же самым, что и сам урон, — та же формула, тот же
+   * навык, то же оружие, та же цепочка ударов и та же стойка с профессией.
+   * Иначе анти-чит сравнивает урон с другой величиной и объявляет подделкой
+   * законный удар.
+   *
+   * Что было не так, обе разницы измерены на настоящих таблицах:
+   *
+   *  - оружие не учитывалось: база бралась как удар без оружия (1.0), а
+   *    урон считался с клинком Исмаила (1.4) — в 1.4 раза меньше;
+   *  - навык не учитывалось: база бралась как обычная атака, а множитель
+   *    навыка берётся только при actionType === "skill". «Орлиный взор» с
+   *    множителем 8 давал отношение 8, а с критом, зикром, едой и клинком —
+   *    до 21.84 при пороге MAX_DAMAGE_MULTIPLIER = 15, то есть перманентный
+   *    бан за честный удар.
+   *
+   * После правки отношение честного удара — крит да баффы, около 1.95, а
+   * порог 15 продолжает ловить настоящую подделку.
+   */
+  getBaseDamageForAnticheat(
+    character: Character,
+    action: CombatAction,
+    weapon: WeaponProfile | null = null,
+    comboMultiplier = 1,
+    damageScale = 1
+  ): number {
+    return (
+      this.getBaseDamageWithWeapon(character, weapon, action) * comboMultiplier * damageScale
+    );
   }
 }

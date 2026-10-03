@@ -1678,8 +1678,15 @@ export class GameSocketHandler {
     }
 
     // Анти-чит: слишком большой урон
+    // База анти-чита — ТА ЖЕ формула, что и сам урон, вместе с оружием.
+    // Раньше база бралась без оружия, а урон считался с ним: у клинка Шаха
+    // (1.25) и у захвата «Орлиный взор» (8) отношение урона к базе доходило
+    // до 21 при пороге 15 — и один законный крит объявлялся подделкой урона с
+    // мерой 3, то есть перманентным баном.
     const damageCheck = this.antiCheat.validateDamage(
-      attacker.id, result.damage, this.combatService.getBaseDamageFor(attacker)
+      attacker.id,
+      result.damage,
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale)
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
@@ -1810,8 +1817,15 @@ export class GameSocketHandler {
       return;
     }
 
+    // База анти-чита — ТА ЖЕ формула, что и сам урон, вместе с оружием.
+    // Раньше база бралась без оружия, а урон считался с ним: у клинка Шаха
+    // (1.25) и у захвата «Орлиный взор» (8) отношение урона к базе доходило
+    // до 21 при пороге 15 — и один законный крит объявлялся подделкой урона с
+    // мерой 3, то есть перманентным баном.
     const damageCheck = this.antiCheat.validateDamage(
-      attacker.id, result.damage, this.combatService.getBaseDamageFor(attacker)
+      attacker.id,
+      result.damage,
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale)
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
