@@ -23,6 +23,10 @@ export type CombatErrorCode =
   // Оглушение. Монстры с эффектом stun объявляли его в данных и не
   // применяли: игрок, оглушённый «Тараном» на 2 секунды, продолжал бить
   // как ни в чём не бывало. Теперь удары не проходят.
+  // Проклятие Шеиха. В страхе нельзя бить и колдовать, но можно
+  // защищаться и бежать. Вид эффекта fear существовал давно и на игрока не
+  // влиял: монстры его навешивали, а код его не проверял.
+  | 'afraid'
   | 'stunned';
 
 export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
@@ -44,7 +48,7 @@ export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   unknown_stance: 'world.combat_error_stance_unknown',
   // Активный навык профессии
   skill_not_active: 'world.combat_error_skill_not_active',
-  stunned: 'world.combat_error_stunned',
+  afraid: 'world.combat_error_afraid',  stunned: 'world.combat_error_stunned',
   skill_no_effect: 'world.combat_error_skill_no_effect',
 };
 

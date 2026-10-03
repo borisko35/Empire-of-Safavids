@@ -120,6 +120,24 @@ export class DebuffService {
   }
 
   /** Замедление игрока: 1 - идёт как обычно, меньше 1 - медленнее. */
+  /**
+   * Боится ли персонаж. В страхе нельзя бить и колдовать, но можно
+   * защищаться и бежать.
+   *
+   * Отдельный быстрый запрос вместо active() со сканированием списка — так же,
+   * как isStunned. Страх проверяется на каждом боевом пакете.
+   */
+  async isAfraid(characterId: string): Promise<boolean> {
+    const строка = await this.db
+      .queryOne<{ есть: number }>(
+        `SELECT 1 AS есть FROM character_debuffs
+          WHERE character_id = $1 AND kind = 'fear' AND expires_at > NOW()`,
+        [characterId]
+      )
+      .catch(() => null);
+    return строка !== null && строка !== undefined;
+  }
+
   async speedMultiplier(characterId: string): Promise<number> {
     const rows = await this.db.query<{ magnitude: number }>(
       `SELECT magnitude FROM character_debuffs

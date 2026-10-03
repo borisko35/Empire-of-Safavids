@@ -282,7 +282,8 @@
     "entrance_loud": "Çox ucuz — səssiz keçmək üçün əyləş",
     "entrance_seen": "Səni gördülər. Görüşdən çıx",
     "entrance_gold": "Qaldıraq 50 qızıl tələb edir",
-    "entrance_closed": "Bu giriş bağlıdır"
+    "entrance_closed": "Bu giriş bağlıdır",
+    "combat_error_afraid": "Qorxu: hücum edə bilməzsin"
   },
   "chat": {
     "cooldown": "Çox tez. {sec} saniye gözləyin.",

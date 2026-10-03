@@ -18,6 +18,8 @@ import { logger } from '../utils/logger';
 // Счётчик пройденных подземелий для достижения. Общая таблица
 // leaderboard - там же убийства, парирования, стихи и шахматы.
 import { LeaderboardService } from '../services/LeaderboardService';
+import { DebuffService } from '../services/DebuffService';
+import type { DebuffPlan } from './MonsterEffects';
 import { v4 as uuidv4 } from 'uuid';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -534,6 +536,39 @@ export class DungeonService {
       }));
   }
 
+  /**
+   * Проклятие Шеиха: страх всем, кто выходит из захода.
+   *
+   * Вид fear уже был в системе эффектов, но ни на что не влиял: монстры его
+   * навешивали, а код проверял только stun, slow, bleed и poison. Без этой
+   * функции «проклятие» было бы иконкой.
+   *
+   * Срок — 5 минут. Ровно столько, чтобы страх ощущался, и мало настолько,
+   * чтобы заход можно было повторить: у гробницы один вход в сутки, и
+   * наказание в четверть суток делало бы её непроходимой.
+   *
+   * Повторный навес не кладёт вторую строку, а продлевает срок: ключ таблицы
+   * (персонаж, вид эффекта), ровно как у удара монстра.
+   */
+  private async curseSheikhRun(участники: Iterable<string>, sessionId: string): Promise<void> {
+    const план: DebuffPlan = {
+      debuffId: 'sheikh_curse',
+      kind: 'fear',
+      durationMs: 5 * 60 * 1000,
+      magnitude: 0,
+      tickDamage: 0,
+      tickMs: 0,
+    };
+    const debuffs = new DebuffService();
+    for (const characterId of участники) {
+      await debuffs
+        .apply(characterId, план, `dungeon:${sessionId}`)
+        .catch((e: unknown) => {
+          logger.warn('[Dungeon] не удалось наложить проклятие:', (e as Error).message);
+        });
+    }
+  }
+
   private async claimLoot(sessionId: string): Promise<boolean> {
     const res = await this.db.query<{ id: string }>(
       `UPDATE dungeon_sessions
@@ -546,6 +581,16 @@ export class DungeonService {
   }
   /** Выйти из данжа: монстры сессии убираются из мира */
   async leave(characterId: string): Promise<boolean> {
+    // Проклятие Шеиха на выходе — и при досрочном уходе тоже: владелец
+    // выбрал «все участники захода», а не «те, кто дошёл до босса».
+    // Состав снимается ДО удаления человека из members.
+    const заходПроклятия = this.characterToSession.get(characterId);
+    if (заходПроклятия) {
+      const сессия = this.sessions.get(заходПроклятия);
+      if (сессия && !сессия.completedAt) {
+        await this.curseSheikhRun([...сессия.members], сессия.id);
+      }
+    }
     const sessionId = this.characterToSession.get(characterId);
     if (!sessionId) return false;
     this.characterToSession.delete(characterId);
@@ -621,6 +666,10 @@ export class DungeonService {
       items: def.rewards.guaranteedItems.filter((_, i) => i % народу === порядок),
     }));
 
+    // Проклятие Шеиха: страх всем участникам захода. Навешивается после
+    // раздачи и независимо от неё: добычу можно получить один раз, а страх
+    // должен достаться каждому, кто был в заходе.
+    await this.curseSheikhRun(участники, session.id);
     if (await this.claimLoot(session.id)) {
       for (const доля of получили) {
         await this.characters

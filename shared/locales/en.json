@@ -282,7 +282,8 @@
     "entrance_loud": "Too loud — crouch to sneak through",
     "entrance_seen": "You were spotted. Get out of sight",
     "entrance_gold": "The lever costs 50 gold",
-    "entrance_closed": "This entrance is closed"
+    "entrance_closed": "This entrance is closed",
+    "combat_error_afraid": "Fear: cannot attack"
   },
   "chat": {
     "cooldown": "Too fast. Wait {sec} sec.",

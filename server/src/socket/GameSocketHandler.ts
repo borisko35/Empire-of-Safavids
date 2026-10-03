@@ -1400,6 +1400,18 @@ export class GameSocketHandler {
     // Проверка до всего остального, включая проверку частоты пакетов:
     // иначе игрок под оглушением мог бы слать боевые пакеты и получать
     // отказ по частоте - ошибку про спам вместо ошибки про оглушение.
+    // Проклятие Шеиха: в страхе нельзя бить и колдовать, но можно
+    // защищаться и бежать. Иначе игрок в страхе был бы беспомощен, и это
+    // уже не наказание.
+    const вСтрахе = await this.debuffs.isAfraid(socket.characterId).catch(() => false);
+    if (
+      вСтрахе &&
+      action.actionType !== 'dodge' &&
+      action.actionType !== 'block'
+    ) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'afraid' });
+      return;
+    }
     const оглушён = await this.debuffs.isStunned(socket.characterId).catch(() => false);
     if (оглушён) {
       socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'stunned' });
