@@ -1552,7 +1552,8 @@
     "title": "World Map",
     "city": "City",
     "port": "Port",
-    "enemy": "Enemy"
+    "enemy": "Enemy",
+    "north": "N"
   },
   "equip": {
     "head": "Head",

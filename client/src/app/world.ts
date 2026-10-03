@@ -2320,10 +2320,23 @@ function loop(now: number): void {
   // Мини-карта: игрок в центре, монстры вокруг (раз в ~0.5с)
   if (now - lastMinimapDraw > 500) {
     lastMinimapDraw = now;
-    updateMinimap(
+    // NPC и маршрут передаются так же, как на большой карте: без них зелёные
+    // точки и пунктир до цели на мини-карте не рисуются, хотя код есть.
+    const regionLabel = updateMinimap(
       { x: me.pos.x, z: me.pos.z },
       [...world.monsters.values()].map((m) => ({ x: m.pos.x, z: m.pos.z })),
+      Object.values(NPC_WORLD_POSITIONS).map((n) => ({ x: n.x, z: n.z, nameRu: n.nameRu })),
+      world3d?.getNavRoute() ?? [],
+      // Карта поворачивается по камере: игрок смотрит вверх.
+      world3d?.getCameraPose().yaw ?? 0,
     );
+    // Подпись региона: элемент есть в разметке, но строку в него никто не
+    // писал. Название уже переведено внутри updateMinimap.
+    const regionEl = document.getElementById('minimap-region');
+    if (regionEl) {
+      regionEl.textContent = regionLabel;
+      regionEl.classList.toggle('hidden', !regionLabel);
+    }
   }
 
   // Большая карта (M): перерисовка раз в ~1.5с, пока открыта

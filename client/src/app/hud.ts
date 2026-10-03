@@ -649,7 +649,15 @@ import {
 } from './game3d/terrain';
 import { ZONES } from '../../../shared/constants';
 
-const MINIMAP_RANGE = 180;   // мировых единиц по горизонтали от игрока
+const MINIMAP_RANGE = 180;
+/**
+ * Запас подложки под поворот карты.
+ *
+ * Выборка рельефа рисуется квадратом ровно на холст. При повороте на 45°
+ * этого не хватает: по углам остаётся пустота и биом обрывается. Меньше √2
+ * нельзя — это диагональ квадрата; берём 1,5 с запасом на всякий угол.
+ */
+const MINIMAP_OVERSCAN = 1.5;   // мировых единиц по горизонтали от игрока
 const TERRAIN_PAD = 24;      // запас слоя террейна (мировые единицы)
 const TERRAIN_SNAP = 16;     // шаг привязки слоя к сетке мира
 
@@ -738,9 +746,11 @@ const ROAD_COLOR: [number, number, number] = [138, 122, 90];
 
 function buildTerrainLayer(cx: number, cz: number, sizePx: number): HTMLCanvasElement {
   const snap = (v: number): number => Math.round(v / TERRAIN_SNAP) * TERRAIN_SNAP;
-  const extent = MINIMAP_RANGE * 2 + TERRAIN_PAD * 2;
-  const ox = snap(cx) - MINIMAP_RANGE - TERRAIN_PAD;
-  const oz = snap(cz) - MINIMAP_RANGE - TERRAIN_PAD;
+  // Слой шире видимой части: центр остаётся на игроке, а мир виден с запасом
+  // по сторонам, чтобы поворот не оставлял пустых углов.
+  const extent = (MINIMAP_RANGE * 2 + TERRAIN_PAD * 2) * MINIMAP_OVERSCAN;
+  const ox = snap(cx) - extent / 2;
+  const oz = snap(cz) - extent / 2;
 
   const cvs = document.createElement('canvas');
   cvs.width = sizePx; cvs.height = sizePx;
@@ -818,6 +828,15 @@ export function updateMinimap(
   monsters: { x: number; z: number }[],
   npcs?: { x: number; z: number; nameRu: string }[],
   route?: { x: number; z: number }[],
+  /**
+   * Направление взгляда в радианах: карта поворачивается так, чтобы игрок
+   * смотрел вверх. Ноль — север вверх, как было раньше.
+   *
+   * Угол поворота равен именно yaw камеры, а не отрицанию: при обоих
+   * направлениях ось z на экране смотрит вниз, поэтому вектор взгляда
+   * (−sin yaw, −cos yaw) после поворота на yaw попадает вверх ровно.
+   */
+  yaw = 0,
 ): string {
   const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement | null;
   if (!canvas) return lastMinimapRegion;
@@ -831,20 +850,40 @@ export function updateMinimap(
     y: size / 2 + (wz - me.z) * scale,
   });
 
+  // Поворот вокруг центра холста. Внутри — только то, что принадлежит миру;
+  // стрелка игрока, рамка и метка севера рисуются после restore, иначе они
+  // крутились бы вместе с картой и «смотрели» вбок.
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+  ctx.rotate(yaw);
+  ctx.translate(-size / 2, -size / 2);
+
   // Фон — разноцветный слой биомов (кэш пересобирается при смещении)
   ctx.clearRect(0, 0, size, size);
+  // Слой строится с запасом по пикселям, иначе карта мылила бы: тот же мир
+  // на меньшем числе пикселей.
+  const layerPx = Math.round(size * MINIMAP_OVERSCAN);
+  // Центр слоя — не край, а середина: иначе после расширения пересборка
+  // никогда не срабатывала бы и карта ехала бы за игроком.
   const needLayer =
-    !terrainLayer || terrainSizePx !== size ||
-    Math.abs(me.x - (terrainOrigin.x + MINIMAP_RANGE + TERRAIN_PAD)) > TERRAIN_SNAP * 0.6 ||
-    Math.abs(me.z - (terrainOrigin.z + MINIMAP_RANGE + TERRAIN_PAD)) > TERRAIN_SNAP * 0.6;
-  if (needLayer) buildTerrainLayer(me.x, me.z, size);
+    !terrainLayer || terrainSizePx !== layerPx ||
+    Math.abs(me.x - (terrainOrigin.x + terrainExtent / 2)) > TERRAIN_SNAP * 0.6 ||
+    Math.abs(me.z - (terrainOrigin.z + terrainExtent / 2)) > TERRAIN_SNAP * 0.6;
+  if (needLayer) buildTerrainLayer(me.x, me.z, layerPx);
   if (terrainLayer) {
     const ls = terrainSizePx / terrainExtent;   // px слоя на мировую единицу
     const sw = size * (ls / scale);             // размер выборки в px слоя
+    // Выборка берётся с запасом и кладётся за пределы холста: пиксель на
+    // мировую единицу не меняется (выборка и результат расширяются вместе),
+    // поэтому рельеф не уезжает относительно маркеров — просто по краям
+    // видно чуть больше мира, чем нужно при взгляде прямо.
+    const swЗапас = sw * MINIMAP_OVERSCAN;
+    const выносСлоя = (size * (MINIMAP_OVERSCAN - 1)) / 2;
     // Игрок — точно в центр мини-карты: выборка центрируется на его позиции
-    const sx = (me.x - terrainOrigin.x) * ls - sw / 2;
-    const sy = (me.z - terrainOrigin.z) * ls - sw / 2;
-    ctx.drawImage(terrainLayer, sx, sy, sw, sw, 0, 0, size, size);
+    const sx = (me.x - terrainOrigin.x) * ls - swЗапас / 2;
+    const sy = (me.z - terrainOrigin.z) * ls - swЗапас / 2;
+    ctx.drawImage(terrainLayer, sx, sy, swЗапас, swЗапас,
+      -выносСлоя, -выносСлоя, size * MINIMAP_OVERSCAN, size * MINIMAP_OVERSCAN);
   } else {
     // ТУТ БЫЛА ПРОСТЬ ЗАЛИВКА ТЁМНО-СИНИМ. Это запасной путь на случай, когда
     // слой рельефа не построился, и он выглядел как «миникарта сломалась»:
@@ -952,6 +991,8 @@ export function updateMinimap(
     dot(x, y, '#ff4f3d', 2.6);
   }
 
+  ctx.restore();
+
   // Игрок в центре (стрелка-треугольник)
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#1a1208';
@@ -968,6 +1009,36 @@ export function updateMinimap(
   ctx.strokeStyle = 'rgba(201, 168, 76, 0.55)';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(0.75, 0.75, size - 1.5, size - 1.5);
+
+  // Север: после поворота «вверх» больше не север, и без метки игрок не
+  // понимает, куда идти. Север в мире — это −z; на холст его поворачивает
+  // тот же угол, что и всю карту.
+  const радиусСевера = size / 2 - 9;
+  const nx = size / 2 + Math.sin(yaw) * радиусСевера;
+  const ny = size / 2 - Math.cos(yaw) * радиусСевера;
+  ctx.save();
+  ctx.translate(nx, ny);
+  ctx.rotate(yaw);
+  ctx.fillStyle = '#ffe9b8';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -4.5);
+  ctx.lineTo(-3.2, 3);
+  ctx.lineTo(3.2, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  // Буква не поворачивается: перевёрнутое «С» читается хуже, чем стрелка
+  ctx.font = 'bold 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.lineWidth = 2.5;
+  ctx.strokeText(t('map.north'), nx, ny - 6);
+  ctx.fillStyle = '#ffe9b8';
+  ctx.fillText(t('map.north'), nx, ny - 6);
+  ctx.textAlign = 'left';
 
   if (currentRegion && currentRegion !== lastMinimapRegion) {
     lastMinimapRegion = currentRegion;

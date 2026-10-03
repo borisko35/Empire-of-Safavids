@@ -1552,7 +1552,8 @@
     "title": "Dünya Xəritəsi",
     "city": "Şəhər",
     "port": "Liman",
-    "enemy": "Düşmən"
+    "enemy": "Düşmən",
+    "north": "Ş"
   },
   "equip": {
     "head": "Baş",
