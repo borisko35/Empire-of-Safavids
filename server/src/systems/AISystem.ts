@@ -143,7 +143,7 @@ export class AISystem {
     }
 
     // Смена состояния
-    const newState = this.evaluateState(ctx, hpPercent, nearbyPlayers);
+    const newState = this.evaluateState(ctx, hpPercent, nearbyPlayers, now);
     if (newState !== ctx.state) {
       ctx.state = newState;
       ctx.lastStateChange = now;
@@ -194,7 +194,10 @@ export class AISystem {
   private evaluateState(
     ctx: AIContext,
     hpPercent: number,
-    players: TargetPlayer[]
+    players: TargetPlayer[],
+    // Время нужно ради готовности навыков: состояние боя начинается на
+    // расстоянии того из них, что сейчас не на перезарядке.
+    now: number
   ): AIState {
     const aquatic = ctx.definition.aquatic === true;
     // Подводное существо не отступает на сушу: там ему некуда деваться
@@ -211,7 +214,13 @@ export class AISystem {
         const dist = this.distance(ctx.position, player.position);
         ctx.targetId = topTarget;
         ctx.targetPosition = player.position;
-        return dist <= ctx.definition.attackRange ? 'attack' : 'chase';
+        // Бой начинается на расстоянии самого дальнего ГОТОВОГО навыка, а не
+        // его полной дальности: как только способность ушла на перезарядку,
+        // монстр должен сближаться. Раньше здесь стоял только attackRange (2 у
+        // всех монстров), и дальности навыков в данных не значили ничего:
+        // «Петля» с 8 метров и «Буря Горизонта» с 12 срабатывали вплотную.
+        const дистанцияБоя = Math.max(ctx.definition.attackRange, this.maxSkillRange(ctx, now));
+        return dist <= дистанцияБоя ? 'attack' : 'chase';
       }
     }
 
@@ -253,14 +262,26 @@ export class AISystem {
           : { type: 'idle' };
 
       case 'attack': {
-        // Выбираем навык для использования
-        const skill = this.selectSkill(ctx, now);
+        // Цель нужна для расстояния: навык выбирается под дистанцию, а не
+        // «какой сильнее».
+        const игрок = _players.find(p => p.id === ctx.targetId);
+        const дистанция = игрок
+          ? this.distance(ctx.position, игрок.position)
+          : ctx.definition.attackRange;
+        const skill = this.selectSkill(ctx, now, дистанция);
         if (skill) {
           ctx.lastAttackTime[skill.id] = now;
           return { type: 'skill', targetId: ctx.targetId ?? undefined, skillId: skill.id };
         }
-        // Базовая атака
-        return { type: 'attack', targetId: ctx.targetId ?? undefined };
+        // Базовая атака — только вплотную. Если не достаёт ничем, монстр
+        // сближается, а не бьёт через полкарты: иначе «Петля» на перезарядке
+        // превращалась бы в удар кулаком с двенадцати метров.
+        if (дистанция <= ctx.definition.attackRange) {
+          return { type: 'attack', targetId: ctx.targetId ?? undefined };
+        }
+        return ctx.targetPosition
+          ? { type: 'move', destination: ctx.targetPosition }
+          : { type: 'idle' };
       }
 
       case 'retreat': {
@@ -285,14 +306,45 @@ export class AISystem {
   // ============================================================
   // Выбор навыка
   // ============================================================
-  private selectSkill(ctx: AIContext, now: number) {
-    const available = ctx.definition.skills.filter(skill => {
+  private selectSkill(ctx: AIContext, now: number, расстояние: number) {
+    // Монстр без навыков — законное состояние: запасной удар для такого
+    // монстра собирается отдельно, и раньше выбор навыков просто не
+    // выполнялся. Читаем список один раз и подстраховываемся пустым.
+    const available = (ctx.definition.skills ?? []).filter(skill => {
       const lastUsed = ctx.lastAttackTime[skill.id] ?? 0;
-      return now - lastUsed >= skill.cooldown * 1000;
+      if (now - lastUsed < skill.cooldown * 1000) return false;
+      // Навык, который не достаёт до цели, не применяется: монстр не бьёт
+      // «Петлёй» через полкарты, он подходит ближе.
+      return расстояние <= skill.range;
     });
     if (available.length === 0) return null;
-    // Случайный выбор с весом по урону
+    // Из готовых берётся самый сильный, а не случайный.
+   
+    // Комментарий раньше обещал «случайный выбор с весом по урону», а код был
+    // детерминированным: сортировка по урону и первый элемент. Монстры с
+    // несколькими способностями всегда били самой сильной, а разнообразия не
+    // было. Правка поведения — решение владельца, поэтому здесь описано то,
+    // что происходит на самом деле.
     return available.sort((a, b) => b.damage - a.damage)[0];
+  }
+
+  /**
+   * Дальность самого далёкого навыка, который сейчас не на перезарядке.
+   *
+   * Если готовых навыков нет, возвращается ноль — и монстр идёт вплотную,
+   потому что иначе с навыком на перезарядке он бил бы издалека.
+   */
+  private maxSkillRange(ctx: AIContext, now: number): number {
+    let дальность = 0;
+    // Пустой список — не ошибка: у монстра просто нет способностей, и он
+    // дерётся вплотную базовой атакой.
+    for (const skill of ctx.definition.skills ?? []) {
+      const lastUsed = ctx.lastAttackTime[skill.id] ?? 0;
+      if (now - lastUsed >= skill.cooldown * 1000 && skill.range > дальность) {
+        дальность = skill.range;
+      }
+    }
+    return дальность;
   }
 
   // ============================================================

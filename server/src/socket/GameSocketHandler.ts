@@ -41,6 +41,7 @@ import { ChatModerationService } from '../services/ChatModerationService';
 import { analytics } from '../services/AnalyticsService';
 import { combatLog, buildCombatLogEntry } from '../services/CombatLogService';
 import { Character, CombatAction, Region } from '../types/game.types';
+import type { AISystem } from '../systems/AISystem';
 import { ITEMS_DATABASE } from '../data/items';
 import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
 import {
@@ -1802,6 +1803,68 @@ export class GameSocketHandler {
     }
   }
 
+  /**
+   * «Монстр как виртуальный персонаж» для общей формулы расчёта урона.
+   *
+   * Отдельный метод не для красоты: главная цель и цели площади считаются по
+   * одному и тому же правилу, и две копии одной формулы рано или поздно
+   * разошлись бы в защите или характеристиках.
+   */
+  private monsterAsCharacter(monsterCtx: AIContext): Character {
+    return {
+      id: monsterCtx.instanceId,
+      userId: '',
+      name: monsterCtx.definition.nameRu,
+      class: undefined,
+      level: monsterCtx.definition.level,
+      stats: {
+        strength: monsterCtx.definition.strength,
+        agility: monsterCtx.definition.agility,
+        intelligence: monsterCtx.definition.intelligence,
+        endurance: Math.round(monsterCtx.definition.defense / 1.5),
+        charisma: 0,
+      },
+      hp: monsterCtx.currentHp,
+      maxHp: monsterCtx.maxHp,
+    } as unknown as Character;
+  }
+
+  /**
+   * Кого ещё накрывает удар по площади, кроме выбранной цели.
+   *
+   * Радиус считается вокруг цели — так написано в данных и так решил владелец.
+   * Отбор: живые монстры того же шарда, без подземельных, к которым у игрока нет
+   * доступа (иначе «Дождь Стрел» бил бы по чужой сессии). Порядок — по
+   * расстоянию: ближние приходят первыми, и при обрезании по числу целей страдает
+   * дальний край, а не ближний.
+   */
+  private aoeTargetsFor(
+    attacker: Character,
+    action: CombatAction,
+    центр: AIContext,
+    ai: AISystem
+  ): AIContext[] {
+    if (!action.skillId) return [];
+    const навык = this.combatService.getSkill(attacker.class, action.skillId);
+    if (!навык?.aoe || !навык.aoeRadius) return [];
+
+    const найденные: { ctx: AIContext; расстояние: number }[] = [];
+    for (const ctx of ai.getAllInstances()) {
+      if (ctx.instanceId === центр.instanceId) continue;
+      if (ctx.state === 'dead') continue;
+      if (ctx.shardId !== центр.shardId) continue;
+      const сессия = this.dungeons.getSessionByMonster(ctx.instanceId);
+      if (сессия && !сессия.members.has(attacker.id)) continue;
+      const расстояние = Math.hypot(
+        ctx.position.x - центр.position.x,
+        ctx.position.z - центр.position.z,
+      );
+      if (расстояние > навык.aoeRadius) continue;
+      найденные.push({ ctx, расстояние });
+    }
+    найденные.sort((a, b) => a.расстояние - b.расстояние);
+    return найденные.map((запись) => запись.ctx);
+  }
   /** PvE: урон по монстру через ИИ-контекст, награды при смерти */
   private async combatPlayerVsMonster(
     socket: AuthenticatedSocket,
@@ -1835,23 +1898,8 @@ export class GameSocketHandler {
       return;
     }
 
-    // Монстр как «виртуальный персонаж» для общей формулы расчёта урона
-    const monsterAsCharacter = {
-      id: monsterCtx.instanceId,
-      userId: '',
-      name: monsterCtx.definition.nameRu,
-      class: undefined,
-      level: monsterCtx.definition.level,
-      stats: {
-        strength: monsterCtx.definition.strength,
-        agility: monsterCtx.definition.agility,
-        intelligence: monsterCtx.definition.intelligence,
-        endurance: Math.round(monsterCtx.definition.defense / 1.5),
-        charisma: 0,
-      },
-      hp: monsterCtx.currentHp,
-      maxHp: monsterCtx.maxHp,
-    } as unknown as Character;
+    // Монстр как «виртуальный персонаж» для общей формулы расчёта урона.
+    const monsterAsCharacter = this.monsterAsCharacter(monsterCtx);
 
     // Оружие и стойка передаются так же, как в PvP: без этого «Танец серпа» и
     // «Шахский щит» влияли бы на PvP, но не на PvE, то есть стойка работала бы
@@ -1889,9 +1937,45 @@ export class GameSocketHandler {
     const ai = GameLoop.getInstance().getSpawnSystem().getAI();
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
 
-    // Опыт навыков и профессии за удар по монстру. Тот же путь, что и в PvP:
-    // сумма берётся из нанесённого урона, а не из пакета клиента.
-    this.grantCombatProgress(attacker.id, action, result.damage);
+    // Удар по площади. Раньше поля aoe и aoeRadius были в данных и не читались
+    // никем: «Дождь Стрел» с радиусом 6, «Гнев Шаха» с 5, «Экстаз Света» с 15 и
+    // остальные били ровно одного врага, а ману и перезарядку тратили как за
+    // площадь. Радиус считается вокруг цели; в PvP по площади не бьёт никто,
+    // кроме выбранной цели, — так решил владелец.
+    //
+    // Урон каждой цели площади считается против ЕЁ собственной защиты, поэтому
+    // считаем через тот же calculateDamage отдельно на каждого.
+    const задетые = this.aoeTargetsFor(attacker, action, monsterCtx, ai);
+    let уронПоПлощади = 0;
+    for (const цель of задетые) {
+      const уронЦели = this.combatService.calculateDamage(
+        attacker,
+        this.monsterAsCharacter(цель),
+        action,
+        comboMult,
+        weapon,
+        damageScale,
+      ).damage;
+      уронПоПлощади += уронЦели;
+      const добитый = ai.takeDamage(цель.instanceId, уронЦели, attacker.id);
+      // Отдельный пакет на каждую цель: клиент рисует цифру урона по
+      // идентификатору, поэтому площадь видна без единой правки на клиенте.
+      socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
+        attackerId: attacker.id,
+        targetId: цель.instanceId,
+        damage: уронЦели,
+        isCritical: false,
+        isBlocked: false,
+        isDodged: false,
+        targetHp: Math.max(0, цель.currentHp),
+        targetMaxHp: цель.maxHp,
+      });
+      if (добитый) await this.rewardMonsterKill(socket, attacker, цель);
+    }
+
+    // Опыт навыков и профессии — по всему нанесённому урону, включая площадь:
+    // игрок действительно ударил столько, сколько увидел на экране.
+    this.grantCombatProgress(attacker.id, action, result.damage + уронПоПлощади);
 
     // Журнал боёв по монстрам. Обычный мусор не пишется - решение принимает
     // buildCombatLogEntry, он же возвращает null, если писать нечего.
@@ -1923,175 +2007,191 @@ export class GameSocketHandler {
       attackerId: attacker.id, targetId: monsterCtx.instanceId, actionType: action.actionType, skillId: action.skillId, position: action.position,
     });
 
-    if (died) {
-      // Начисляем награду убийце: опыт, золото и лут из таблицы монстра
-      const def = monsterCtx.definition;
-      // Бонус территории: +10% опыта владельцу за владение ею в этом
-      // регионе. До этого бонусы из TerritoryDefinition.bonuses были
-      // объявлены у всех четырёх территорий и не читались никем.
-      //
-      // Порядок тот же, что у навыка гильдии по золоту: множитель
-      // применяется ДО округления. Округлив базовое число, а потом умножив,
-      // потеряли бы весь бонус на мелком опыте.
-      //
-      // Отказ здесь не глотаем: бонусВида обязан бросить на неизвестном виде,
-      // потому что молчаливый ноль - это опечатка в данных, которая выглядит
-      // как «бонуса нет».
-      let опытБазовый = def.expReward;
-      try {
-        const бонусы = await TerritoryBonuses.getInstance().бонусыИгрока(attacker.id, attacker.region);
-        опытБазовый = Math.floor(опытБазовый * бонусы.exp);
-      } catch (e) {
-        logger.error(`[TerritoryBonuses] бонус не применён, опыт базовый: ${(e as Error).message}`);
-      }
-      const reward = await this.characterService.addExperience(attacker.id, опытБазовый);
-
-      // Репутация за убийство. Раньше не начислялась: addReputation был
-      // написан и не вызывался. Повышение ранга показываем игроку — иначе
-      // единственным признаком того, что репутация растёт, было бы число,
-      // которое игрок и не смотрел бы.
-      // Счётчик убийств для вкладки рейтинга «Убийства». Раньше она
-      // показывала 0 у всех: колонка monsters_killed была в схеме с самого
-      // начала, и её не писал никто. Через increment, потому что тик
-      // регенерации раз в 5 секунд перезаписывает строку рейтинга целиком.
-      void this.leaderboardService.increment(attacker.id, { monstersKilled: 1 })
-        // Счётчик накопился - проверяем достижения. Именно здесь, а не в
-        // панели: «Первая Кровь» выдаётся за первое убийство, а панель
-        // могли и не открыть. Цепочкой, потому что счётчик копится
-        // сложением и на момент проверки уже должен лежать в базе.
-        .then(() => this.achievements.checkAll(attacker.id))
-        .catch((error) => logger.debug('Leaderboard kills skipped:', error));
-      void grantReputation(attacker.id, 'monsterKill', (faction, rankRu) => {
-        socket.emit(SERVER_EVENTS.NOTIFICATION, {
-          type: 'rank_up',
-          titleRu: 'Новый ранг',
-          bodyRu: `${FACTION_NAMES_RU[faction] ?? faction}: ${rankRu}`,
-        });
-      });
-
-      const золотоБазовое = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
-      // Навык гильдии «Удача Торговца»: +3% к золоту с монстров за уровень.
-      // До этого навык был объявлен в data/guilds.ts и не существовал.
-      //
-      // Порядок важен: множитель применяется ДО округления вниз. Если бы
-      // округлили базовое число, а потом умножили, бонус в 3% на мелких
-      // монетах терялся бы целиком, и игрок заплатил бы за навык в пустоту.
-      let золото = золотоБазовое;
-      try {
-        const бонусы = await new GuildService().getBonuses(attacker.id);
-        золото = Math.floor(золотоБазовое * бонусы.gold);
-      } catch {
-        золото = золотоБазовое;
-      }
-      const gold = золото;
-      await this.characterService.addGoldReward(attacker.id, gold).catch(() => {});
-
-      const loot: { itemId: string; nameRu: string; qty: number }[] = [];
-      for (const entry of def.lootTable) {
-        if (Math.random() >= entry.chance) continue;
-        const qty = entry.minQty + Math.floor(Math.random() * (entry.maxQty - entry.minQty + 1));
-        await this.characterService.addItems(attacker.id, [{ itemId: entry.itemId, qty }]).catch(() => {});
-        loot.push({ itemId: entry.itemId, nameRu: ITEMS_DATABASE[entry.itemId]?.nameRu ?? entry.itemId, qty });
-      }
-
-      // Партия: союзники в том же регионе получают 50% опыта
-      await this.sharePartyExperience(attacker, def.expReward).catch((e: unknown) => {
-        logger.debug('Party XP share failed:', e);
-      });
-
-      GameLoop.getInstance().getSpawnSystem().onInstanceDeath(monsterCtx.instanceId);
-
-      // Мировой босс события: объявление победы + награда
-      if (this.worldEvents.isActiveBoss(monsterCtx.instanceId)) {
-        await this.worldEvents.onBossDefeated(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
-          logger.error('World event reward failed:', e);
-        });
-      }
-
-      // Данж: прогресс боссов, завершение с наградой
-      const dungeonDone = await this.dungeons.onMonsterKilled(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
-        logger.debug('Dungeon progress failed:', e);
-        return null;
-      });
-      if (dungeonDone) {
-        socket.emit(SERVER_EVENTS.DUNGEON_COMPLETED, dungeonDone);
-        // Задачи дня: «Рейд в Подземелье». Раньше она висела вечно 0/2 —
-        // updateProgress не вызывался НИ РАЗУ
-        await this.dailyTasks.updateProgress(attacker.id, 'dungeon', 'any').catch((e: unknown) => {
-          logger.debug('Daily task (dungeon) failed:', e);
-        });
-      }
-
-      // Прогресс квестов: kill-цели + завершение смешанных квестов
-      const completedQuests = await this.questService.recordKill(attacker.id, def.id).catch((e: unknown) => {
-        logger.debug('Quest recordKill failed:', e);
-        return [];
-      });
-
-      // Прогресс гильдейских заданий. void, а не await: это горячая точка
-      // (каждый удар каждого игрока), и ожидание запроса в базу за
-      // гильдией поставило бы бой на паузу. Ошибка внутри onKill ловится
-      // и пишется в журнал сама.
-      void guildMissionService.onKill(attacker.id, def.id);
-      // Осада территории гильдии: урон крепости от убийств в её регионе.
-      // void и без await - по той же причине, что и у заданий гильдии выше:
-      // это горячая точка (каждый удар каждого игрока), и ожидание запроса в
-      // базу поставило бы бой на паузу. Если осады в регионе нет, система
-      // возвращается сразу, не обращаясь к базе.
-      void SiegeSystem.getInstance().нанестиУрон(attacker.id, attacker.region)
-        .catch((e: unknown) => {
-          logger.debug('Siege damage failed:', e);
-        });
-      const evaluated = await this.questService.evaluateQuests(attacker.id).catch((e: unknown) => {
-        logger.debug('Quest evaluate failed:', e);
-        return [];
-      });
-      const allCompleted = [...completedQuests, ...evaluated.filter(e => !completedQuests.some(c => c.questId === e.questId))];
-      if (allCompleted.length) {
-        socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: allCompleted });
-        // Задачи дня: «Марафон Квестов». За один раз могло закрыться
-        // несколько квестов, поэтому прибавляем сразу amount
-        await this.dailyTasks
-          .updateProgress(attacker.id, 'quest_complete', 'any', allCompleted.length)
-          .catch((e: unknown) => {
-            logger.debug('Daily task (quest) failed:', e);
-          });
-      }
-
-      // Задачи дня за убийства. Тип монстра известен точно:
-      // 'normal' | 'elite' | 'boss' | 'world_boss'
-      for (const [taskType, target] of [
-        ['kill', 'any'],
-        ['kill_elite', 'elite'],
-        ['kill_boss', 'world_boss'],
-      ] as const) {
-        // Задача «убить элитных» не должна считать обычных, и наоборот
-        if (taskType === 'kill_elite' && def.type !== 'elite') continue;
-        if (taskType === 'kill_boss' && def.type !== 'world_boss') continue;
-        const done = await this.dailyTasks.updateProgress(attacker.id, taskType, target).catch((e: unknown) => {
-          logger.debug(`Daily task (${taskType}) failed:`, e);
-          return null;
-        });
-        if (done?.taskCompleted) {
-          socket.emit(SERVER_EVENTS.DAILY_TASK_COMPLETED, {
-            taskId: done.taskId, gold: done.gold, experience: done.experience, item: done.item,
-          });
-        }
-      }
-
-      await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.serverId ?? 'isfahan', attacker.region), {
-        instanceId: monsterCtx.instanceId,
-        monsterId: def.id,
-        killerId: attacker.id,
-        expReward: def.expReward,
-        gold,
-        loot,
-        leveledUp: reward.leveledUp,
-        newLevel: reward.newLevel,
-      }).catch(() => {});
-    }
+    if (died) await this.rewardMonsterKill(socket, attacker, monsterCtx);
   }
 
+
+  /**
+   * Награда за убийство монстра.
+   *
+   * Отдельный метод не для красоты: удар по площади может убить несколько
+   * монстров сразу, и копия этого блока рядом с шагом площади рано или поздно
+   * разошлась бы с оригиналом — опыт, лут, квесты, задания дня и осада в разных
+   местах.
+   */
+  private async rewardMonsterKill(
+    socket: AuthenticatedSocket,
+    attacker: Character,
+    monsterCtx: AIContext
+  ): Promise<void> {
+    // `def` уже объявляется в перенесённом теле: раньше скрипт добавлял своё
+    // объявление, и компилятор ругался на повтор.
+// Начисляем награду убийце: опыт, золото и лут из таблицы монстра
+    const def = monsterCtx.definition;
+    // Бонус территории: +10% опыта владельцу за владение ею в этом
+    // регионе. До этого бонусы из TerritoryDefinition.bonuses были
+    // объявлены у всех четырёх территорий и не читались никем.
+    //
+    // Порядок тот же, что у навыка гильдии по золоту: множитель
+    // применяется ДО округления. Округлив базовое число, а потом умножив,
+    // потеряли бы весь бонус на мелком опыте.
+    //
+    // Отказ здесь не глотаем: бонусВида обязан бросить на неизвестном виде,
+    // потому что молчаливый ноль - это опечатка в данных, которая выглядит
+    // как «бонуса нет».
+    let опытБазовый = def.expReward;
+    try {
+      const бонусы = await TerritoryBonuses.getInstance().бонусыИгрока(attacker.id, attacker.region);
+      опытБазовый = Math.floor(опытБазовый * бонусы.exp);
+    } catch (e) {
+      logger.error(`[TerritoryBonuses] бонус не применён, опыт базовый: ${(e as Error).message}`);
+    }
+    const reward = await this.characterService.addExperience(attacker.id, опытБазовый);
+
+    // Репутация за убийство. Раньше не начислялась: addReputation был
+    // написан и не вызывался. Повышение ранга показываем игроку — иначе
+    // единственным признаком того, что репутация растёт, было бы число,
+    // которое игрок и не смотрел бы.
+    // Счётчик убийств для вкладки рейтинга «Убийства». Раньше она
+    // показывала 0 у всех: колонка monsters_killed была в схеме с самого
+    // начала, и её не писал никто. Через increment, потому что тик
+    // регенерации раз в 5 секунд перезаписывает строку рейтинга целиком.
+    void this.leaderboardService.increment(attacker.id, { monstersKilled: 1 })
+      // Счётчик накопился - проверяем достижения. Именно здесь, а не в
+      // панели: «Первая Кровь» выдаётся за первое убийство, а панель
+      // могли и не открыть. Цепочкой, потому что счётчик копится
+      // сложением и на момент проверки уже должен лежать в базе.
+      .then(() => this.achievements.checkAll(attacker.id))
+      .catch((error) => logger.debug('Leaderboard kills skipped:', error));
+    void grantReputation(attacker.id, 'monsterKill', (faction, rankRu) => {
+      socket.emit(SERVER_EVENTS.NOTIFICATION, {
+        type: 'rank_up',
+        titleRu: 'Новый ранг',
+        bodyRu: `${FACTION_NAMES_RU[faction] ?? faction}: ${rankRu}`,
+      });
+    });
+
+    const золотоБазовое = def.goldReward.min + Math.floor(Math.random() * (def.goldReward.max - def.goldReward.min + 1));
+    // Навык гильдии «Удача Торговца»: +3% к золоту с монстров за уровень.
+    // До этого навык был объявлен в data/guilds.ts и не существовал.
+    //
+    // Порядок важен: множитель применяется ДО округления вниз. Если бы
+    // округлили базовое число, а потом умножили, бонус в 3% на мелких
+    // монетах терялся бы целиком, и игрок заплатил бы за навык в пустоту.
+    let золото = золотоБазовое;
+    try {
+      const бонусы = await new GuildService().getBonuses(attacker.id);
+      золото = Math.floor(золотоБазовое * бонусы.gold);
+    } catch {
+      золото = золотоБазовое;
+    }
+    const gold = золото;
+    await this.characterService.addGoldReward(attacker.id, gold).catch(() => {});
+
+    const loot: { itemId: string; nameRu: string; qty: number }[] = [];
+    for (const entry of def.lootTable) {
+      if (Math.random() >= entry.chance) continue;
+      const qty = entry.minQty + Math.floor(Math.random() * (entry.maxQty - entry.minQty + 1));
+      await this.characterService.addItems(attacker.id, [{ itemId: entry.itemId, qty }]).catch(() => {});
+      loot.push({ itemId: entry.itemId, nameRu: ITEMS_DATABASE[entry.itemId]?.nameRu ?? entry.itemId, qty });
+    }
+
+    // Партия: союзники в том же регионе получают 50% опыта
+    await this.sharePartyExperience(attacker, def.expReward).catch((e: unknown) => {
+      logger.debug('Party XP share failed:', e);
+    });
+
+    GameLoop.getInstance().getSpawnSystem().onInstanceDeath(monsterCtx.instanceId);
+
+    // Мировой босс события: объявление победы + награда
+    if (this.worldEvents.isActiveBoss(monsterCtx.instanceId)) {
+      await this.worldEvents.onBossDefeated(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
+        logger.error('World event reward failed:', e);
+      });
+    }
+
+    // Данж: прогресс боссов, завершение с наградой
+    const dungeonDone = await this.dungeons.onMonsterKilled(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
+      logger.debug('Dungeon progress failed:', e);
+      return null;
+    });
+    if (dungeonDone) {
+      socket.emit(SERVER_EVENTS.DUNGEON_COMPLETED, dungeonDone);
+      // Задачи дня: «Рейд в Подземелье». Раньше она висела вечно 0/2 —
+      // updateProgress не вызывался НИ РАЗУ
+      await this.dailyTasks.updateProgress(attacker.id, 'dungeon', 'any').catch((e: unknown) => {
+        logger.debug('Daily task (dungeon) failed:', e);
+      });
+    }
+
+    // Прогресс квестов: kill-цели + завершение смешанных квестов
+    const completedQuests = await this.questService.recordKill(attacker.id, def.id).catch((e: unknown) => {
+      logger.debug('Quest recordKill failed:', e);
+      return [];
+    });
+
+    // Прогресс гильдейских заданий. void, а не await: это горячая точка
+    // (каждый удар каждого игрока), и ожидание запроса в базу за
+    // гильдией поставило бы бой на паузу. Ошибка внутри onKill ловится
+    // и пишется в журнал сама.
+    void guildMissionService.onKill(attacker.id, def.id);
+    // Осада территории гильдии: урон крепости от убийств в её регионе.
+    // void и без await - по той же причине, что и у заданий гильдии выше:
+    // это горячая точка (каждый удар каждого игрока), и ожидание запроса в
+    // базу поставило бы бой на паузу. Если осады в регионе нет, система
+    // возвращается сразу, не обращаясь к базе.
+    void SiegeSystem.getInstance().нанестиУрон(attacker.id, attacker.region)
+      .catch((e: unknown) => {
+        logger.debug('Siege damage failed:', e);
+      });
+    const evaluated = await this.questService.evaluateQuests(attacker.id).catch((e: unknown) => {
+      logger.debug('Quest evaluate failed:', e);
+      return [];
+    });
+    const allCompleted = [...completedQuests, ...evaluated.filter(e => !completedQuests.some(c => c.questId === e.questId))];
+    if (allCompleted.length) {
+      socket.emit(SERVER_EVENTS.QUEST_COMPLETED, { quests: allCompleted });
+      // Задачи дня: «Марафон Квестов». За один раз могло закрыться
+      // несколько квестов, поэтому прибавляем сразу amount
+      await this.dailyTasks
+        .updateProgress(attacker.id, 'quest_complete', 'any', allCompleted.length)
+        .catch((e: unknown) => {
+          logger.debug('Daily task (quest) failed:', e);
+        });
+    }
+
+    // Задачи дня за убийства. Тип монстра известен точно:
+    // 'normal' | 'elite' | 'boss' | 'world_boss'
+    for (const [taskType, target] of [
+      ['kill', 'any'],
+      ['kill_elite', 'elite'],
+      ['kill_boss', 'world_boss'],
+    ] as const) {
+      // Задача «убить элитных» не должна считать обычных, и наоборот
+      if (taskType === 'kill_elite' && def.type !== 'elite') continue;
+      if (taskType === 'kill_boss' && def.type !== 'world_boss') continue;
+      const done = await this.dailyTasks.updateProgress(attacker.id, taskType, target).catch((e: unknown) => {
+        logger.debug(`Daily task (${taskType}) failed:`, e);
+        return null;
+      });
+      if (done?.taskCompleted) {
+        socket.emit(SERVER_EVENTS.DAILY_TASK_COMPLETED, {
+          taskId: done.taskId, gold: done.gold, experience: done.experience, item: done.item,
+        });
+      }
+    }
+
+    await this.redis.publish(REDIS_CHANNELS.REGION_MONSTER_KILLED(attacker.serverId ?? 'isfahan', attacker.region), {
+      instanceId: monsterCtx.instanceId,
+      monsterId: def.id,
+      killerId: attacker.id,
+      expReward: def.expReward,
+      gold,
+      loot,
+      leveledUp: reward.leveledUp,
+      newLevel: reward.newLevel,
+    }).catch(() => {});
+  }
   /** Опыт членам партии в том же регионе: 50% от награды за убийство */
   private async sharePartyExperience(attacker: Character, expReward: number): Promise<void> {
     if (expReward <= 0) return;
