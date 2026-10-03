@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { secureMiddleware } from '../middleware/auth';
-import { AuctionService } from '../services/AuctionService';
+import { AuctionService, AuctionError } from '../services/AuctionService';
 import { auctionRateLimiter, apiRateLimiter } from '../middleware/rateLimiter';
 import { CraftingService } from '../services/CraftingService';
 import { DailyTaskService } from '../services/DailyTaskService';
@@ -265,6 +265,11 @@ gameRouter.post('/auction/list', auctionRateLimiter, secureMiddleware, requireCh
       );
       return res.status(201).json({ listing });
     } catch (err) {
+      // Отказ с кодом переводится на клиенте, сумма идёт числом. Раньше сюда
+      // попадала строка по-английски и игрок читал её как есть.
+      if (err instanceof AuctionError) {
+        return res.status(400).json({ error: err.code, ...err.params });
+      }
       return res.status(400).json({ error: (err as Error).message });
     }
   })

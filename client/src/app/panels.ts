@@ -813,6 +813,22 @@ export async function loadAuction(): Promise<void> {
       box.append(failRow);
     }
 
+/**
+     * Что сказать про отказ аукциона.
+     *
+     * Сервер отдаёт код и сумму числом. Раньше он слал английскую строку, и она
+     * показывалась как есть. Неизвестный код показывается обобщённо: молчание
+     * выглядит как зависание, а код — как ошибка в игре.
+     */
+    function auctionErrorMessage(err: unknown): string {
+      const e = err as { error?: string; fee?: number; message?: string };
+      const code = typeof e?.error === 'string' ? e.error : '';
+      if (code === 'auction_no_silver') {
+        return t('auction.no_silver').replace('{fee}', String(e.fee ?? 0));
+      }
+      if (code) return t('auction.failed');
+      return e?.message ?? t('auction.failed');
+    }
     // ── Форма размещения лота: предмет из сумки + цена ──
     try {
       const { items } = await api.inventory(cid());
@@ -854,7 +870,7 @@ export async function loadAuction(): Promise<void> {
             });
             toast(t('auction.listed'), 'success');
             await loadAuction();
-          } catch (err) { toast((err as Error).message, 'error'); }
+          } catch (err) { toast(auctionErrorMessage(err), 'error'); }
         });
         form.append(itemSel, qtyInput, priceInput, submitBtn);
         box.append(form);

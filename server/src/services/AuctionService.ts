@@ -8,7 +8,7 @@ import { NotificationService } from './NotificationService';
 import { grantReputation } from '../systems/ReputationGrants';
 import { logger } from '../utils/logger';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
-import { AUCTION_LISTING_FEE_SILVER } from '../utils/economy';
+import { auctionListingFee } from '../utils/economy';
 import { MAX_INVENTORY_SLOTS } from '../../../shared/constants';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -133,10 +133,48 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
   },
 };
 
+/**
+ * Отказ аукциона с кодом и данными для перевода.
+ *
+ * Раньше отказ летел строкой по-английски прямо в игрока: клиент показывает
+ * err.message дословно, и текст «need 10 Isfahan silver» оказывался на
+ * экране. Теперь код переводится, а сумма приходит числом и подставляется в
+ * надпись через {fee}.
+ */
+export class AuctionError extends Error {
+  constructor(
+    readonly code: string,
+    readonly params: Record<string, string | number> = {},
+    message = code
+  ) {
+    super(message);
+    this.name = 'AuctionError';
+  }
+}
+
 export class AuctionService {
   private db = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
   private notifications = new NotificationService();
+
+  /**
+   * Репутация у «Торговцев Шёлкового пути» — от неё растёт пошлина за лот.
+   *
+   * Ошибка чтения не должна мешать выставить лот: без репутации пошлина
+   * просто базовая, и игрок платит как чужак. Это честнее, чем отказ.
+   */
+  private async merchantsReputation(characterId: string): Promise<number> {
+    try {
+      const row = await this.db.queryOne<{ reputation: number | null }>(
+        `SELECT reputation FROM character_reputation
+         WHERE character_id = $1 AND faction = 'merchants'`,
+        [characterId]
+      );
+      return Number(row?.reputation ?? 0);
+    } catch {
+      return 0;
+    }
+  }
 
   async createListing(
     sellerId: string,
@@ -160,6 +198,10 @@ export class AuctionService {
       createdAt: new Date(),
     };
 
+    // Репутация читается один раз перед транзакцией: пошлина зависит от
+    // ранга, а ранга нет в объекте персонажа, как и кармы.
+    const репутация = await this.merchantsReputation(sellerId);
+
     await this.db.transaction(async (client) => {
       // Эскроу: предмет списывается с продавца при выставлении лота.
       // Без проверки продавец мог выставлять предметы, которых у него нет.
@@ -179,14 +221,20 @@ export class AuctionService {
         [sellerId, itemId, enhancement]
       );
 
-      // Плата за выставление лота — исфаханским серебром (сток валюты).
+      // Плата за лот — исфаханским серебром, и растёт вместе с рангом у
+      // «Торговцев Шёлкового пути». Это и есть обратная сторона репутации:
+      // раньше репутация ничего не стоила, теперь известный торговец платит
+      // за каждый лот больше.
+      const silverFee = auctionListingFee(репутация);
       const fee = await client.query(
         `UPDATE characters SET isfahan_silver = isfahan_silver - $1
          WHERE id = $2 AND isfahan_silver >= $1`,
-        [AUCTION_LISTING_FEE_SILVER, sellerId]
+        [silverFee, sellerId]
       );
       if (fee.rowCount === 0) {
-        throw new Error(`Listing fee: need ${AUCTION_LISTING_FEE_SILVER} Isfahan silver`);
+        // Сумма в сообщении — та, что действительно списана попытались, а не
+        // зашитая константа: игрок должен видеть, сколько не хватило.
+        throw new AuctionError('auction_no_silver', { fee: silverFee });
       }
 
       await client.query(
