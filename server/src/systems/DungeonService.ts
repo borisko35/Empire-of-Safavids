@@ -13,6 +13,7 @@ import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
 import { DatabaseService } from '../services/DatabaseService';
 import { grantReputation } from './ReputationGrants';
+import { planDungeonRooms } from './dungeonLayout';
 import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
 // Счётчик пройденных подземелий для достижения. Общая таблица
@@ -203,24 +204,23 @@ export class DungeonService {
    * заход считался бы выигранным тем, чего на самом деле не было убито.
    */
   private spawnSessionMonsters(session: DungeonSession, def: DungeonDefinition): void {
-    for (const room of def.rooms) {
-      for (const group of room.monsters) {
-        for (const pos of group.positions) {
-          const monsterDef = MONSTERS_DATABASE[group.monsterId];
-          if (!monsterDef) continue;
-          // Позиция комнаты локальная: спавним от точки входа подземелья.
-          // Без сдвига монстры появлялись в (8, 0, 5) — в начале координат,
-          // то есть в центре города, при входе в любой данж.
-          const ctx = this.ai.spawnMonster(
-            monsterDef,
-            { x: def.entryX + pos.x, y: pos.y, z: def.entryZ + pos.z },
-            session.shardId,
-          );
-          session.monsterIds.add(ctx.instanceId);
-          this.monsterToSession.set(ctx.instanceId, session.id);
-          if (room.isBossRoom && room.bossId === group.monsterId) {
-            session.requiredBossIds.add(ctx.instanceId);
-          }
+    for (const planned of planDungeonRooms(def)) {
+      const room = def.rooms[planned.index];
+      for (const monster of planned.monsters) {
+        const monsterDef = MONSTERS_DATABASE[monster.monsterId];
+        if (!monsterDef) continue;
+        // Раскладку считает dungeonLayout: позиции в данных локальны к своей
+        // комнате, и свод всех комнат в одну точку выносил часть монстров за
+        // стену зала. Здесь берём уже готовые координаты.
+        const ctx = this.ai.spawnMonster(
+          monsterDef,
+          { x: monster.x, y: monster.y, z: monster.z },
+          session.shardId,
+        );
+        session.monsterIds.add(ctx.instanceId);
+        this.monsterToSession.set(ctx.instanceId, session.id);
+        if (room.isBossRoom && room.bossId === monster.monsterId) {
+          session.requiredBossIds.add(ctx.instanceId);
         }
       }
     }

@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon';
 
 export interface BuildingDef {
   id: string;
@@ -93,6 +93,8 @@ const SPOTS: {
   // Катакомбы Тебриза: первое подземелье с геометрией. Вход снаружи —
   // это дверь в мире, а комната стоит в кармане рядом.
   { id: 'catacombs', kind: 'catacombs', nameKey: 'buildings.catacombs', icon: '🕳', dx: -520, dz: -340, ex: -520, ez: -336 },
+  // Дворец Сорока Колонн как подземелье: сад с янычарами и тронный зал.
+  { id: 'palace_dungeon', kind: 'palace_dungeon', nameKey: 'buildings.palace_dungeon', icon: '🏛', dx: -160, dz: 240, ex: -160, ez: 244 },
 ];
 
 export const POCKET_X = 4000;
@@ -702,16 +704,20 @@ function furnishCatacombs(g: THREE.Group, cx: number, cz: number): { x: number; 
   cols.push({ x: cx + 3.2, z: cz + 7.6, r: 1 });
   cols.push({ x: cx - 3.2, z: cz + 2.6, r: 1 });
   // ── Зона 3. Тронный зал Рустама ──
-  // Трон У ДАЛЬНЕЙ СТЕНЫ: босс появляется в (0, 0), то есть в центре.
-  // Трон в центре означал бы, что босс стоит внутри трона.
-  g.add(box(3.6, 0.5, 1.6, M.stone, cx, FLOOR_Y + 0.25, cz - 12));
-  g.add(box(2.6, 1.6, 1.2, M.stone, cx, FLOOR_Y + 1.3, cz - 12.4));
-  g.add(box(2.2, 0.24, 0.7, M.red, cx, FLOOR_Y + 2.2, cz - 12.4));
-  cols.push({ x: cx, z: cz - 12, r: 2.2 });
+  // Зона босса по раскладке (systems/dungeonLayout): третья комната получает
+  // z = −10, и Рустам встаёт в её середину — опорной точкой боссовой комнаты
+  // служит сам босс. Трон стоит у дальней стены, в трёх шагах перед ним.
+  // Раньше трон был в (0, −12) и босс появлялся в (0, 0), то есть в середине
+  // зала, в полутора шагах от трона: трон был поставлен по данным о позиции,
+  // а босс — по геометрии, и они не сошлись.
+  g.add(box(3.6, 0.5, 1.6, M.stone, cx, FLOOR_Y + 0.25, cz - 14));
+  g.add(box(2.6, 1.6, 1.2, M.stone, cx, FLOOR_Y + 1.3, cz - 14.4));
+  g.add(box(2.2, 0.24, 0.7, M.red, cx, FLOOR_Y + 2.2, cz - 14.4));
+  cols.push({ x: cx, z: cz - 14, r: 2.2 });
   // Колонны по бокам зала: держат потолок и читаются как зал, а не как зал
   // без опоры.
   for (const side of [-1, 1]) {
-    for (const dz of [-9, -4]) {
+    for (const dz of [-13, -8]) {
       const px = cx + side * 9.5;
       g.add(cyl(0.7, 4.4, 0.7, M.stone, px, FLOOR_Y + 2.2, cz + dz, 10));
       g.add(box(1.6, 0.4, 1.6, M.stone, px, FLOOR_Y + 4.5, cz + dz));
@@ -719,15 +725,15 @@ function furnishCatacombs(g: THREE.Group, cx: number, cz: number): { x: number; 
     }
   }
   // Алтарь у входа в тронный зал
-  g.add(box(1.6, 1.1, 1, M.stone, cx - 5.4, FLOOR_Y + 0.55, cz - 7.4));
-  cols.push({ x: cx - 5.4, z: cz - 7.4, r: 1.2 });
+  g.add(box(1.6, 1.1, 1, M.stone, cx - 5.4, FLOOR_Y + 0.55, cz - 5.4));
+  cols.push({ x: cx - 5.4, z: cz - 5.4, r: 1.2 });
   // Сундуки тронного зала: по данным 3
-  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 6.4, FLOOR_Y + 0.4, cz - 10.4));
-  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 6.4, FLOOR_Y + 0.4, cz - 10.4));
-  g.add(box(1.1, 0.8, 0.8, M.wood, cx, FLOOR_Y + 0.4, cz - 8.6));
-  cols.push({ x: cx - 6.4, z: cz - 10.4, r: 1 });
-  cols.push({ x: cx + 6.4, z: cz - 10.4, r: 1 });
-  cols.push({ x: cx, z: cz - 8.6, r: 1 });
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 6.4, FLOOR_Y + 0.4, cz - 11.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 6.4, FLOOR_Y + 0.4, cz - 11.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx, FLOOR_Y + 0.4, cz - 6.4));
+  cols.push({ x: cx - 6.4, z: cz - 11.4, r: 1 });
+  cols.push({ x: cx + 6.4, z: cz - 11.4, r: 1 });
+  cols.push({ x: cx, z: cz - 6.4, r: 1 });
   // ── Факелы в каждой зоне: подземелье освещается по частям ──
   for (const [px, pz] of [
     [cx - 5.4, cz + 11.6],
@@ -737,6 +743,89 @@ function furnishCatacombs(g: THREE.Group, cx: number, cz: number): { x: number; 
   ] as [number, number][]) {
     g.add(cyl(0.12, 1.8, 0.12, M.iron, px, FLOOR_Y + 0.9, pz, 8));
     g.add(cyl(0.28, 0.4, 0.28, M.fire, px, FLOOR_Y + 1.9, pz, 8));
+    cols.push({ x: px, z: pz, r: 0.7 });
+  }
+  return cols;
+}
+
+// Дворец Сорока Колонн как подземелье: Дворцовый Сад и Тронный Зал.
+//
+// Что просили: сад с янычарами и тронный зал паши. В отличие от катакомб,
+// босс здесь стоит не в центре, а у дальнего края (z = 30 в данных), поэтому
+// трон сдвинут вбок, а не стоит перед боссом.
+function furnishPalaceDungeon(
+  g: THREE.Group,
+  cx: number,
+  cz: number,
+): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Зона 1. Дворцовый Сад: шесть янычаров, два сундука ──
+  // Сад у входа: увитый плющ, фонтан посередине, клумбы по краям.
+  const фонтан = cyl(1.9, 0.6, 1.9, M.stone, cx, FLOOR_Y + 0.3, cz + 8);
+  g.add(фонтан);
+  g.add(cyl(1.4, 0.1, 1.4, M.water, cx, FLOOR_Y + 0.58, cz + 8, 12));
+  cols.push({ x: cx, z: cz + 8, r: 2 });
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const px = cx + side * (8.5 + i * 0.4);
+      const pz = cz + 4.5 + i * 4;
+      g.add(box(1.6, 0.5, 1.6, M.stone, px, FLOOR_Y + 0.25, pz));
+      g.add(cyl(0.5, 1.4, 0.5, M.green, px, FLOOR_Y + 1.1, pz, 8));
+      cols.push({ x: px, z: pz, r: 1.1 });
+    }
+  }
+  // Сундуки сада: по данным 2
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 4.4, FLOOR_Y + 0.4, cz + 11.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 4.4, FLOOR_Y + 0.4, cz + 11.4));
+  cols.push({ x: cx - 4.4, z: cz + 11.4, r: 1 });
+  cols.push({ x: cx + 4.4, z: cz + 11.4, r: 1 });
+  // ── Зона 2. Тронный Зал: паша в (−7.5), трон у дальней стены ──
+  // Тронная зона измерена по раскладке (systems/dungeonLayout): комната 0 (сад)
+  // получает z = +7.5, комната 1 (тронный зал) — z = −7.5, и паша встаёт ровно
+  // в середину своей зоны, потому что опорной точкой боссовой комнаты служит
+  // сам босс. Значит трон ставится у дальней стены, а паша — перед ним.
+  //
+  // Раньше я поставил трон у дверей (z = +12) по догадке, что паша «стоит
+  // почти у дальней стены» — его позиция z = 30 локальна его комнате, и после
+  // раскладки он оказался в середине зала. Трон и босс разошлись.
+  g.add(box(3.4, 0.5, 1.5, M.stone, cx - 6.4, FLOOR_Y + 0.25, cz - 13));
+  g.add(box(2.5, 1.5, 1.1, M.stone, cx - 6.4, FLOOR_Y + 1.25, cz - 13.4));
+  g.add(box(2.1, 0.22, 0.6, M.teal, cx - 6.4, FLOOR_Y + 2.1, cz - 13.4));
+  cols.push({ x: cx - 6.4, z: cz - 13, r: 2 });
+  // Колонны: дворец сорока колонн, и по залу должно стоять два ряда
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const px = cx + side * 9.6;
+      const pz = cz - 4.5 - i * 4.5;
+      g.add(cyl(0.6, 4.2, 0.6, M.cream, px, FLOOR_Y + 2.1, pz, 10));
+      g.add(box(1.4, 0.36, 1.4, M.stone, px, FLOOR_Y + 4.3, pz));
+      cols.push({ x: px, z: pz, r: 0.9 });
+    }
+  }
+  // Кафедра у дальней стены, как раз напротив трона
+  g.add(box(2.2, 1.2, 1.2, M.woodDark, cx + 6.4, FLOOR_Y + 0.6, cz - 13.4));
+  cols.push({ x: cx + 6.4, z: cz - 13.4, r: 1.2 });
+  // Сундуки тронного зала: по данным 5
+  const местаСундуков: [number, number][] = [
+    [cx - 3.6, cz - 10.4],
+    [cx + 3.6, cz - 10.4],
+    [cx - 3.6, cz - 15],
+    [cx + 3.6, cz - 15],
+    [cx, cz - 15],
+  ];
+  for (const [px, pz] of местаСундуков) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  // Светильники в обоих залах
+  for (const [px, pz] of [
+    [cx - 11.4, cz + 9.4],
+    [cx + 11.4, cz + 9.4],
+    [cx - 11.4, cz - 9.4],
+    [cx + 11.4, cz - 9.4],
+  ] as [number, number][]) {
+    g.add(cyl(0.12, 2.1, 0.12, M.iron, px, FLOOR_Y + 1.05, pz, 8));
+    g.add(cyl(0.3, 0.42, 0.3, M.gold, px, FLOOR_Y + 2.2, pz, 8));
     cols.push({ x: px, z: pz, r: 0.7 });
   }
   return cols;
@@ -1278,6 +1367,7 @@ caravanserai: furnishCaravanserai,
     tomb: furnishTomb,
     hanza: furnishHanza,
     catacombs: furnishCatacombs,
+    palace_dungeon: furnishPalaceDungeon,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

@@ -1580,7 +1580,8 @@
     "shrine": "Zoroastrian Shrine",
     "tomb": "Sheikh's Tomb",
     "hanza": "Library House",
-    "catacombs": "Tabriz Catacombs"
+    "catacombs": "Tabriz Catacombs",
+    "palace_dungeon": "Palace of Forty Columns (dungeon)"
   },
   "cutscene": {
     "throne_room": "Throne Room",

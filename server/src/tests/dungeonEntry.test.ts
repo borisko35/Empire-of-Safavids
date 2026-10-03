@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DUNGEONS_DATABASE } from '../data/dungeons';
+import { planDungeonRooms } from '../systems/dungeonLayout';
 import { stripComments } from './helpers/stripCode';
 
 const корень = join(__dirname, '..', '..', '..');
@@ -37,15 +38,33 @@ describe('Точка входа: монстры не появляются в н�
   });
 
   it('спавн идёт от точки входа, а не от нуля', () => {
+    // Якорь теперь на раскладку, а не на строку сложения: спавн берёт готовые
+    // координаты из planDungeonRooms, и требование «в коде есть def.entryX + pos.x»
+    // проверяло бы не то место. Заодно требуем, чтобы сервис нигде не спавнил
+    // по локальной позиции комнаты.
     must(
-      /spawnMonster\([\s\S]{0,220}def\.entryX \+ pos\.x/.test(сервис),
-      'спавн не прибавляет точку входа: монстры снова окажутся в начале координат'
+      /planDungeonRooms\(def\)/.test(сервис),
+      'спавн не берёт раскладку по залу: монстры снова окажутся в начале координат'
     );
-    must(/def\.entryZ \+ pos\.z/.test(сервис), 'по оси z точка входа не прибавляется');
+    must(
+      !/def\.entryX \+ pos\.x/.test(сервис),
+      'сервис всё ещё складывает точку входа с локальной позицией — это старый ' +
+        'способ, который сводил все комнаты подземелья в одну точку'
+    );
     must(
       !/spawnMonster\(monsterDef, pos, session\.shardId\)/.test(сервис),
       'спавн всё ещё идёт по локальной позиции без сдвига'
     );
+    // И поведением: раскладка обязана увести спавн от нуля.
+    const катакомбы = DUNGEONS_DATABASE.dungeon_tabriz_catacombs;
+    const точки = planDungeonRooms(катакомбы).flatMap((к) => к.monsters);
+    must(точки.length > 0, 'раскладка пуста: проверка не видит ни одного монстра');
+    for (const точка of точки) {
+      must(
+        Math.hypot(точка.x, точка.z) > 1000,
+        `монстр в (${точка.x}, ${точка.z}) — это начало координат, то есть центр города`
+      );
+    }
   });
 
   it('точки входа далеко от начала координат', () => {
