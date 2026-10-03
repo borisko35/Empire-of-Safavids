@@ -23,6 +23,12 @@ export interface TargetPlayer {
   hp: number;
   /** В лодке: подводные существа игнорируют таких (см. tick) */
   inBoat?: boolean;
+  /**
+   * Карма враждебна: «красный» и «изгой» пахнут кровью, и монстр замечает их
+   * дальше, чем мирных. Признак считается из кармы в GameLoop по таблице
+   * последствий KARMA_PENALTIES — здесь он уже готовым флагом.
+   */
+  npcHostile?: boolean;
 }
 
 export interface AIContext {
@@ -52,6 +58,15 @@ export interface AIAction {
   skillId?: string;
   destination?: Vector3;
 }
+
+/**
+ * Во сколько раз монстр замечает враждебного игрока дальше мирного.
+ *
+ * Два, а не полтора: при aggroRange 18-20 в мире это 36-40 единиц против
+ * 18-20. Разница заметна, но не превращает лес в место, где на красного
+ * бегут со всего региона. Проверяется числом в karmaNpcHostile.test.ts.
+ */
+export const NPC_HUNT_RANGE_MULTIPLIER = 2;
 
 export class AISystem {
   private contexts = new Map<string, AIContext>();
@@ -118,7 +133,11 @@ export class AISystem {
     for (const player of nearbyPlayers) {
       if (aquatic && (!isDeepWater(player.position.x, player.position.z) || player.inBoat)) continue;
       const dist = this.distance(ctx.position, player.position);
-      if (dist <= ctx.definition.aggroRange && !ctx.aggroTable.has(player.id)) {
+      // Живое последствие кармы: враждебного замечают издалека.
+      const дальность = player.npcHostile
+        ? ctx.definition.aggroRange * NPC_HUNT_RANGE_MULTIPLIER
+        : ctx.definition.aggroRange;
+      if (dist <= дальность && !ctx.aggroTable.has(player.id)) {
         ctx.aggroTable.set(player.id, 0);
       }
     }

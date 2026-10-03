@@ -8,7 +8,7 @@
 import { Region } from '../types/game.types';
 import { SpawnSystem } from './SpawnSystem';
 import { TargetPlayer } from './AISystem';
-import { KarmaSystem } from './KarmaSystem';
+import { KarmaSystem, isNpcHostile } from './KarmaSystem';
 import { WorldTimeSystem } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
 import { DungeonService } from './DungeonService';
@@ -225,15 +225,21 @@ export class GameLoop {
       }
     }
 
-    // Реальный HP одним запросом: ИИ не должен таргетить павших
-    // (заглушка выше — только признак живости, уточняется здесь)
+    // Реальный HP и карма одним запросом: ИИ не должен таргетить павших, а
+    // враждебность берётся из кармы. Отдельный запрос на карму означал бы
+    // ещё один обход базы на каждом тике (тик идёт раз в 200 мс).
     if (allIds.length) {
       const db = DatabaseService.getInstance();
-      const rows = await db.query<{ id: string; hp: number }>(
-        'SELECT id, hp FROM characters WHERE id = ANY($1::uuid[])',
+      const rows = await db.query<{ id: string; hp: number; karma: number | null }>(
+        'SELECT id, hp, karma FROM characters WHERE id = ANY($1::uuid[])',
         [allIds]
       ).catch(() => []);
       const hpById = new Map(rows.map(r => [r.id, Number(r.hp)]));
+      // Карма → признак враждебности по таблице последствий. Пустая карта —
+      // обычное дело при недоступной базе: тогда все просто не враждебны.
+      const hostileById = new Map(
+        rows.map(r => [r.id, isNpcHostile(Number(r.karma ?? 0))]),
+      );
       for (const players of nearbyPlayers.values()) {
         for (let i = players.length - 1; i >= 0; i--) {
           const hp = hpById.get(players[i].id) ?? 0;
@@ -242,6 +248,7 @@ export class GameLoop {
             continue;
           }
           players[i].hp = hp;
+          players[i].npcHostile = hostileById.get(players[i].id) === true;
         }
       }
     }

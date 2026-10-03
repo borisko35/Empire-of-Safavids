@@ -55,6 +55,21 @@ export const KARMA_PENALTIES: Record<KarmaStatus, {
   red:     { nameRu: 'Красный',    canBeAttacked: true,  dropChanceOnDeath: 0.3,  npcHostile: true,  guardAttack: true,  auctionBan: false },
   outlaw:  { nameRu: 'Изгой',     canBeAttacked: true,  dropChanceOnDeath: 0.5,  npcHostile: true,  guardAttack: true,  auctionBan: true  },
 };
+/**
+ * Враждебны ли монстры к такому персонажу.
+ *
+ * Истина у «красного» и «изгоя»: в таблице последствий у них npcHostile, и
+ * монстры замечают их вдвое дальше, чем мирных (см. NPC_HUNT_RANGE_MULTIPLIER
+ * в AISystem).
+ *
+ * Функция, а не пара ссылок в коде: таблица последствий — одно место, где
+ * решено, что значит «красный». Читать её из двух файлов — верный способ
+ * однажды разъехаться по порогам.
+ */
+export function isNpcHostile(karma: number): boolean {
+  return KARMA_PENALTIES[getKarmaStatus(karma)].npcHostile;
+}
+
 
 export const PVP_ZONES: Record<string, { type: PvPZoneType; nameRu: string; karmaOnKill: boolean }> = {
   tabriz:       { type: 'safe',      nameRu: 'Тебриз',          karmaOnKill: true  },
