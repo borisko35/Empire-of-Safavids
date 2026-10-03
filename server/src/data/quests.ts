@@ -4,7 +4,11 @@ import { CharacterClass, Region } from '../types/game.types';
 // Система квестов — Empire of Safavids
 // ============================================================
 
-export type QuestType = 'main' | 'side' | 'guild' | 'daily' | 'world' | 'class';
+/**
+ * personal — личный квест: выдаётся по карме, а не по уровню и региону.
+ * Единственный тип, условие которого — кто ты, а не где ты.
+ */
+export type QuestType = 'main' | 'side' | 'guild' | 'daily' | 'world' | 'class' | 'personal';
 export type QuestStatus = 'locked' | 'available' | 'active' | 'completed' | 'failed';
 export type ObjectiveType = 'kill' | 'collect' | 'talk' | 'explore' | 'escort' | 'craft' | 'trade';
 
@@ -43,6 +47,14 @@ export interface QuestDefinition {
   minLevel: number;
   requiredClass?: CharacterClass;
   requiredRegion?: Region;
+  /**
+   * Тёмная ветка: квест доступен только если карма НЕ ВЫШЕ этого числа.
+   *
+   * Означает «красный или изгой». Для светлой ветки поле можно читать
+   * наоборот — как минимальную карму, но таких квестов пока нет, и лишнего
+   * поля с незаполненным смыслом в данных не заводим.
+   */
+  requiresKarmaAtMost?: number;
   prerequisites: string[];  // id предыдущих квестов
   objectives: QuestObjectiveDef[];
   rewards: QuestRewardDef;
@@ -53,7 +65,57 @@ export interface QuestDefinition {
   repeatCooldown?: number; // часы
 }
 
+/**
+ * Граница «тёмной» кармы: −2001 и ниже — это красный и изгой.
+ *
+ * Число намерино по getKarmaStatus: хаотичным считается карма от −2000,
+ * значит красный начинается с −2001. Проверка сверяет эту константу с
+ * таблицей статусов на всём диапазоне, так что при смене порогов в карме
+ * проверка укажет на расхождение, а не промолчит.
+ */
+export const PERSONAL_KARMA_MAX = -2001;
+
 export const QUESTS_DATABASE: Record<string, QuestDefinition> = {
+
+  // ── Личные квесты по тёмной карме ──────────────────────────────────────
+  // Их даёт охотник: заказы, от которых отказываются остальные. Смысл в том,
+  // что карма — не только наказание (смерть, потеря золота, охота монстров),
+  // но и работа: изгой идёт туда, куда не ходят добрые.
+  'personal_001_dirty_work': {
+    id: 'personal_001_dirty_work',
+    title: 'Dirty Work',
+    titleRu: 'Грязная работа',
+    description: 'Охотник берёт заказы, от которых отказываются остальные. Разбойники на дороге душат торговцев, а ловить их больше некому: закон для таких, как ты, не работает.',
+    type: 'personal',
+    minLevel: 4,
+    requiresKarmaAtMost: PERSONAL_KARMA_MAX,
+    prerequisites: [],
+    objectives: [
+      { id: 'obj_personal_bandits', type: 'kill', description: 'Перебить разбойников на дороге', target: 'mob_road_bandit', required: 10, optional: false, spawnPoints: [{ x: 143, z: 115 }, { x: -80, z: 120 }] },
+    ],
+    rewards: { experience: 400, gold: 150, items: [] },
+    npcGiver: 'npc_tabriz_hunter',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
+  },
+  'personal_002_ledger': {
+    id: 'personal_002_ledger',
+    title: 'The Ledger',
+    titleRu: 'Счёт',
+    description: 'За разбойниками стоит не только они. Охотник хочет имя главаря — а узнать его можно только там, где бандиты держат оплот.',
+    type: 'personal',
+    minLevel: 8,
+    requiresKarmaAtMost: PERSONAL_KARMA_MAX,
+    prerequisites: ['personal_001_dirty_work'],
+    objectives: [
+      { id: 'obj_personal_warriors', type: 'kill', description: 'Сломить бандитский отряд', target: 'mob_bandit_warrior', required: 6, optional: false },
+    ],
+    rewards: { experience: 900, gold: 400, items: [] },
+    npcGiver: 'npc_tabriz_hunter',
+    npcGiverRegion: Region.TABRIZ,
+    repeatable: false,
+  },
+
 
   // ── ОСНОВНОЙ СЮЖЕТ ──────────────────────────────────────────────
   'main_001_awakening': {
@@ -948,12 +1010,29 @@ export function getQuestsByType(type: QuestType): QuestDefinition[] {
   return Object.values(QUESTS_DATABASE).filter(q => q.type === type);
 }
 
-export function getAvailableQuests(level: number, completedIds: string[], characterClass?: CharacterClass): QuestDefinition[] {
+export function getAvailableQuests(
+  level: number,
+  completedIds: string[],
+  characterClass?: CharacterClass,
+  /**
+   * Карма персонажа.
+   *
+   * Нужна личным квестам. Без неё тёмный квест святому либо виден в
+   * списке, либо отклоняется только при попытке взять — и то и другое плохо.
+   * Карму не передали — личные квесты просто не показываются: безопаснее,
+   * чем показать их не тому.
+   */
+  karma?: number,
+): QuestDefinition[] {
   return Object.values(QUESTS_DATABASE).filter(q => {
     if (q.minLevel > level) return false;
     if (q.requiredClass && q.requiredClass !== characterClass) return false;
     if (!q.repeatable && completedIds.includes(q.id)) return false;
     if (q.prerequisites.some(p => !completedIds.includes(p))) return false;
+    // Личный квест по тёмной карме: добрым он не адресован.
+    if (q.requiresKarmaAtMost !== undefined) {
+      if (karma === undefined || karma > q.requiresKarmaAtMost) return false;
+    }
     return true;
   });
 }

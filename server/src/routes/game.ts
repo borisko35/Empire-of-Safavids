@@ -1615,7 +1615,10 @@ gameRouter.get('/quests', secureMiddleware, asyncHandler(async (req: Request, re
     if (!char || char.userId !== req.userId) {
       return res.status(403).json({ error: 'Character does not belong to you' });
     }
-    quests = getAvailableQuests(char.level, [], char.class);
+    // Карма идёт в фильтр: без неё личный квест либо виден святому, либо
+    // отклоняется только при попытке взять. И то и другое — ошибка.
+    const карма = await characterService.getKarma(char.id);
+    quests = getAvailableQuests(char.level, [], char.class, карма);
   }
   return res.json({ quests });
 }));

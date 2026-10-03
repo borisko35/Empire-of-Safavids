@@ -639,7 +639,8 @@
     "provider_disabled": "This sign-in method is not set up yet",
     "invalid_state": "Sign-in request expired. Please try again",
     "provider_error": "Could not sign in with the external service",
-    "name_taken": "This name is already taken by another player"
+    "name_taken": "This name is already taken by another player",
+    "quest_karma_mismatch": "Such a job is given only to those with dark karma"
   },
   "panels": {
     "character": "Character",
@@ -1525,7 +1526,8 @@
     "side": "Side",
     "daily": "Daily",
     "class": "Class",
-    "world": "World"
+    "world": "World",
+    "personal": "Personal"
   },
   "shop": {
     "no_shop_near": "No shop available nearby"

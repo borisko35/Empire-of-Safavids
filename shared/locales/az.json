@@ -639,7 +639,8 @@
     "provider_disabled": "Bu daxil olma üsulu hələ qurulmayıb",
     "invalid_state": "Daxil olma sorğusu köhnəlib. Yenidən cəhd edin",
     "provider_error": "Xarici xidmət vasitəsilə daxil olmaq mümkün olmadı",
-    "name_taken": "Bu ad artıq başqa oyunçu tərəfindən tutulub"
+    "name_taken": "Bu ad artıq başqa oyunçu tərəfindən tutulub",
+    "quest_karma_mismatch": "Belə bir iş yalnız qaranlıq karması olanlara verilir"
   },
   "panels": {
     "character": "Personaj",
@@ -1525,7 +1526,8 @@
     "side": "Əlavə",
     "daily": "Günlük",
     "class": "Sinif",
-    "world": "Dünya"
+    "world": "Dünya",
+    "personal": "Şəxsi"
   },
   "shop": {
     "no_shop_near": "Yaxınlıqda dükan yoxdur"

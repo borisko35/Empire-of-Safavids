@@ -38,7 +38,7 @@ export interface CompletedQuestInfo {
 
 export type AcceptQuestResult =
   | { ok: true }
-  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_already_completed' | 'character_not_found' };
+  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_karma_mismatch' | 'quest_already_completed' | 'character_not_found' };
 
 export class QuestService {
   private db = DatabaseService.getInstance();
@@ -70,6 +70,16 @@ export class QuestService {
   }
 
   /** Взять квест (идемпотентно для уже активного) */
+/**
+   * Карма персонажа для личных квестов.
+   *
+   * Отдельное чтение, потому что в типе Character поля karma нет: карма лежит
+   * в колонке characters, но в объект персонажа не попадает. Ошибка чтения —
+   * ноль, то есть «личный квест тебе не выдаётся»: переживать работу
+   * лишним запросом не стоит.
+   */
+
+
   async accept(characterId: string, questId: string): Promise<AcceptQuestResult> {
     const def = QUESTS_DATABASE[questId];
     if (!def) return { ok: false, code: 'quest_not_found' };
@@ -78,6 +88,14 @@ export class QuestService {
     if (!character) return { ok: false, code: 'character_not_found' };
     if (def.minLevel > character.level) return { ok: false, code: 'quest_level_low' };
     if (def.requiredClass && def.requiredClass !== character.class) return { ok: false, code: 'quest_class_mismatch' };
+
+    // Личный квест по тёмной карме. Условие есть и в списке доступных, но
+    // там оно фильтр, а здесь — правило: иначе квест можно взять ручным
+    // запросом, минуя список.
+    if (def.requiresKarmaAtMost !== undefined) {
+      const карма = await this.characters.getKarma(characterId);
+      if (карма > def.requiresKarmaAtMost) return { ok: false, code: 'quest_karma_mismatch' };
+    }
 
     const state = await this.getState(characterId);
     const existing = state.find(s => s.questId === questId);

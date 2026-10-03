@@ -377,6 +377,7 @@ export async function loadRegions(): Promise<void> {
 const QUEST_TYPE_RU: Record<string, string> = {
   main: 'quest_type.main', side: 'quest_type.side', daily: 'quest_type.daily',
   class: 'quest_type.class', world: 'quest_type.world',
+  personal: 'quest_type.personal',
 };
 
 export async function loadQuests(): Promise<void> {

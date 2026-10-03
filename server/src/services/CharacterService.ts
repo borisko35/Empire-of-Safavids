@@ -571,6 +571,25 @@ export class CharacterService {
    * и возврат за неудачную покупку. Если бы бонус применялся там, то во
    * время праздника возврат платил бы больше, чем отдано.
    */
+/**
+ * Карма персонажа.
+ *
+ * Отдельное чтение: в типе Character поля karma нет, карма лежит в колонке
+ * characters, но в объект персонажа не попадает. Места, где она нужна,
+ * идут через этот метод, а не пишут свой запрос: формулировки разъезжаются,
+ * и про null забывает одна из сторон.
+ *
+ * Отсутствие строки — это ноль, то есть нейтральный персонаж. Лучше, чем
+ * молчаливый undefined, на котором арифметика даёт NaN.
+ */
+  async getKarma(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ karma: number | null }>(
+      'SELECT karma FROM characters WHERE id = $1',
+      [characterId],
+    );
+    return Number(row?.karma ?? 0);
+  }
+
   async addGoldReward(characterId: string, amount: number): Promise<number> {
     return this.addGold(characterId, Math.floor(amount * seasonalEvent.goldMultiplier()));
   }
