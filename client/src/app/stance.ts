@@ -10,6 +10,15 @@ export interface StanceInfo {
   id: Stance;
   /** Нужен ли скакун: если да, стойка недоступна пешком */
   requiresMount: boolean;
+  /**
+   * Множитель времени замаха: меньше единицы — быстрее, больше — медленнее.
+   *
+   * Те же значения, что и на сервере (CombatStance.attackSpeed): сервер
+   * считает по ним откат удара, клиент по ним же ведёт замах в 3D. Если
+   * числа разойдутся, игрок начнёт получать отказ «слишком быстро» на
+   * собственном нормальном темпе.
+   */
+  attackSpeed: number;
 }
 
 /**
@@ -21,10 +30,10 @@ export interface StanceInfo {
 export const STANCE_ORDER: Stance[] = ['balanced', 'sickle_dance', 'shah_shield', 'mounted_archery'];
 
 export const STANCES: Record<Stance, StanceInfo> = {
-  balanced: { id: 'balanced', requiresMount: false },
-  sickle_dance: { id: 'sickle_dance', requiresMount: false },
-  shah_shield: { id: 'shah_shield', requiresMount: false },
-  mounted_archery: { id: 'mounted_archery', requiresMount: true },
+  balanced: { id: 'balanced', requiresMount: false, attackSpeed: 1.0 },
+  sickle_dance: { id: 'sickle_dance', requiresMount: false, attackSpeed: 1.3 },
+  shah_shield: { id: 'shah_shield', requiresMount: false, attackSpeed: 0.8 },
+  mounted_archery: { id: 'mounted_archery', requiresMount: true, attackSpeed: 1.1 },
 };
 
 export function isStance(value: string): value is Stance {

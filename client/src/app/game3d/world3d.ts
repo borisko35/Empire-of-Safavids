@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
+import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
@@ -44,7 +45,21 @@ export interface LocalGear {
   weapon: boolean;
   /** Цвет груди по редкости доспеха; null — брони нет */
   armorColor: number | null;
+  /**
+   * Время одного замаха в секундах — из данных предмета.
+   *
+   * null или отсутствует — оружия нет либо экипировка ещё не пришла, тогда
+   * берётся DEFAULT_WEAPON.speed (0.45).
+   */
+  swingSeconds?: number | null;
 }
+
+/**
+ * Замах пустых рук: ровно то, что стоит в данных как DEFAULT_WEAPON.speed.
+ * Раньше эта цифра была вбита в замах дважды и не имела ничего общего с
+ * предметами: смена оружия на быстрое ничего не ускоряла.
+ */
+const ЗАМАХ_ПУСТЫМИ_РУКАМИ = 0.45;
 
 const GRAVITY = 20;
 const JUMP_V = 7.6;
@@ -325,6 +340,14 @@ export class World3D {
     // null — «экипировка ещё не пришла», и риг показывает классовый вид.
     // Объект с weapon: false — «пришла, оружия нет», и меч убирается
     this.localGear = gear;
+  }
+
+  /** Время замаха в секундах: из данных оружия, делённое на скорость стойки. */
+  private swingSeconds(): number {
+    const оружие = this.localGear?.swingSeconds ?? ЗАМАХ_ПУСТЫМИ_РУКАМИ;
+    // Деление, а не умножение: attackSpeed — множитель скорости. У «Серповой
+    // пляски» он 1.3 («урон и скорость выше»), значит замах короче.
+    return оружие / (STANCES[getStance()].attackSpeed || 1);
   }
 
   // ── Инициализация ────────────────────────────────────────────
@@ -750,7 +773,9 @@ export class World3D {
 
   private tryAttack(): void {
     if (this.attackCd > 0) return;
-    this.attackCd = 0.45;
+    // Замах по данным оружия и стойки. Сервер считает откат так же, поэтому
+    // клиент не отклоняет законный темп и не спамит отказом «слишком быстро».
+    this.attackCd = this.swingSeconds();
 
     // Крючок для слоя приложения (туториал засчитывает замах).
     // Вызывается ДО проверки цели: игрок замахнулся — шаг засчитан, даже если

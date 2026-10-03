@@ -122,7 +122,7 @@ export const session = {
    * Экипировка для 3D-аватара: вид оружия и цвет брони.
    * null — сервер ещё не ответил, до тех пор показываем вид класса.
    */
-  gear: null as null | { weapon: boolean; armorColor: number | null },
+  gear: null as null | { weapon: boolean; armorColor: number | null; swingSeconds: number | null },
   /** Убийства за сессию: monsterId -> количество (для прогресса квестов) */
   kills: {} as Record<string, number>,
   /** Прогресс квестов с сервера: questId -> { status, progress } */

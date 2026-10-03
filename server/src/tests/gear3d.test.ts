@@ -62,7 +62,7 @@ describe('Экипировка на аватаре берётся из наде�
   });
 
   it('в сессии экипировка хранится', () => {
-    expect(state).toMatch(/gear: null as null \| \{ weapon: boolean; armorColor: number \| null \}/);
+    expect(state).toMatch(/gear: null as null \| \{ weapon: boolean; armorColor: number \| null; swingSeconds: number \| null \}/);
   });
 });
 

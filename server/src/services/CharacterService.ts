@@ -931,6 +931,9 @@ export class CharacterService {
         rarity: def?.rarity ?? 'common',
         enhancement,
         stats: def?.stats,
+        // Время замаха: у оружия это поле speed в данных предмета, у брони
+        // его нет, и там остаётся пустым — клиент берёт тогда умолчание.
+        swingSeconds: def?.weapon?.speed,
       });
       for (const [key, value] of Object.entries(def?.stats ?? {})) {
         if (key in stats) stats[key as keyof CharacterStats] += Math.round(Number(value) * mult);
@@ -1109,4 +1112,12 @@ export interface EquippedItem {
   rarity: string;
   enhancement: number;
   stats?: Partial<CharacterStats>;
+  /**
+   * Время одного замаха в секундах — из данных предмета (поле speed).
+   *
+   * Отправляется клиенту, чтобы замах в 3D шёл по данным оружия, а не по
+   * вбитому 0.45. Без этого быстрое оружие не быстрее, а медленное ловит
+   * отказ «слишком быстро» на каждый лишний клик.
+   */
+  swingSeconds?: number;
 }

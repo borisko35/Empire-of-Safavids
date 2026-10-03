@@ -494,7 +494,14 @@ function invBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement 
 }
 
 export function renderEquipment(equipment: {
-  items: { slot: string; nameRu: string; rarity: string; enhancement: number }[];
+  items: {
+    slot: string;
+    nameRu: string;
+    rarity: string;
+    enhancement: number;
+    /** Время одного замаха в секундах; есть только у оружия */
+    swingSeconds?: number;
+  }[];
   stats: Record<string, number>;
 }): void {
   // Сначала 3D-аватар, потом панель. Раньше вид персонажа вообще не зависел
@@ -505,6 +512,10 @@ export function renderEquipment(equipment: {
   const armor = equipped.get('armor');
   session.gear = {
     weapon: equipped.has('weapon'),
+    // Время замаха приходит из данных предмета вместе с экипировкой.
+    // Без него замах в 3D шёл бы по вбитому 0.45, и смена оружия на
+    // более быстрое ничего бы не меняла.
+    swingSeconds: equipped.get('weapon')?.swingSeconds ?? null,
     // Цвет груди — по редкости доспеха: замена брони должна быть видна
     armorColor: armor ? parseInt((RARITY_COLOR[armor.rarity] ?? RARITY_COLOR.common).slice(1), 16) : null,
   };

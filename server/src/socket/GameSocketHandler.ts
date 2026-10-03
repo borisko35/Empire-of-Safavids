@@ -108,7 +108,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * должна быть одна на оба, иначе щит и рывок разойдутся по цене. */
 const DODGE_STAMINA_COST = 15;
 
-const MIN_ATTACK_INTERVAL_MS = 380;
+// Страховка от испорченных данных оружия, а не игровое ограничение:
+// с настоящими данными самый быстрый замах — это 0.36 с у оружия, умноженные
+// на 0.8 у «Шахского щита», то есть 288 мс. Раньше здесь стояло жёсткое 380,
+// и оно срезало всё, что предмет обещал.
+const MIN_ATTACK_INTERVAL_MS = 150;
 
 export class GameSocketHandler {
   private static instance: GameSocketHandler | null = null;
@@ -1425,29 +1429,7 @@ export class GameSocketHandler {
     }
     if (!action.targetId) return;
 
-    // Откат обычной атаки и досягаемость удара.
-    //
-    // ДО ЭТОГО НИ ОДНОГО ИЗ НИХ НЕ БЫЛО. Откат держал только клиент, а
-    // сервер не проверял расстояние до цели. Правкой клиента можно было
-    // отправлять по 30 ударов в секунду (лимит пакетов это пропускал) и
-    // доставать жертву через полкарты. Теперь и частота, и дальность
-    // считаются на сервере по позициям, а не по тому, что прислал клиент.
-    if (action.actionType === 'attack' && !action.skillId) {
-      // Замедление от эффекта монстра тянет откат удара. Чем сильнее
-      // замедление, тем реже игрок может бить - иначе «Топтание» было бы
-      // пустой иконкой, которая ничего не меняет в бою.
-      //
-      // Ошибка базы читается как «не замедлён»: пропустить один удар
-      // игроку честнее, чем заблокировать бой из-за сбоя чтения.
-      const скорость = await this.debuffs.speedMultiplier(socket.characterId).catch(() => 1);
-      const откат = Math.round(MIN_ATTACK_INTERVAL_MS / Math.max(0.2, Math.min(1, скорость)));
-      const last = this.lastAttackAt.get(socket.characterId) ?? 0;
-      if (Date.now() - last < откат) {
-        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'attack_too_fast' });
-        return;
-      }
-      this.lastAttackAt.set(socket.characterId, Date.now());
-    }
+
 
     try {
       const attacker = await this.withEquipment(
@@ -1510,6 +1492,35 @@ export class GameSocketHandler {
           socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'stance_needs_mount' });
           return;
         }
+      }
+
+      // Откат обычной атаки считается здесь, а не в начале обработчика:
+      // раньше он был жёстким (380 мс для всех), потому что оружие и стойка
+      // ещё не были прочитаны. Теперь откату есть из чего считаться.
+      //
+      // Откат — это время одного замаха: weapon.speed из данных предмета,
+      // умноженное на скорость стойки. Раньше speed предмета и attackSpeed
+      // стойки не участвовали в бою вообще: любое оружие било одинаково, а
+      // «Серповая пляска» с обещанными +30 % не давала ничего.
+      //
+      // Замедление от эффекта монстра растягивает откат, как и раньше.
+      // Ошибка базы читается как «не замедлён»: пропустить один удар
+      // игроку честнее, чем заблокировать бой из-за сбоя чтения.
+      if (action.actionType === 'attack' && !action.skillId) {
+        // Откат — это время одного замаха: weapon.speed из данных предмета, делённое
+        // на скорость стойки. Именно ДЕЛЕНИЕ: attackSpeed — множитель СКОРОСТИ
+        // (1.3 у «Серповой пляски» — «урон и скорость выше», 0.8 у «Шахского
+        // щита» — «замах медленный»), поэтому умножение времени на него
+        // перевернуло бы стойки наоборот: агрессивная стала бы самой медленной.
+        const замедление = Math.max(0.2, Math.min(1, await this.debuffs.speedMultiplier(attacker.id).catch(() => 1)));
+        const замах = ((weapon?.speed ?? DEFAULT_WEAPON.speed) * 1000) / stance.attackSpeed;
+        const откат = Math.round(Math.max(MIN_ATTACK_INTERVAL_MS, замах) / замедление);
+        const last = this.lastAttackAt.get(attacker.id) ?? 0;
+        if (Date.now() - last < откат) {
+          socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'attack_too_fast' });
+          return;
+        }
+        this.lastAttackAt.set(attacker.id, Date.now());
       }
 
       // Бонус профессии «Воин» или «Лучник» на урон. Раньше обещание
