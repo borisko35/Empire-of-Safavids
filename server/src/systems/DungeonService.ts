@@ -13,7 +13,7 @@ import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
 import { DatabaseService } from '../services/DatabaseService';
 import { grantReputation } from './ReputationGrants';
-import { planDungeonRooms } from './dungeonLayout';
+import { planDungeonRooms, clampToRoom } from './dungeonLayout';
 import { Region } from '../types/game.types';
 import { logger } from '../utils/logger';
 // Счётчик пройденных подземелий для достижения. Общая таблица
@@ -57,6 +57,23 @@ export interface DungeonSession {
   members: Set<string>;
   monsterIds: Set<string>;
   requiredBossIds: Set<string>;
+  /**
+   * Виды боссов, для которых обязательный экземпляр уже выбран.
+   *
+   * Нужно, чтобы комната с несколькими боссами получила ровно ОДНО условие, а не
+   * по условию на каждого: у крепости джиннов два, у гробницы убийц три. Решение
+   * владельца — «хватает одного».
+   */
+  bossTaken: Set<string>;
+  /** Открытые сундуки захода: повторное вскрытие не даёт добычу. */
+  openedChests: Set<string>;
+  /**
+   * Сундуки захода в мировых координатах.
+   *
+   * Заводятся из chestPositions комнат при спавне захода, как монстры, и
+   * проходят ту же обрезку по стене. Значит сундук не встанет в стену.
+   */
+  chests: { id: string; x: number; z: number }[];
   killedBossIds: Set<string>;
   startedAt: number;
   completedAt?: number;
@@ -73,6 +90,15 @@ export interface DungeonSession {
   // же, как заход, где умер один раз. Раз заход засчитывается целиком,
   // достаточно сравнения с нулём - но хранить сам факт надо точно.
   deaths: Map<string, number>;
+}
+
+/** Результат вскрытия сундука. */
+export interface ChestOpenResult {
+  ok: boolean;
+  /** Код отказа, когда ok === false: не в подземелье, далеко, уже вскрыт. */
+  code?: 'not_in_dungeon' | 'too_far' | 'already_opened' | 'no_such_chest';
+  gold: number;
+  experience: number;
 }
 
 export interface DungeonCompleteInfo {
@@ -98,7 +124,41 @@ export interface DungeonRunInvite {
   expiresAt: number;
 }
 
-export class DungeonService {
+/**
+ * Радиус вскрытия сундука.
+ *
+ * Сундук в зале — вещь, до которой доходят пешком. Дыры в этом месте быть
+ * не должно: иначе сундук открывается из другого конца карты, потому что
+ * вход в подземелье держится на памяти сервера, а не на координатах.
+ */
+const CHEST_OPEN_RADIUS = 3;
+
+/**
+ * Золото и опыт из сундука — по подземелью, из данных.
+ *
+ * Числа взяты из наград подземелья и уменьшены: сундук должен быть
+ * дополнением к босгу, а не заменой ему. Формула считается от наград
+ * подземелья, поэтому при пересмотре наград меняется и сундук.
+ */
+function chestGold(dungeonId: string): number {
+  const def = DUNGEONS_DATABASE[dungeonId];
+  if (!def) return 0;
+  const середина = (def.rewards.gold.min + def.rewards.gold.max) / 2;
+  return Math.round(середина * CHEST_GOLD_SHARE);
+}
+
+function chestExperience(dungeonId: string): number {
+  const def = DUNGEONS_DATABASE[dungeonId];
+  if (!def) return 0;
+  return Math.round(def.rewards.experience * CHEST_EXP_SHARE);
+}
+
+/** Доля наград захода, которую даёт один сундук. */
+const CHEST_GOLD_SHARE = 0.1;
+/** Доля опыта захода, которую даёт один сундук. */
+const CHEST_EXP_SHARE = 0.15;
+
+export class DungeonService {
   private static instance: DungeonService;
   private sessions = new Map<string, DungeonSession>();
   // Приглашения в заход. Живут 60 секунд и одноразовые.
@@ -174,12 +234,16 @@ export class DungeonService {
       members: new Set([characterId]),
       monsterIds: new Set(),
       requiredBossIds: new Set(),
+      bossTaken: new Set(),
+      openedChests: new Set(),
+      chests: [],
       killedBossIds: new Set(),
       startedAt: Date.now(),
     deaths: new Map(),
     };
 
     this.spawnSessionMonsters(session, def);
+    this.spawnSessionChests(session, def);
 
     this.sessions.set(session.id, session);
     this.characterToSession.set(characterId, session.id);
@@ -219,7 +283,17 @@ export class DungeonService {
         );
         session.monsterIds.add(ctx.instanceId);
         this.monsterToSession.set(ctx.instanceId, session.id);
-        if (room.isBossRoom && room.bossId === monster.monsterId) {
+        // Обязателен ОДИН босс на комнату: решение владельца «хватает одного».
+        // У крепости джиннов два, у гробницы убийц три — остальные экземпляры
+        // остаются помехой и в условие захода не входят. Берётся ПЕРВЫЙ спавн
+        // боссовой комнаты: порядок групп в данных не меняется от захода к
+        // заходу, значит условие одинаково для всех, а не «кто добежал».
+        if (
+          room.isBossRoom &&
+          room.bossId === monster.monsterId &&
+          !session.bossTaken.has(room.bossId)
+        ) {
+          session.bossTaken.add(room.bossId);
           session.requiredBossIds.add(ctx.instanceId);
         }
       }
@@ -234,6 +308,98 @@ export class DungeonService {
    * DUNGEONS_DATABASE при восстановлении, а идентификаторы экземпляров
    * всё равно меняются при каждом спавне.
    */
+  /**
+   * Завести сундуки захода.
+   *
+   * Координаты берутся из данных комнаты и проходят ту же обрезку по стене,
+   * что и монстры: сундук не должен оказаться в стене или на месте босса.
+   *
+   * Число сверяется с treasureChests: если координат столько же, сундуки
+   * встанут ровно там, где нарисованы. Расхождение — ошибка данных, и она
+   * пишется в лог, а не молча исправляется.
+   */
+  private spawnSessionChests(session: DungeonSession, def: DungeonDefinition): void {
+    let номер = 0;
+    for (const план of planDungeonRooms(def)) {
+      const комната = def.rooms[план.index];
+      const позиции = комната.chestPositions ?? [];
+      if (позиции.length !== комната.treasureChests) {
+        logger.warn(
+          `[Dungeon] ${def.id} / ${комната.id}: сундуков в данных ` +
+            `${комната.treasureChests}, координат ${позиции.length}`
+        );
+      }
+      for (const позиция of позиции) {
+        номер++;
+        session.chests.push({
+          id: `${session.id}_ch_${номер}`,
+          x: clampToRoom(def.entryX + позиция.x, def.entryX),
+          z: clampToRoom(def.entryZ + позиция.z, def.entryZ),
+        });
+      }
+    }
+  }
+
+  /**
+   * Вскрыть сундук захода.
+   *
+   * Добыча идёт тому, кто открыл: решение владельца — сундук даёт золото и
+   * опыт, и вскрывает один игрок. Раздача на весь заход остаётся за босгом.
+   *
+   * Четыре отказа, и каждый на своём месте: не свой заход, слишком далеко,
+   * уже вскрыт, такого сундука нет. Повторное вскрытие сверяется с
+   * openedChests, а не с наградой: иначе второй клиент вскрыл бы тот же
+   * сундук повторно и получил бы добычу дважды.
+   */
+  async openChest(
+    characterId: string,
+    chestId: string,
+    позиция: { x: number; z: number }
+  ): Promise<ChestOpenResult> {
+    const sessionId = this.characterToSession.get(characterId);
+    if (!sessionId) return { ok: false, code: 'not_in_dungeon', gold: 0, experience: 0 };
+    const session = this.sessions.get(sessionId);
+    if (!session) return { ok: false, code: 'not_in_dungeon', gold: 0, experience: 0 };
+
+    const сундук = session.chests.find((с) => с.id === chestId);
+    if (!сундук) return { ok: false, code: 'no_such_chest', gold: 0, experience: 0 };
+
+    // Дистанция вскрытия. Без неё сундук открывается из любой точки мира:
+    // вход в подземелье держится на памяти сервера, а не на координатах.
+    const расстояние = Math.hypot(сундук.x - позиция.x, сундук.z - позиция.z);
+    if (расстояние > CHEST_OPEN_RADIUS) {
+      return { ok: false, code: 'too_far', gold: 0, experience: 0 };
+    }
+
+    if (session.openedChests.has(chestId)) {
+      return { ok: false, code: 'already_opened', gold: 0, experience: 0 };
+    }
+    session.openedChests.add(chestId);
+
+    const def = DUNGEONS_DATABASE[session.dungeonId];
+    const золото = chestGold(def.id);
+    const опыт = chestExperience(def.id);
+
+    await this.characters.addGoldReward(characterId, золото).catch(() => {});
+    await this.characters.addExperience(characterId, опыт).catch(() => {});
+
+    return { ok: true, gold: золото, experience: опыт };
+  }
+
+  /** Сундуки захода персонажа: клиент рисует их по этому списку. */
+  listChests(characterId: string): { id: string; x: number; z: number; opened: boolean }[] {
+    const sessionId = this.characterToSession.get(characterId);
+    if (!sessionId) return [];
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
+    return session.chests.map((с) => ({
+      id: с.id,
+      x: с.x,
+      z: с.z,
+      opened: session.openedChests.has(с.id),
+    }));
+  }
+
   private async persistSession(session: DungeonSession): Promise<void> {
     await this.db.query(
       `INSERT INTO dungeon_sessions (id, dungeon_id, difficulty, leader_id, max_size, started_at, status)
@@ -329,6 +495,9 @@ export class DungeonService {
         members: new Set(members.map(m => m.character_id)),
         monsterIds: new Set(),
         requiredBossIds: new Set(),
+        bossTaken: new Set(),
+        openedChests: new Set(),
+        chests: [],
         killedBossIds: new Set(),
         startedAt: new Date(row.started_at).getTime(),
       // Смерти ДО перезапуска читаются из таблицы. Раньше здесь стояло
@@ -339,6 +508,7 @@ export class DungeonService {
       };
       session.members.add(row.leader_id);
       this.spawnSessionMonsters(session, def);
+    this.spawnSessionChests(session, def);
 
       this.sessions.set(session.id, session);
       for (const memberId of session.members) this.characterToSession.set(memberId, session.id);

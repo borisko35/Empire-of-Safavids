@@ -493,6 +493,29 @@ export const api = {
       records: { name: string; durationSec: number; completedAt: string; bossesKilled: number }[];
     }>(`/api/game/dungeons/${dungeonId}/records`),
 
+  /**
+   * Сундуки моего захода: где стоят и какие уже вскрыты.
+   *
+   * Клиент рисует сундуки по этому списку, поэтому картинка и игра показывают
+   * одну и ту же точку: координаты в данных и в схеме сверяет проверка.
+   */
+  dungeonChests: (characterId: string) =>
+    req<{ chests: { id: string; x: number; z: number; opened: boolean }[] }>(
+      `/api/game/dungeons/chests?characterId=${characterId}`
+    ),
+
+  /**
+   * Вскрыть сундук.
+   *
+   * Координаты игрока идут в запрос, чтобы сервер отказал, если игрок далеко:
+   * до сундука надо дойти пешком. Добыча выдаётся по идентификатору из
+   * сессии, а не по присланным координатам, поэтому подделать их нельзя.
+   */
+  dungeonChestOpen: (characterId: string, chestId: string, x: number, z: number) =>
+    req<{ gold: number; experience: number }>(`/api/game/dungeons/chests/${chestId}/open`, {
+      method: 'POST',
+      body: JSON.stringify({ characterId, x, z }),
+    }),
   /** Открытые заходы по данжу: к кому можно присоединиться */
   dungeonSessions: (dungeonId: string) =>
     req<{ sessions: { sessionId: string; members: number; maxPlayers: number }[] }>(

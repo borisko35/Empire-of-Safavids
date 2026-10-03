@@ -11,6 +11,15 @@ export interface DungeonRoom {
   name: string;
   nameRu: string;
   monsters: { monsterId: string; count: number; positions: { x: number; y: number; z: number }[] }[];
+  /**
+   * Координаты сундуков комнаты в её локальной системе.
+   *
+   * Появляются вместе с механикой сундуков: пока поля не было, сундуки
+   * были нарисованы в геометрии, но в игре их не существовало — сервер не
+   * читал treasureChests нигде. Теперь у комнаты есть и количество, и
+   * координаты, и сервер заводит их в заход при спавне.
+   */
+  chestPositions?: { x: number; z: number }[];
   isBossRoom: boolean;
   bossId?: string;
   treasureChests: number;
@@ -94,6 +103,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         nameRu: 'Входный Зал',
         monsters: [{ monsterId: 'mob_bandit_scout', count: 4, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }, { x: 5, y: 0, z: 20 }] }],
         isBossRoom: false,
+        chestPositions: [{ x: -4.6, z: 12.4 }],
         treasureChests: 1,
       },
       {
@@ -105,6 +115,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'mob_bandit_warrior', count: 2, positions: [{ x: 8, y: 0, z: 15 }, { x: -8, y: 0, z: 15 }] },
         ],
         isBossRoom: false,
+        chestPositions: [{ x: 3.2, z: 7.6 }, { x: -3.2, z: 2.6 }],
         treasureChests: 2,
       },
       {
@@ -119,6 +130,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         ],
         isBossRoom: true,
         bossId: 'boss_bandit_king',
+        chestPositions: [{ x: -6.4, z: -11.4 }, { x: 6.4, z: -11.4 }, { x: 0, z: -6.4 }],
         treasureChests: 3,
       },
     ],
@@ -162,6 +174,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         nameRu: 'Дворцовый Сад',
         monsters: [{ monsterId: 'mob_ottoman_janissary', count: 6, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }, { x: 15, y: 0, z: 10 }, { x: -15, y: 0, z: 10 }, { x: 0, y: 0, z: 25 }] }],
         isBossRoom: false,
+        chestPositions: [{ x: -4.4, z: 11.4 }, { x: 4.4, z: 11.4 }],
         treasureChests: 2,
       },
       {
@@ -174,6 +187,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'boss_ottoman_pasha', count: 1, positions: [{ x: 0, y: 0, z: 30 }] },{ monsterId: 'mob_ottoman_janissary', count: 8, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }, { x: 15, y: 0, z: 10 }, { x: -15, y: 0, z: 10 }, { x: 0, y: 0, z: 25 }, { x: 20, y: 0, z: 20 }, { x: -20, y: 0, z: 20 }] }],
         isBossRoom: true,
         bossId: 'boss_ottoman_pasha',
+        chestPositions: [{ x: -3.6, z: -10.4 }, { x: 3.6, z: -10.4 }, { x: -3.6, z: -15 }, { x: 3.6, z: -15 }, { x: 0, z: -15 }],
         treasureChests: 5,
       },
     ],
@@ -214,6 +228,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         nameRu: 'Вход в Пещеру',
         monsters: [{ monsterId: 'mob_div_fire', count: 3, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }] }],
         isBossRoom: false,
+        chestPositions: [{ x: -7.4, z: 12.4 }, { x: 8.4, z: 6.4 }],
         treasureChests: 2,
       },
       {
@@ -226,6 +241,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'boss_div_arzhang', count: 1, positions: [{ x: 0, y: 0, z: 40 }] },{ monsterId: 'mob_div_fire', count: 6, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }, { x: 15, y: 0, z: 20 }, { x: -15, y: 0, z: 20 }, { x: 0, y: 0, z: 30 }] }],
         isBossRoom: true,
         bossId: 'boss_div_arzhang',
+        chestPositions: [{ x: -4.6, z: -2.4 }, { x: 4.6, z: -2.4 }, { x: -7.4, z: -3.4 }, { x: 7.4, z: -3.4 }, { x: -3.6, z: -12.4 }, { x: 3.6, z: -12.4 }],
         treasureChests: 6,
       },
     ],
@@ -272,6 +288,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'mob_road_bandit', count: 3, positions: [{ x: -6, y: 0, z: 18 }, { x: 12, y: 0, z: 20 }, { x: -12, y: 0, z: 20 }] },
         ],
         isBossRoom: false,
+        chestPositions: [{ x: 0, z: 6.4 }],
         treasureChests: 1,
       },
       {
@@ -282,6 +299,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'mob_ottoman_janissary', count: 5, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 14 }, { x: 15, y: 0, z: 8 }, { x: -15, y: 0, z: 8 }] },
         ],
         isBossRoom: false,
+        chestPositions: [{ x: 8.4, z: -4.4 }, { x: 8.4, z: -8.4 }],
         treasureChests: 2,
       },
       {
@@ -296,6 +314,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         ],
         isBossRoom: true,
         bossId: 'mob_storm_djinn',
+        chestPositions: [{ x: -5.4, z: -13.4 }, { x: 5.4, z: -13.4 }, { x: -5.4, z: -5.6 }, { x: 5.4, z: -5.6 }],
         treasureChests: 4,
       },
     ],

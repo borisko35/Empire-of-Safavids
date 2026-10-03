@@ -1178,6 +1178,36 @@ gameRouter.post(
   })
 );
 
+// GET /api/game/dungeons/chests — сундуки моего захода. Клиент рисует их по
+// этому списку, поэтому картинка и игра показывают одну и ту же точку.
+gameRouter.get(
+  '/dungeons/chests',
+  secureMiddleware,
+  requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    res.json({ chests: dungeonService.listChests(characterId) });
+  })
+);
+
+// POST /api/game/dungeons/chests/:chestId/open — вскрыть сундук.
+// Координаты идут в запрос, чтобы сервер отказал, если игрок далеко: добыча
+// выдаётся по идентификатору из сессии, а не по присланным координатам.
+gameRouter.post('/dungeons/chests/:chestId/open', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = await bodyCharacterId(req, res);
+    if (!characterId) return;
+    const x = Number(req.body?.x);
+    const z = Number(req.body?.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      return res.status(400).json({ error: 'chest_bad_position' });
+    }
+    const result = await dungeonService.openChest(characterId, req.params.chestId, { x, z });
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    res.json({ gold: result.gold, experience: result.experience });
+  })
+);
 // GET /api/game/dungeons/:dungeonId/records — рекорды прохождений
 gameRouter.get(
   '/dungeons/:dungeonId/records',
