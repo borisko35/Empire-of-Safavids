@@ -1836,7 +1836,14 @@ input, select { font: inherit; }
 
 /* ═══ Полноэкранная карта мира (M) ═══ */
 .worldmap {
-  position: relative; width: 92vw; max-width: 940px;
+  /* Ширина карты: 92 процента окна, потолок 1800.
+   *
+   * Раньше здесь стояло `max-width: 940px`, и правило 92 процента
+   * срабатывало только на экранах уже 1022 пикселей (940 / 0.92): на любом
+   * обычном мониторе карта упиралась в 940 и выглядела ровно так, будто
+   * правила не было. Потолок оставлен, но поднят до 1800, чтобы на 4K карта
+   * не занимала пол-экрана. */
+  position: relative; width: min(92vw, 1800px);
   background: var(--panel); border: 1px solid var(--panel-border);
   border-radius: 16px; padding: 20px; text-align: center;
 }
@@ -1850,6 +1857,8 @@ input, select { font: inherit; }
 }
 .worldmap-close:hover { color: var(--cream); }
 #worldmap-canvas {
+  /* Холст тянется на всю рамку, а его настоящий размер выставляет drawWorldMap
+   * по ширине на экране: иначе 900 пикселей растягиваются мыльно. */
   width: 100%; height: auto; border-radius: 8px;
   border: 1px solid rgba(201,168,76,0.2);
 }
