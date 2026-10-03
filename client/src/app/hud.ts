@@ -5,6 +5,7 @@
 import { api, ApiError } from './api';
 import type { ActiveBuff } from './api';
 import { t } from './i18n';
+import { fogLayerFor, worldFogMask } from './minimapFog';
 import { icon } from '../ui/icons';
 import { session } from './state';
 
@@ -884,6 +885,13 @@ export function updateMinimap(
     const sy = (me.z - terrainOrigin.z) * ls - swЗапас / 2;
     ctx.drawImage(terrainLayer, sx, sy, swЗапас, swЗапас,
       -выносСлоя, -выносСлоя, size * MINIMAP_OVERSCAN, size * MINIMAP_OVERSCAN);
+
+    // Туман войны: незнакомая местность закрыта. Маска в тех же мировых
+    // координатах и в том же повороте, что и рельеф, поэтому совпадает с ним
+    // пиксель в пиксель. Лежит ДО маркеров — иначе монстры светились бы сквозь
+    // то, чего игрок не видел.
+    const fog = fogLayerFor(terrainOrigin.x, terrainOrigin.z, terrainExtent, terrainSizePx);
+    if (fog) ctx.drawImage(fog, 0, 0);
   } else {
     // ТУТ БЫЛА ПРОСТЬ ЗАЛИВКА ТЁМНО-СИНИМ. Это запасной путь на случай, когда
     // слой рельефа не построился, и он выглядел как «миникарта сломалась»:
@@ -1056,6 +1064,9 @@ export function drawWorldMap(
   npcs?: { x: number; z: number }[],
   route?: { x: number; z: number }[],
 ): void {
+  // Туман войны и на большой карте: карта со всей местностью рядом с
+  // мини-картой с запорами выглядела бы как поломка, а не как замысел.
+  const worldFog = worldFogMask();
   const canvas = document.getElementById('worldmap-canvas') as HTMLCanvasElement | null;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -1205,6 +1216,16 @@ export function drawWorldMap(
     worldmapLayerW = W;
   }
   ctx.drawImage(worldmapLayer, 0, 0);
+
+  // Туман войны поверх мира: маска покрывает ровно [-WORLD_HALF, WORLD_HALF]
+  // по обеим осям, поэтому ложится по той же формуле, что и toPx. Лежит до
+  // сетки и подписей: незнакомая местность не должна просвечивать.
+  if (worldFog) {
+    const fx = W / 2 - WORLD_HALF * scale;
+    const fy = H / 2 - WORLD_HALF * scale;
+    const fw = WORLD_HALF * 2 * scale;
+    ctx.drawImage(worldFog, fx, fy, fw, fw);
+  }
 
   // Сетка
   ctx.strokeStyle = 'rgba(20, 16, 8, 0.3)';

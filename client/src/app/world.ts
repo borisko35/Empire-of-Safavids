@@ -13,6 +13,7 @@ import { setHubStaff } from './hub';
 import { requestCutsceneForQuest, advance, isCutscenePlaying } from './cutscene';
 import { openNpcDialogue } from './dialogue';
 import { NPC_WORLD_POSITIONS, questNpcPosition } from './game3d/npc';
+import { revealAround, loadFog, flushFog } from './minimapFog';
 import { GATE, groundHeight, waterSurfaceY } from './game3d/terrain';
 import { STAMINA, GAME_VERSION, SOCKET_EVENTS, SERVER_EVENTS, REGION_SPAWNS } from '../../../shared/constants';
 import { QuestDef, QuestObjectiveDef } from './state';
@@ -62,6 +63,7 @@ let lastMoveSent = 0;
 /** Обратный отсчёт до следующей проверки «опасность в воде» (раз в секунду) */
 let dangerTick = 0;
 let lastMinimapDraw = 0;
+let lastFogSave = 0;
 let lastWorldmapDraw = 0;
 let lastExploreCheck = 0;
 // Уже отправленные explore-цели (чтобы не спамить endpoint каждый тик)
@@ -608,6 +610,10 @@ export async function enterWorld(character: Character): Promise<void> {
     onDoor: (action, buildingId, nameRu, entranceId) => void enterOrExitBuilding(action, buildingId, nameRu, entranceId),
   });
 
+  // Память о местности — по персонажу: у другого героя карта своя, и чужая
+  // память была бы подменой. Загрузка идёт здесь, а не при создании персонажа
+  // в данных: персонаж на карте появляется раньше, чем готов игровой мир.
+  loadFog(character.id);
   me = {
     id: character.id,
     name: character.name,
@@ -2316,6 +2322,17 @@ function loop(now: number): void {
   tickCooldowns();
   // Туториал: шаг «иди» засчитывается по реально пройденному расстоянию
   tickTutorial();
+
+  // Туман войны: открываем местность ВСЕГДА, независимо от того, видна ли
+  // мини-карта. Выключенный виджет не должен стирать память о мире: походил с
+  // выключенной картой, включил — карта помнит.
+  if (me.id) revealAround(me.pos.x, me.pos.z);
+
+  // Запись памяти на диск: не на каждом кадре, а раз в несколько секунд.
+  if (now - lastFogSave > 5000) {
+    lastFogSave = now;
+    flushFog();
+  }
 
   // Мини-карта: игрок в центре, монстры вокруг (раз в ~0.5с)
   if (now - lastMinimapDraw > 500) {
