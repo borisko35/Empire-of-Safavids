@@ -25,7 +25,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs';
 
 export interface BuildingDef {
   id: string;
@@ -90,6 +90,9 @@ const SPOTS: {
   { id: 'tomb', kind: 'tomb', nameKey: 'buildings.tomb', icon: '⚰️', dx: 1400, dz: 1400, ex: 1400, ez: 1404 },
   // Ханжа: «Рассказ через детали». Северо-восток от святилища.
   { id: 'hanza', kind: 'hanza', nameKey: 'buildings.hanza', icon: '📜', dx: 1600, dz: 1000, ex: 1600, ez: 1004 },
+  // Катакомбы Тебриза: первое подземелье с геометрией. Вход снаружи —
+  // это дверь в мире, а комната стоит в кармане рядом.
+  { id: 'catacombs', kind: 'catacombs', nameKey: 'buildings.catacombs', icon: '🕳', dx: -520, dz: -340, ex: -520, ez: -336 },
 ];
 
 export const POCKET_X = 4000;
@@ -137,7 +140,7 @@ export const FLOOR_Y = 0.4;
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
 // Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4792, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 4880, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -653,6 +656,89 @@ function furnishHanza(g: THREE.Group, cx: number, cz: number): { x: number; z: n
   // ── Ящик с письмами ──
   g.add(box(1.3, 0.8, 0.9, M.wood, cx + 5.2, FLOOR_Y + 0.4, cz - 6.2));
   cols.push({ x: cx + 5.2, z: cz - 6.2, r: 1.1 });
+  return cols;
+}
+
+// Катакомбы Тебриза: первое подземелье, где комнаты данных разложены по
+// одной геометрии. Переходов между комнатами в проекте нет, и заводить их
+// ради одного подземелья — работа вдвое больше.
+//
+// Что просили: входной зал, казармы разбойников, тронный зал Рустама.
+// Трон у дальней стены, потому что босс стоит в (0, 0) — в центре.
+function furnishCatacombs(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Зона 1. Входной зал: арка входа и спуск вниз ──
+  // Игрок сюда попадает: спавн у дальнего края, вход позади.
+  for (const side of [-1, 1]) {
+    g.add(box(1.1, 3.6, 1.1, M.stone, cx + side * 3.6, FLOOR_Y + 1.8, cz + 14.2));
+    g.add(box(4.4, 0.7, 1.1, M.stone, cx, FLOOR_Y + 3.3, cz + 14.2));
+  }
+  for (let i = 0; i < 4; i++) {
+    g.add(box(3.4, 0.16, 0.5, M.stone, cx, FLOOR_Y + 0.08 - i * 0.16, cz + 9.5 + i * 0.5));
+  }
+  cols.push({ x: cx, z: cz + 10, r: 1.7 });
+  // Сундук входного зала: по данным treasureChests: 1
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 4.6, FLOOR_Y + 0.4, cz + 12.4));
+  cols.push({ x: cx - 4.6, z: cz + 12.4, r: 1 });
+  // ── Зона 2. Казармы: нар двух рядов ──
+  for (const side of [-1, 1]) {
+    for (let ряд = 0; ряд < 2; ряд++) {
+      const px = cx + side * (6.5 + ряд * 3);
+      for (let i = 0; i < 3; i++) {
+        g.add(box(1.5, 0.5, 3, M.wood, px, FLOOR_Y + 0.25, cz + 5.5 - i * 3.4));
+        g.add(box(0.5, 0.2, 0.6, M.hay, px, FLOOR_Y + 0.6, cz + 6.4 - i * 3.4));
+      }
+      cols.push({ x: px, z: cz + 5.5 - ряд * 1.2, r: 1.6 });
+    }
+  }
+  // Стол с добычей посередине казарм
+  g.add(box(2.4, 0.16, 1.3, M.wood, cx, FLOOR_Y + 0.9, cz + 5.4));
+  g.add(box(0.2, 0.9, 0.2, M.woodDark, cx - 1, FLOOR_Y + 0.45, cz + 5.4));
+  g.add(box(0.2, 0.9, 0.2, M.woodDark, cx + 1, FLOOR_Y + 0.45, cz + 5.4));
+  cols.push({ x: cx, z: cz + 5.4, r: 1.5 });
+  // Сундуки казарм: по данным 2
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 3.2, FLOOR_Y + 0.4, cz + 7.6));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 3.2, FLOOR_Y + 0.4, cz + 2.6));
+  cols.push({ x: cx + 3.2, z: cz + 7.6, r: 1 });
+  cols.push({ x: cx - 3.2, z: cz + 2.6, r: 1 });
+  // ── Зона 3. Тронный зал Рустама ──
+  // Трон У ДАЛЬНЕЙ СТЕНЫ: босс появляется в (0, 0), то есть в центре.
+  // Трон в центре означал бы, что босс стоит внутри трона.
+  g.add(box(3.6, 0.5, 1.6, M.stone, cx, FLOOR_Y + 0.25, cz - 12));
+  g.add(box(2.6, 1.6, 1.2, M.stone, cx, FLOOR_Y + 1.3, cz - 12.4));
+  g.add(box(2.2, 0.24, 0.7, M.red, cx, FLOOR_Y + 2.2, cz - 12.4));
+  cols.push({ x: cx, z: cz - 12, r: 2.2 });
+  // Колонны по бокам зала: держат потолок и читаются как зал, а не как зал
+  // без опоры.
+  for (const side of [-1, 1]) {
+    for (const dz of [-9, -4]) {
+      const px = cx + side * 9.5;
+      g.add(cyl(0.7, 4.4, 0.7, M.stone, px, FLOOR_Y + 2.2, cz + dz, 10));
+      g.add(box(1.6, 0.4, 1.6, M.stone, px, FLOOR_Y + 4.5, cz + dz));
+      cols.push({ x: px, z: cz + dz, r: 1 });
+    }
+  }
+  // Алтарь у входа в тронный зал
+  g.add(box(1.6, 1.1, 1, M.stone, cx - 5.4, FLOOR_Y + 0.55, cz - 7.4));
+  cols.push({ x: cx - 5.4, z: cz - 7.4, r: 1.2 });
+  // Сундуки тронного зала: по данным 3
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx - 6.4, FLOOR_Y + 0.4, cz - 10.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx + 6.4, FLOOR_Y + 0.4, cz - 10.4));
+  g.add(box(1.1, 0.8, 0.8, M.wood, cx, FLOOR_Y + 0.4, cz - 8.6));
+  cols.push({ x: cx - 6.4, z: cz - 10.4, r: 1 });
+  cols.push({ x: cx + 6.4, z: cz - 10.4, r: 1 });
+  cols.push({ x: cx, z: cz - 8.6, r: 1 });
+  // ── Факелы в каждой зоне: подземелье освещается по частям ──
+  for (const [px, pz] of [
+    [cx - 5.4, cz + 11.6],
+    [cx + 5.4, cz + 3.6],
+    [cx - 11.4, cz - 6.4],
+    [cx + 11.4, cz - 6.4],
+  ] as [number, number][]) {
+    g.add(cyl(0.12, 1.8, 0.12, M.iron, px, FLOOR_Y + 0.9, pz, 8));
+    g.add(cyl(0.28, 0.4, 0.28, M.fire, px, FLOOR_Y + 1.9, pz, 8));
+    cols.push({ x: px, z: pz, r: 0.7 });
+  }
   return cols;
 }
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
@@ -1191,6 +1277,7 @@ caravanserai: furnishCaravanserai,
     shrine: furnishShrine,
     tomb: furnishTomb,
     hanza: furnishHanza,
+    catacombs: furnishCatacombs,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 

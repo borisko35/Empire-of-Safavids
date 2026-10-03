@@ -65,8 +65,8 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     description: 'Древние подземные туннели под городом. Здесь скрываются разбойники и нежить.',
     region: Region.TABRIZ,
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: -520,
-    entryZ: -340,
+    entryX: 4792,
+    entryZ: 4000,
     minLevel: 5,
     // Было 5–25. Расширение, а не урезание: выше двадцатого в катакомбах
     // всё равно нет ничего, а полоса 26–29 закрывается кавказским данжем
@@ -134,8 +134,8 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // означало бы, что игрок тридцатого уровня доходит до тронного зала и
     // встанет. Уровни 25–40 закрывает новый кавказский данж.
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: -160,
-    entryZ: 240,
+    entryX: 4836,
+    entryZ: 4000,
     minLevel: 40,
     maxLevel: 60,
     minPlayers: 3,
@@ -185,8 +185,8 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     description: 'Глубокие пещеры в горах Хорасана. Здесь обитают демоны из персидской мифологии.',
     region: Region.KHORASAN,
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: 780,
-    entryZ: -620,
+    entryX: 4880,
+    entryZ: 4000,
     minLevel: 60,
     maxLevel: 85,
     minPlayers: 5,
@@ -239,8 +239,8 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     description: 'Гарнизон Сефевидов ушёл вниз, и перевал заняли янычары. Пока крепость стоит, караваны идут мимо, а с ними и налёты.',
     region: Region.CAUCASUS,
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: -880,
-    entryZ: 520,
+    entryX: 4924,
+    entryZ: 4000,
     minLevel: 30,
     maxLevel: 52,
     minPlayers: 3,
@@ -309,8 +309,8 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     description: 'В горах Шираза открылась гробница, откуда выходят мертвецы. Святилище закрыто снаружи - и медленно перестало закрываться изнутри.',
     region: Region.SHIRAZ,
     // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
-    entryX: 1340,
-    entryZ: 1340,
+    entryX: 4968,
+    entryZ: 4000,
     minLevel: 45,
     maxLevel: 70,
     minPlayers: 3,
