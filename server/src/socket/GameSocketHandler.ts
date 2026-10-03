@@ -14,7 +14,7 @@ import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
-import { KarmaSystem, PVP_ZONES } from '../systems/KarmaSystem';
+import { KarmaSystem, PVP_ZONES, karmaDeathDrop } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { PvPService } from '../services/PvPService';
@@ -2061,6 +2061,28 @@ export class GameSocketHandler {
    * сервер запоминает точку, где погиб, и ждёт решения игрока (город или
    * место за золото) либо срабатывает страховочный таймер.
    */
+  /**
+   * Потерять золото при смерти по карме.
+   *
+   * Расчёт вынесен в чистую функцию karmaDeathDrop, здесь только списание.
+   * Ошибка списания не должна помешать смерти оформиться: игрок и так мёртв,
+   * и молча проглоченная ошибка оставила бы его без экрана смерти.
+   */
+  private async applyKarmaDeathDrop(dead: Character): Promise<{ dropped: number }> {
+    // Карма читается из базы, а не берётся из персонажа: в типе Character
+    // такого поля нет, и молчаливый ноль превращал бы штраф в ноль.
+    const карма = await this.karmaSystem.getKarma(dead.id).catch(() => 0);
+    const штраф = karmaDeathDrop(карма, Number(dead.gold ?? 0), Math.random());
+    if (штраф.dropped <= 0) return { dropped: 0 };
+    try {
+      const остаток = await this.characterService.spendGold(dead.id, штраф.dropped);
+      dead.gold = остаток;
+      return { dropped: штраф.dropped };
+    } catch {
+      // Золота не хватило (или запись не прошла): потери нет, и это не ошибка.
+      return { dropped: 0 };
+    }
+  }
   private async handlePlayerDeath(dead: Character, killer?: Character): Promise<void> {
     // Повторная смерть (два урона в одном кадре, добивание трупа) —
     // состояние уже есть, второй таймер только запутал бы логику
@@ -2085,9 +2107,17 @@ export class GameSocketHandler {
     this.deadPlayers.set(dead.id, { position, busy: false });
     this.armAutoRespawn(dead.id);
 
+    // Потеря золота по карме: таблица последствий KARMA_PENALTIES была
+    // объявлена и не читалась нигде. Теперь dropChanceOnDeath работает, и
+    // игрок видит сумму в окне смерти — последствие должно быть заметным,
+    // иначе это просто число в базе.
+    const потеря = await this.applyKarmaDeathDrop(dead).catch(() => ({ dropped: 0 }));
+
     deadSocket?.emit(SOCKET_EVENTS.PLAYER_DIED, {
       killerId: killer?.id,
       killerName: killer?.name ?? null,
+      // Сколько золота забрала карма: клиент показывает это в окне смерти.
+      karmaDropGold: потеря.dropped,
       respawnInSec: DEATH.AUTO_RESPAWN_SEC,
       gold: dead.gold,
       spotCostGold: spotRespawnCost(dead.gold),

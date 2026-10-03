@@ -520,8 +520,8 @@ describe('Стили экрана смерти', () => {
 describe('Переводы: смерть', () => {
   const DEATH_KEYS = [
     'death_auto', 'death_city', 'death_cost', 'death_err_generic', 'death_err_no_gold',
-    'death_err_spot_blocked', 'death_killer', 'death_killer_unknown', 'death_respawned_spot',
-    'death_respawning', 'death_spot',
+    'death_err_spot_blocked', 'death_karma_drop', 'death_killer', 'death_killer_unknown',
+    'death_respawned_spot', 'death_respawning', 'death_spot',
   ];
 
   it('ключи экрана смерти есть во всех языках', () => {

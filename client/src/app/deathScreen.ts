@@ -28,6 +28,8 @@ interface DiedPayload {
   respawnInSec?: number;
   gold?: number;
   spotCostGold?: number;
+  /** Сколько золота забрала карма за смерть: последствие видно игроку */
+  karmaDropGold?: number;
 }
 
 /** Отказ сервера в респавне */
@@ -76,6 +78,7 @@ function mount(): void {
           <div class="death-skull">&#9760;</div>
           <h2 class="death-title" id="death-title"></h2>
           <p class="death-subtitle" id="death-killer"></p>
+          <p class="death-subtitle" id="death-karma" hidden></p>
           <div class="death-timer" id="death-countdown">0</div>
           <p class="death-hint" id="death-hint"></p>
           <p class="death-error hidden" id="death-error"></p>
@@ -267,6 +270,19 @@ function paint(payload: DiedPayload): void {
     const cost = document.createElement('small');
     cost.textContent = t('panels.death_cost');
     spot.replaceChildren(document.createTextNode(t('panels.death_spot')), cost);
+  }
+  // Потеря золота по карме: показывается только когда что-то потеряно,
+  // иначе строка мигает «0» у игроков, которым карма ни при чём.
+  const karma = document.getElementById('death-karma');
+  if (karma) {
+    const lost = Number(payload?.karmaDropGold ?? 0);
+    if (lost > 0) {
+      karma.textContent = t('panels.death_karma_drop').replace('{gold}', String(lost));
+      karma.hidden = false;
+    } else {
+      karma.textContent = '';
+      karma.hidden = true;
+    }
   }
   const title = document.getElementById('death-title');
   if (title) title.textContent = t('world.died');

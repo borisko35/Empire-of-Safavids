@@ -785,7 +785,8 @@
     "invite_friend": "Dost",
     "invite_sent": "Dəvət göndərildi",
     "dungeon_invited": "Sizi oyuna dəvət edirlər",
-    "invite_expired": "Dəvət artıq etibarsızdır"
+    "invite_expired": "Dəvət artıq etibarsızdır",
+    "death_karma_drop": "Karma {gold} qızıl aldı"
   },
   "settings": {
     "title": "⚙ Parametrlər",

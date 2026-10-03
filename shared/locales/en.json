@@ -785,7 +785,8 @@
     "invite_friend": "Friend",
     "invite_sent": "Invitation sent",
     "dungeon_invited": "You are invited to a run",
-    "invite_expired": "The invitation has expired"
+    "invite_expired": "The invitation has expired",
+    "death_karma_drop": "Karma took {gold} gold"
   },
   "settings": {
     "title": "⚙ Settings",

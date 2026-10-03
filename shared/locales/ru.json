@@ -785,7 +785,8 @@
     "invite_friend": "Друг",
     "invite_sent": "Приглашение отправлено",
     "dungeon_invited": "Вас зовут в заход",
-    "invite_expired": "Приглашение больше не действует"
+    "invite_expired": "Приглашение больше не действует",
+    "death_karma_drop": "Карма забрала {gold} золота"
   },
   "settings": {
     "title": "⚙ Настройки",

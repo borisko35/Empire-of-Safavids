@@ -66,9 +66,51 @@ export const PVP_ZONES: Record<string, { type: PvPZoneType; nameRu: string; karm
   persian_gulf: { type: 'pvp',       nameRu: 'Персидский залив', karmaOnKill: false },
 };
 
+/**
+ * Что игрок теряет при смерти по карме.
+ *
+ * Шанс и доля берутся из одной цифры статуса: хаотичный — 0,1, красный —
+ * 0,3, изгой — 0,5. Одна цифра на обе величины, иначе таблица последствий
+ * разойдётся с тем, что игрок видит.
+ *
+ * `roll` передаётся снаружи, чтобы расчёт можно было проверить без
+ * подмены случайности внутри.
+ */
+export function karmaDeathDrop(
+  karma: number,
+  gold: number,
+  roll: number
+): { dropped: number; chance: number } {
+  const штраф = KARMA_PENALTIES[getKarmaStatus(karma)];
+  const chance = штраф.dropChanceOnDeath;
+  if (chance <= 0) return { dropped: 0, chance: 0 };
+  if (roll >= chance) return { dropped: 0, chance };
+  const золото = Math.max(0, Math.floor(gold));
+  if (золото <= 0) return { dropped: 0, chance };
+  // Не ниже одного золота: у изгоя с тремя золотом списание доли дало бы
+  // ноль, и смерть перестала бы стоить ничего.
+  const dropped = Math.max(1, Math.floor(золото * chance));
+  return { dropped: Math.min(dropped, золото), chance };
+}
+
 export class KarmaSystem {
   private db  = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
+
+  /**
+   * Карма персонажа.
+   *
+   * Отдельное чтение, потому что в типе Character поля karma нет: карма лежит
+   * в колонке characters, но в объект персонажа не попадает. Места, где она
+   * нужна (смерть, аукцион, отношение NPC), идут через этот метод.
+   */
+  async getKarma(characterId: string): Promise<number> {
+    const row = await this.db.queryOne<{ karma: number | null }>(
+      'SELECT karma FROM characters WHERE id = $1',
+      [characterId]
+    );
+    return Number(row?.karma ?? 0);
+  }
 
   async applyKarmaEvent(
     characterId: string,
