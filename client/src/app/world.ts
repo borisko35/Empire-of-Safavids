@@ -818,7 +818,10 @@ function wireSocket(): void {
       aquaticSize: payload.aquaticSize ?? 0.25,
       pos: { ...payload.position },
       target: { ...payload.position },
-      speed: 3.5,
+      // Константы скорости здесь больше нет: она была вбита как 3.5 для всех
+      // монстров, хотя серверные скорости доходят до 8. Из-за этого быстрый
+      // монстр отставал от своей настоящей позиции, а остановившийся ещё
+      // долго доезжал к ней. Положение сглаживается по времени.
       hp: payload.hp,
       maxHp: payload.maxHp ?? payload.hp,
       deadAt: 0,
@@ -835,7 +838,9 @@ function wireSocket(): void {
       const dest = action.destination;
       if (!swimNeeded(dest.x, dest.z) || swimNeeded(m.pos.x, m.pos.z)) {
         m.target = { ...dest };
-        m.speed = 3.2;
+        // Скорость не выставляется: она нужна была только чтобы догонять
+        // позицию с ограничением, а это и давало отставание. Куда идти — в
+        // m.target, сглаживание по времени живёт в entities.ts.
       } else {
         m.target = { x: m.pos.x, y: m.pos.y, z: m.pos.z };
       }

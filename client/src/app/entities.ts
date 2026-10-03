@@ -27,7 +27,7 @@ export interface MonsterEntity {
   aquaticSize?: number;
   pos: Vec3;
   target: Vec3;
-  speed: number;      // скорость интерполяции (юнитов/сек)
+
   hp: number;
   maxHp: number;
   deadAt: number;     // время смерти (для анимации), 0 — жив
@@ -57,6 +57,22 @@ export function tileHash(x: number, y: number): number {
   return ((h ^ (h >> 16)) >>> 0) / 4294967296;
 }
 
+/**
+ * Время сглаживания чужих тел, секунды.
+ *
+ * Чем меньше, тем точнее идёт объект за настоящей позицией и тем заметнее
+ * дёргается на пакетах. 0.1 с даёт отставание примерно в шестую долю пути:
+ * на скакуне (16 ед/с) это около 1.6 метра позади, что глазом не читается.
+ */
+const СГЛАЖИВАНИЕ_С = 0.1;
+
+/**
+ * Разрыв, который закрывается сразу: телепорт, воскрешение, появление из-за
+ * края карты. Сглаживать такое бессмысленно — объект долго летел бы через
+ * полкарты к своей настоящей позиции.
+ */
+const ЩЕЛЧОК_М = 6;
+
 export class World {
   players = new Map<string, PlayerEntity>();
   monsters = new Map<string, MonsterEntity>();
@@ -77,25 +93,38 @@ export class World {
 
   update(dt: number): void {
     const now = performance.now();
-    const lerp = (pos: Vec3, target: Vec3, speed: number) => {
+    // Сглаживание по времени, а НЕ ограничение скорости.
+    //
+    // Раньше чужие игроки догоняли настоящую позицию со скоростью 6 ед/с, а все
+    // монстры — со вбитыми 3.5, при том что серверные скорости доходят до 8, а
+    // скакун разгоняется до 16. При движении цели разрыв только накапливался:
+    // объект уезжал дальше, чем клиент мог догнать.
+    //
+    // Здесь за кадр берётся доля расстояния до цели, независимо от её скорости,
+    // поэтому отставание у движущегося объекта постоянное и небольшое, а большой
+    // разрыв (телепорт, воскрешение, появление из-за края) закрывается сразу.
+    const доля = 1 - Math.exp(-dt / СГЛАЖИВАНИЕ_С);
+    const lerp = (pos: Vec3, target: Vec3) => {
       const dx = target.x - pos.x, dz = target.z - pos.z;
       const dist = Math.hypot(dx, dz);
-      if (dist < 0.05) { pos.x = target.x; pos.z = target.z; return false; }
-      const step = Math.min(dist, speed * dt);
-      pos.x += (dx / dist) * step;
-      pos.z += (dz / dist) * step;
+      if (dist < 0.02) { pos.x = target.x; pos.z = target.z; return false; }
+      if (dist > ЩЕЛЧОК_М) { pos.x = target.x; pos.z = target.z; return true; }
+      pos.x += dx * доля;
+      pos.z += dz * доля;
       return true;
     };
 
     for (const p of this.players.values()) {
       if (p.isSelf) { p.moving = false; continue; }
-      p.moving = lerp(p.pos, p.target, 6);
+      // Предела скорости здесь больше нет: чужие игроки едут так же быстро,
+      // как едут на самом деле.
+      p.moving = lerp(p.pos, p.target);
       if (p.target.x !== p.pos.x) p.flipped = p.target.x < p.pos.x;
     }
     for (const m of this.monsters.values()) {
       if (m.deadAt) continue;
       m.pos.y = m.target.y;
-      lerp(m.pos, m.target, m.speed);
+      lerp(m.pos, m.target);
     }
 
     this.floaters = this.floaters.filter((f) => now - f.born < 1100);
