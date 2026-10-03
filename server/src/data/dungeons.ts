@@ -28,6 +28,15 @@ export interface DungeonDefinition {
   maxPlayers: number;
   difficulties: DungeonDifficulty[];
   rooms: DungeonRoom[];
+  /**
+   * Точка входа в подземелье в МИРОВЫХ координатах.
+   *
+   * Позиции комнат локальные: без этого поля спавн шёл в (8, 0, 5), то
+   * есть в начало координат — в центр города. Монстры подземелья
+   * появлялись на главной площади при входе в данж.
+   */
+  entryX: number;
+  entryZ: number;
   timeLimit: number; // минуты
   /**
    * Свой дневной лимит входа. Не задано — берётся общий
@@ -55,6 +64,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     nameRu: 'Катакомбы Тебриза',
     description: 'Древние подземные туннели под городом. Здесь скрываются разбойники и нежить.',
     region: Region.TABRIZ,
+    // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
+    entryX: -520,
+    entryZ: -340,
     minLevel: 5,
     // Было 5–25. Расширение, а не урезание: выше двадцатого в катакомбах
     // всё равно нет ничего, а полоса 26–29 закрывается кавказским данжем
@@ -121,6 +133,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     // появлялся, обещание «с двадцать пятого» ничего не значило; теперь
     // означало бы, что игрок тридцатого уровня доходит до тронного зала и
     // встанет. Уровни 25–40 закрывает новый кавказский данж.
+    // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
+    entryX: -160,
+    entryZ: 240,
     minLevel: 40,
     maxLevel: 60,
     minPlayers: 3,
@@ -169,6 +184,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     nameRu: 'Пещеры Огненных Дивов',
     description: 'Глубокие пещеры в горах Хорасана. Здесь обитают демоны из персидской мифологии.',
     region: Region.KHORASAN,
+    // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
+    entryX: 780,
+    entryZ: -620,
     minLevel: 60,
     maxLevel: 85,
     minPlayers: 5,
@@ -220,6 +238,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     nameRu: 'Крепость на перевале',
     description: 'Гарнизон Сефевидов ушёл вниз, и перевал заняли янычары. Пока крепость стоит, караваны идут мимо, а с ними и налёты.',
     region: Region.CAUCASUS,
+    // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
+    entryX: -880,
+    entryZ: 520,
     minLevel: 30,
     maxLevel: 52,
     minPlayers: 3,
@@ -287,6 +308,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     nameRu: 'Гробница Шеиха',
     description: 'В горах Шираза открылась гробница, откуда выходят мертвецы. Святилище закрыто снаружи - и медленно перестало закрываться изнутри.',
     region: Region.SHIRAZ,
+    // Точка входа: монстры появятся здесь плюс локальные позиции комнат.
+    entryX: 1340,
+    entryZ: 1340,
     minLevel: 45,
     maxLevel: 70,
     minPlayers: 3,

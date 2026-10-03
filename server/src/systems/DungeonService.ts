@@ -208,7 +208,14 @@ export class DungeonService {
         for (const pos of group.positions) {
           const monsterDef = MONSTERS_DATABASE[group.monsterId];
           if (!monsterDef) continue;
-          const ctx = this.ai.spawnMonster(monsterDef, pos, session.shardId);
+          // Позиция комнаты локальная: спавним от точки входа подземелья.
+          // Без сдвига монстры появлялись в (8, 0, 5) — в начале координат,
+          // то есть в центре города, при входе в любой данж.
+          const ctx = this.ai.spawnMonster(
+            monsterDef,
+            { x: def.entryX + pos.x, y: pos.y, z: def.entryZ + pos.z },
+            session.shardId,
+          );
           session.monsterIds.add(ctx.instanceId);
           this.monsterToSession.set(ctx.instanceId, session.id);
           if (room.isBossRoom && room.bossId === group.monsterId) {
