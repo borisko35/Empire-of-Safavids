@@ -723,6 +723,14 @@ export const api = {
       '/api/game/crafting/recipes',
     ),
 
+  /** Что сейчас в работе: нужно, чтобы не потерять задание вместе с данными
+   * браузера. Идентификатор хранится в localStorage, и после очистки
+   * сайта или входа с другого устройства клиент о нём не знал, а предмет
+   * остался изготовленным и незабираемым */
+  craftingJobs: (characterId: string) =>
+    req<{ jobs: { id: string; recipeId: string; completesAt: string }[] }>(
+      `/api/game/crafting/jobs?characterId=${characterId}`,
+    ),
   craftingStart: (characterId: string, recipeId: string) =>
     req<{ job: { id: string; recipeId: string; completesAt: string } }>('/api/game/crafting/start', {
       method: 'POST',

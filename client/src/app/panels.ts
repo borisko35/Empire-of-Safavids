@@ -658,6 +658,22 @@ export async function loadCraft(): Promise<void> {
     // Откат: если маршрут не ответил, панель всё равно показывает рецепты,
     // просто без уровней профессий. Тип указываем явно — из catch выходит
     // {} без индекса, и TS не может доказать, что доступ даст число
+    // Подхватываем задание с сервера, если клиент о нём забыл.
+    //
+    // Раньше идентификатор крафта жил только в localStorage: очистка данных
+    // сайта, другое устройство или простое залипание ключа делали задание
+    // невидимым. Материалы уже списаны, предмет изготовлен, но забрать его
+    // было нечем — единственный выход был попросить выдать руками.
+    if (!craftJobId) {
+      const свежие = (await api.craftingJobs(cid()).catch(() => ({ jobs: [] as { id: string; recipeId: string; completesAt: string }[] }))).jobs;
+      if (свежие.length > 0) {
+        craftJobId = свежие[0].id;
+        craftCompletesAt = new Date(свежие[0].completesAt).getTime();
+        localStorage.setItem('eos_craft_job', craftJobId);
+        localStorage.setItem('eos_craft_until', String(craftCompletesAt));
+      }
+    }
+
     const craftLevels: Record<string, number> =
       (await api.craftingSkills(cid()).catch(() => ({ levels: {} as Record<string, number> }))).levels;
     const box = $('craft-list');

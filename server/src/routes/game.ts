@@ -1429,6 +1429,19 @@ gameRouter.post('/crafting/start', secureMiddleware, requireCharacterOwnership()
 // В данных шесть профессий, и уровень теперь свой у каждой. Раньше был
 // один общий: кузнечный опыт открывал рецепты ювелира, и панель об
 // этом не говорила — просто показывала «Закрыто».
+// GET /api/game/crafting/jobs — что сейчас в работе.
+//
+// Маршрут появился вместе с защитой от второго крафта. Без него клиент знал
+// о своём задании только из localStorage: очистка данных сайта или другое
+// устройство делали задание невидимым навсегда — материалы списаны, предмет
+// не выдан, забрать его было нечем.
+gameRouter.get('/crafting/jobs', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const characterId = await bodyCharacterId(req, res);
+  if (!characterId) return;
+  const jobs = await craftingService.getActiveJobs(characterId);
+  return res.json({ jobs });
+}));
+
 gameRouter.get('/crafting/skills', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const characterId = await bodyCharacterId(req, res);
   if (!characterId) return;
