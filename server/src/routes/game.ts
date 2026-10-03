@@ -136,6 +136,7 @@ function paymentCountry(req: Request): string | null {
 
 // Создаём сервисы лениво-локально там, где нужны
 import { QuestService } from '../services/QuestService';
+import { REDIS_CHANNELS } from '../../../shared/constants';
 const questService = new QuestService();
 
 /** Квесты с collect-целями могут закрыться после пополнения инвентаря */
@@ -1127,6 +1128,55 @@ gameRouter.get('/servers-status', asyncHandler(async (_req: Request, res: Respon
 // ============================================================
 // ДАНЖИ
 // ============================================================
+
+// POST /api/game/dungeons/invite — позвать друга в заход
+// { characterId, friendUserId }. Отправить может только лидер своего захода.
+gameRouter.post(
+  '/dungeons/invite',
+  secureMiddleware,
+  requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await dungeonService.inviteToRun(
+      req.body.characterId,
+      req.body.friendUserId,
+    );
+    if (!result.ok) {
+      res.status(400).json({ error: result.code });
+      return;
+    }
+    // Уведомление идёт через существующий персональный канал: подписка
+    // раздаёт его игроку через activePlayers. Отдельный канал не заводился.
+    await redis
+      .publish(REDIS_CHANNELS.PLAYER_NOTIFICATION, {
+        characterId: result.inviteeCharacterId,
+        type: 'dungeon_invite',
+        inviteId: result.inviteId,
+      })
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] приглашение создано, но уведомление не ушло:', (e as Error).message);
+      });
+    res.json({ inviteId: result.inviteId });
+  })
+);
+
+// POST /api/game/dungeons/invite/:inviteId/answer — согласиться или отказаться
+gameRouter.post(
+  '/dungeons/invite/:inviteId/answer',
+  secureMiddleware,
+  requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await dungeonService.answerInvite(
+      req.body.characterId,
+      req.params.inviteId,
+      req.body.accept !== false,
+    );
+    if (!result.ok) {
+      res.status(400).json({ error: result.code });
+      return;
+    }
+    res.json({ joined: result.joined });
+  })
+);
 
 // GET /api/game/dungeons/:dungeonId/records — рекорды прохождений
 gameRouter.get(

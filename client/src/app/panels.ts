@@ -135,6 +135,26 @@ export async function loadDungeons(): Promise<void> {
           await loadDungeons();
         }));
       }
+      // Приглашение другу. Список друзей отдаёт userId, а не characterId:
+      // персонажа сервер ищет сам, в этом же регионе.
+      if (status.active) {
+        const друзья = await api.friends().catch(() => ({ friends: [] as never[] }));
+        for (const друг of друзья.friends) {
+          if (друг.status !== 'accepted' || друг.online !== true) continue;
+          const строка = rowEl('inv-item');
+          const подпись = document.createElement('span');
+          подпись.className = 'inv-name';
+          подпись.textContent = `${t('panels.invite_friend')}: ${друг.friendName}`;
+          строка.append(подпись);
+          строка.append(
+            actionButton(t('panels.invite'), async () => {
+              await api.dungeonInvite(cid(), друг.friendId);
+              toast(t('panels.invite_sent'), 'success');
+            }),
+          );
+          box.append(строка);
+        }
+      }
       // Рекорды прохождений. Пустой список — не ошибка: данных просто
       // ещё нет, и панель не должна из-за этого упасть.
       const рекорды = await api.dungeonRecords(d.id).catch(() => ({ records: [] as never[] }));

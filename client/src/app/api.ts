@@ -473,6 +473,20 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
+  /** Позвать друга в заход. Отправить может только лидер. */
+  dungeonInvite: (characterId: string, friendUserId: string) =>
+    req<{ inviteId: string }>('/api/game/dungeons/invite', {
+      method: 'POST',
+      body: JSON.stringify({ characterId, friendUserId }),
+    }),
+
+  /** Ответ на приглашение: принять значит войти в заход. */
+  dungeonInviteAnswer: (characterId: string, inviteId: string, accept: boolean) =>
+    req<{ joined: boolean }>(`/api/game/dungeons/invite/${inviteId}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ characterId, accept }),
+    }),
+
   /** Рекорды прохождений: кто прошёл быстрее всех */
   dungeonRecords: (dungeonId: string) =>
     req<{

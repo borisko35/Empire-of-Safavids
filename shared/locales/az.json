@@ -780,7 +780,12 @@
     "join_raid": "Qoşul",
     "joined_raid": "Siz oyuna qoşuldunuz",
     "raid_open": "Açıq oyun:",
-    "dungeon_records": "Rekord"
+    "dungeon_records": "Rekord",
+    "invite": "Dəvət",
+    "invite_friend": "Dost",
+    "invite_sent": "Dəvət göndərildi",
+    "dungeon_invited": "Sizi oyuna dəvət edirlər",
+    "invite_expired": "Dəvət artıq etibarsızdır"
   },
   "settings": {
     "title": "⚙ Parametrlər",

@@ -1279,6 +1279,22 @@ function wireSocket(): void {
     toast(isCombatErrorCode(message) ? t(COMBAT_ERROR_KEYS[message]) : message, 'error');
   });
 
+  // Приглашение в заход. Принимая, игрок входит в заход лидера: отдельного
+  // подтверждения сервер не спрашивает, потому что кнопка и есть согласие.
+  socket.on('notification', async (n: { characterId: string; type?: string; inviteId?: string }) => {
+    if (n.type !== 'dungeon_invite' || !n.inviteId) return;
+    if (!me || n.characterId !== me.id) return;
+    toast(`${t('panels.dungeon_invited')}: ${t('panels.join_raid')}`, 'info');
+    await api
+      .dungeonInviteAnswer(me.id, n.inviteId, true)
+      .then((r) => {
+        if (r.joined) toast(t('panels.joined_raid'), 'success');
+      })
+      .catch(() => {
+        toast(t('panels.invite_expired'), 'error');
+      });
+  });
+
   socket.on('combat:visual', (v: { attackerId: string; targetId: string }) => {
     if (!world || v.attackerId === me?.id) return; // свой урон уже отрисован по combat:result
     const a = world.players.get(v.attackerId);

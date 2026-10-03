@@ -780,7 +780,12 @@
     "join_raid": "Join",
     "joined_raid": "You joined the run",
     "raid_open": "Open run:",
-    "dungeon_records": "Record"
+    "dungeon_records": "Record",
+    "invite": "Invite",
+    "invite_friend": "Friend",
+    "invite_sent": "Invitation sent",
+    "dungeon_invited": "You are invited to a run",
+    "invite_expired": "The invitation has expired"
   },
   "settings": {
     "title": "⚙ Settings",

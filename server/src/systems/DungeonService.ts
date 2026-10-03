@@ -88,10 +88,20 @@ export interface DungeonCompleteInfo {
   items: string[];
 }
 
+/** Приглашение в заход: живёт 60 секунд и одноразовое. */
+export interface DungeonRunInvite {
+  inviteId: string;
+  sessionId: string;
+  inviterId: string;
+  inviteeCharacterId: string;
+  expiresAt: number;
+}
+
 export class DungeonService {
   private static instance: DungeonService;
   private sessions = new Map<string, DungeonSession>();
-  private monsterToSession = new Map<string, string>();
+  // Приглашения в заход. Живут 60 секунд и одноразовые.
+  private invites = new Map<string, DungeonRunInvite>();  private monsterToSession = new Map<string, string>();
   private characterToSession = new Map<string, string>();
   private db = DatabaseService.getInstance();
   private ai = new AISystem(); // заглушка: заменяется при init
@@ -524,6 +534,96 @@ export class DungeonService {
     }));
   }
 
+  /**
+   * Пригласить друга в заход. Возвращает идентификатор приглашения.
+   *
+   * Персонаж ищется по userId друга и только в регионе захода: персонажей у
+   * пользователя может быть несколько, и «первый» мог бы оказаться не тем.
+   *
+   * Приглашение живёт 60 секунд: за это время заход закрывается, и принявший
+   * присоединился бы к пустой сессии или к чужой.
+   */
+  async inviteToRun(
+    inviterId: string,
+    inviteeUserId: string,
+  ): Promise<{ ok: true; inviteId: string; inviteeCharacterId: string } | { ok: false; code: string }> {
+    const sessionId = this.characterToSession.get(inviterId);
+    const session = sessionId ? this.sessions.get(sessionId) : undefined;
+    if (!session || session.completedAt) return { ok: false, code: 'dungeon_not_in_run' };
+    if (session.leaderId !== inviterId) return { ok: false, code: 'dungeon_not_leader' };
+    if (session.members.size >= (DUNGEONS_DATABASE[session.dungeonId]?.maxPlayers || 1)) {
+      return { ok: false, code: 'dungeon_full' };
+    }
+
+    const персонаж = await this.db
+      .queryOne<{ id: string }>(
+        `SELECT id FROM characters
+          WHERE user_id = $1 AND region = $2
+          LIMIT 1`,
+        [inviteeUserId, session.region]
+      )
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] не удалось найти персонажа приглашённого:', (e as Error).message);
+        return null;
+      });
+    if (!персонаж) return { ok: false, code: 'dungeon_invitee_not_here' };
+    if (session.members.has(персонаж.id)) return { ok: false, code: 'dungeon_already_in_run' };
+
+    const inviteId = uuidv4();
+    this.invites.set(inviteId, {
+      inviteId,
+      sessionId: session.id,
+      inviterId,
+      inviteeCharacterId: персонаж.id,
+      expiresAt: Date.now() + 60 * 1000,
+    });
+    return { ok: true, inviteId, inviteeCharacterId: персонаж.id };
+  }
+
+  /**
+   * Ответ на приглашение. При согласии приглашённый входит в заход.
+   *
+   * Приглашение одноразовое: после ответа оно удаляется, и повторно принять
+   * его нельзя. Иначе один клик по старой кнопке втянул бы в уже закрытый заход.
+   */
+  async answerInvite(
+    characterId: string,
+    inviteId: string,
+    accept: boolean,
+  ): Promise<{ ok: true; joined: boolean } | { ok: false; code: string }> {
+    const invite = this.invites.get(inviteId);
+    if (!invite) return { ok: false, code: 'dungeon_invite_unknown' };
+    if (invite.inviteeCharacterId !== characterId) {
+      return { ok: false, code: 'dungeon_invite_not_yours' };
+    }
+    this.invites.delete(inviteId);
+    if (Date.now() > invite.expiresAt) return { ok: false, code: 'dungeon_invite_expired' };
+    if (!accept) return { ok: true, joined: false };
+
+    const result = await this.join(characterId, invite.sessionId);
+    if (!result.ok) return { ok: false, code: result.code };
+    return { ok: true, joined: true };
+  }
+
+  /** Отозвать приглашение: заход закрылся, друг ушёл, срок вышел. */
+  dropInvites(sessionId: string): void {
+    for (const [inviteId, invite] of this.invites) {
+      if (invite.sessionId === sessionId) this.invites.delete(inviteId);
+    }
+  }
+
+  /** Заодно и приглашения, срок которых вышел: иначе память растёт вечно. */
+  dropExpiredInvites(now: number = Date.now()): number {
+    let снято = 0;
+    for (const [inviteId, invite] of this.invites) {
+      if (now > invite.expiresAt) {
+        this.invites.delete(inviteId);
+        снято++;
+      }
+    }
+    return снято;
+  }
+
   listOpenSessions(dungeonId: string): { sessionId: string; members: number; maxPlayers: number }[] {
     const def = DUNGEONS_DATABASE[dungeonId];
     if (!def) return [];
@@ -569,6 +669,8 @@ export class DungeonService {
     }
   }
 
+  // Приглашения снимаются вместе с заходом: приглашённый не должен ждать
+  // минуту и потом присоединиться к закрытой сессии.
   private async claimLoot(sessionId: string): Promise<boolean> {
     const res = await this.db.query<{ id: string }>(
       `UPDATE dungeon_sessions
@@ -588,6 +690,7 @@ export class DungeonService {
     if (заходПроклятия) {
       const сессия = this.sessions.get(заходПроклятия);
       if (сессия && !сессия.completedAt) {
+      if (сессия) this.dropInvites(сессия.id);
         await this.curseSheikhRun([...сессия.members], сессия.id);
       }
     }
@@ -670,6 +773,9 @@ export class DungeonService {
     // раздачи и независимо от неё: добычу можно получить один раз, а страх
     // должен достаться каждому, кто был в заходе.
     await this.curseSheikhRun(участники, session.id);
+    // Приглашения снимаются вместе с заходом: приглашённый не должен ждать
+    // минуту и потом присоединиться к закрытой сессии.
+    this.dropInvites(session.id);
     if (await this.claimLoot(session.id)) {
       for (const доля of получили) {
         await this.characters

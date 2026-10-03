@@ -780,7 +780,12 @@
     "join_raid": "Вступить",
     "joined_raid": "Вы вступили в заход",
     "raid_open": "Открытый заход:",
-    "dungeon_records": "Рекорд"
+    "dungeon_records": "Рекорд",
+    "invite": "Пригласить",
+    "invite_friend": "Друг",
+    "invite_sent": "Приглашение отправлено",
+    "dungeon_invited": "Вас зовут в заход",
+    "invite_expired": "Приглашение больше не действует"
   },
   "settings": {
     "title": "⚙ Настройки",
