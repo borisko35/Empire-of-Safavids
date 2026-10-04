@@ -1557,7 +1557,13 @@
     "city": "Город",
     "port": "Порт",
     "enemy": "Враг",
-    "north": "С"
+    "north": "С",
+    "legend_trade": "Торговля",
+    "legend_gardens": "Сады",
+    "legend_ruins": "Руины",
+    "legend_oasis": "Оазис",
+    "legend_route": "Маршрут",
+    "legend_fog": "Туман"
   },
   "equip": {
     "head": "Голова",

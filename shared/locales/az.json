@@ -1557,7 +1557,13 @@
     "city": "Şəhər",
     "port": "Liman",
     "enemy": "Düşmən",
-    "north": "Ş"
+    "north": "Ş",
+    "legend_trade": "Ticarət",
+    "legend_gardens": "Bağlar",
+    "legend_ruins": "Xaraba",
+    "legend_oasis": "Vahə",
+    "legend_route": "Marşrut",
+    "legend_fog": "Duman"
   },
   "equip": {
     "head": "Baş",

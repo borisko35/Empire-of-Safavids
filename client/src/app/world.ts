@@ -2217,6 +2217,8 @@ function redrawWorldMap(): void {
     [...world.monsters.values()].map((m) => ({ x: m.pos.x, z: m.pos.z })),
     Object.values(NPC_WORLD_POSITIONS).map((n) => ({ x: n.x, z: n.z })),
     world3d?.getNavRoute() ?? [],
+    // Маркер игрока на большой карте смотрит по камере, а не на север.
+    world3d?.getCameraPose().yaw ?? 0,
   );
 }
 

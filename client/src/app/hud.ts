@@ -1097,6 +1097,10 @@ export function drawWorldMap(
   monsters: { x: number; z: number }[],
   npcs?: { x: number; z: number }[],
   route?: { x: number; z: number }[],
+  // Направление взгляда камеры. Без него маркер игрока всегда смотрел на
+  // север, и на большой карте было непонятно, куда идёшь. Параметр последний
+  // и со значением по умолчанию, чтобы старые вызовы не сломались.
+  yaw = 0,
 ): void {
   // Туман войны и на большой карте: карта со всей местностью рядом с
   // мини-картой с запорами выглядела бы как поломка, а не как замысел.
@@ -1148,8 +1152,19 @@ export function drawWorldMap(
           col = [10, 22, 40];
         } else {
           const biome = biomeAt(wx, wz);
-          const base = BIOME_COLORS[biome] ?? BIOME_COLORS.field;
-          col = [base[0], base[1], base[2]];
+          // Дороги и высотная подсветка — как на мини-карте. Без них большая
+          // карта была плоскими пятнами: ни гор, ни дорог, и горы не читались.
+          if (isRoad(wx, wz) && biome !== 'water') {
+            col = [ROAD_COLOR[0], ROAD_COLOR[1], ROAD_COLOR[2]];
+          } else {
+            const base = BIOME_COLORS[biome] ?? BIOME_COLORS.field;
+            col = [base[0], base[1], base[2]];
+            if (biome === 'mountain' || biome === 'field' || biome === 'desert') {
+              const h = terrainHeight(wx, wz);
+              const k = Math.max(0.82, Math.min(1.22, 1 + h / 160));
+              col = [col[0] * k, col[1] * k, col[2] * k];
+            }
+          }
         }
         for (let dy = 0; dy < step && py + dy < H; dy++) {
           for (let dx = 0; dx < step && px + dx < W; dx++) {
@@ -1179,22 +1194,18 @@ export function drawWorldMap(
     }
 
     // ── Границы регионов и их названия ─────────────────────────
-    // Полосы идут сверху вниз по z. Граница рисуется пунктиром, иначе
-    // сплошная линия читалась бы как дорога, а названия поверх неё
-    // показывали бы, что это рубеж между регионами.
+    // Прямоугольник по границам полосы, а не только горизонтальные линии.
+    // Раньше рисовались только z1/z2 от края до края мира: для полос-краёв,
+    // которые идут по x, горизонтальные линии были неверны по смыслу, а
+    // вертикальных рубежей не было вовсе. Пунктир — чтобы не читалось дорогой.
     c.save();
     c.setLineDash([9, 7]);
     c.lineWidth = 2;
     c.strokeStyle = 'rgba(255, 233, 184, 0.55)';
     for (const полоса of ПОЛОСЫ_РЕГИОНОВ) {
-      for (const z of [полоса.z1, полоса.z2]) {
-        const a = toPx(-WORLD_HALF, z);
-        const b = toPx(WORLD_HALF, z);
-        c.beginPath();
-        c.moveTo(a.x, a.y);
-        c.lineTo(b.x, b.y);
-        c.stroke();
-      }
+      const a = toPx(полоса.x1, полоса.z1);
+      const b = toPx(полоса.x2, полоса.z2);
+      c.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
     }
     c.restore();
 
@@ -1439,18 +1450,54 @@ export function drawWorldMap(
     dot(x, y, '#ff4f3d', 3);
   }
 
-  // Игрок — белый треугольник
+  // Игрок — белый треугольник носом по направлению взгляда.
+  // Поворот равен -yaw: при yaw = π камера стоит севернее игрока и смотрит
+  // на юг, то есть вниз карты, и треугольник разворачивается носом вниз.
   const p = toPx(me.x, me.z);
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(-yaw);
   ctx.fillStyle = '#ffffff';
   ctx.strokeStyle = '#1a1208';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(p.x, p.y - 9);
-  ctx.lineTo(p.x - 7, p.y + 6);
-  ctx.lineTo(p.x + 7, p.y + 6);
+  ctx.moveTo(0, -9);
+  ctx.lineTo(-7, 6);
+  ctx.lineTo(7, 6);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+
+  // Компас и масштабная линейка. Карта, в отличие от мини-карты, не
+  // поворачивается за камерой: север всегда вверх, и это надо показать,
+  // иначе маркер носом вниз читается как «карта перевёрнута».
+  // Линейка — 500 единиц мира: подпись числом, перевода не требует.
+  const компасX = W - 34;
+  const компасY = 34;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(компасX, компасY, 16, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(10, 14, 26, 0.72)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(201, 168, 76, 0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = '#ffe9b8';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(t('map.north'), компасX, компасY + 5);
+  const длинаШкалы = 500 * scale;
+  const шкалаY = H - 22;
+  ctx.strokeStyle = 'rgba(255, 233, 184, 0.85)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(18, шкалаY);
+  ctx.lineTo(18 + длинаШкалы, шкалаY);
+  ctx.stroke();
+  ctx.font = '11px sans-serif';
+  ctx.fillText('500', 18 + длинаШкалы / 2, шкалаY - 6);
+  ctx.restore();
 
   // Рамка
   ctx.strokeStyle = 'rgba(201, 168, 76, 0.55)';

@@ -1557,7 +1557,13 @@
     "city": "City",
     "port": "Port",
     "enemy": "Enemy",
-    "north": "N"
+    "north": "N",
+    "legend_trade": "Trade",
+    "legend_gardens": "Gardens",
+    "legend_ruins": "Ruins",
+    "legend_oasis": "Oasis",
+    "legend_route": "Route",
+    "legend_fog": "Fog"
   },
   "equip": {
     "head": "Head",
