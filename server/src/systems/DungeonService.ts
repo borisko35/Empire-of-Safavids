@@ -7,7 +7,7 @@
 // убирает монстров из мира. Состояние в памяти: сессии переживают
 // только текущий процесс сервера (транзиентный геймплей).
 
-import { DUNGEONS_DATABASE, DungeonDefinition } from '../data/dungeons';
+import { DUNGEONS_DATABASE, DungeonDefinition, rollBonusItems } from '../data/dungeons';
 import { MONSTERS_DATABASE } from '../data/monsters';
 import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
@@ -401,11 +401,21 @@ export class DungeonService {
   }
 
   private async persistSession(session: DungeonSession): Promise<void> {
+    // Размер и сложность берутся из данных подземелья, а не из вписанных
+    // значений. Раньше здесь стояло 'normal' и 5: у гробницы, где в данных
+    // maxPlayers 20, в базу всё равно писалось 5, и любое чтение этой колонки
+    // показывало неверный размер захода. Сложность остаётся первой из
+    // объявленных, потому что выбор сложности игроком в игре ещё не сделан
+    // (difficultieshard/heroic/mythic объявлены, но не используются) - врать
+    // в базе о том, чего в игре нет, не нужно.
+    const def = DUNGEONS_DATABASE[session.dungeonId];
+    const сложность = def?.difficulties[0] ?? 'normal';
+    const размер = def?.maxPlayers ?? 5;
     await this.db.query(
       `INSERT INTO dungeon_sessions (id, dungeon_id, difficulty, leader_id, max_size, started_at, status)
-       VALUES ($1, $2, 'normal', $3, 5, to_timestamp($4 / 1000.0), 'active')
+       VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), 'active')
        ON CONFLICT (id) DO NOTHING`,
-      [session.id, session.dungeonId, session.leaderId, session.startedAt]
+      [session.id, session.dungeonId, сложность, session.leaderId, размер, session.startedAt]
     );
     for (const memberId of session.members) {
       await this.db.query(
@@ -934,6 +944,15 @@ export class DungeonService {
     const каждому = Math.floor(gold / народу);
     const остаток = gold - каждому * народу;
 
+    // Бонусная добыча. Поле bonusItems было объявлено у всех пяти подземелий
+    // (тринадцать записей, шансы от 0.001 до 0.4) и не читалось никогда:
+    // выдавались только гарантированные предметы, а обещанное в данных не
+    // выпадало ни разу. Бросок делается один на заход, и выпавшее идёт в
+    // общий круг раздачи - одинокий игрок забирает всё, а группа делит так же,
+    // как гарантированные предметы.
+    const бонус = rollBonusItems(def.rewards.bonusItems, Math.random);
+    const добыча = [...def.rewards.guaranteedItems, ...бонус];
+
     // Предметы идут по кругу участников: каждый достаётся ровно один раз.
     // Формула «предмет i достаётся участнику i» отдавала бы лишние
     // предметы НИКОМУ — при двух людях и трёх предметах третий исчезал бы.
@@ -943,7 +962,7 @@ export class DungeonService {
       experience: def.rewards.experience,
       // Остаток от деления золота — лидеру захода, он первый во входе.
       gold: каждому + (порядок === 0 ? остаток : 0),
-      items: def.rewards.guaranteedItems.filter((_, i) => i % народу === порядок),
+      items: добыча.filter((_, i) => i % народу === порядок),
     }));
 
     // Проклятие Шеиха: страх всем участникам захода. Навешивается после
@@ -971,7 +990,9 @@ export class DungeonService {
       dungeonNameRu: def.nameRu,
       experience: def.rewards.experience,
       gold,
-      items: def.rewards.guaranteedItems,
+      // Именно выданное, а не объявленное в данных: экран захода не имеет
+      // права показывать предмет, который не достался никому.
+      items: добыча,
       participants: участники.length,
       goldEach: каждому,
     };
