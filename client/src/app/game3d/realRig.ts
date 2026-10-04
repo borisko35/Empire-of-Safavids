@@ -69,7 +69,40 @@ const CLIP_CROUCH_IDLE = 'crouch-idle';
 const CLIP_CROUCH_FWD = 'crouch-walk-forward';
 const CLIP_ATTACK = 'sword-shield-attack';
 const CLIP_JUMP = 'jumping';
-const CLIP_FALL_DEATH = 'jumping-down';
+
+/**
+ * Клипы, добавленные после того, как владелец докачал недостающее.
+ *
+ * Смерть и уклонение играются один раз: у клипа смерти раньше не было, и вместо неё
+ * шёл `jumping-down`, то есть персонаж падал, но не умирал. Теперь падение настоящее.
+ */
+const CLIP_DEATH = 'death-fall-forward';
+const CLIP_DEATH_BACK = 'death-fall-back';
+const CLIP_BLOCK = 'block';
+const CLIP_BLOCK_CROUCH = 'block-crouch';
+const CLIP_BLOCK_CROUCH_IDLE = 'block-crouch-idle';
+const CLIP_SWIM = 'swim';
+const CLIP_SWIM_IDLE = 'swim-idle';
+const CLIP_DODGE = {
+  forward: 'dodge-forward',
+  back: 'dodge-back',
+  left: 'dodge-left',
+  right: 'dodge-right',
+} as const;
+
+/**
+ * Эти клипы проигрываются один раз и замирают на последнем кадре.
+ *
+ * Прежний переключатель всегда ставил LoopRepeat, и персонаж после смерти
+ * падал бы заново каждые несколько секунд — мигающий труп. Смерть, уклонение и
+ * атака сюда и отнесены.
+ */
+const ОДИН_РАЗ = new Set<string>([
+  CLIP_DEATH,
+  CLIP_DEATH_BACK,
+  CLIP_ATTACK,
+  ...Object.values(CLIP_DODGE),
+]);
 
 /** С какой скорости идёт бег, а не шаг. Порог взят по длинам клипов. */
 const RUN_THRESHOLD = 3.4;
@@ -214,13 +247,27 @@ export class RealRig implements Rig {
     this.включить(первыйКлип.name || CLIP_IDLE, первыйКлип);
   }
 
-  /** Переключает на клип. Первый переход — без наложения, дальше с наложением. */
+  /**
+   * Переключает на клип. Первый переход — без наложения, дальше с наложением.
+   *
+   * Клип из ОДИН_РАЗ ставится на один проход и замирает: без этого персонаж после
+   * смерти начинал бы падать заново каждые несколько секунд.
+   */
   private включить(имя: string, клип: THREE.AnimationClip): void {
     if (this.текущееИмя === имя) return;
     const прежний = this.текущийКлип;
     const действие = this.mixer.clipAction(клип);
+    const одноразовый = ОДИН_РАЗ.has(имя);
     действие.enabled = true;
-    действие.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    if (одноразовый) {
+      действие.reset().setLoop(THREE.LoopOnce, 1).play();
+      // clampWhenFinished держит последний кадр: без него поза сбрасывается в нули
+      // и персонаж после смерти дёргается стойкой.
+      действие.clampWhenFinished = true;
+    } else {
+      действие.clampWhenFinished = false;
+      действие.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+    }
     if (прежний && прежний !== клип) {
       действие.crossFadeFrom(this.mixer.clipAction(прежний), CROSSFADE, false);
     }
@@ -248,20 +295,43 @@ export class RealRig implements Rig {
   update(dt: number, p: RigPose): void {
     // Длинный кадр (вкладка была свёрнута) не должен дёргать позу рывком.
     this.mixer.update(Math.min(Math.max(dt, 0), 0.1));
-    if (p.dead) { this.хочу(CLIP_FALL_DEATH); return; }
-    if (p.swimming) { this.хочу(CLIP_IDLE); return; }
+    if (p.dead) { this.хочу(CLIP_DEATH); return; }
+    // Плавание: на месте и в движении разные клипы, а не один и тот же.
+    if (p.swimming) { this.хочу(p.moving ? CLIP_SWIM : CLIP_SWIM_IDLE); return; }
     if (!p.grounded) { this.хочу(CLIP_JUMP); return; }
-    if (p.crouch) { this.хочу(p.moving ? CLIP_CROUCH_FWD : CLIP_CROUCH_IDLE); return; }
-    if (p.block) { this.хочу(CLIP_IDLE); return; }
+    if (p.crouch) {
+      // Блок в приседе — отдельные клипы: стоять с щитом в полный рост и в
+      // приседе выглядит по-разному, и раньше блок просто держал текущий клип.
+      if (p.block) { this.хочу(p.moving ? CLIP_BLOCK_CROUCH : CLIP_BLOCK_CROUCH_IDLE); return; }
+      this.хочу(p.moving ? CLIP_CROUCH_FWD : CLIP_CROUCH_IDLE);
+      return;
+    }
+    if (p.block) { this.хочу(CLIP_BLOCK); return; }
     if (p.moving) { this.хочу(p.speed > RUN_THRESHOLD ? CLIP_RUN : CLIP_WALK); return; }
     this.хочу(CLIP_IDLE);
+  }
+
+  /**
+   * Уклонение: рывок в сторону, из которой пришёл удар по ногам.
+   *
+   * Направление передаётся снаружи, потому что риг не знает, куда смотрит камера.
+   * Клип одноразовый: рывок длится доли секунды, и повторять его в цикле нельзя.
+   */
+  triggerDodge(direction: keyof typeof CLIP_DODGE): void {
+    const имя = CLIP_DODGE[direction];
+    void загрузитьКлип(имя).then((клип) => {
+      if (!клип || !this.group.parent) return;
+      // Переход не делаем: рывок резкий, и наложение в 0,18 с съело бы его начало.
+      this.включить(имя, клип);
+    });
   }
 
   triggerAttack(): void {
     void загрузитьКлип(CLIP_ATTACK).then((клип) => {
       if (!клип || !this.group.parent) return;
-      const действие = this.mixer.clipAction(клип);
-      действие.reset().setLoop(THREE.LoopOnce, 1).play();
+      // Через включить(), а не напрямую: одноразовость и замирание на последнем
+      // кадре задаются там, иначе атака осталась бы вечно в крайней позе.
+      this.включить(CLIP_ATTACK, клип);
     });
   }
 

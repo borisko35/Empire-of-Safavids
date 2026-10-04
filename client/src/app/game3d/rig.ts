@@ -26,6 +26,9 @@ const MAT = {
 export type Weapon = 'sword' | 'staff' | 'bow' | 'dagger' | 'rapier' | 'none';
 export type Hat = 'turban' | 'helmet' | 'hood' | 'cap' | 'none';
 
+/** Сторона рывка: из этих четырёх выбирается клип переката */
+export type DodgeDirection = 'forward' | 'back' | 'left' | 'right';
+
 export interface RigPose {
   moving: boolean;
   speed: number;      // юнитов/сек (для фазы и размаха)
@@ -40,6 +43,13 @@ export interface Rig {
   group: THREE.Group;
   update: (dt: number, p: RigPose) => void;
   triggerAttack: () => void;
+  /**
+   * Уклонение в сторону: forward, back, left, right.
+   *
+   * Необязательный: четыре сборки в этом файле состоят из палочек и показывают
+   * уклонение без анимации. Настоящая модель проигрывает перекат.
+   */
+  triggerDodge?: (direction: DodgeDirection) => void;
   equipWeapon: (visible: boolean) => void;
   equipShield: (visible: boolean) => void;
   isWeaponEquipped: () => boolean;

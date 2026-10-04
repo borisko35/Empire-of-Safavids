@@ -50,6 +50,30 @@
   ],
   "clips": [
     {
+      "file": "models/block.glb",
+      "name": "block",
+      "channels": 162,
+      "bytes": 58288
+    },
+    {
+      "file": "models/block-crouch.glb",
+      "name": "block-crouch",
+      "channels": 162,
+      "bytes": 63744
+    },
+    {
+      "file": "models/block-crouch-idle.glb",
+      "name": "block-crouch-idle",
+      "channels": 162,
+      "bytes": 63432
+    },
+    {
+      "file": "models/cheer-victory.glb",
+      "name": "cheer-victory",
+      "channels": 198,
+      "bytes": 94064
+    },
+    {
       "file": "models/crouch-idle.glb",
       "name": "crouch-idle",
       "channels": 165,
@@ -80,6 +104,54 @@
       "bytes": 87536
     },
     {
+      "file": "models/death-fall-back.glb",
+      "name": "death-fall-back",
+      "channels": 162,
+      "bytes": 99612
+    },
+    {
+      "file": "models/death-fall-forward.glb",
+      "name": "death-fall-forward",
+      "channels": 162,
+      "bytes": 98816
+    },
+    {
+      "file": "models/dodge-back.glb",
+      "name": "dodge-back",
+      "channels": 162,
+      "bytes": 85812
+    },
+    {
+      "file": "models/dodge-forward.glb",
+      "name": "dodge-forward",
+      "channels": 162,
+      "bytes": 70544
+    },
+    {
+      "file": "models/dodge-left.glb",
+      "name": "dodge-left",
+      "channels": 162,
+      "bytes": 69520
+    },
+    {
+      "file": "models/dodge-right.glb",
+      "name": "dodge-right",
+      "channels": 162,
+      "bytes": 69384
+    },
+    {
+      "file": "models/hurt-flinch.glb",
+      "name": "hurt-flinch",
+      "channels": 162,
+      "bytes": 99916
+    },
+    {
+      "file": "models/jumping.glb",
+      "name": "jumping",
+      "channels": 165,
+      "bytes": 108964
+    },
+    {
       "file": "models/jumping-down.glb",
       "name": "jumping-down",
       "channels": 165,
@@ -92,10 +164,16 @@
       "bytes": 74516
     },
     {
-      "file": "models/jumping.glb",
-      "name": "jumping",
+      "file": "models/knife-idle.glb",
+      "name": "knife-idle",
+      "channels": 162,
+      "bytes": 95744
+    },
+    {
+      "file": "models/running.glb",
+      "name": "running",
       "channels": 165,
-      "bytes": 108964
+      "bytes": 67736
     },
     {
       "file": "models/running-backward.glb",
@@ -110,10 +188,16 @@
       "bytes": 114376
     },
     {
-      "file": "models/running.glb",
-      "name": "running",
-      "channels": 165,
-      "bytes": 67736
+      "file": "models/sit-idle.glb",
+      "name": "sit-idle",
+      "channels": 162,
+      "bytes": 92232
+    },
+    {
+      "file": "models/sit-talk.glb",
+      "name": "sit-talk",
+      "channels": 198,
+      "bytes": 164952
     },
     {
       "file": "models/standing-idle.glb",
@@ -134,6 +218,30 @@
       "bytes": 132560
     },
     {
+      "file": "models/swim.glb",
+      "name": "swim",
+      "channels": 162,
+      "bytes": 152848
+    },
+    {
+      "file": "models/swim-idle.glb",
+      "name": "swim-idle",
+      "channels": 162,
+      "bytes": 109620
+    },
+    {
+      "file": "models/swim-to-edge.glb",
+      "name": "swim-to-edge",
+      "channels": 162,
+      "bytes": 127460
+    },
+    {
+      "file": "models/sword-shield-attack.glb",
+      "name": "sword-shield-attack",
+      "channels": 165,
+      "bytes": 141216
+    },
+    {
       "file": "models/sword-shield-attack-3.glb",
       "name": "sword-shield-attack-3",
       "channels": 165,
@@ -146,10 +254,10 @@
       "bytes": 116856
     },
     {
-      "file": "models/sword-shield-attack.glb",
-      "name": "sword-shield-attack",
-      "channels": 165,
-      "bytes": 141216
+      "file": "models/walk-backward.glb",
+      "name": "walk-backward",
+      "channels": 162,
+      "bytes": 67912
     },
     {
       "file": "models/walking.glb",

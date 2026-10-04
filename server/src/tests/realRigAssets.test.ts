@@ -98,14 +98,16 @@ function world3dSource(): string {
 }
 
 describe('Активы: настоящие модели на месте', () => {
-  it('пять персонажей и восемнадцать клипов лежат в репозитории', () => {
+  it('пять персонажей и все клипы лежат в репозитории', () => {
     must(
       manifest.characters.length === CLASSES.length,
       `v manifeste ${manifest.characters.length} personazhey, a klassov igroka ${CLASSES.length}`,
     );
+    // 18 первых + 18 докачанных = 36. Число берётся из манифеста и сверяется с
+    // диском: константой оно жить не может, файлы добавляются.
     must(
-      manifest.clips.length === 18,
-      `v manifeste ${manifest.clips.length} klipov, a v papke Animation bylo 18 faylov animacii`,
+      manifest.clips.length >= 36,
+      `v manifeste ${manifest.clips.length} klipov, a dolzhno byt ne menshe 36: 18 pervых + 18 dokačannyx`,
     );
     for (const entry of [...manifest.characters, ...manifest.clips]) {
       must(
@@ -255,6 +257,68 @@ describe('Клипы играют на персонажах', () => {
         );
       }
     }
+  });
+});
+
+describe('Подключённые состояния ведут к существующим клипам', () => {
+  it('каждый клип, названный в realRig.ts, лежит на диске', () => {
+    // Состояние, которому назначен несуществующий клип, выглядит в игре как «персонаж
+    // замер», и нигде не падает: загрузчик молча отдаёт null, а хочу() пропускает
+    // переключение. Проверка по коду ловит это до игры.
+    const src = realRigSource();
+    const имена = [...src.matchAll(/'([a-z]+(?:-[a-z0-9]+)+)'/g)].map((m) => m[1]);
+    const клипы = new Set(manifest.clips.map((c) => c.name));
+    // Из имён берём только те, что похожи на клипы: в файле есть и путь к папке.
+    const кандидаты = имена.filter((n) => клипы.has(n) || /^(walk|run|crouch|swim|block|death|dodge|sit|cheer|hurt|knife|jumping|standing|start|stop|sword)-/.test(n));
+    const наДиске = [...new Set(кандидаты.filter((n) => !клипы.has(n)))];
+    must(
+      наДиске.length === 0,
+      `realRig.ts ссылается на клипы, которых нет в models: ${наДиске.join(', ')}. Состояние будет замирать на месте`,
+    );
+  });
+
+  it('смерть, блок, плавание и уклонение подключены, а не заменены заглушкой', () => {
+    // Заглушки стояли там, где клипов не было: смерть играла падением, блок держал
+    // текущий клип, плавание стояло на месте. Смысл проверки — не дать вернуться туда.
+    const src = realRigSource();
+    must(/const CLIP_DEATH = 'death-fall-forward'/.test(src), 'смерть не подключена');
+    must(/if \(p\.block\) \{ this\.хочу\(CLIP_BLOCK\)/.test(src), 'блок не подключён');
+    must(
+      /p\.moving \? CLIP_SWIM : CLIP_SWIM_IDLE/.test(src),
+      'плавание не различает движение и покой',
+    );
+    must(/triggerDodge\(direction/.test(src), 'уклонение не проигрывается');
+  });
+
+  it('смерть и уклонение играются один раз, а не зациклены', () => {
+    // Смерть в цикле — это мигающий труп: падение начинается заново каждые несколько
+    // секунд. Поэтому одноразовые клипы помечены отдельно.
+    const src = realRigSource();
+    must(/const ОДИН_РАЗ = new Set<string>\(\[/.test(src), 'нет списка одноразовых клипов');
+    must(/CLIP_DEATH,/.test(src), 'смерть не помечена как одноразовая');
+    must(/\.\.\.Object\.values\(CLIP_DODGE\)/.test(src), 'перекат не помечен как одноразовый');
+    must(/clampWhenFinished = true/.test(src), 'одноразовый клип не замирает на последнем кадре');
+    // Проверяем, что играет ИМЕННО клип смерти. Проверка на отсутствие старой строки
+    // пропускала подмену на любую другую константу: ломка «смерть -> прыжок» прошла
+    // на зелёном.
+    must(
+      /if \(p\.dead\) \{ this\.хочу\(CLIP_DEATH\)/.test(src),
+      'смерть играет не клип смерти, а что-то другое: персонаж будет падать заново или замирать стоя',
+    );
+  });
+
+  it('у интерфейса Rig есть необязательный крючок уклонения, и он зовётся', () => {
+    // Необязательный, потому что четыре сборки из палочек его не умеют.
+    must(
+      /triggerDodge\?: \(direction: DodgeDirection\) => void;/.test(readText(join(ROOT, 'client/src/app/game3d/rig.ts'))),
+      'в интерфейсе Rig нет triggerDodge: настоящая модель не сможет показать перекат',
+    );
+    const world = world3dSource();
+    must(/rig\.triggerDodge\?\./.test(world), 'уклонение не запускает анимацию');
+    must(
+      /сторона = ix < 0 \? 'left' : 'right'/.test(world) && /сторона = iz < 0 \? 'back' : 'forward'/.test(world),
+      'сторона уклонения не определяется по нажатым клавишам: перекат всегда будет одним и тем же',
+    );
   });
 });
 

@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
-import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
+import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig';
 import { loadRealPlayerRig } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
@@ -696,6 +696,18 @@ export class World3D {
       - (this.keys.has('KeyA') || this.keys.has('ArrowLeft') ? 1 : 0);
     const iz = (this.keys.has('KeyW') || this.keys.has('ArrowUp') ? 1 : 0)
       - (this.keys.has('KeyS') || this.keys.has('ArrowDown') ? 1 : 0);
+    // Анимация уклонения начинается здесь же, до поворота на угол камеры:
+    // сторона читается прямо из нажатых клавиш, без обратной тригонометрии,
+    // а по диагонали берётся та ось, где нажатие сильнее.
+    if (this.me) {
+      let сторона: DodgeDirection = 'back';
+      if (Math.abs(ix) >= Math.abs(iz) && ix !== 0) {
+        сторона = ix < 0 ? 'left' : 'right';
+      } else if (iz !== 0) {
+        сторона = iz < 0 ? 'back' : 'forward';
+      }
+      this.rigs.get(this.me.id)?.rig.triggerDodge?.(сторона);
+    }
     // Без направляющей клавиши — в ту сторону, куда повёрнут персонаж
     const dx = ix !== 0 || iz !== 0 ? ix : Math.sin(this.yaw);
     const dz = ix !== 0 || iz !== 0 ? iz : Math.cos(this.yaw);
