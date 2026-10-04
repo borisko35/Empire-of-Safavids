@@ -364,6 +364,9 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'mob_undead_guardian', count: 3, positions: [{ x: 8, y: 0, z: 5 }, { x: -8, y: 0, z: 5 }, { x: 0, y: 0, z: 14 }] },
         ],
         isBossRoom: false,
+        // Сундуки нарисованы в furnishTomb (client/src/app/game3d/interiors.ts)
+        // в этом же порядке: 2 здесь, 3 в зале саркофагов, 5 в святилище.
+        chestPositions: [{ x: 6.4, z: 7.4 }, { x: -6.4, z: 7.4 }],
         treasureChests: 2,
       },
       {
@@ -375,6 +378,7 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'mob_fog_assassin', count: 3, positions: [{ x: 0, y: 0, z: 22 }, { x: 14, y: 0, z: 10 }, { x: -14, y: 0, z: 10 }] },
         ],
         isBossRoom: false,
+        chestPositions: [{ x: 4.4, z: -1.4 }, { x: -4.4, z: -1.4 }, { x: 0, z: 2.4 }],
         treasureChests: 3,
       },
       {
@@ -386,6 +390,10 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
         ],
         isBossRoom: true,
         bossId: 'mob_fog_assassin',
+        chestPositions: [
+          { x: -9.4, z: -2.4 }, { x: 9.4, z: -2.4 }, { x: -3.4, z: -9.4 },
+          { x: 3.4, z: -9.4 }, { x: 0, z: -11.4 },
+        ],
         treasureChests: 5,
       },
     ],
