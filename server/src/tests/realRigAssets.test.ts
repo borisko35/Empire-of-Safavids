@@ -30,12 +30,25 @@ const MODELS = join(ROOT, 'client/src/app/public/models');
 const DRACO = join(ROOT, 'client/src/app/public/draco');
 
 type Prim = { attributes: Record<string, number> };
-type Anim = { channels: { target: { node: number } }[] };
+type Sampler = { output: number };
+type Anim = {
+  channels: { target: { node: number; path: string }; sampler: number }[];
+  samplers: Sampler[];
+};
 type GLTF = {
   // translation и scale нужны для размера скелета, scenes — для масштаба корня.
   nodes?: { name?: string; translation?: number[]; scale?: number[] }[];
   meshes?: { primitives?: Prim[] }[];
-  accessors?: { min?: number[]; max?: number[] }[];
+  accessors?: {
+    min?: number[];
+    max?: number[];
+    componentType?: number;
+    type?: string;
+    count?: number;
+    bufferView?: number;
+    byteOffset?: number;
+  }[];
+  bufferViews?: { byteOffset?: number }[];
   scenes?: { nodes: number[] }[];
   skins?: unknown[];
   animations?: Anim[];
@@ -65,6 +78,42 @@ function readGLB(file: string): GLTF {
   return JSON.parse(buf.slice(20, 20 + jsonLength).toString('utf-8')) as GLTF;
 }
 
+/**
+ * Насколько корень уезжает со своего места за клип.
+ *
+ * Смещение считается от ПОКОЯ кости, а не от нуля: в glTF дорожка перевода заменяет
+ * собственный перевод узла целиком, поэтому уехать можно и вместе с покоем.
+ */
+function rootDrift(file: string): number {
+  const buf = readFileSync(join(MODELS, file));
+  const jsonLength = buf.readUInt32LE(12);
+  const jsonEnd = 20 + jsonLength;
+  const gltf = JSON.parse(buf.slice(20, jsonEnd).toString('utf-8')) as GLTF;
+  const bin = buf.slice(jsonEnd + 8, jsonEnd + 8 + buf.readUInt32LE(jsonEnd));
+  const nodes = gltf.nodes ?? [];
+  const hips = nodes.findIndex((n) => n.name === 'mixamorig:Hips');
+  if (hips < 0) throw new Error(file + ": net kosti taza");
+  const rest = nodes[hips].translation ?? [0, 0, 0];
+  let drift = 0;
+  for (const anim of gltf.animations ?? []) {
+    for (const channel of anim.channels) {
+      if (channel.target.node !== hips || channel.target.path !== 'translation') continue;
+      const sampler = anim.samplers[channel.sampler];
+      const acc = (gltf.accessors ?? [])[sampler ? sampler.output : -1];
+      if (!acc || acc.componentType !== 5126 || acc.type !== 'VEC3') continue;
+      const view = (gltf.bufferViews ?? [])[acc.bufferView ?? -1];
+      if (!view) continue;
+      const base = (view.byteOffset ?? 0) + (acc.byteOffset ?? 0);
+      for (let f = 0; f < (acc.count ?? 0); f++) {
+        for (let k = 0; k < 3; k++) {
+          const value = bin.readFloatLE(base + f * 12 + k * 4);
+          drift = Math.max(drift, Math.abs(value - rest[k]));
+        }
+      }
+    }
+  }
+  return drift;
+}
 function must(ok: unknown, why: string): void {
   if (!ok) throw new Error(why);
 }
@@ -257,6 +306,41 @@ describe('Клипы играют на персонажах', () => {
         );
       }
     }
+  });
+});
+
+describe('Koren ne uvozit personazha s mesta', () => {
+  // Porog 8 izmeren na oboikh naborah: bitye davali 10,69-728,75, godnye 0,05-6,18.
+  const MAX_DRIFT = 8;
+
+  it('ni odin klip ne dvigaet koren silnee skeleta', () => {
+    const bad: string[] = [];
+    for (const clip of manifest.clips) {
+      const drift = rootDrift(shortName(clip.file));
+      if (drift > MAX_DRIFT) bad.push(clip.name + ': ' + drift.toFixed(1));
+    }
+    must(
+      bad.length === 0,
+      'klipov s uezdom kornya: ' + bad.length + ' - ' + bad.slice(0, 4).join(', ') +
+        '. Skelet vysokoy okolo metra, a koren otkhodit na desyatki edinits: dorozhki i pokoy kosti v raznyh edinitsah, i personazh pod zemley',
+    );
+  });
+
+  it('u stoящего pokoya koren pochti na meste', () => {
+    // Стоящий покой играется всегда, поэтому если уезжает он - не видно персонажа прежде
+    // всего. Остальные клипы могут двигаться: присед и падение это делают по делу.
+    const idle = manifest.clips.find((c) => c.name === 'standing-idle');
+    must(idle !== undefined, 'klipa standing-idle net v manifeste');
+    // must не сужает тип, поэтому проверка на undefined повторяется здесь явно.
+    if (!idle) return;
+    const drift = rootDrift(shortName(idle.file));
+    // 0,2 - не с потолка: у годного standing-idle смещение 0,0485, запас вчетверо.
+    // Битый файл давал 10,69. Ломка сдвига в 0,3 обязана ломать эту проверку.
+    must(
+      drift < 0.2,
+      'u standing-idle koren otkhodit na ' + drift.toFixed(2) +
+        ': personazh budet rezko smeshchatsya, a dolzhen stojat na meste',
+    );
   });
 });
 

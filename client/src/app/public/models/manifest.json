@@ -160,7 +160,7 @@
       "file": "models/jumping-down.glb",
       "name": "jumping-down",
       "channels": 165,
-      "bytes": 132208
+      "bytes": 100448
     },
     {
       "file": "models/jumping-up.glb",
@@ -190,7 +190,7 @@
       "file": "models/running-slide.glb",
       "name": "running-slide",
       "channels": 165,
-      "bytes": 112604
+      "bytes": 83316
     },
     {
       "file": "models/sit-idle.glb",
@@ -214,7 +214,7 @@
       "file": "models/start-walking.glb",
       "name": "start-walking",
       "channels": 165,
-      "bytes": 134240
+      "bytes": 112248
     },
     {
       "file": "models/stop-walking.glb",
@@ -244,19 +244,19 @@
       "file": "models/sword-shield-attack.glb",
       "name": "sword-shield-attack",
       "channels": 165,
-      "bytes": 140776
+      "bytes": 95940
     },
     {
       "file": "models/sword-shield-attack-3.glb",
       "name": "sword-shield-attack-3",
       "channels": 165,
-      "bytes": 97616
+      "bytes": 76524
     },
     {
       "file": "models/sword-shield-attack-4.glb",
       "name": "sword-shield-attack-4",
       "channels": 165,
-      "bytes": 106932
+      "bytes": 83584
     },
     {
       "file": "models/walk-backward.glb",
