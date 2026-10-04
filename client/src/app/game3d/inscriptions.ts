@@ -61,6 +61,32 @@ export interface Inscription {
 
 export const INSCRIPTIONS: readonly Inscription[] = [
   {
+    id: 'safar',
+    buildingId: 'caravanserai',
+    lines: [
+      'بسیار سفر باید تا پخته شود خامی',
+      'صوفی نشود صافی تا درنکشد جامی',
+    ],
+    translit: [
+      'basyar safar bayad ta pakhte shod khami',
+      'sofi nasavad saafi ta dar nakeshad jami',
+    ],
+    source: 'Saadi, Divan, ghazal 597',
+  },
+  {
+    id: 'pardedar',
+    buildingId: 'fortress',
+    lines: [
+      'چو پرده دار به شمشیر می زند همه را',
+      'کسی مقیم حریم حرم نخواهد ماند',
+    ],
+    translit: [
+      'cho parde-dar be shashir mizand hame ra',
+      'kasi moqeem-e harim-e haram nakhavad mand',
+    ],
+    source: 'Hafez, Divan, ghazal 179',
+  },
+  {
     id: 'shahnameh',
     buildingId: 'science',
     lines: [
@@ -120,6 +146,24 @@ export const INSCRIPTIONS: readonly Inscription[] = [
 // sans-serif, который точно есть, но персидские буквы в нём есть не везде.
 const ГАРНИТУРЫ = '"Noto Naskh Arabic", "Amiri", "Scheherazade New", "Segoe UI", Tahoma, sans-serif';
 
+// ── Стелы у ворот ───────────────────────────────────────────
+//
+// Локальные координаты группы двора: начало в центре двора, +X на восток, +Z на юг.
+// Обе стелы стоят СНАРУЖИ ворот и смотрят на юг, откуда подходят.
+//
+// КАРАВАН-САРАЙ, (-13, 17). Столбы ворот на x = ±11, угловые башни на (±14, ±14)
+// с коллайдером 2,5. Расстояние от (-13, 17) до башни (-14, 14) равно 3,16, запас
+// 0,66. Ближе ставить нельзя: стела встанет в башню.
+//
+// КРЕПОСТЬ, (-12, 11). Башни на (±9, ±9) с коллайдером 2,7. Расстояние от (-12, 11)
+// до башни (-9, 9) равно 3,61, запас 0,91.
+//
+// Оба смотрят в +Z: ворота у обеих построек с юга, и с юга подходят.
+export const GATE_STELES: Record<string, { x: number; z: number; ry: number }> = {
+  caravanserai: { x: -13, z: 17, ry: 0 },
+  fortress: { x: -12, z: 11, ry: 0 },
+};
+
 /** Надпись здания, если оно есть в списке. */
 export function inscriptionFor(buildingId: string): Inscription | undefined {
   return INSCRIPTIONS.find((i) => i.buildingId === buildingId);
@@ -167,6 +211,36 @@ export const STELE = {
  * светлую подложку со смещением вниз на два пикселя: тень от нижнего края
  * резьбы и есть весь эффект.
  */
+/**
+ * Стела целиком: ствол, цокень, карниз и лицевая сторона с надписью.
+ *
+ * Материал свой, а не из interiors.ts: стелу ставят и город, и ворота, а
+ * interiors.ts не должен импортироваться отсюда - вышел бы круг.
+ */
+export function steleMesh(ins: Inscription): THREE.Group {
+  const g = new THREE.Group();
+  const камень = new THREE.MeshStandardMaterial({ color: 0xb9b2a6, roughness: 0.95 });
+  const shaft = new THREE.Mesh(
+    new THREE.BoxGeometry(STELE.width, STELE.height, STELE.depth),
+    камень,
+  );
+  shaft.position.set(0, STELE.centerY, 0);
+  shaft.castShadow = true;
+  // Цокень и карниз: стела должна выглядеть поставленной, а не приставленной к стене.
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(STELE.width + 0.24, 0.16, STELE.depth + 0.22),
+    камень,
+  );
+  base.position.set(0, 0.08, 0);
+  const cap = new THREE.Mesh(
+    new THREE.BoxGeometry(STELE.width + 0.16, 0.14, STELE.depth + 0.16),
+    камень,
+  );
+  cap.position.set(0, STELE.height - 0.07, 0);
+  g.add(shaft, base, cap, inscriptionFace(ins));
+  return g;
+}
+
 export function inscriptionFace(ins: Inscription): THREE.Mesh {
   const ШИР = 512;
   const ВЫС = 850;

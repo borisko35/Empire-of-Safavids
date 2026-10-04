@@ -17,7 +17,7 @@ import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
-import { STELE, inscriptionFace, inscriptionFor } from './inscriptions';
+import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
 // глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
 // постом в shared/stealth.ts, а не отдельно от него.
@@ -1132,26 +1132,8 @@ export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
     // окна слева, сама она левее двери.
     const ins = inscriptionFor(s.id);
     if (ins) {
-      const stele = new THREE.Group();
-      const shaft = new THREE.Mesh(
-        new THREE.BoxGeometry(STELE.width, STELE.height, STELE.depth),
-        M.stone,
-      );
-      shaft.position.set(0, STELE.centerY, 0);
-      shaft.castShadow = true;
-      // Цокень и карниз: стела должна выглядеть поставленной, а не
-      // приставленной к стене.
-      const base = new THREE.Mesh(
-        new THREE.BoxGeometry(STELE.width + 0.24, 0.16, STELE.depth + 0.22),
-        M.stone,
-      );
-      base.position.set(0, 0.08, 0);
-      const cap = new THREE.Mesh(
-        new THREE.BoxGeometry(STELE.width + 0.16, 0.14, STELE.depth + 0.16),
-        M.stone,
-      );
-      cap.position.set(0, STELE.height - 0.07, 0);
-      stele.add(shaft, base, cap, inscriptionFace(ins));
+      const stele = steleMesh(ins);
+
       stele.position.set(STELE.offsetX, STELE.offsetY, STELE.offsetZ);
       g.add(stele);
     }

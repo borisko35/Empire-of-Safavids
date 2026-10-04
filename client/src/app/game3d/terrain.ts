@@ -13,6 +13,8 @@ import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterTexture, waterfallTexture,
 } from './textures';
+import { t } from '../i18n';
+import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
 
 // Половина стороны мира. Мир 6350x6350 единиц - в семь раз больше прежних
 // 2400x2400 по площади, как и просили: (6350/2400)^2 = 7.000.
@@ -1891,7 +1893,29 @@ export function buildSettlements(scene: THREE.Scene): void {
     }
     // Бирюзовый айван над воротами
     tiledIwan(g, 0, 14, 9, 6.5, 0);
-    addCollider(CARAVANSERAI.x, CARAVANSERAI.z + 14, 2.2);
+    // Коллайдер в середине ворот УБРАН. Он стоял здесь же и затыкал проём:
+    // подойти к воротам можно было, войти - нет. Айван построен НАД проёмом,
+    // а коллайдеры в игре двумерные, и затыкать им вход нечего.
+    //
+    // Дверь стоит ровно там, куда указывают данные: локальные (0, 14) - это мировые
+    // (505, 69), и caravanseraiInterior.test.ts сверяет именно эту точку.
+    const vorota = new THREE.Mesh(new THREE.BoxGeometry(5.0, 3.4, 0.3), MAT.wood);
+    vorota.position.set(0, 1.7, 14);
+    vorota.userData = {
+      doorBuilding: 'caravanserai',
+      doorAction: 'enter',
+      doorName: t('buildings.caravanserai'),
+    };
+    g.add(vorota);
+    // Стела у ворот, снаружи: игрок подходит с юга и читает её на пути к двери.
+    const nadpisKarav = inscriptionFor('caravanserai');
+    const mestoKarav = GATE_STELES.caravanserai;
+    if (nadpisKarav && mestoKarav) {
+      const steleKarav = steleMesh(nadpisKarav);
+      steleKarav.position.set(mestoKarav.x, 0, mestoKarav.z);
+      steleKarav.rotation.y = mestoKarav.ry;
+      g.add(steleKarav);
+    }
     // Внутренняя аркада вдоль северной стены
     for (let ax = -10; ax <= 10; ax += 5) {
       const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.7, 3.4, 0.7), MAT.sandstone);
@@ -2044,8 +2068,25 @@ export function buildSettlements(scene: THREE.Scene): void {
     }
     // Айван ворот с юга
     tiledIwan(g, 0, 9, 7, 6, 0);
-    addCollider(FORT.x, FORT.z + 9, 2.4);
-    scene.add(g);
+    // Коллайдер в воротах УБРАН: он стоял в проёме и не давал войти. Куртины
+    // строятся только с трёх сторон, и южный проём - это и есть ворота.
+    const vorotaFort = new THREE.Mesh(new THREE.BoxGeometry(5.0, 3.4, 0.3), MAT.wood);
+    vorotaFort.position.set(0, 1.7, 9);
+    vorotaFort.userData = {
+      doorBuilding: 'fortress',
+      doorAction: 'enter',
+      doorName: t('buildings.fortress'),
+    };
+    g.add(vorotaFort);
+    // Стела у ворот крепости, снаружи и сбоку от айвана.
+    const nadpisFort = inscriptionFor('fortress');
+    const mestoFort = GATE_STELES.fortress;
+    if (nadpisFort && mestoFort) {
+      const steleFort = steleMesh(nadpisFort);
+      steleFort.position.set(mestoFort.x, 0, mestoFort.z);
+      steleFort.rotation.y = mestoFort.ry;
+      g.add(steleFort);
+    }
   }
 }
 // ── Города регионов ────────────────────────────────────────────────────
