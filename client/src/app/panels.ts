@@ -135,20 +135,26 @@ export async function loadDungeons(): Promise<void> {
           await loadDungeons();
         }));
       }
-      // Приглашение другу. Список друзей отдаёт userId, а не characterId:
-      // персонажа сервер ищет сам, в этом же регионе.
+      // Приглашение в заход. Список — игроки этого же региона, а не друзья:
+      // заход рассчитан на 8-20 человек, и набрать его можно было только из
+      // тех, с кем уже дружишь. Друзья в списке просто отмечены.
       if (status.active) {
+        const друзьяIds = new Set<string>();
         const друзья = await api.friends().catch(() => ({ friends: [] as never[] }));
         for (const друг of друзья.friends) {
-          if (друг.status !== 'accepted' || друг.online !== true) continue;
+          if (друг.status === 'accepted') друзьяIds.add(друг.friendId);
+        }
+        const вРегионе = await api.regionPlayers(cid()).catch(() => ({ players: [] as never[] }));
+        for (const игрок of вРегионе.players) {
           const строка = rowEl('inv-item');
           const подпись = document.createElement('span');
           подпись.className = 'inv-name';
-          подпись.textContent = `${t('panels.invite_friend')}: ${друг.friendName}`;
+          const метка = друзьяIds.has(игрок.id) ? `${t('panels.invite_friend')}: ` : '';
+          подпись.textContent = `${метка}${игрок.name} · ${t('badges.level')} ${игрок.level}`;
           строка.append(подпись);
           строка.append(
             actionButton(t('panels.invite'), async () => {
-              await api.dungeonInvite(cid(), друг.friendId);
+              await api.dungeonInvite(cid(), игрок.id);
               toast(t('panels.invite_sent'), 'success');
             }),
           );

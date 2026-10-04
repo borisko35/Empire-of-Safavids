@@ -2129,7 +2129,23 @@ export class GameSocketHandler {
       return null;
     });
     if (dungeonDone) {
-      socket.emit(SERVER_EVENTS.DUNGEON_COMPLETED, dungeonDone);
+      // Уведомление о завершении - ВСЕМ участникам захода, а не только тому,
+      // кто добил босса. Раньше событие уходило в сокет убийцы, и остальные
+      // участники получали опыт, золото и предметы молча: экран не открывался
+      // ни разу, и непонятно было, куда делась добыча.
+      //
+      // Каждому уходит его доля: при трёх участниках и трёх предметах видно
+      // «тебе достался вот этот», а не «вот эти три на всех». Общая сумма и
+      // весь список предметов тоже остаются - по ним виден итог захода.
+      for (const доля of dungeonDone.shares) {
+        const сокетУчастника = this.activePlayers.get(доля.characterId);
+        if (!сокетУчастника) continue;
+        сокетУчастника.emit(SERVER_EVENTS.DUNGEON_COMPLETED, {
+          ...dungeonDone,
+          gold: доля.gold,
+          items: доля.items,
+        });
+      }
       // Задачи дня: «Рейд в Подземелье». Раньше она висела вечно 0/2 —
       // updateProgress не вызывался НИ РАЗУ
       await this.dailyTasks.updateProgress(attacker.id, 'dungeon', 'any').catch((e: unknown) => {

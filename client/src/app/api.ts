@@ -473,11 +473,28 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
-  /** Позвать друга в заход. Отправить может только лидер. */
-  dungeonInvite: (characterId: string, friendUserId: string) =>
+  /**
+   * Кто онлайн в этом же регионе — список для приглашения в заход.
+   *
+   * Раньше приглашение брало игроков из списка друзей, и заход на 8-20 человек
+   * было не набрать иначе. Сервер отдаёт characterId: пригласить можно любого
+   * игрока региона, а не только друга.
+   */
+  regionPlayers: (characterId: string) =>
+    req<{ players: { id: string; name: string; level: number; class: string }[] }>(
+      `/api/game/players?characterId=${characterId}`,
+    ),
+
+  /**
+   * Позвать в заход. Отправить может только лидер.
+   *
+   * targetId — characterId из regionPlayers. Прежний friendUserId сервер ещё
+   * принимает: друзей по userId пригласить можно и дальше.
+   */
+  dungeonInvite: (characterId: string, targetId: string) =>
     req<{ inviteId: string }>('/api/game/dungeons/invite', {
       method: 'POST',
-      body: JSON.stringify({ characterId, friendUserId }),
+      body: JSON.stringify({ characterId, targetId }),
     }),
 
   /** Ответ на приглашение: принять значит войти в заход. */

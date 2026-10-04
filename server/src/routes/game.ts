@@ -137,11 +137,30 @@ function paymentCountry(req: Request): string | null {
 // Создаём сервисы лениво-локально там, где нужны
 import { QuestService } from '../services/QuestService';
 import { REDIS_CHANNELS } from '../../../shared/constants';
+import { GameLoop } from '../systems/GameLoop';
+import { DatabaseService } from '../services/DatabaseService';
+import type { CharacterClass } from '../types/game.types';
 const questService = new QuestService();
 
 /** Квесты с collect-целями могут закрыться после пополнения инвентаря */
 const questEvaluate = (characterId: string) =>
   questService.evaluateQuests(characterId).catch(() => []);
+
+/**
+ * Шард, на котором персонаж сейчас онлайн. null, если его в сети нет.
+ *
+ * У персонажа шарда нет: он живёт в сокете (socket.shardId) и попадает в Redis
+ * при входе. Единственный честный источник здесь — список активных шардов
+ * GameLoop. Шард из запроса не берётся: иначе игрок назвал бы чужой регион и
+ * получил бы чужой список игроков.
+ */
+const regionShardResolver = (): string | null => {
+  const спавн = GameLoop.getInstance().getSpawnSystem();
+  for (const shardId of спавн.getActiveShards()) {
+    if (спавн.isShardActive(shardId)) return shardId;
+  }
+  return null;
+};
 
 const auctionService = new AuctionService();
 const craftingService = new CraftingService();
@@ -1134,16 +1153,75 @@ gameRouter.get('/servers-status', asyncHandler(async (_req: Request, res: Respon
 // ДАНЖИ
 // ============================================================
 
-// POST /api/game/dungeons/invite — позвать друга в заход
-// { characterId, friendUserId }. Отправить может только лидер своего захода.
+// GET /api/game/players?characterId=… — кто онлайн в этом же регионе.
+//
+// ЗАЧЕМ. Приглашение в заход брало игроков из списка друзей, а заход
+// рассчитан на 8-20 человек (maxPlayers в данных). То есть набрать группу
+// можно было только из тех, кого уже дружишь, а случайного игрока рядом
+// позвать было нечем.
+//
+// Список идёт из Redis (регион и шард) плюс одна выборка имён из базы.
+// Шард берётся у того сокета, который сейчас онлайн: у персонажа шарда нет,
+// он живёт в сокете, и подставлять его руками значило бы доверять клиенту.
+gameRouter.get(
+  '/players',
+  secureMiddleware,
+  requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    const char = await characterService.getCharacterById(characterId);
+    if (!char || char.userId !== req.userId) {
+      res.status(403).json({ error: 'Character does not belong to you' });
+      return;
+    }
+    const shardId = regionShardResolver();
+    const ids = shardId
+      ? await redis.getPlayersInRegion(shardId, char.region).catch(() => [] as string[])
+      : [];
+    // Себя в списке показывать незачем: пригласить самого себя нельзя, и
+    // сервер всё равно откажет.
+    const остальные = ids.filter((id) => id !== characterId).slice(0, 50);
+    // Имена и уровни — одной выборкой. Без них панель показала бы список
+    // UUID, и игрок не узнал бы, кого зовёт.
+    const строки = остальные.length
+      ? await DatabaseService.getInstance()
+          .query<{ id: string; name: string; level: number; class: CharacterClass }>(
+            `SELECT id, name, level, class FROM characters WHERE id = ANY($1::uuid[])`,
+            [остальные],
+          )
+          .catch(() => [])
+      : [];
+    res.json({
+      players: строки.map((с) => ({
+        id: с.id,
+        name: с.name,
+        level: Number(с.level),
+        class: с.class,
+      })),
+    });
+  }),
+);
+
+// POST /api/game/dungeons/invite — позвать в заход
+// { characterId, targetId }. Отправить может только лидер своего захода.
+//
+// targetId — это characterId из списка игроков региона. Прежде здесь стояло
+// `friendUserId`, и пригласить можно было только друга: заход рассчитан на
+// 8-20 человек (maxPlayers в данных), а набирать пришлосьсь из списка друзей.
+// Сервер по-прежнему принимает и userId друга — см. inviteToRun.
 gameRouter.post(
   '/dungeons/invite',
   secureMiddleware,
   requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
+    const targetId = req.body.targetId ?? req.body.friendUserId;
+    if (!targetId) {
+      res.status(400).json({ error: 'targetId is required' });
+      return;
+    }
     const result = await dungeonService.inviteToRun(
       req.body.characterId,
-      req.body.friendUserId,
+      targetId,
     );
     if (!result.ok) {
       res.status(400).json({ error: result.code });

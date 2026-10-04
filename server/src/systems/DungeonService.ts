@@ -113,6 +113,16 @@ export interface DungeonCompleteInfo {
   experience: number;
   gold: number;
   items: string[];
+  /**
+   * Что досталось КАЖДОМУ участнику.
+   *
+   * Добавлено потому, что уведомление о завершении получал только тот, кто
+   * добил босса: остальные золото и предметы получали, а экран не открывался
+   * ни разу. Теперь событие уходит каждому, и у каждого - своя доля: при
+   * трёх участниках и трёх предметах видно «тебе достался вот этот», а не
+   * «вот эти три на всех».
+   */
+  shares: { characterId: string; gold: number; experience: number; items: string[] }[];
 }
 
 /** Приглашение в заход: живёт 60 секунд и одноразовое. */
@@ -732,7 +742,7 @@ export class DungeonService {
    */
   async inviteToRun(
     inviterId: string,
-    inviteeUserId: string,
+    inviteeId: string,
   ): Promise<{ ok: true; inviteId: string; inviteeCharacterId: string } | { ok: false; code: string }> {
     const sessionId = this.characterToSession.get(inviterId);
     const session = sessionId ? this.sessions.get(sessionId) : undefined;
@@ -742,17 +752,29 @@ export class DungeonService {
       return { ok: false, code: 'dungeon_full' };
     }
 
-    const персонаж = await this.db
-      .queryOne<{ id: string }>(
-        `SELECT id FROM characters
-          WHERE user_id = $1 AND region = $2
-          LIMIT 1`,
-        [inviteeUserId, session.region]
-      )
-      .catch((e: unknown) => {
-        logger.warn('[Dungeon] не удалось найти персонажа приглашённого:', (e as Error).message);
-        return null;
-      });
+    // Кого приглашаем: персонажа из списка игроков региона или друга по
+    // userId. Список региона отдаёт characterId, поэтому сначала ищем по id
+    // персонажа и только потом по userId - иначе пригласить можно было бы
+    // только друзей, а это и было ограничением: заход рассчитан на 8-20
+    // человек, а набирать пришлосьсь из списка друзей.
+    // Регион проверяется в обоих случаях: игрок из другого региона в заход
+    // не попадёт, даже если его туда позвали.
+    const персонаж =
+      (await this.db
+        .queryOne<{ id: string }>(
+          `SELECT id FROM characters WHERE id = $1 AND region = $2 LIMIT 1`,
+          [inviteeId, session.region],
+        )
+        .catch(() => null)) ??
+      (await this.db
+        .queryOne<{ id: string }>(
+          `SELECT id FROM characters WHERE user_id = $1 AND region = $2 LIMIT 1`,
+          [inviteeId, session.region],
+        )
+        .catch((e: unknown) => {
+          logger.warn('[Dungeon] не удалось найти персонажа приглашённого:', (e as Error).message);
+          return null;
+        }));
     if (!персонаж) return { ok: false, code: 'dungeon_invitee_not_here' };
     if (session.members.has(персонаж.id)) return { ok: false, code: 'dungeon_already_in_run' };
 
@@ -995,6 +1017,14 @@ export class DungeonService {
       items: добыча,
       participants: участники.length,
       goldEach: каждому,
+      // Доля каждого участника - то же, что ушло на сервер, а не пересчёт
+      // заново: показываем игроку ровно то, что он получил.
+      shares: получили.map((доля) => ({
+        characterId: доля.characterId,
+        gold: доля.gold,
+        experience: доля.experience,
+        items: доля.items,
+      })),
     };
     logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${def.rewards.experience}xp, +${gold}g)`);
     // Репутация за данж — заметный поступок, а не рядовой бой
