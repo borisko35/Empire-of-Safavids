@@ -2124,18 +2124,26 @@ export interface RegionTownDef {
 }
 
 export const REGION_TOWNS: RegionTownDef[] = [
-  // Слободная площадка (уклон 0.7), зона tabriz_bazaar.
-  { region: 'khorasan', x: 150, z: 750, radius: 42, level: -0.9, kind: 'oasis', nameRu: 'Хорасан' },
-  { region: 'tabriz', x: 0, z: -300, radius: 46, level: 3.5, kind: 'trade', nameRu: 'Тебриз' },
-  // Уклон 7.0 — ровняем к высоте центра 0.1, зона shiraz_gardens.
-  { region: 'shiraz', x: 90, z: 400, radius: 44, level: 0.1, kind: 'walls', nameRu: 'Шираз' },
-  // Уклон 11.2, самый крутой из якорей, зона caucasus_pass.
-  { region: 'caucasus', x: 60, z: 560, radius: 42, level: 3.7, kind: 'fortress', nameRu: 'Кавказ' },
-  // Ровный (уклон 0), зона mesopotamia_ruins.
-  { region: 'mesopotamia', x: 200, z: -450, radius: 44, level: 3.5, kind: 'ruins', nameRu: 'Месопотамия' },
-  // Уклон 6.2, зона khorasan_oasis. Уровень ниже нуля: низменность.
-  // Ровный (уклон 0) берег залива, зона persian_gulf_islands.
-  { region: 'persian_gulf', x: -60, z: -620, radius: 44, level: 3.5, kind: 'port', nameRu: 'Залив' },
+  // Шесть центральных городов разнесены по миру: x от -1175 до 1925 (размах 3100),
+  // ближайшее соседство 852. Раньше все шесть стояли в радиусе ~1300 от центра.
+  // Полосы зон не трогались: каждый город остался в зоне своего региона, иначе якоря
+  // и спавны упали бы в чужой регион. Площадки выбраны сеточным сканом портом чистой
+  // математики террейна (порт сверен с девятью записанными высотами, шесть сошлись
+  // до 0.04): сухой диск r=100, размах высот на r=85, вода рядом только у порта.
+  // Хорасан: зона khorasan_oasis, размах 2.2.
+  { region: 'khorasan', x: -225, z: 797, radius: 42, level: 0.32, kind: 'oasis', nameRu: 'Хорасан' },
+  // Тебриз: восточный край своей полосы, зона tabriz_bazaar, размах 1.7.
+  { region: 'tabriz', x: 1925, z: -299, radius: 46, level: 6.28, kind: 'trade', nameRu: 'Тебриз' },
+  // Шираз: зона shiraz_east, размах 1.2.
+  { region: 'shiraz', x: 1475, z: 493, radius: 44, level: 0.22, kind: 'walls', nameRu: 'Шираз' },
+  // Кавказ: запад своей полосы, зона caucasus_pass, размах 1.7.
+  { region: 'caucasus', x: -1025, z: 505, radius: 42, level: 2.06, kind: 'fortress', nameRu: 'Кавказ' },
+  // Месопотамия: запад, зона mesopotamia_frontier, размах 3.5. Уровень ниже нуля,
+  // но суша: диск r=100 сухой, до моря далеко.
+  { region: 'mesopotamia', x: -1175, z: -365, radius: 44, level: -1.8, kind: 'ruins', nameRu: 'Месопотамия' },
+  // Залив: размах 0, вода в 140 — порт без воды не порт.
+  // Ровный берег залива, зона persian_gulf_islands.
+  { region: 'persian_gulf', x: -175, z: -567, radius: 44, level: 3.5, kind: 'port', nameRu: 'Залив' },
   // Герат: восьмой регион, которого не было в мире вовсе. Уровень 0.24 —
   // замеренная высота центра до постройки; ровнялка сама выровняет землю.
   { region: 'herat', x: -700, z: 2250, radius: 44, level: 0.24, kind: 'gates', nameRu: 'Герат' },
