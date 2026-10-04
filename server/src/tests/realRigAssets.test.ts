@@ -260,6 +260,134 @@ describe('Клипы играют на персонажах', () => {
   });
 });
 
+describe('Система единиц одна: скелет клипа равен скелету персонажа', () => {
+  const TOLERANCE = 0.2;
+
+  function boneNames(gltf: GLTF): Set<string> {
+    const set = new Set<string>();
+    for (const node of gltf.nodes ?? []) {
+      if ((node.name ?? '').startsWith('mixamorig:')) set.add(node.name as string);
+    }
+    return set;
+  }
+
+  /** Mean length of bone translations over the shared names. */
+  function meanTranslation(gltf: GLTF, shared: string[]): number | null {
+    let sum = 0;
+    let count = 0;
+    for (const name of shared) {
+      const node = (gltf.nodes ?? []).find((n) => n.name === name);
+      if (!node || !node.translation) continue;
+      sum += Math.hypot(node.translation[0], node.translation[1], node.translation[2]);
+      count++;
+    }
+    return count > 0 ? sum / count : null;
+  }
+
+  it('у персонажей и клипов одна система единиц', () => {
+    const characterBones = new Set<string>();
+    for (const person of manifest.characters) {
+      for (const name of boneNames(readGLB(shortName(person.file)))) characterBones.add(name);
+    }
+    const clipBones = new Set<string>();
+    for (const clip of manifest.clips) {
+      for (const name of boneNames(readGLB(shortName(clip.file)))) clipBones.add(name);
+    }
+    const shared = [...characterBones].filter((name) => clipBones.has(name));
+    must(
+      shared.length >= 50,
+      `общих костей только ${shared.length}, а нужно не меньше 50: сравнивать нечего`,
+    );
+
+    const base = manifest.characters
+      .map((p) => meanTranslation(readGLB(shortName(p.file)), shared))
+      .filter((v): v is number => v !== null);
+    const target = base.reduce((s, v) => s + v, 0) / base.length;
+
+    const bad: string[] = [];
+    for (const clip of manifest.clips) {
+      const value = meanTranslation(readGLB(shortName(clip.file)), shared);
+      if (value === null) { bad.push(`${clip.name}: нечем мерить`); continue; }
+      const ratio = value / target;
+      if (Math.abs(ratio - 1) > TOLERANCE) bad.push(`${clip.name}: x${ratio.toFixed(2)}`);
+    }
+    must(
+      bad.length === 0,
+      `клипов с чужой системой единиц: ${bad.length} - ${bad.slice(0, 5).join(', ')}. three.js связывает дорожку с костью по имени, поэтому анимация просто разорвёт тело`,
+    );
+  });
+});
+
+describe('Масштаб в файле: один, а не два', () => {
+  // Blender при обратном импорте файла компенсирует масштаб корня молча, three.js
+  // учитывает его честно. Из-за этого файл с корнем 0,01 выглядит правильным при
+  // любой проверке в Blender и ломает игру.
+  function rootScale(gltf: GLTF): number {
+    const rootIndex = (gltf.scenes?.[0]?.nodes ?? [])[0];
+    if (rootIndex === undefined) return 1;
+    const scale = (gltf.nodes ?? [])[rootIndex]?.scale ?? [1, 1, 1];
+    return (Math.abs(scale[0]) + Math.abs(scale[1]) + Math.abs(scale[2])) / 3;
+  }
+
+  function meshHeight(gltf: GLTF): number | null {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const mesh of gltf.meshes ?? []) {
+      for (const prim of mesh.primitives ?? []) {
+        const acc = (gltf.accessors ?? [])[prim.attributes.POSITION];
+        if (!acc?.min || !acc.max) continue;
+        min = Math.min(min, acc.min[1]);
+        max = Math.max(max, acc.max[1]);
+      }
+    }
+    return max > min ? max - min : null;
+  }
+
+  it('у всех файлов в models масштаб корня равен единице', () => {
+    const плохие: string[] = [];
+    for (const entry of [...manifest.characters, ...manifest.clips]) {
+      const gltf = readGLB(shortName(entry.file));
+      const scale = rootScale(gltf);
+      if (Math.abs(scale - 1) > 0.0005) {
+        плохие.push(`${entry.name}: ${scale.toFixed(4)}`);
+      }
+    }
+    must(
+      плохие.length === 0,
+      `масштаб корня не равен 1 у ${плохие.length} файлов: ${плохие.slice(0, 4).join(', ')}. three.js этот масштаб учитывает, а нормализация по мешу умножит сцену на 95 и получится огромная размазанная фигура`,
+    );
+  });
+
+  it('персонаж приезжает в игру правдоподобного роста', () => {
+    // Рост в единицах игрового мира. Спец при 1,78-1,81, страж 3,78: он и в исходнике
+    // вдвое больше остальных, и нормализация приводит его к общей высоте.
+    for (const person of manifest.characters) {
+      const height = meshHeight(readGLB(shortName(person.file)));
+      must(height !== null, `${person.name}: нечем измерить рост — у меша нет границ`);
+      must(
+        (height ?? 0) > 1.5 && (height ?? 0) < 4.0,
+        `${person.name}: рост ${height?.toFixed(3)} вне диапазона 1.5-4.0. Модель приедет в игру то гигантом, то точкой`,
+      );
+    }
+  });
+
+  it('нормализация не станет увеличивать сцену в разы', () => {
+    // Страховка в клиенте: даже если актив снова окажется битым, персонаж не должен
+    // превратиться в фигуру во весь экран молча.
+    const src = realRigSource();
+    must(/const MAX_SCALE = 5;/.test(src), 'в клиенте нет верхней границы коэффициента');
+    must(/const MIN_SCALE = 0.2;/.test(src), 'в клиенте нет нижней границы коэффициента');
+    must(
+      /if \(k < MIN_SCALE \|\| k > MAX_SCALE\)/.test(src),
+      'границы объявлены, но не проверяются: битый актив снова растянет сцену',
+    );
+    must(
+      /не трогаю размер/.test(src),
+      'при битом коэффициенте нет сообщения в консоль: непонятно, почему персонаж такой',
+    );
+  });
+});
+
 describe('Подключённые состояния ведут к существующим клипам', () => {
   it('каждый клип, названный в realRig.ts, лежит на диске', () => {
     // Состояние, которому назначен несуществующий клип, выглядит в игре как «персонаж
@@ -431,16 +559,20 @@ describe('Скелет клипа совпадает со скелетом пе�
     }
   });
 
-  it('масштаб корня клипа записан в файле, а не подобран вручную в клиенте', () => {
-    // Если масштаб корня уехал, чинить это придётся переконвертацией, и молча
-    // править в коде нельзя: правка в коде не попадёт в ассеты.
+  it('у клипа нет неучтённого масштаба: он впечатан в кости', () => {
+    // Масштаб корня, оставленный на узле, - это вторая система единиц в файле.
+    // После впечатывания экспорт опускает поле целиком, поэтому «поля нет» и
+    // «масштаб равен единице» - одно и то же состояние.
     const clip = readGLB(shortName(manifest.clips[0].file));
     const rootIndex = (clip.scenes?.[0]?.nodes ?? [])[0];
     must(rootIndex !== undefined, 'u klipa net kornya sceny: masshtab nechego menyat');
     const scale = (clip.nodes ?? [])[rootIndex]?.scale;
+    const value = scale
+      ? (Math.abs(scale[0]) + Math.abs(scale[1]) + Math.abs(scale[2])) / 3
+      : 1;
     must(
-      Array.isArray(scale) && scale.every((s) => s > 0),
-      'u klipa net masshtaba kornya: skelet klipa okazhetsya bolshe skeleta modeli',
+      Math.abs(value - 1) <= 0.0005,
+      `u klipa masshtab kornya ${value}: on ne vpechatan v kosti, i fайл derzhit dve sistemy edinits. three.js etot masshtab uchityvaet`,
     );
   });
 });

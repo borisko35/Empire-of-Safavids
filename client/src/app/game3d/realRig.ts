@@ -28,6 +28,17 @@ const DRACO_BASE = '/game/draco/';
 const TARGET_HEIGHT = 1.9;
 
 /**
+ * Правдоподобный диапазон коэффициента нормализации.
+ *
+ * Модель ростом 1,8 при TARGET 1,9 даёт коэффициент около 1,06. Всё, что вне
+ * диапазона, - это битый актив: обычно масштаб корня в файле. Раньше такой файл
+ * растягивался в 95 раз, и на экране появлялась огромная размазанная фигура вместо
+ * персонажа.
+ */
+const MIN_SCALE = 0.2;
+const MAX_SCALE = 5;
+
+/**
  * Класс игрока → файл модели.
  *
  * Совпадение один в один, а не подбор: пять классов в rig.ts названы ровно так же,
@@ -185,15 +196,22 @@ function загрузитьКлип(имя: string): Promise<THREE.AnimationClip
 }
 
 /** Приводит модель к игровому масштабу и ставит ноги на нуль. */
-function подогнать(сцена: THREE.Group): THREE.Group {
+function подогнать(сцена: THREE.Group, имя: string): THREE.Group {
   const обёртка = new THREE.Group();
   const габариты = new THREE.Box3().setFromObject(сцена);
   const высота = габариты.max.y - габариты.min.y;
   if (высота > 0.001) {
     const k = TARGET_HEIGHT / высота;
-    сцена.scale.setScalar(k);
-    // Сдвиг делаем после масштабирования, иначе смещение умножится ещё раз.
-    сцена.position.y = -габариты.min.y * k;
+    if (k < MIN_SCALE || k > MAX_SCALE) {
+      console.warn(
+        `[rig] ${имя}: не трогаю размер, коэффициент ${k.toFixed(2)} вне диапазона. ` +
+          'Обычно это масштаб корня в файле: three.js его честно учитывает, а Blender - нет',
+      );
+    } else {
+      сцена.scale.setScalar(k);
+      // Сдвиг делаем после масштабирования, иначе смещение умножится ещё раз.
+      сцена.position.y = -габариты.min.y * k;
+    }
   }
   сцена.rotation.y = MODEL_ROTATION_Y;
   сцена.traverse((o) => {
@@ -228,9 +246,9 @@ export class RealRig implements Rig {
   /** Исходные цвета материалов: без них снятие брони не вернуло бы вид. */
   private исходныеЦвета = new Map<THREE.Material, number>();
 
-  constructor(сцена: THREE.Group, первыйКлип: THREE.AnimationClip) {
+  constructor(сцена: THREE.Group, первыйКлип: THREE.AnimationClip, имя: string) {
     this.сцена = new THREE.Group();
-    this.сцена.add(подогнать(сцена));
+    this.сцена.add(подогнать(сцена, имя));
     this.group = this.сцена;
     this.mixer = new THREE.AnimationMixer(this.group);
 
@@ -403,7 +421,7 @@ export async function loadRealPlayerRig(charClass: string): Promise<RealRig | nu
   if (!сцена || !idle) return null;
   try {
     const копия = cloneSkeleton(сцена) as THREE.Group;
-    return new RealRig(копия, idle);
+    return new RealRig(копия, idle, имя);
   } catch (e) {
     console.warn('[rig] skeleton clone failed', e);
     return null;

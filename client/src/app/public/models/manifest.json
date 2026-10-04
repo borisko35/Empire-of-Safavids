@@ -8,7 +8,8 @@
       "bones": 65,
       "meshes": 7,
       "textures": 5,
-      "bytes": 1012528,
+      "height": 1.7823195597156882,
+      "bytes": 1011996,
       "skins": 1
     },
     {
@@ -17,7 +18,8 @@
       "bones": 65,
       "meshes": 5,
       "textures": 4,
-      "bytes": 458332,
+      "height": 1.7639812021516263,
+      "bytes": 458060,
       "skins": 1
     },
     {
@@ -26,7 +28,8 @@
       "bones": 67,
       "meshes": 7,
       "textures": 21,
-      "bytes": 1672848,
+      "height": 3.7848470021781395,
+      "bytes": 1671116,
       "skins": 1
     },
     {
@@ -35,7 +38,8 @@
       "bones": 65,
       "meshes": 9,
       "textures": 6,
-      "bytes": 1146072,
+      "height": 1.783978259714786,
+      "bytes": 1145692,
       "skins": 1
     },
     {
@@ -44,7 +48,8 @@
       "bones": 67,
       "meshes": 4,
       "textures": 5,
-      "bytes": 394652,
+      "height": 1.800876373425126,
+      "bytes": 394228,
       "skins": 1
     }
   ],
@@ -53,217 +58,217 @@
       "file": "models/block.glb",
       "name": "block",
       "channels": 162,
-      "bytes": 58288
+      "bytes": 57056
     },
     {
       "file": "models/block-crouch.glb",
       "name": "block-crouch",
       "channels": 162,
-      "bytes": 63744
+      "bytes": 62744
     },
     {
       "file": "models/block-crouch-idle.glb",
       "name": "block-crouch-idle",
       "channels": 162,
-      "bytes": 63432
+      "bytes": 61568
     },
     {
       "file": "models/cheer-victory.glb",
       "name": "cheer-victory",
       "channels": 198,
-      "bytes": 94064
+      "bytes": 92680
     },
     {
       "file": "models/crouch-idle.glb",
       "name": "crouch-idle",
       "channels": 165,
-      "bytes": 83720
+      "bytes": 82464
     },
     {
       "file": "models/crouch-walk-back.glb",
       "name": "crouch-walk-back",
       "channels": 165,
-      "bytes": 85112
+      "bytes": 83044
     },
     {
       "file": "models/crouch-walk-forward.glb",
       "name": "crouch-walk-forward",
       "channels": 165,
-      "bytes": 81980
+      "bytes": 81068
     },
     {
       "file": "models/crouch-walk-left.glb",
       "name": "crouch-walk-left",
       "channels": 165,
-      "bytes": 84720
+      "bytes": 81244
     },
     {
       "file": "models/crouch-walk-right.glb",
       "name": "crouch-walk-right",
       "channels": 165,
-      "bytes": 87536
+      "bytes": 83304
     },
     {
       "file": "models/death-fall-back.glb",
       "name": "death-fall-back",
       "channels": 162,
-      "bytes": 99612
+      "bytes": 98832
     },
     {
       "file": "models/death-fall-forward.glb",
       "name": "death-fall-forward",
       "channels": 162,
-      "bytes": 98816
+      "bytes": 97780
     },
     {
       "file": "models/dodge-back.glb",
       "name": "dodge-back",
       "channels": 162,
-      "bytes": 85812
+      "bytes": 80576
     },
     {
       "file": "models/dodge-forward.glb",
       "name": "dodge-forward",
       "channels": 162,
-      "bytes": 70544
+      "bytes": 69124
     },
     {
       "file": "models/dodge-left.glb",
       "name": "dodge-left",
       "channels": 162,
-      "bytes": 69520
+      "bytes": 68788
     },
     {
       "file": "models/dodge-right.glb",
       "name": "dodge-right",
       "channels": 162,
-      "bytes": 69384
+      "bytes": 68876
     },
     {
       "file": "models/hurt-flinch.glb",
       "name": "hurt-flinch",
       "channels": 162,
-      "bytes": 99916
+      "bytes": 98560
     },
     {
       "file": "models/jumping.glb",
       "name": "jumping",
       "channels": 165,
-      "bytes": 108964
+      "bytes": 90916
     },
     {
       "file": "models/jumping-down.glb",
       "name": "jumping-down",
       "channels": 165,
-      "bytes": 155576
+      "bytes": 132208
     },
     {
       "file": "models/jumping-up.glb",
       "name": "jumping-up",
       "channels": 165,
-      "bytes": 74516
+      "bytes": 68580
     },
     {
       "file": "models/knife-idle.glb",
       "name": "knife-idle",
       "channels": 162,
-      "bytes": 95744
+      "bytes": 94740
     },
     {
       "file": "models/running.glb",
       "name": "running",
       "channels": 165,
-      "bytes": 67736
+      "bytes": 65884
     },
     {
       "file": "models/running-backward.glb",
       "name": "running-backward",
       "channels": 165,
-      "bytes": 59044
+      "bytes": 58428
     },
     {
       "file": "models/running-slide.glb",
       "name": "running-slide",
       "channels": 165,
-      "bytes": 114376
+      "bytes": 112604
     },
     {
       "file": "models/sit-idle.glb",
       "name": "sit-idle",
       "channels": 162,
-      "bytes": 92232
+      "bytes": 90832
     },
     {
       "file": "models/sit-talk.glb",
       "name": "sit-talk",
       "channels": 198,
-      "bytes": 164952
+      "bytes": 164696
     },
     {
       "file": "models/standing-idle.glb",
       "name": "standing-idle",
       "channels": 165,
-      "bytes": 189772
+      "bytes": 126312
     },
     {
       "file": "models/start-walking.glb",
       "name": "start-walking",
       "channels": 165,
-      "bytes": 144132
+      "bytes": 134240
     },
     {
       "file": "models/stop-walking.glb",
       "name": "stop-walking",
       "channels": 165,
-      "bytes": 132560
+      "bytes": 114524
     },
     {
       "file": "models/swim.glb",
       "name": "swim",
       "channels": 162,
-      "bytes": 152848
+      "bytes": 148720
     },
     {
       "file": "models/swim-idle.glb",
       "name": "swim-idle",
       "channels": 162,
-      "bytes": 109620
+      "bytes": 108256
     },
     {
       "file": "models/swim-to-edge.glb",
       "name": "swim-to-edge",
       "channels": 162,
-      "bytes": 127460
+      "bytes": 124552
     },
     {
       "file": "models/sword-shield-attack.glb",
       "name": "sword-shield-attack",
       "channels": 165,
-      "bytes": 141216
+      "bytes": 140776
     },
     {
       "file": "models/sword-shield-attack-3.glb",
       "name": "sword-shield-attack-3",
       "channels": 165,
-      "bytes": 100900
+      "bytes": 97616
     },
     {
       "file": "models/sword-shield-attack-4.glb",
       "name": "sword-shield-attack-4",
       "channels": 165,
-      "bytes": 116856
+      "bytes": 106932
     },
     {
       "file": "models/walk-backward.glb",
       "name": "walk-backward",
       "channels": 162,
-      "bytes": 67912
+      "bytes": 65812
     },
     {
       "file": "models/walking.glb",
       "name": "walking",
       "channels": 165,
-      "bytes": 76456
+      "bytes": 72772
     }
   ]
 }
