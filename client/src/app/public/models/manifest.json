@@ -1,0 +1,161 @@
+{
+  "note": "Measured, not hand written. Regenerate with the Blender converter.",
+  "base": "/game/",
+  "characters": [
+    {
+      "file": "models/archer-of-persian.glb",
+      "name": "archer-of-persian",
+      "bones": 65,
+      "meshes": 7,
+      "textures": 5,
+      "bytes": 1012528,
+      "skins": 1
+    },
+    {
+      "file": "models/court-diplomat.glb",
+      "name": "court-diplomat",
+      "bones": 65,
+      "meshes": 5,
+      "textures": 4,
+      "bytes": 458332,
+      "skins": 1
+    },
+    {
+      "file": "models/guard-qizilbash.glb",
+      "name": "guard-qizilbash",
+      "bones": 67,
+      "meshes": 7,
+      "textures": 21,
+      "bytes": 1672848,
+      "skins": 1
+    },
+    {
+      "file": "models/market-vendor.glb",
+      "name": "market-vendor",
+      "bones": 65,
+      "meshes": 9,
+      "textures": 6,
+      "bytes": 1146072,
+      "skins": 1
+    },
+    {
+      "file": "models/sufi-mystic.glb",
+      "name": "sufi-mystic",
+      "bones": 67,
+      "meshes": 4,
+      "textures": 5,
+      "bytes": 394652,
+      "skins": 1
+    }
+  ],
+  "clips": [
+    {
+      "file": "models/crouch-idle.glb",
+      "name": "crouch-idle",
+      "channels": 165,
+      "bytes": 83680
+    },
+    {
+      "file": "models/crouch-walk-back.glb",
+      "name": "crouch-walk-back",
+      "channels": 165,
+      "bytes": 85072
+    },
+    {
+      "file": "models/crouch-walk-forward.glb",
+      "name": "crouch-walk-forward",
+      "channels": 165,
+      "bytes": 81936
+    },
+    {
+      "file": "models/crouch-walk-left.glb",
+      "name": "crouch-walk-left",
+      "channels": 165,
+      "bytes": 84680
+    },
+    {
+      "file": "models/crouch-walk-right.glb",
+      "name": "crouch-walk-right",
+      "channels": 165,
+      "bytes": 87496
+    },
+    {
+      "file": "models/jumping-down.glb",
+      "name": "jumping-down",
+      "channels": 165,
+      "bytes": 155536
+    },
+    {
+      "file": "models/jumping-up.glb",
+      "name": "jumping-up",
+      "channels": 165,
+      "bytes": 74476
+    },
+    {
+      "file": "models/jumping.glb",
+      "name": "jumping",
+      "channels": 165,
+      "bytes": 108920
+    },
+    {
+      "file": "models/running-backward.glb",
+      "name": "running-backward",
+      "channels": 165,
+      "bytes": 59000
+    },
+    {
+      "file": "models/running-slide.glb",
+      "name": "running-slide",
+      "channels": 165,
+      "bytes": 114336
+    },
+    {
+      "file": "models/running.glb",
+      "name": "running",
+      "channels": 165,
+      "bytes": 67692
+    },
+    {
+      "file": "models/standing-idle.glb",
+      "name": "standing-idle",
+      "channels": 165,
+      "bytes": 189732
+    },
+    {
+      "file": "models/start-walking.glb",
+      "name": "start-walking",
+      "channels": 165,
+      "bytes": 144092
+    },
+    {
+      "file": "models/stop-walking.glb",
+      "name": "stop-walking",
+      "channels": 165,
+      "bytes": 132520
+    },
+    {
+      "file": "models/sword-shield-attack-3.glb",
+      "name": "sword-shield-attack-3",
+      "channels": 165,
+      "bytes": 100856
+    },
+    {
+      "file": "models/sword-shield-attack-4.glb",
+      "name": "sword-shield-attack-4",
+      "channels": 165,
+      "bytes": 116816
+    },
+    {
+      "file": "models/sword-shield-attack.glb",
+      "name": "sword-shield-attack",
+      "channels": 165,
+      "bytes": 141176
+    },
+    {
+      "file": "models/walking.glb",
+      "name": "walking",
+      "channels": 165,
+      "bytes": 76416
+    }
+  ]
+}

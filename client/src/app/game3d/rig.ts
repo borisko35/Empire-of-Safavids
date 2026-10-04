@@ -101,7 +101,7 @@ function cyl(rt: number, rb: number, h: number, m: THREE.Material, seg = 10): TH
   return mesh;
 }
 
-function buildWeapon(kind: Weapon): THREE.Group {
+export function buildWeapon(kind: Weapon): THREE.Group {
   const g = new THREE.Group();
   if (kind === 'sword') {
     const blade = box(0.055, 0.85, 0.028, MAT.steel);
@@ -138,6 +138,47 @@ function buildWeapon(kind: Weapon): THREE.Group {
     g.add(blade, cup);
   }
   return g;
+}
+
+/**
+ * Щит: диск, обод и умбон.
+ *
+ * Вынесено потому, что щит собирался дважды — в `buildHumanoid` и в `buildFigure` —
+ * почти одинаковым кодом, и появился бы ещё третий раз в настоящем персонаже из
+ * `realRig.ts`. Радиусы и смещения у двух мест были свои, поэтому вынесено с
+ * параметрами: по умолчанию — как у гуманоида.
+ *
+ * Диск стоит строго вертикально, и ночью (свет сверху, от луны и факелов) на него
+ * падает только скользящий свет — грань уходила в абсолютный ноль, и щит выглядел
+ * чёрным шаром. Светлее + наклон + небольшое собственное свечение.
+ */
+export function buildShield(
+  radius = 0.28,
+  offset: [number, number, number] = [-0.22, -0.48, 0.15],
+): THREE.Group {
+  const группа = new THREE.Group();
+  const shieldMat = mat(0xb08a52, 0.8, 0.05);
+  shieldMat.emissive = new THREE.Color(0x3a2a14);
+  shieldMat.emissiveIntensity = 0.55;
+  const rimMat = mat(0xb9a06a, 0.45, 0.6);
+  rimMat.emissive = new THREE.Color(0x2a2410);
+  rimMat.emissiveIntensity = 0.5;
+
+  const диск = cyl(radius, radius, 0.045, shieldMat, 14);
+  // Наклон по Y и Z: диск перестаёт быть строго вертикальным и ловит верхний
+  // свет, поэтому ночью читается как щит, а не как чёрный круг
+  диск.rotation.set(Math.PI / 2, 0.32, 0.12);
+  диск.position.set(offset[0], offset[1], offset[2]);
+
+  const обод = cyl(radius * 1.09, radius * 1.09, 0.028, rimMat, 14);
+  обод.rotation.copy(диск.rotation);
+  обод.position.set(offset[0], offset[1], offset[2] - 0.005);
+
+  const умбон = sphere(0.06, MAT.gold, 8);
+  умбон.position.set(offset[0], offset[1], offset[2] + 0.05);
+
+  группа.add(диск, обод, умбон);
+  return группа;
 }
 
 function buildHat(kind: Hat, color: number): THREE.Group {
@@ -271,33 +312,10 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   // ночью (свет сверху, от луны и факелов) на него падает только скользящий
   // свет — грань уходила в абсолютный ноль, и щит выглядел чёрным шаром
   // (видно на скриншоте). Светлее + наклон + небольшое собственное свечение.
-  let shieldRef: THREE.Mesh | null = null;
-  let bossRef: THREE.Mesh | null = null;
+  let shieldRef: THREE.Object3D | null = null;
   if (cfg.shield) {
-    const shieldMat = mat(0xb08a52, 0.8, 0.05);
-    shieldMat.emissive = new THREE.Color(0x3a2a14);
-    shieldMat.emissiveIntensity = 0.55;
-    const rimMat = mat(0xb9a06a, 0.45, 0.6);
-    rimMat.emissive = new THREE.Color(0x2a2410);
-    rimMat.emissiveIntensity = 0.5;
-
-    shieldRef = cyl(0.28, 0.28, 0.045, shieldMat, 14);
-    // Наклон по Y и Z: диск перестаёт быть строго вертикальным и ловит
-    // верхний свет, поэтому ночью читается как щит, а не как чёрный круг
-    shieldRef.rotation.x = Math.PI / 2;
-    shieldRef.rotation.y = 0.32;
-    shieldRef.rotation.z = 0.12;
-    shieldRef.position.set(-0.22, -0.48, 0.15);
-
-    const rim = cyl(0.305, 0.305, 0.028, rimMat, 14);
-    rim.rotation.copy(shieldRef.rotation);
-    rim.position.set(-0.22, -0.48, 0.145);
-
-    bossRef = sphere(0.06, MAT.gold, 8);
-    bossRef.position.set(-0.22, -0.48, 0.2);
+    shieldRef = buildShield();
     armL.add(shieldRef);
-    armL.add(rim);
-    armL.add(bossRef);
   }
 
   let weaponOn = !!weaponRef;
@@ -412,7 +430,7 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
       if (weaponRef) { weaponRef.visible = visible; weaponOn = visible; }
     },
     equipShield(visible: boolean) {
-      if (shieldRef) { shieldRef.visible = visible; bossRef && (bossRef.visible = visible); shieldOn = visible; }
+      if (shieldRef) { shieldRef.visible = visible; shieldOn = visible; }
     },
     isWeaponEquipped() { return weaponOn; },
     isShieldEquipped() { return shieldOn; },
@@ -1522,26 +1540,10 @@ function buildFigure(cfg: HumanoidCfg): Rig {
   }
 
   // ── Щит в левой ──
-  let shieldRef: THREE.Mesh | null = null;
-  let bossRef: THREE.Mesh | null = null;
+  let shieldRef: THREE.Object3D | null = null;
   if (cfg.shield) {
-    const shieldMat = mat(0xb08a52, 0.8, 0.05);
-    shieldMat.emissive = new THREE.Color(0x3a2a14);
-    shieldMat.emissiveIntensity = 0.55;
-    const rimMat = mat(0xb9a06a, 0.45, 0.6);
-    rimMat.emissive = new THREE.Color(0x2a2410);
-    rimMat.emissiveIntensity = 0.5;
-    shieldRef = cyl(0.27, 0.27, 0.045, shieldMat, 14);
-    shieldRef.rotation.x = Math.PI / 2;
-    shieldRef.rotation.y = 0.32;
-    shieldRef.rotation.z = 0.12;
-    shieldRef.position.set(-0.2, -0.5, 0.14);
-    const rim = cyl(0.295, 0.295, 0.028, rimMat, 14);
-    rim.rotation.copy(shieldRef.rotation);
-    rim.position.set(-0.2, -0.5, 0.135);
-    bossRef = sphere(0.06, MAT.gold, 8);
-    bossRef.position.set(-0.2, -0.5, 0.19);
-    armL.add(shieldRef, rim, bossRef);
+    shieldRef = buildShield(0.27, [-0.2, -0.5, 0.14]);
+    armL.add(shieldRef);
   }
 
   let weaponOn = !!weaponRef;
@@ -1648,7 +1650,7 @@ function buildFigure(cfg: HumanoidCfg): Rig {
       if (weaponRef) { weaponRef.visible = visible; weaponOn = visible; }
     },
     equipShield(visible: boolean) {
-      if (shieldRef) { shieldRef.visible = visible; bossRef && (bossRef.visible = visible); shieldOn = visible; }
+      if (shieldRef) { shieldRef.visible = visible; shieldOn = visible; }
     },
     isWeaponEquipped() { return weaponOn; },
     isShieldEquipped() { return shieldOn; },

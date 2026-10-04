@@ -11,6 +11,7 @@ import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig } from './rig';
+import { loadRealPlayerRig } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns,
@@ -89,6 +90,13 @@ const WADE_MULT = 0.75;       // замедление в броду по вод�
 interface BoundRig {
   rig: Rig;
   kind: 'player' | 'monster';
+  /**
+   * Настоящая модель уже запрошена и подставлена (или попытка закончилась).
+   *
+   * Ставится один раз на риг: без этой отметки каждый кадр снова спрашивал бы
+   * файл из сети, а кеш загрузчика всё равно отдал бы то же самое.
+   */
+  realModelTried?: boolean;
   /** Монстр оказался в глубокой воде и плывёт (поза и анимация) */
   monsterSwim?: boolean;
   /** Подводное существо: рисуется на поверхности, а не под ней */
@@ -929,6 +937,47 @@ export class World3D {
     return t(def.nameKey);
   }
 
+  /**
+   * Подменяет процедурный риг игрока настоящей моделью, когда она дошла.
+   *
+   * Порядок важен: сначала показывается процедурный силуэт, и только потом он
+   * меняется на модель. Обратный порядок означал бы пустоту на месте игрока всё то
+   * время, пока идёт загрузка файла. Подмена сохраняет позицию, поворот и
+   * видимость, а надетое снаряжение переносится на новый риг: слоты те же.
+   */
+  private upgradeToRealModel(id: string, charClass: string): void {
+    const b = this.rigs.get(id);
+    if (!b || b.realModelTried) return;
+    b.realModelTried = true;
+    void loadRealPlayerRig(charClass).then((real) => {
+      const cur = this.rigs.get(id);
+      if (!real || !cur || cur.kind !== 'player') {
+        // Модель не пришла: остаёмся на палочках, и отметку сбрасываем, чтобы
+        // попытка могла повториться — например, после смены класса.
+        if (cur && !real) cur.realModelTried = false;
+        return;
+      }
+      const прежний = cur.rig;
+      real.group.position.copy(прежний.group.position);
+      real.group.rotation.copy(прежний.group.rotation);
+      real.group.visible = прежний.group.visible;
+      real.group.userData.playerId = id;
+      прежний.group.removeFromParent();
+      прежний.dispose();
+      this.scene.add(real.group);
+      cur.rig = real;
+      if (id === this.me?.id) {
+        if (this.localGear) {
+          real.equipWeapon(this.localGear.weapon);
+          real.setArmorTint(this.localGear.armorColor);
+        } else {
+          real.equipWeapon(charClass !== 'sufi_mystic');
+        }
+        real.equipShield(charClass === 'qizilbash');
+      }
+    });
+  }
+
   // ── Синхронизация ригов ──────────────────────────────────────
   private syncRigs(): void {
     if (!this.entities) return;
@@ -942,6 +991,9 @@ export class World3D {
         b.rig.group.userData.playerId = id;
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
+        // Настоящая модель подставляется позже и только своему игроку: остальным
+        // игрокам она пока не нужна, а толпе тем более.
+        if (id === this.me?.id) this.upgradeToRealModel(id, p.charClass);
       }
       // Свой персонаж: вид — из надетого, а не из класса. Применяем на каждом
       // проходе, а не только при создании рига: игрок надевает и снимает

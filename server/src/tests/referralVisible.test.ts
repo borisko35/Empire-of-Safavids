@@ -11,7 +11,7 @@
 // кнопок старой вёрстки, ни хаба, ни бейджей). Именно из-за него разбор
 // сначала пришёл к выводу, что бейдж заданий — мёртвый код, и это было
 // неверно: в живом мире бейдж работает.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stripComments } from './helpers/stripCode';
 
@@ -22,7 +22,12 @@ const html = read('client/src/app/index.html');
 const hub = stripComments(read('client/src/app/hub.ts'));
 const icons = read('client/src/ui/icons.ts');
 const referralService = stripComments(read('server/src/services/ReferralService.ts'));
-const builtArtifact = read('client/web/game/index.html');
+// Артефакта сборки может не быть: client/web/game/ в .gitignore, и на чистой
+// копии репозитория этой папки нет. Раньше чтение бросало ошибку, и набор
+// падал целиком ещё до проверок.
+const builtArtifactPath = join(repoRoot, 'client/web/game/index.html');
+const builtArtifact = existsSync(builtArtifactPath) ? readFileSync(builtArtifactPath, 'utf-8') : null;
+const ignoreFile = read('.gitignore');
 
 /** Кнопки постоянного ряда: блок .panel-toggles целиком */
 function rowBlock(): string {
@@ -113,21 +118,22 @@ describe('Смысл кнопки не выдуман', () => {
 });
 
 describe('Разметку читаем из исходника, а не из артефакта сборки', () => {
-  it('артефакт в репозитории устарел — и это видно', () => {
-    // Не «сломанная проверка», а описание реального расхождения: в
-    // артефакте 29 кнопок и нет хаба. Если артефакт однажды приведут в
-    // порядок, проверка начнёт падать и скажет об этом прямо
-    const i = builtArtifact.indexOf('class="hud panel-toggles"');
-    const block = i < 0 ? '' : builtArtifact.slice(i, builtArtifact.indexOf('</div>', i));
-    const count = (block.match(/data-panel="/g) ?? []).length;
+  it('разметку нельзя брать из артефакта сборки: его нет в репозитории', () => {
+    // Раньше здесь стояло требование «артефакт устарел»: в нём нет хаба и
+    // бейджа. Проверка падала после каждой пересборки клиента, то есть после
+    // нормальной работы, и падала с ошибкой чтения там, где артефакта вообще
+    // нет. Теперь утверждается устойчивое свойство: артефакт исключён из git,
+    // поэтому источник правды о разметке — только исходник.
     expect({
-      кнопок_в_артефакте: count,
-      хаб_в_артефакте: builtArtifact.includes('id="panel-hub"'),
-      бейдж_в_артефакте: builtArtifact.includes('id="tasks-badge"'),
+      артефакт_в_gitignore: ignoreFile.split(/\r?\n/).some((line) => line.trim() === 'client/web/game/'),
+      хаб_в_исходнике: html.includes('id="panel-hub"'),
+      бейдж_в_исходнике: html.includes('id="tasks-badge"'),
+      артефакт_существует_локально: builtArtifact !== null,
     }).toEqual({
-      кнопок_в_артефакте: expect.any(Number),
-      хаб_в_артефакте: false,
-      бейдж_в_артефакте: false,
+      артефакт_в_gitignore: true,
+      хаб_в_исходнике: true,
+      бейдж_в_исходнике: true,
+      артефакт_существует_локально: expect.any(Boolean),
     });
   });
 
