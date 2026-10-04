@@ -17,6 +17,7 @@ import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
 import { plasterTexture, stoneTexture, woodTexture } from './textures';
+import { STELE, inscriptionFace, inscriptionFor } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
 // глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
 // постом в shared/stealth.ts, а не отдельно от него.
@@ -1126,6 +1127,34 @@ export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
     const frame = box(2.8, 3.8, 0.2, M.gold, 0, 1.9, 3.0);
     const sign = signMesh(t(s.nameKey));
     sign.position.set(0, 4.0, 3.12);
+    // Стела с персидской надписью. Её габариты и положение заданы в
+    // inscriptions.ts и подобраны под этот фасад: верх ниже подоконника
+    // окна слева, сама она левее двери.
+    const ins = inscriptionFor(s.id);
+    if (ins) {
+      const stele = new THREE.Group();
+      const shaft = new THREE.Mesh(
+        new THREE.BoxGeometry(STELE.width, STELE.height, STELE.depth),
+        M.stone,
+      );
+      shaft.position.set(0, STELE.centerY, 0);
+      shaft.castShadow = true;
+      // Цокень и карниз: стела должна выглядеть поставленной, а не
+      // приставленной к стене.
+      const base = new THREE.Mesh(
+        new THREE.BoxGeometry(STELE.width + 0.24, 0.16, STELE.depth + 0.22),
+        M.stone,
+      );
+      base.position.set(0, 0.08, 0);
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(STELE.width + 0.16, 0.14, STELE.depth + 0.16),
+        M.stone,
+      );
+      cap.position.set(0, STELE.height - 0.07, 0);
+      stele.add(shaft, base, cap, inscriptionFace(ins));
+      stele.position.set(STELE.offsetX, STELE.offsetY, STELE.offsetZ);
+      g.add(stele);
+    }
     const lamp = box(0.5, 0.5, 0.5, M.lamp, 2.1, 3.1, 3.1);
     const win1 = box(1.4, 1.2, 0.2, M.teal, -2.9, 2.6, 3.05);
     const win2 = box(1.4, 1.2, 0.2, M.teal, 2.9, 1.2, 3.05);
