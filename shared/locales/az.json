@@ -629,6 +629,7 @@
     "region_locked": "Region bağlıdır: səviyyə çox aşağıdır",
     "quest_level_low": "Bu tapşırıq üçün səviyyəniz aşağıdır",
     "quest_locked": "Tapşırıq bağlıdır: əvvəlkiləri tamamlayın",
+    "quest_repeat_cooldown": "Bu tapşırıqk müvəqqətidir — sonra açılacaq",
     "quest_already_completed": "Tapşırıq artıq tamamlandı",
     "quest_class_mismatch": "Tapşırıq sinifiniz üçün deyil",
     "quest_not_found": "Tapşırıq tapılmadı",

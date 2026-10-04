@@ -629,6 +629,7 @@
     "region_locked": "Region is locked: level too low",
     "quest_level_low": "Your level is too low for this quest",
     "quest_locked": "Quest locked: finish previous quests first",
+    "quest_repeat_cooldown": "This quest is on cooldown — it will open later",
     "quest_already_completed": "Quest is already completed",
     "quest_class_mismatch": "Quest is not available to your class",
     "quest_not_found": "Quest not found",

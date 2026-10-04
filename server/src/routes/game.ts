@@ -1631,7 +1631,14 @@ gameRouter.get('/quests', secureMiddleware, asyncHandler(async (req: Request, re
     // Карма идёт в фильтр: без неё личный квест либо виден святому, либо
     // отклоняется только при попытке взять. И то и другое — ошибка.
     const карма = await characterService.getKarma(char.id);
-    quests = getAvailableQuests(char.level, [], char.class, карма);
+    // Выполненные квесты — тоже обязательный аргумент фильтра. Раньше здесь
+    // стоял пустой массив, и это ломало две вещи сразу: выполненные обычные
+    // квесты оставались в списке навсегда, а любой квест с предыдущими
+    // (prerequisites) не показывался никогда - ведь отсутствующий в пустом
+    // списке предыдущий квест означает «не выполнен».
+    const состояние = await questService.getState(char.id);
+    const выполненные = состояние.filter((с) => с.status === 'completed').map((с) => с.questId);
+    quests = getAvailableQuests(char.level, выполненные, char.class, карма);
   }
   return res.json({ quests });
 }));

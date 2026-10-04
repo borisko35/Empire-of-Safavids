@@ -382,11 +382,19 @@ const QUEST_TYPE_RU: Record<string, string> = {
 
 export async function loadQuests(): Promise<void> {
   try {
-    const { quests } = await api.quests();
+    // Уровень и персонаж уходят на сервер: он применяет настоящий фильтр
+    // доступности (уровень, класс, выполненные, предыдущие квесты, карма).
+    // Без них сервер отдаёт всю базу, и список показывал первые восемь квестов
+    // по порядку в базе - в том числе закрытые и чужие, а доступные игроку
+    // не влезали. Свой фильтр по уровню с запасом +10 тут больше не нужен:
+    // правило доступности живёт в одном месте на сервере.
+    const уровень = session.level ?? 1;
+    const регион = session.character?.region;
+    const { quests } = await api.quests(
+      session.character ? { level: уровень, characterId: session.character.id } : undefined,
+    );
     const box = $('quests-list');
     box.innerHTML = '';
-    const level = session.level ?? 1;
-    const region = session.character?.region;
 
     // Прогресс с сервера — источник истины для принятых квестов
     if (session.character) {
@@ -398,9 +406,11 @@ export async function loadQuests(): Promise<void> {
       }
     }
 
-    const available = quests.filter(
-      (q) => q.minLevel <= level + 10 && (!q.requiredRegion || q.requiredRegion === region),
-    );
+    // Регион остаётся на клиенте: в getAvailableQuests его нет, а квест может
+    // требовать другой регион.
+    const available = quests.filter((q) => !q.requiredRegion || q.requiredRegion === регион);
+    // Восемь карточек — предел панели, а не правило игры: за ним прячутся
+    // доступные квесты, и это отдельное решение владельца про размер списка.
     const list = available.slice(0, 8);
     if (!list.length) {
       box.innerHTML = `<div class="quest-card"><b>${t('common.loading')}</b></div>`;

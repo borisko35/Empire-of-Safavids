@@ -807,7 +807,22 @@ export const api = {
       body: JSON.stringify({ characterId, region }),
     }),
 
-  quests: () => req<{ quests: QuestDef[] }>('/api/game/quests'),
+  /**
+   * Список квестов.
+   *
+   * БЕЗ ПАРАМЕТРОВ сервер отдаёт всю базу целиком, и вкладка квестов показывала
+   * первые восемь квестов по порядку в базе: чужие, закрытые и выполненные. С
+   * уровнем и персонажем сервер применяет настоящий фильтр доступности
+   * (getAvailableQuests): уровень, класс, предыдущие квесты, карма.
+   */
+  quests: (params?: { level?: number; characterId?: string; type?: string }) => {
+    const поиск = new URLSearchParams();
+    if (params?.level !== undefined) поиск.set('level', String(params.level));
+    if (params?.characterId) поиск.set('characterId', params.characterId);
+    if (params?.type) поиск.set('type', params.type);
+    const хвост = поиск.toString();
+    return req<{ quests: QuestDef[] }>(`/api/game/quests${хвост ? `?${хвост}` : ''}`);
+  },
 
   questState: (characterId: string) =>
     req<{ quests: { questId: string; status: string; progress: Record<string, number> }[] }>(

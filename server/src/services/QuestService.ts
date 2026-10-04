@@ -38,7 +38,45 @@ export interface CompletedQuestInfo {
 
 export type AcceptQuestResult =
   | { ok: true }
-  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_karma_too_high' | 'quest_karma_too_low' | 'quest_already_completed' | 'character_not_found' };
+  | { ok: false; code: 'quest_not_found' | 'quest_level_low' | 'quest_class_mismatch' | 'quest_locked' | 'quest_karma_too_high' | 'quest_karma_too_low' | 'quest_already_completed' | 'quest_repeat_cooldown' | 'character_not_found' };
+
+/** Миллисекунд в часе. В данных откаты в часах, в коде время в миллисекундах. */
+export const HOUR_MS = 3_600_000;
+
+/**
+ * Когда повторный квест снова можно взять.
+ *
+ * ЧТО БЫЛО ЗАМЕРЕНО. Поле repeatCooldown объявлено у всех двадцати одного
+ * повторяемого квеста — от 24 до 336 часов, в среднем 55 — и не читалось НИГДЕ.
+ * Единственная проверка в accept() была `!def.repeatable`: повторяемый квест
+ * можно было взять снова сразу после выполнения, сколько угодно раз. Данные
+ * обещали ожидание до двух недель, а игра разрешала повтор без него.
+ *
+ * Граница включена со стороны игрока: ровно в момент, когда откат истёк, квест
+ * уже можно брать. На миллисекунду раньше - ещё нет.
+ *
+ * Нет отката или нет времени выполнения - повтор разрешён. Так ведёт себя
+ * неразборчивость данных, а не запрет: заблокировать квест навсегда из-за
+ * пустого completed_at хуже, чем разрешить лишний повтор.
+ */
+export function repeatReadyAt(
+  completedAtMs: number,
+  cooldownHours: number | undefined,
+): number {
+  if (!cooldownHours || cooldownHours <= 0) return 0;
+  return completedAtMs + cooldownHours * HOUR_MS;
+}
+
+/** Не истёк ли ещё откат повторного квеста. */
+export function repeatBlocked(
+  completedAtMs: number,
+  cooldownHours: number | undefined,
+  now = Date.now(),
+): boolean {
+  if (!cooldownHours || cooldownHours <= 0) return false;
+  if (!Number.isFinite(completedAtMs) || completedAtMs <= 0) return false;
+  return now < repeatReadyAt(completedAtMs, cooldownHours);
+}
 
 export class QuestService {
   private db = DatabaseService.getInstance();
@@ -108,7 +146,16 @@ export class QuestService {
     const state = await this.getState(characterId);
     const existing = state.find(s => s.questId === questId);
     if (existing?.status === 'active') return { ok: true };
-    if (existing?.status === 'completed' && !def.repeatable) return { ok: false, code: 'quest_already_completed' };
+    if (existing?.status === 'completed') {
+      if (!def.repeatable) return { ok: false, code: 'quest_already_completed' };
+      // Откат повторного квеста. Раньше его не было: поле repeatCooldown было
+      // объявлено у всех двадцати одного повторяемого квеста и не читалось, так
+      // что повторный квест можно было брать сразу, сколько угодно раз.
+      const выполнен = new Date(existing.completedAt ?? NaN).getTime();
+      if (repeatBlocked(выполнен, def.repeatCooldown)) {
+        return { ok: false, code: 'quest_repeat_cooldown' };
+      }
+    }
 
     if (def.prerequisites.length) {
       const done = new Set(state.filter(s => s.status === 'completed').map(s => s.questId));
