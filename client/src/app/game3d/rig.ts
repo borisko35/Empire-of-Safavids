@@ -42,7 +42,13 @@ export interface RigPose {
 export interface Rig {
   group: THREE.Group;
   update: (dt: number, p: RigPose) => void;
-  triggerAttack: () => void;
+  /**
+   * Замах. Стадия связки: 1 — прямой удар, 2 — обратный. Параметр
+   * необязательный: старые вызовы без стадии работают как первая.
+   * Процедурные риги (запасной вариант без модели) стадию принимают, но
+   * показывают один и тот же замах — второй клип есть только у модели.
+   */
+  triggerAttack: (stage?: 1 | 2) => void;
   /**
    * Уклонение в сторону: forward, back, left, right.
    *
@@ -345,7 +351,7 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
 
   const rig: Rig = {
     group,
-    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    triggerAttack(_stage: 1 | 2 = 1) { if (attackT < 0 || attackT > 1) attackT = 0; },
     update(dt, p) {
       const speedRatio = Math.min(1, p.speed / 7);
       phase += dt * (p.moving ? 2.2 + p.speed * 1.35 : 2);
@@ -533,7 +539,7 @@ function buildDemon(): Rig {
   let deadT = 0;
   return {
     group,
-    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    triggerAttack(_stage: 1 | 2 = 1) { if (attackT < 0 || attackT > 1) attackT = 0; },
     update(dt, p) {
       phase += dt * (p.moving ? 5.2 : 2.4);
       attackT = attackT < 0 ? -1 : attackT + dt / 0.55;
@@ -621,7 +627,7 @@ function buildSimurgh(): Rig {
   let deadT = 0;
   return {
     group,
-    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    triggerAttack(_stage: 1 | 2 = 1) { if (attackT < 0 || attackT > 1) attackT = 0; },
     update(dt, p) {
       phase += dt * (p.moving ? 7 : 3.4);
       attackT = attackT < 0 ? -1 : attackT + dt / 0.6;
@@ -757,7 +763,7 @@ function buildFish(cfg: FishCfg): Rig {
 
   return {
     group,
-    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    triggerAttack(_stage: 1 | 2 = 1) { if (attackT < 0 || attackT > 1) attackT = 0; },
     update(dt, p) {
       // Рыба ползёт только когда плывёт: стоящая на месте подводная
       // существо всё равно чуть качается, но не «бежит»
@@ -888,7 +894,7 @@ function buildQuadruped(cfg: QuadrupedCfg): Rig {
   let падение = 0;
   return {
     group,
-    triggerAttack() {},
+    triggerAttack(_stage: 1 | 2 = 1) {},
     update(dt, p) {
       // Шаг быстрее в движении; на месте волк дышит и качает головой.
       фаза += dt * (p.moving ? 7 : 1.2);
@@ -983,7 +989,7 @@ function buildScorpion(): Rig {
   let deadT = 0;
   return {
     group,
-    triggerAttack() {},
+    triggerAttack(_stage: 1 | 2 = 1) {},
     update(dt, p) {
       phase += dt * (p.moving ? 4 : 1.5);
       deadT = p.dead ? Math.min(1, deadT + dt * 2.2) : 0;
@@ -1577,7 +1583,7 @@ function buildFigure(cfg: HumanoidCfg): Rig {
 
   return {
     group,
-    triggerAttack() { if (attackT < 0 || attackT > 1) attackT = 0; },
+    triggerAttack(_stage: 1 | 2 = 1) { if (attackT < 0 || attackT > 1) attackT = 0; },
     update(dt, p) {
       const speedRatio = Math.min(1, p.speed / 7);
       phase += dt * (p.moving ? 2.2 + p.speed * 1.35 : 2);

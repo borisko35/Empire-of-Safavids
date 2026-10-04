@@ -283,7 +283,9 @@
     "entrance_seen": "Тебя заметили. Отойди из поля зрения",
     "entrance_gold": "Нужно 50 золота за рычаг",
     "entrance_closed": "Этот вход закрыт",
-    "combat_error_afraid": "Страх: нельзя атаковать"
+    "combat_error_afraid": "Страх: нельзя атаковать",
+    "combat_error_block_cooldown": "Щит ещё не готов",
+    "finisher": "Финишер!"
   },
   "chat": {
     "cooldown": "Слишком часто. Подождите {sec} сек.",

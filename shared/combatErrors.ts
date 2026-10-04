@@ -8,6 +8,7 @@
 export type CombatErrorCode =
   | 'attack_too_fast'
   | 'dodge_cooldown'
+  | 'block_cooldown'
   | 'out_of_reach'
   | 'not_enough_stamina'
   | 'not_enough_mana'
@@ -32,6 +33,7 @@ export type CombatErrorCode =
 export const COMBAT_ERROR_KEYS: Record<CombatErrorCode, string> = {
   attack_too_fast: 'world.combat_error_attack_too_fast',
   dodge_cooldown: 'world.combat_error_dodge_cooldown',
+  block_cooldown: 'world.combat_error_block_cooldown',
   out_of_reach: 'world.combat_error_out_of_reach',
   not_enough_stamina: 'world.combat_error_not_enough_stamina',
   not_enough_mana: 'world.combat_error_not_enough_mana',

@@ -283,7 +283,9 @@
     "entrance_seen": "You were spotted. Get out of sight",
     "entrance_gold": "The lever costs 50 gold",
     "entrance_closed": "This entrance is closed",
-    "combat_error_afraid": "Fear: cannot attack"
+    "combat_error_afraid": "Fear: cannot attack",
+    "combat_error_block_cooldown": "Shield not ready yet",
+    "finisher": "Finisher!"
   },
   "chat": {
     "cooldown": "Too fast. Wait {sec} sec.",

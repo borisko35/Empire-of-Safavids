@@ -1261,6 +1261,14 @@ export class GameSocketHandler {
       return;
     }
 
+    // Резерв щита — тоже до списания стамины, как у рывка: проверка отката
+    // и резерв в одном вызове, иначе спам ПКМ списывал бы стамину за каждый
+    // отклонённый щит. Отклонённый щит не тратит стамину вовсе.
+    if (!isDodge && !this.defenseStates.activateBlock(character.id)) {
+      socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'block_cooldown' });
+      return;
+    }
+
     // Стоимость щита зависит от стойки: у «Шахского щита» он почти бесплатный,
     // у «Танца серпа» дорогой. Раньше стоимость была одна на всех, то есть
     // обещание «оборонительный стиль» было бы пустым словом.
@@ -1271,11 +1279,10 @@ export class GameSocketHandler {
       // Резерв не состоялся из-за стамины - откатываем, иначе игрок
       // ждал бы отката за действие, которого не было.
       if (isDodge) this.defenseStates.clearDodge(character.id);
+      else this.defenseStates.clearBlock(character.id);
       socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'not_enough_stamina' });
       return;
     }
-
-    if (!isDodge) this.defenseStates.activateBlock(character.id);
 
     socket.emit(SERVER_EVENTS.COMBAT_BLOCKED, {
       actionType: action.actionType,

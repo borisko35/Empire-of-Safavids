@@ -87,6 +87,16 @@ const FACE_TURN_RATE = 10;
  */
 const ROLL_RATE = 1.1;
 const ROLL_LIMIT = 0.6;
+/**
+ * Окно связки ударов, мс. Повторный клик внутри окна — вторая стадия
+ * (обратный замах), клик позже — связка начинается заново с первой.
+ *
+ * 2000, а не 4000 как серверная цепочка: сервер считает серию для урона по
+ * своим часам и своему окну, а это окно — про ритм замахов на экране.
+ * Окно обязано быть шире самого долгого замаха, иначе вторую стадию
+ * нельзя было бы выбить в принципе.
+ */
+const COMBO_WINDOW_MS = 2000;
 /** Клавиши, двойное нажатие которых означает рывок: WASD плюс стрелки */
 const DOUBLE_TAP_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']);
 const DODGE_SPEED = 15.0;    // скорость рывка, юниты/сек
@@ -201,6 +211,16 @@ private roll = 0;
   private exhaustedFlash = 0;
   private stepTimer = 0;
   private attackCd = 0;
+  /**
+   * Стадия связки ударов: 1 — прямой замах, 2 — обратный. Переключается
+   * повторным кликом в окне COMBO_WINDOW_MS. Третьей стадии у кликов нет:
+   * завершающая атака — это клик плюс навык, поэтому дальше счётчик
+   * чередуется, пока окно не выйдет.
+   */
+  private comboStage: 1 | 2 = 1;
+  private lastSwingAt = 0;
+  /** Стадия текущего замаха: ставится в tryAttack, читается кадром ниже. */
+  private attackStage: 1 | 2 = 1;
   /**
    * Крючок «игрок замахнулся». Ставится слоем приложения (см. world.ts) —
    * туториалу нужно знать о замахе, а заводить зависимость от интерфейса
@@ -582,6 +602,30 @@ private roll = 0;
     return { yaw: this.yaw, pitch: this.pitch, dist: this.dist };
   }
 
+  /**
+   * Стадия активной связки: 0 — окна нет, связки нет. Читает useSkill:
+   * навык в окне после клика — это завершающая атака связки.
+   */
+  getComboStage(): 0 | 1 | 2 {
+    if (performance.now() - this.lastSwingAt > COMBO_WINDOW_MS) return 0;
+    return this.comboStage;
+  }
+
+  /** Навык-финишер закрывает связку: окно не висит за эффектом навыка. */
+  resetCombo(): void {
+    this.lastSwingAt = 0;
+  }
+
+  /**
+   * Замах финишера: обратный, как второй удар, плюс эффект навыка поверх.
+   * Отдельного клипа финишера в проекте нет, и обратный замах плюс вспышка
+   * навыка читаются как завершение связки.
+   */
+  playFinisherSwing(): void {
+    this.attackAnim = true;
+    this.attackStage = 2;
+  }
+
   setCameraPose(yaw: number, pitch: number, dist?: number): void {
     this.yaw = yaw;
     this.pitch = pitch;
@@ -833,6 +877,14 @@ private roll = 0;
     // клиент не отклоняет законный темп и не спамит отказом «слишком быстро».
     this.attackCd = this.swingSeconds();
 
+    // Стадии связки: первый клик — прямой замах, повторный клик в окне —
+    // обратный. Третий клик подряд связку не продолжает: завершающая атака —
+    // это клик плюс навык (см. useSkill), поэтому счётчик чередуется 1, 2,
+    // 1, 2, пока окно не выйдет и связка не начнётся заново с первой.
+    const now = performance.now();
+    this.comboStage = now - this.lastSwingAt < COMBO_WINDOW_MS && this.comboStage === 1 ? 2 : 1;
+    this.lastSwingAt = now;
+
     // Крючок для слоя приложения (туториал засчитывает замах).
     // Вызывается ДО проверки цели: игрок замахнулся — шаг засчитан, даже если
     // рядом никого не было. Прямая зависимость от tutorial.ts здесь была бы
@@ -854,6 +906,7 @@ private roll = 0;
     }
     // Замах всегда (отклик на клик); пакет атаки уходит только при цели
     this.attackAnim = true;
+    this.attackStage = this.comboStage;
     audio.whoosh();
     if (this.entities?.targetId) this.callbacks?.onAttack();
   }
@@ -1487,7 +1540,7 @@ if (isMe && moving) {
         dead,
         swimming: b.kind === 'monster' ? mSwim : (isMe && this.swimming),
       });
-      if (b.kind === 'player' && isMe && this.attackAnim) b.rig.triggerAttack();
+      if (b.kind === 'player' && isMe && this.attackAnim) b.rig.triggerAttack(this.attackStage);
     }
     this.attackAnim = false;
 

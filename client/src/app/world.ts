@@ -2189,6 +2189,14 @@ function useSkill(skillId: string): void {
   onTutorialAction('use_skill', skill.id);
   audio.pokeCombat();
   emitCombat('skill', skillId);
+  // Финишер связки: навык в окне после клика (каким навыком — на выбор
+  // игрока, клавиши 1–4). Связка закрывается: окно не висит за эффектом.
+  // Урон — сам навык, как раньше: стадия меняет замах и подпись, а не цифры.
+  if (world3d?.getComboStage()) {
+    world3d.playFinisherSwing();
+    if (world && me) world.addFloater(me.pos.x, me.pos.z - 1, t('world.finisher'), '#F4D26C', true);
+    world3d.resetCombo();
+  }
 }
 
 // ── Игровой цикл ─────────────────────────────────────────────
