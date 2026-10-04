@@ -65,6 +65,12 @@ interface АктивноеПревью {
 const активные: АктивноеПревью[] = [];
 let цикл: number | null = null;
 let последнееВремя = 0;
+/**
+ * Поколение экрана выбора. attach грузит модель асинхронно (секунды), а игрок
+ * может уйти в игру раньше: без поколения опоздавшее превью пересоздало бы
+ * рендеры и перезапустило цикл поверх игры.
+ */
+let поколение = 0;
 
 /** Один общий цикл на все пять превью, а не пять requestAnimationFrame. */
 function тик(время: number): void {
@@ -90,8 +96,15 @@ function ensureЦикл(): void {
  * тёмную карточку.
  */
 export async function attachClassPreview(canvas: HTMLCanvasElement, classId: string): Promise<boolean> {
+  const моё = поколение;
   const rig = await loadRealPlayerRig(classId);
   if (!rig) return false;
+  if (моё !== поколение || !canvas.isConnected) {
+    // Экран уже закрыт: модель успела, а игрок — нет. Риг разбирается,
+    // в список не добавляется, цикл не трогается.
+    rig.dispose();
+    return false;
+  }
   // Canvas уже в DOM: размеры берутся из CSS. setSize с updateStyle=false,
   // чтобы рендер не переписывал стили карточки.
   const ширина = canvas.clientWidth || 120;
@@ -123,6 +136,7 @@ export async function attachClassPreview(canvas: HTMLCanvasElement, classId: str
  * игровой, и цикл крутил бы модели поверх игры.
  */
 export function stopClassPreviews(): void {
+  поколение++;
   if (цикл !== null) {
     cancelAnimationFrame(цикл);
     цикл = null;
