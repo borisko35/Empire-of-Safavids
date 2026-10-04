@@ -37,7 +37,8 @@ type Anim = {
 };
 type GLTF = {
   // translation и scale нужны для размера скелета, scenes — для масштаба корня.
-  nodes?: { name?: string; translation?: number[]; scale?: number[] }[];
+  // children нужен для длины кости: длина измеряется до начала кости-потомка.
+  nodes?: { name?: string; translation?: number[]; scale?: number[]; children?: number[] }[];
   meshes?: { primitives?: Prim[] }[];
   accessors?: {
     min?: number[];
@@ -147,10 +148,15 @@ function world3dSource(): string {
 }
 
 describe('Активы: настоящие модели на месте', () => {
-  it('пять персонажей и все клипы лежат в репозитории', () => {
+  it('все клипы лежат в репозитории, и персонажей хоть один есть', () => {
+    // Раньше здесь стояло требование «столько же моделей, сколько классов». Сейчас
+    // доспех один на пять классов, и такая проверка ловила бы не забытый класс, а
+    // наоборот - запрещала бы иметь меньше файлов, чем классов. Нужно другое: чтобы
+    // каждый класс вёл в файл, который есть и в манифесте, и на диске; это проверяет
+    // следующая проверка, здесь остаётся только факт наличия персонажа.
     must(
-      manifest.characters.length === CLASSES.length,
-      `v manifeste ${manifest.characters.length} personazhey, a klassov igroka ${CLASSES.length}`,
+      manifest.characters.length >= 1,
+      'v manifeste net ni odnogo personazha: vse klassy ostanutsya na palochkah',
     );
     // 18 первых + 18 докачанных = 36. Число берётся из манифеста и сверяется с
     // диском: константой оно жить не может, файлы добавляются.
@@ -344,64 +350,6 @@ describe('Koren ne uvozit personazha s mesta', () => {
   });
 });
 
-describe('Система единиц одна: скелет клипа равен скелету персонажа', () => {
-  const TOLERANCE = 0.2;
-
-  function boneNames(gltf: GLTF): Set<string> {
-    const set = new Set<string>();
-    for (const node of gltf.nodes ?? []) {
-      if ((node.name ?? '').startsWith('mixamorig:')) set.add(node.name as string);
-    }
-    return set;
-  }
-
-  /** Mean length of bone translations over the shared names. */
-  function meanTranslation(gltf: GLTF, shared: string[]): number | null {
-    let sum = 0;
-    let count = 0;
-    for (const name of shared) {
-      const node = (gltf.nodes ?? []).find((n) => n.name === name);
-      if (!node || !node.translation) continue;
-      sum += Math.hypot(node.translation[0], node.translation[1], node.translation[2]);
-      count++;
-    }
-    return count > 0 ? sum / count : null;
-  }
-
-  it('у персонажей и клипов одна система единиц', () => {
-    const characterBones = new Set<string>();
-    for (const person of manifest.characters) {
-      for (const name of boneNames(readGLB(shortName(person.file)))) characterBones.add(name);
-    }
-    const clipBones = new Set<string>();
-    for (const clip of manifest.clips) {
-      for (const name of boneNames(readGLB(shortName(clip.file)))) clipBones.add(name);
-    }
-    const shared = [...characterBones].filter((name) => clipBones.has(name));
-    must(
-      shared.length >= 50,
-      `общих костей только ${shared.length}, а нужно не меньше 50: сравнивать нечего`,
-    );
-
-    const base = manifest.characters
-      .map((p) => meanTranslation(readGLB(shortName(p.file)), shared))
-      .filter((v): v is number => v !== null);
-    const target = base.reduce((s, v) => s + v, 0) / base.length;
-
-    const bad: string[] = [];
-    for (const clip of manifest.clips) {
-      const value = meanTranslation(readGLB(shortName(clip.file)), shared);
-      if (value === null) { bad.push(`${clip.name}: нечем мерить`); continue; }
-      const ratio = value / target;
-      if (Math.abs(ratio - 1) > TOLERANCE) bad.push(`${clip.name}: x${ratio.toFixed(2)}`);
-    }
-    must(
-      bad.length === 0,
-      `клипов с чужой системой единиц: ${bad.length} - ${bad.slice(0, 5).join(', ')}. three.js связывает дорожку с костью по имени, поэтому анимация просто разорвёт тело`,
-    );
-  });
-});
-
 describe('Масштаб в файле: один, а не два', () => {
   // Blender при обратном импорте файла компенсирует масштаб корня молча, three.js
   // учитывает его честно. Из-за этого файл с корнем 0,01 выглядит правильным при
@@ -468,6 +416,67 @@ describe('Масштаб в файле: один, а не два', () => {
     must(
       /не трогаю размер/.test(src),
       'при битом коэффициенте нет сообщения в консоль: непонятно, почему персонаж такой',
+    );
+  });
+});
+
+describe('Оттенок доспеха различает классы', () => {
+  function tintTable(): { cls: string; hex: string }[] {
+    const src = realRigSource();
+    const start = src.indexOf('MODEL_TINT');
+    if (start < 0) return [];
+    const block2 = src.slice(start, src.indexOf('};', start));
+    return [...block2.matchAll(/(\w+):\s*0x([0-9a-fA-F]{6})/g)].map((m) => ({
+      cls: m[1],
+      hex: m[2].toLowerCase(),
+    }));
+  }
+
+  it('у каждого класса свой оттенок, и все они разные', () => {
+    const rows = tintTable();
+    must(rows.length === CLASSES.length, `v MODEL_TINT ${rows.length} zapisey, a klassov ${CLASSES.length}`);
+    for (const cls of CLASSES) {
+      must(
+        rows.some((r) => r.cls === cls),
+        `klassa ${cls} net v MODEL_TINT: on budet vyglydet kak vse ostalnye` +
+          '. Pyat klassov delyat odin dospeh, i razlichaet ih tolkoottenok',
+      );
+    }
+    const uniq = new Set(rows.map((r) => r.hex));
+    must(
+      uniq.size === rows.length,
+      `otтенков ${uniq.size} na ${rows.length} klassov: vse klassy odinakvye` +
+        '. Osensiblyatelnost ne zakryvaet raznicu, a odin dospeh na pyat klassov ' +
+        'dolzhen razlichatsya chem-to besides',
+    );
+  });
+
+  it('конструктор берёт оттенок из своего параметра', () => {
+    // Без этой проверки оттенок можно было бы тихо отключить в конструкторе: таблица
+    // осталась бы полной, домножение на месте, а все классы стали бы одинаковыми.
+    const src = realRigSource();
+    must(
+      /this\.классТинт = оттенок === null/.test(src),
+      'konstruktor ne beret oттенок iz svoyеgo parametra: ' +
+        'otтенок klassа vsegda budet belym, i vse pyat klassov stanut odinakovymi',
+    );
+    must(
+      /MODEL_TINT\[charClass\]/.test(src),
+      'zagruzchik ne peredaet oттенок klassа v konstruktor: ' +
+        'tablica est, no nikto ee ne primenяet',
+    );
+  });
+  it('оттенок домножается на цвет брони, а не заменяет его', () => {
+    const src = realRigSource();
+    must(
+      /multiply\(this\.броняТинт\)\.multiply\(this\.классТинт\)/.test(src),
+      'cvet dospehа ne umnozhaetsya na otтенок klassa: ' +
+        'nadetyi dospeh со svoei redkostyu zatret by otтенok, i klassy stali by odinakovymi',
+    );
+    must(
+      /setHex\(исходный\)/.test(src),
+      'cvet schitaetsya ot исходnogo: иначе смена otтенка копилась бы raz za razom ' +
+        'и dospeh temnel s kazhdoi smenoi',
     );
   });
 });
@@ -543,9 +552,11 @@ describe('Класс игрока ведёт к существующей мод�
         `klassa ${cls} net v karte modeley realRig.ts: igrok etogo klassa ostanetsya na palochkah`,
       );
     }
-    const entries = src
-      .split('\n')
-      .map((line) => line.trim())
+    // Только блок PLAYER_MODEL: в файле есть ещё MODEL_TINT с такими же строками
+    // "класс: ", и без среза каждая строка считалась бы дважды.
+    const blockStart = src.indexOf('PLAYER_MODEL');
+    const block = src.slice(blockStart, src.indexOf('};', blockStart));
+    const entries = block.split('\n').map((line) => line.trim())
       .filter((line) => CLASSES.some((cls) => line.startsWith(`${cls}: `)));
     must(
       entries.length === CLASSES.length,
@@ -557,9 +568,17 @@ describe('Класс игрока ведёт к существующей мод�
     const src = realRigSource();
     const start = src.indexOf('PLAYER_MODEL');
     const block = src.slice(start, src.indexOf('};', start));
-    const files = [...block.matchAll(/:\s*'([a-z-]+)',/g)].map((m) => `${m[1]}.glb`);
-    must(files.length === CLASSES.length, `v karte ${files.length} imen faylov, a klassov ${CLASSES.length}`);
+    const files = [...block.matchAll(/:\s*'([a-z-]+)',/g)].map((m) => m[1] + '.glb');
+    must(files.length === CLASSES.length, `v karte ${files.length} zapisey klassov, a klassov ${CLASSES.length}`);
+    // Один доспех на пять классов, поэтому сверяем не число файлов, а то, что каждый
+    // класс ведёт в файл, который есть и в манифесте, и на диске. Манифест пишется по
+    // диску, карта ведётся руками: их расхождение и есть признак устаревшего манифеста.
+    const вМанифесте = new Set(manifest.characters.map((c) => shortName(c.file)));
     for (const file of files) {
+      must(
+        вМанифесте.has(file),
+        `karta ssylaetsya na ${file}, a v manifeste takogo net: klass ostanetsya na palochkach, manifest ustarel`,
+      );
       must(
         existsSync(join(MODELS, file)),
         `karta ssylaetsya na ${file}, a takogo fayla net: igrok etogo klassa ostanetsya na palochkah`,
@@ -568,13 +587,68 @@ describe('Класс игрока ведёт к существующей мод�
   });
 });
 
+/**
+ * Мировые позиции костей: перевод узла в glTF задан относительно родителя, поэтому
+ * спускаемся по дереву от корня сцены.
+ */
+function worldPositions(gltf: GLTF): Map<string, number[]> {
+  const nodes = gltf.nodes ?? [];
+  const parent = new Array<number>(nodes.length).fill(-1);
+  for (let i = 0; i < nodes.length; i++) {
+    for (const child of nodes[i].children ?? []) parent[child] = i;
+  }
+  const cache = new Map<number, number[]>();
+  function world(i: number): number[] {
+    const hit = cache.get(i);
+    if (hit) return hit;
+    const t = nodes[i].translation ?? [0, 0, 0];
+    const p = parent[i];
+    const base = p < 0 ? [0, 0, 0] : world(p);
+    const out = [base[0] + t[0], base[1] + t[1], base[2] + t[2]];
+    cache.set(i, out);
+    return out;
+  }
+  const out = new Map<string, number[]>();
+  for (let i = 0; i < nodes.length; i++) {
+    const name = nodes[i].name ?? '';
+    if (name.startsWith('mixamorig:')) out.set(name, world(i));
+  }
+  return out;
+}
+
+/**
+ * Длины костей: от начала кости до начала первой кости-потомка.
+ *
+ * Именно эта величина, а не head->tail: между началом и концом кости может лежать
+ * промежуточная кость, и разница между двумя определениями измерялась в 3,4 %.
+ */
+function boneChainLengths(gltf: GLTF): Map<string, number> {
+  const nodes = gltf.nodes ?? [];
+  const world = worldPositions(gltf);
+  const out = new Map<string, number>();
+  for (let i = 0; i < nodes.length; i++) {
+    const name = nodes[i].name ?? '';
+    if (!name.startsWith('mixamorig:')) continue;
+    const from = world.get(name);
+    if (!from) continue;
+    for (const child of nodes[i].children ?? []) {
+      const childName = nodes[child]?.name ?? '';
+      if (childName.includes('End')) continue;
+      const to = world.get(childName);
+      if (!to) break;
+      out.set(name, Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2]));
+      break;
+    }
+  }
+  return out;
+}
+
 describe('Скелет клипа совпадает со скелетом персонажа', () => {
   // Высота, к которой игра приводит любую модель: см. TARGET_HEIGHT в realRig.ts.
   const TARGET = 1.9;
   // Допуск 15 %: модели разного происхождения, и разброс между персонажами сам по
   // себе достигает 8 % (1.042..1.122). Вдвое больше скелета — это 100 %, и такое
   // проверка ловит.
-  const TOLERANCE = 0.15;
 
   type Bones = { torso: number; rootScale: number; height: number | null };
 
@@ -611,19 +685,28 @@ describe('Скелет клипа совпадает со скелетом пе�
     return out;
   }
 
-  function clipTorso(): { file: string; value: number }[] {
-    const out: { file: string; value: number }[] = [];
-    for (const clip of manifest.clips) {
-      const b = bones(readGLB(shortName(clip.file)));
-      if (!b) continue;
-      out.push({ file: clip.name, value: b.torso * b.rootScale });
+  /** Отношение длин общих костей клипа к персонажу: 1 - значит скелеты одного размера. */
+  function clipBoneRatio(clipFile: string, reference: Map<string, number>): number | null {
+    const lengths = boneChainLengths(readGLB(clipFile));
+    let sum = 0;
+    let count = 0;
+    for (const [name, length] of lengths) {
+      const want = reference.get(name);
+      if (!want || want <= 1e-6 || length <= 1e-6) continue;
+      sum += length / want;
+      count++;
     }
-    return out;
+    return count >= 20 ? sum / count : null;
+  }
+
+  function referenceSkeleton(): Map<string, number> | null {
+    const person = manifest.characters[0];
+    return person ? boneChainLengths(readGLB(shortName(person.file))) : null;
   }
 
   it('у персонажей скелет одного размера после нормализации в игре', () => {
     const norms = characterNorm();
-    must(norms.length === 5, `soderzhashchih personazhey ${norms.length}, zhdal 5`);
+    must(norms.length >= 1, 'v manifeste net personazha: skeleta s chem sravnivat ne s chem');
     const spread = Math.max(...norms) / Math.min(...norms);
     must(
       spread < 1.2,
@@ -632,15 +715,23 @@ describe('Скелет клипа совпадает со скелетом пе�
   });
 
   it('скелет клипа равен скелету персонажа, а не вдвое больше', () => {
-    const norms = characterNorm();
-    const target = norms.reduce((sum, n) => sum + n, 0) / norms.length;
-    for (const clip of clipTorso()) {
-      const ratio = clip.value / target;
-      must(
-        Math.abs(ratio - 1) <= TOLERANCE,
-        `klip ${clip.file}: skelet ${clip.value.toFixed(3)} protiv normy ${target.toFixed(3)} (v ${ratio.toFixed(2)} raza). three.js svyazyvaet dorozhku s kostyu po IMENI, tak chto oshibki net: animaciya prosto razryvaet telo`,
-      );
+    const reference = referenceSkeleton();
+    must(reference !== null, 'net personazha: skeleta s chem sravnivat ne s chem');
+    const ref = reference as Map<string, number>;
+    must(ref.size >= 20, `u personazha izmerimo ${ref.size} kostey, a nuzhno 20: ne s chem sravnivat`);
+    const bad: string[] = [];
+    for (const clip of manifest.clips) {
+      const ratio = clipBoneRatio(shortName(clip.file), ref);
+      must(ratio !== null, `klip ${clip.name}: ne s chem sravnivat, kostej net`);
+      const value = ratio as number;
+      if (Math.abs(value - 1) > 0.06) bad.push(`${clip.name}: x${value.toFixed(2)}`);
     }
+    must(
+      bad.length === 0,
+      `klipov s chuzhim skeletom: ${bad.length} - ${bad.slice(0, 4).join(', ')}. ` +
+        'Kost u raznyh personazhey Mixamo nemnogo raznye, i takoe rashozhdenie mozhno, ' +
+        'no stolko rasxozhdenie bylo by oshibkoy podgonki',
+    );
   });
 
   it('у клипа нет неучтённого масштаба: он впечатан в кости', () => {

@@ -47,11 +47,30 @@ const MAX_SCALE = 5;
  * использовалась, они ждали именно этого.
  */
 const PLAYER_MODEL: Record<string, string> = {
-  qizilbash: 'guard-qizilbash',
-  sufi_mystic: 'sufi-mystic',
-  persian_archer: 'archer-of-persian',
-  bazaar_merchant: 'market-vendor',
-  court_diplomat: 'court-diplomat',
+  qizilbash: 'paladin',
+  sufi_mystic: 'paladin',
+  persian_archer: 'paladin',
+  bazaar_merchant: 'paladin',
+  court_diplomat: 'paladin',
+};
+
+/**
+ * Оттенок доспеха по классу.
+ *
+ * Один доспех на всех, различается только оттенок: пять моделей весили бы в пять раз
+ * больше, а пять одинаковых рыцарей выглядели бы странно. У модели один материал и
+ * один атлас, поэтому красится всё целиком - это оттенок металла, а не перекраска ткани.
+ *
+ * Оттенок умножается поверх цвета брони, а не заменяет его: надетое с редкостью остаётся
+ * видно. Числа подобраны темнее единицы, потому что цвет умножается с текстурой и
+ * осветлить им нельзя.
+ */
+const MODEL_TINT: Record<string, number> = {
+  qizilbash: 0xffc07a,
+  sufi_mystic: 0xd6dcf0,
+  persian_archer: 0xa8d8c0,
+  bazaar_merchant: 0xf0c8a0,
+  court_diplomat: 0xc8b4f0,
 };
 
 /** Кости кистей Mixamo: к ним крепится снаряжение. */
@@ -245,8 +264,18 @@ export class RealRig implements Rig {
   private видОружия: Weapon = 'sword';
   /** Исходные цвета материалов: без них снятие брони не вернуло бы вид. */
   private исходныеЦвета = new Map<THREE.Material, number>();
+  /** Оттенок доспеха по классу. */
+  private классТинт = new THREE.Color(1, 1, 1);
+  /** Цвет надетой брони: приходит с сервера вместе с редкостью. */
+  private броняТинт = new THREE.Color(1, 1, 1);
 
-  constructor(сцена: THREE.Group, первыйКлип: THREE.AnimationClip, имя: string) {
+  constructor(
+    сцена: THREE.Group,
+    первыйКлип: THREE.AnimationClip,
+    имя: string,
+    оттенок: number | null = null,
+  ) {
+    this.классТинт = оттенок === null ? new THREE.Color(1, 1, 1) : new THREE.Color(оттенок);
     this.сцена = new THREE.Group();
     this.сцена.add(подогнать(сцена, имя));
     this.group = this.сцена;
@@ -262,6 +291,7 @@ export class RealRig implements Rig {
       }
     });
 
+    this.применитьОттенки();
     this.включить(первыйКлип.name || CLIP_IDLE, первыйКлип);
   }
 
@@ -384,12 +414,31 @@ export class RealRig implements Rig {
   isWeaponEquipped(): boolean { return this.оружиеВидно; }
   isShieldEquipped(): boolean { return this.щитВиден; }
 
-  setArmorTint(color: number | null): void {
+  /**
+   * Цвет доспеха по классу. Умножается поверх цвета брони, а не заменяет его.
+   */
+  setClassTint(color: number | null): void {
+    this.классТинт = color === null ? new THREE.Color(1, 1, 1) : new THREE.Color(color);
+    this.применитьОттенки();
+  }
+
+  /**
+   * Оттенок класса и цвет надетой брони перемножаются поверх исходного цвета материала.
+   *
+   * Раньше здесь ставился готовый цвет, и смена доспеха затирала бы оттенок класса. При одном
+   * доспехе на пять классов это стало бы заметно: у всех был бы одинаковый металл.
+   */
+  private применитьОттенки(): void {
     for (const [mat, исходный] of this.исходныеЦвета) {
       const цветный = mat as THREE.MeshStandardMaterial;
       if (!цветный.color) continue;
-      цветный.color.setHex(color === null ? исходный : color);
+      цветный.color.setHex(исходный).multiply(this.броняТинт).multiply(this.классТинт);
     }
+  }
+
+  setArmorTint(color: number | null): void {
+    this.броняТинт = color === null ? new THREE.Color(1, 1, 1) : new THREE.Color(color);
+    this.применитьОттенки();
   }
 
   dispose(): void {
@@ -421,7 +470,7 @@ export async function loadRealPlayerRig(charClass: string): Promise<RealRig | nu
   if (!сцена || !idle) return null;
   try {
     const копия = cloneSkeleton(сцена) as THREE.Group;
-    return new RealRig(копия, idle, имя);
+    return new RealRig(копия, idle, имя, MODEL_TINT[charClass] ?? null);
   } catch (e) {
     console.warn('[rig] skeleton clone failed', e);
     return null;
