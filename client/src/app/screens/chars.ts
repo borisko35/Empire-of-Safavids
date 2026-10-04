@@ -9,6 +9,7 @@ import { CLASS_COLORS } from '../../ui/icons';
 import { showScreen } from '../world';
 import { toast } from '../hud';
 import { createCharacterWithReferral } from '../referral';
+import { attachClassPreview, stopClassPreviews } from './classPreview';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -31,6 +32,9 @@ async function spriteUrl(base: string): Promise<string> {
 }
 
 export async function initCharsScreen(onEnter: (c: Character) => void): Promise<void> {
+  // Превью с прошлого показа (повторный вход без перезагрузки): иначе старые
+  // контексты остались бы тикать поверх новых.
+  stopClassPreviews();
   $('chars-username').textContent = session.username;
   showScreen('screen-chars');
   await buildClassPicker();
@@ -47,6 +51,8 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
       // Создаём через обёртку: она приложит код приглашения и потратит его
       const { character } = await createCharacterWithReferral(name, selectedClass, serverId);
       ($('new-name') as HTMLInputElement).value = '';
+      // В игру — без пяти живых превью за спиной.
+      stopClassPreviews();
       onEnter(character);
     } catch (e) {
       // ТУТ БЫЛО alert(). Нативное окно останавливает всю страницу: пока
@@ -63,6 +69,7 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
   };
 
   $('btn-logout').addEventListener('click', () => {
+    stopClassPreviews();
     void api.logout().catch(() => {});
     location.reload();
   });
@@ -148,7 +155,13 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
         }
       });
       row.append(img, info, enter, del);
-      row.addEventListener('click', () => onEnter(c));
+      row.addEventListener('click', () => {
+        // Готовые персонажи показывают спрайты (их число не ограничено, а
+        // каждое живое превью — это GL-контекст), но карточки классов за
+        // спиной всё равно надо остановить.
+        stopClassPreviews();
+        onEnter(c);
+      });
       list.append(row);
     }
   } catch (err) {
@@ -176,9 +189,24 @@ async function buildClassPicker(): Promise<void> {
     btn.type = 'button';
     btn.className = 'class-option' + (id === selectedClass ? ' selected' : '');
     btn.style.setProperty('--class-color', CLASS_COLORS[id]);
-    btn.innerHTML =
-      `<img src="${await spriteUrl(CLASS_SPRITE[id])}" alt="">` +
-      `<span>${t(`classes.${id}`)}</span>`;
+    // Живое 3D-превью вместо плоского спрайта: настоящая модель с оружием
+    // класса на медленном круге. Canvas в DOM сразу (с фоном из CSS), модель
+    // доезжает асинхронно. Не доехала — вместо пустой тёмной карточки встанет
+    // пиксельный спрайт.
+    const canvas = document.createElement('canvas');
+    canvas.className = 'class-preview';
+    const название = document.createElement('span');
+    название.textContent = t(`classes.${id}`);
+    btn.append(canvas, название);
+    void attachClassPreview(canvas, id).then((живое) => {
+      if (живое) return;
+      const img = document.createElement('img');
+      img.alt = '';
+      canvas.replaceWith(img);
+      void spriteUrl(CLASS_SPRITE[id]).then((url) => {
+        img.src = url;
+      });
+    });
     btn.addEventListener('click', () => {
       selectedClass = id;
       for (const el of picker.children) el.classList.remove('selected');

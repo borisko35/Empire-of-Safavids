@@ -324,7 +324,7 @@ input, select { font: inherit; }
 .char-create { border-top: 1px solid var(--panel-border); padding-top: 16px; display: flex; flex-direction: column; gap: 12px; }
 .char-create h2 { font-family: Georgia, serif; font-weight: 400; font-size: 18px; color: var(--gold-light); }
 
-.class-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 8px; }
+.class-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
 
 .class-option {
   display: flex;
@@ -341,6 +341,13 @@ input, select { font: inherit; }
 }
 
 .class-option img { width: 36px; height: 36px; image-rendering: pixelated; }
+/* Живое 3D-превью класса: модель целиком на тёмном стекле карточки. */
+.class-option canvas.class-preview {
+  width: 120px;
+  height: 140px;
+  display: block;
+  background: radial-gradient(ellipse at 50% 35%, rgba(64, 84, 120, 0.35), rgba(7, 15, 27, 0) 70%);
+}
 .class-option.selected { border-color: var(--class-color, var(--gold)); box-shadow: 0 0 12px var(--class-color); }
 
 .chars-footer { margin-top: 18px; display: flex; justify-content: flex-end; }
