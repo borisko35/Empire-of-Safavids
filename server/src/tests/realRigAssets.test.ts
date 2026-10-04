@@ -32,8 +32,11 @@ const DRACO = join(ROOT, 'client/src/app/public/draco');
 type Prim = { attributes: Record<string, number> };
 type Anim = { channels: { target: { node: number } }[] };
 type GLTF = {
-  nodes?: { name?: string }[];
+  // translation и scale нужны для размера скелета, scenes — для масштаба корня.
+  nodes?: { name?: string; translation?: number[]; scale?: number[] }[];
   meshes?: { primitives?: Prim[] }[];
+  accessors?: { min?: number[]; max?: number[] }[];
+  scenes?: { nodes: number[] }[];
   skins?: unknown[];
   animations?: Anim[];
   extensionsUsed?: string[];
@@ -286,6 +289,95 @@ describe('Класс игрока ведёт к существующей мод�
         `karta ssylaetsya na ${file}, a takogo fayla net: igrok etogo klassa ostanetsya na palochkah`,
       );
     }
+  });
+});
+
+describe('Скелет клипа совпадает со скелетом персонажа', () => {
+  // Высота, к которой игра приводит любую модель: см. TARGET_HEIGHT в realRig.ts.
+  const TARGET = 1.9;
+  // Допуск 15 %: модели разного происхождения, и разброс между персонажами сам по
+  // себе достигает 8 % (1.042..1.122). Вдвое больше скелета — это 100 %, и такое
+  // проверка ловит.
+  const TOLERANCE = 0.15;
+
+  type Bones = { torso: number; rootScale: number; height: number | null };
+
+  function bones(gltf: GLTF): Bones | null {
+    const hips = (gltf.nodes ?? []).find((n) => n.name === 'mixamorig:Hips')?.translation;
+    const head = (gltf.nodes ?? []).find((n) => n.name === 'mixamorig:Head')?.translation;
+    if (!hips || !head) return null;
+    const rootIndex = (gltf.scenes?.[0]?.nodes ?? [])[0];
+    const scale = (rootIndex === undefined ? undefined : (gltf.nodes ?? [])[rootIndex ?? -1]?.scale) ?? [1, 1, 1];
+    let min = Infinity;
+    let max = -Infinity;
+    for (const mesh of gltf.meshes ?? []) {
+      for (const prim of mesh.primitives ?? []) {
+        const acc = (gltf.accessors ?? [])[prim.attributes.POSITION];
+        if (!acc?.min || !acc.max) continue;
+        min = Math.min(min, acc.min[1]);
+        max = Math.max(max, acc.max[1]);
+      }
+    }
+    return {
+      torso: Math.hypot(head[0] - hips[0], head[1] - hips[1], head[2] - hips[2]),
+      rootScale: (Math.abs(scale[0]) + Math.abs(scale[1]) + Math.abs(scale[2])) / 3,
+      height: max > min ? max - min : null,
+    };
+  }
+
+  function characterNorm(): number[] {
+    const out: number[] = [];
+    for (const person of manifest.characters) {
+      const b = bones(readGLB(shortName(person.file)));
+      if (!b || !b.height) continue;
+      out.push((b.torso * b.rootScale * TARGET) / b.height);
+    }
+    return out;
+  }
+
+  function clipTorso(): { file: string; value: number }[] {
+    const out: { file: string; value: number }[] = [];
+    for (const clip of manifest.clips) {
+      const b = bones(readGLB(shortName(clip.file)));
+      if (!b) continue;
+      out.push({ file: clip.name, value: b.torso * b.rootScale });
+    }
+    return out;
+  }
+
+  it('у персонажей скелет одного размера после нормализации в игре', () => {
+    const norms = characterNorm();
+    must(norms.length === 5, `soderzhashchih personazhey ${norms.length}, zhdal 5`);
+    const spread = Math.max(...norms) / Math.min(...norms);
+    must(
+      spread < 1.2,
+      `skelety personazhey raznye v ${spread.toFixed(2)} raza posle privedeniya k odnoy vysote: igrok budet menyat rost pri smene klassa`,
+    );
+  });
+
+  it('скелет клипа равен скелету персонажа, а не вдвое больше', () => {
+    const norms = characterNorm();
+    const target = norms.reduce((sum, n) => sum + n, 0) / norms.length;
+    for (const clip of clipTorso()) {
+      const ratio = clip.value / target;
+      must(
+        Math.abs(ratio - 1) <= TOLERANCE,
+        `klip ${clip.file}: skelet ${clip.value.toFixed(3)} protiv normy ${target.toFixed(3)} (v ${ratio.toFixed(2)} raza). three.js svyazyvaet dorozhku s kostyu po IMENI, tak chto oshibki net: animaciya prosto razryvaet telo`,
+      );
+    }
+  });
+
+  it('масштаб корня клипа записан в файле, а не подобран вручную в клиенте', () => {
+    // Если масштаб корня уехал, чинить это придётся переконвертацией, и молча
+    // править в коде нельзя: правка в коде не попадёт в ассеты.
+    const clip = readGLB(shortName(manifest.clips[0].file));
+    const rootIndex = (clip.scenes?.[0]?.nodes ?? [])[0];
+    must(rootIndex !== undefined, 'u klipa net kornya sceny: masshtab nechego menyat');
+    const scale = (clip.nodes ?? [])[rootIndex]?.scale;
+    must(
+      Array.isArray(scale) && scale.every((s) => s > 0),
+      'u klipa net masshtaba kornya: skelet klipa okazhetsya bolshe skeleta modeli',
+    );
   });
 });
 
