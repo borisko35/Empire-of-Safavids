@@ -9,6 +9,8 @@
 // + плита городской площади (иначе персонажи проваливаются).
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterTexture, waterfallTexture,
@@ -2087,6 +2089,68 @@ export function buildSettlements(scene: THREE.Scene): void {
       steleFort.rotation.y = mestoFort.ry;
       g.add(steleFort);
     }
+  }
+}
+
+// ── Акведук деревни ──────────────────────────────────────────────────
+//
+// Разрушенная аркада из пяти сегментов к востоку от лесной деревни: строка
+// списка владельца требует у деревни акведуки. Сегмент — готовая модель
+// (Tripo, децимация до 66к треугольников, Draco, JPEG), цепочка собирается
+// кодом: последний сегмент осел и накренился — руина, а не новостройка.
+//
+// Площадка замерена: сухо, размах 0.2–0.3, вне домов (кольцо r=10) и полей.
+// Загрузка асинхронная: нет файла — деревня стоит без аркады, игра не падает.
+export const AQUEDUCT = { x: VILLAGE.x + 20, z: VILLAGE.z - 2, count: 5, step: 1.0 };
+const AQUEDUCT_MODEL = 'decor/aqueduct-seg.glb';
+
+let aqueductCache: Promise<THREE.Group | null> | null = null;
+
+function loadAqueductModel(): Promise<THREE.Group | null> {
+  if (aqueductCache) return aqueductCache;
+  aqueductCache = new Promise<THREE.Group | null>((готово) => {
+    try {
+      const draco = new DRACOLoader();
+      draco.setDecoderPath('/game/draco/');
+      const l = new GLTFLoader();
+      l.setDRACOLoader(draco);
+      l.load(
+        `/game/models/${AQUEDUCT_MODEL}`,
+        (gltf) => готово((gltf.scene as THREE.Group) ?? null),
+        undefined,
+        () => готово(null),
+      );
+    } catch {
+      готово(null);
+    }
+  });
+  return aqueductCache;
+}
+
+export function buildAqueduct(scene: THREE.Scene): void {
+  for (let i = 0; i < AQUEDUCT.count; i++) {
+    const px = AQUEDUCT.x + (i - (AQUEDUCT.count - 1) / 2) * AQUEDUCT.step;
+    const pz = AQUEDUCT.z;
+    // Аркада — стена: пролезть между сегментами нельзя, это завал, а не ворота.
+    addCollider(px, pz, 0.9);
+    void loadAqueductModel().then((модель) => {
+      if (!модель) return;
+      const seg = модель.clone();
+      seg.position.set(px, groundHeight(px, pz), pz);
+      seg.rotation.y = 0.08 * (i % 2 === 0 ? 1 : -1);
+      if (i === AQUEDUCT.count - 1) {
+        // Последний сегмент осел: руина читается осадкой, а не ровным рядом.
+        seg.rotation.z = 0.1;
+        seg.position.y -= 0.12;
+      }
+      seg.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(seg);
+    });
   }
 }
 // ── Города регионов ────────────────────────────────────────────────────

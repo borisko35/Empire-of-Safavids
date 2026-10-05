@@ -14,7 +14,7 @@ import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig
 import { loadRealPlayerRig } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
-  buildRegionTowns,
+  buildRegionTowns, buildAqueduct,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -465,6 +465,8 @@ private roll = 0;
     // Стоят на своих якорях, поэтому игрок, выбравший регион, возрождается
     // у ворот города, а не в пустом поле.
     buildRegionTowns(this.scene);
+    // Акведук деревни: разрушенная аркада к востоку от неё.
+    buildAqueduct(this.scene);
     const flame = this.scene.getObjectByName('campfire-flame');
     if (flame) {
       this.flames.push(flame as THREE.Mesh);

@@ -270,5 +270,12 @@
       "channels": 165,
       "bytes": 72792
     }
+  ],
+  "decor": [
+    {
+      "file": "models/decor/aqueduct-seg.glb",
+      "name": "aqueduct-seg",
+      "bytes": 3504392
+    }
   ]
 }
