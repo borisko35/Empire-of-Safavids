@@ -15,7 +15,7 @@ import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
-  buildSignposts,
+  buildSignposts, buildGameTable,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -472,6 +472,8 @@ private roll = 0;
     buildRegionTowns(this.scene);
     // Указатели сбоку от дорог: «здесь начинается путь к порту».
     buildSignposts(this.scene);
+    // Стол с доской во дворе караван-сарая: караван ждёт утра, люди играют.
+    buildGameTable(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.

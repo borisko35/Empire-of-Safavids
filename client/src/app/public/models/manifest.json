@@ -354,6 +354,16 @@
       "file": "models/decor/signpost.glb",
       "name": "signpost",
       "bytes": 2092
+    },
+    {
+      "file": "models/decor/carav-table.glb",
+      "name": "carav-table",
+      "bytes": 6016
+    },
+    {
+      "file": "models/decor/game-board.glb",
+      "name": "game-board",
+      "bytes": 20840
     }
   ],
   "weapons": [
