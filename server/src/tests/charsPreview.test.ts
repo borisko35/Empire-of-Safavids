@@ -82,9 +82,10 @@ describe('Выбор класса: живые 3D-превью', () => {
   it('у каждого класса честное оружие и щит только у кизылбаша', () => {
     // Без карты оружия превью показывало бы меч всем: мистик с мечом,
     // лучник с мечом. Карта сверяется дословно — расхождение означает,
-    // что превью врёт про класс.
-    const карта = /export const CLASS_WEAPON: Record<string, Weapon> = \{([^}]*)\}/.exec(ПРЕВЬЮ)?.[1];
-    must(карта !== undefined, 'не нашли CLASS_WEAPON: оружие классов неизвестно откуда');
+    // что превью врёт про класс. Карта живёт в realRig.ts: она нужна и игре,
+    // а game3d не импортирует экраны.
+    const карта = /export const CLASS_WEAPON: Record<string, Weapon> = \{([^}]*)\}/.exec(РИГ)?.[1];
+    must(карта !== undefined, 'не нашли CLASS_WEAPON в realRig.ts: оружие классов неизвестно откуда');
     const пары: Record<string, string> = {};
     for (const м of (карта as string).matchAll(/(\w+): '(\w+)'/g)) пары[м[1]] = м[2];
     const честно: Record<string, string> = {
@@ -98,12 +99,16 @@ describe('Выбор класса: живые 3D-превью', () => {
       );
     }
     must(
+      /from '\.\.\/game3d\/realRig'/.test(ПРЕВЬЮ) && /CLASS_WEAPON/.test(ПРЕВЬЮ),
+      'превью не берёт карту из realRig.ts: две карты разойдутся молча'
+    );
+    must(
       /classHasShield\(classId: string\): boolean \{\s*\r?\n\s*return classId === 'qizilbash';/.test(ПРЕВЬЮ),
       'щит дают не только кизылбашу: в игре щит только у него',
     );
     must(
-      /classShowsWeapon\(classId: string\): boolean \{\s*\r?\n\s*return classId !== 'sufi_mystic';/.test(ПРЕВЬЮ),
-      'мистику показывают оружие: в игре он воюет без него, превью врёт',
+      /return true;/.test(ПРЕВЬЮ.split('classShowsWeapon')[1] ?? ''),
+      'мистику прячут посох: у посоха теперь настоящая модель, скрывать нечего'
     );
   });
 

@@ -11,7 +11,7 @@ import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig';
-import { loadRealPlayerRig } from './realRig';
+import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
@@ -1062,11 +1062,15 @@ private roll = 0;
       this.scene.add(real.group);
       cur.rig = real;
       if (id === this.me?.id) {
+        // Вид оружия — по классу (посох мистика — настоящей моделью, остальные
+        // процедурные). Ставится до equipWeapon: иначе построится меч.
+        real.setWeaponKind(CLASS_WEAPON[charClass] ?? 'sword');
         if (this.localGear) {
           real.equipWeapon(this.localGear.weapon);
           real.setArmorTint(this.localGear.armorColor);
         } else {
-          real.equipWeapon(charClass !== 'sufi_mystic');
+          // Мистик с видимым посохом: прятали процедурный, настоящий показывают.
+          real.equipWeapon(true);
         }
         real.equipShield(charClass === 'qizilbash');
       }
@@ -1094,12 +1098,14 @@ private roll = 0;
       // проходе, а не только при создании рига: игрок надевает и снимает
       // вещи на ходу, и без этого риг обновлялся бы только при входе в игру
       if (id === this.me?.id) {
+        // Вид оружия — по классу, как при создании рига выше.
+        b.rig.setWeaponKind?.(CLASS_WEAPON[p.charClass] ?? 'sword');
         if (this.localGear) {
           b.rig.equipWeapon(this.localGear.weapon);
           b.rig.setArmorTint(this.localGear.armorColor);
         } else {
           // Экипировка ещё не пришла с сервера: показываем то, что даёт класс
-          b.rig.equipWeapon(p.charClass !== 'sufi_mystic');
+          b.rig.equipWeapon(true);
         }
         // Щит классовый: слота щита в игре нет (weapon, armor, accessory)
         b.rig.equipShield(p.charClass === 'qizilbash');

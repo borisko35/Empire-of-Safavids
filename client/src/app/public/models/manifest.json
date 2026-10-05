@@ -297,5 +297,12 @@
       "name": "gate-ruin",
       "bytes": 3867780
     }
+  ],
+  "weapons": [
+    {
+      "file": "models/weapons/staff.glb",
+      "name": "staff",
+      "bytes": 582376
+    }
   ]
 }

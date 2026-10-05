@@ -16,21 +16,10 @@
 // персонажей убили бы все контексты, и часть canvas осталась бы чёрной.
 // Строки показывают спрайты, как раньше.
 import * as THREE from 'three';
-import { loadRealPlayerRig, type RealRig } from '../game3d/realRig';
-import type { RigPose, Weapon } from '../game3d/rig';
+import { loadRealPlayerRig, CLASS_WEAPON, type RealRig } from '../game3d/realRig';
+import type { RigPose } from '../game3d/rig';
 
-/**
- * Честное оружие класса: превью показывает то, чем класс воюет.
- * Совпадает с процедурным buildPlayerRig — два источника оружия в проекте,
- * и расхождение между ними означало бы, что превью врёт.
- */
-export const CLASS_WEAPON: Record<string, Weapon> = {
-  qizilbash: 'sword',
-  sufi_mystic: 'staff',
-  persian_archer: 'bow',
-  bazaar_merchant: 'dagger',
-  court_diplomat: 'rapier',
-};
+export { CLASS_WEAPON };
 
 /** Щит только у кизылбаша — как в игре (world3d.equipShield). */
 export function classHasShield(classId: string): boolean {
@@ -38,12 +27,13 @@ export function classHasShield(classId: string): boolean {
 }
 
 /**
- * Мистик в игре воюет без видимого оружия (world3d прячет его через
- * equipWeapon(false)). Превью показывает то же, иначе игрок увидел бы
- * посох, которого в игре не будет.
+ * Мистик воюет с видимым посохом: у посоха теперь настоящая модель, и
+ * прятать его больше незачем. Раньше скрывали процедурный — решение
+ * изменилось вместе с моделью.
  */
 export function classShowsWeapon(classId: string): boolean {
-  return classId !== 'sufi_mystic';
+  void classId;
+  return true;
 }
 
 /** Поза превью: стоит и дышит. Именно её update крутит standing-idle. */

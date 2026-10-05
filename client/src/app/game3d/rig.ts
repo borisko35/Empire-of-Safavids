@@ -56,6 +56,11 @@ export interface Rig {
    * уклонение без анимации. Настоящая модель проигрывает перекат.
    */
   triggerDodge?: (direction: DodgeDirection) => void;
+  /**
+   * Вид оружия для превью и игры. Необязательный, как triggerDodge:
+   * процедурные сборки его не умеют, у них оружие задано при построении.
+   */
+  setWeaponKind?: (kind: Weapon) => void;
   equipWeapon: (visible: boolean) => void;
   equipShield: (visible: boolean) => void;
   isWeaponEquipped: () => boolean;
