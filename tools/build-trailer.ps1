@@ -51,7 +51,7 @@ $segments = @(
   @{ img = (Join-Path $shots 'tasks.png');          dur = 8; zoom = '1.08->1.16'; z = 'center';
      title = 'Задания каждый день'; sub = 'и что за них дают' },
   @{ img = (Join-Path $assets 'og-screenshot.png'); dur = 9; zoom = '1.0->1.06';  z = 'center';
-     title = 'Бесплатно. В браузере.'; sub = 'www.game.eos-gameonline.com' },
+     title = 'Бесплатно. В браузере.'; sub = 'game.eos-gameonline.com' },
   @{ img = (Join-Path $assets 'bg-history.png');    dur = 3; zoom = '1.12->1.0'; z = 'center';
      title = ''; sub = '' }
 )

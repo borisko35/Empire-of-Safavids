@@ -86,7 +86,7 @@ describe('У каждой репостимой страницы есть пре�
       const html = читать(web + страница);
       const url = /og:url" content="([^"]*)"/.exec(html)?.[1] ?? '';
       const имя = страница === 'index.html' ? '' : страница;
-      const ожидается = `https://www.game.eos-gameonline.com/${имя}`;
+      const ожидается = `https://game.eos-gameonline.com/${имя}`;
       const список: string[] = [];
       if (url !== ожидается) список.push(`og:url=${url || 'нет'}`);
       if (!/<link rel="canonical"/.test(html)) список.push('canonical нет');

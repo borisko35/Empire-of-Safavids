@@ -41,7 +41,7 @@ const ВХОД = {
   userId: USER_ID,
   sku: 'eos.azens.rub_m',
   quantity: 1,
-  returnUrl: 'https://www.game.eos-gameonline.com/game/?payment=' + PAYMENT_ID,
+  returnUrl: 'https://game.eos-gameonline.com/game/?payment=' + PAYMENT_ID,
   country: 'ru',
   email: 'igrok@example.com',
   language: 'ru',

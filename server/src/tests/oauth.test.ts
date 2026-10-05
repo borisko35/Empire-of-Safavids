@@ -40,7 +40,7 @@ const svc = new OAuthService();
 function enableGoogle(): void {
   process.env.GOOGLE_CLIENT_ID = 'gid';
   process.env.GOOGLE_CLIENT_SECRET = 'gsecret';
-  process.env.CLIENT_ORIGIN = 'https://www.game.eos-gameonline.com';
+  process.env.CLIENT_ORIGIN = 'https://game.eos-gameonline.com';
 }
 
 beforeEach(() => {
@@ -127,7 +127,7 @@ describe('Включённый провайдер (с подставленным
   beforeEach(() => {
     process.env.GOOGLE_CLIENT_ID = 'gid';
     process.env.GOOGLE_CLIENT_SECRET = 'gsecret';
-    process.env.CLIENT_ORIGIN = 'https://www.game.eos-gameonline.com';
+    process.env.CLIENT_ORIGIN = 'https://game.eos-gameonline.com';
     jest.resetModules();
   });
 
@@ -250,7 +250,7 @@ describe('Facebook: особенности протокола', () => {
   beforeEach(() => {
     process.env.FACEBOOK_CLIENT_ID = 'fbid';
     process.env.FACEBOOK_CLIENT_SECRET = 'fbsecret';
-    process.env.CLIENT_ORIGIN = 'https://www.game.eos-gameonline.com';
+    process.env.CLIENT_ORIGIN = 'https://game.eos-gameonline.com';
     jest.resetModules();
   });
 

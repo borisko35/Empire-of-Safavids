@@ -85,8 +85,8 @@ node tools/build-itch-bundle.js
 
 Игра на русском, английском и азербайджанском.
 
-▶️ **Играть:** https://www.game.eos-gameonline.com/
-▶️ **Сайт и форум:** https://www.game.eos-gameonline.com/
+▶️ **Играть:** https://game.eos-gameonline.com/
+▶️ **Сайт и форум:** https://game.eos-gameonline.com/
 \`\`\`
 
 ### Картинки — обязательно
@@ -95,10 +95,10 @@ node tools/build-itch-bundle.js
 встраиваются в описание. Без этого витрина будет пустой.
 
 \`\`\`
-![Город](https://www.game.eos-gameonline.com/assets/screenshots/city.png)
-![Бой](https://www.game.eos-gameonline.com/assets/screenshots/combat.png)
-![Задания](https://www.game.eos-gameonline.com/assets/screenshots/tasks.png)
-![Карта мира](https://www.game.eos-gameonline.com/assets/screenshots/worldmap.png)
+![Город](https://game.eos-gameonline.com/assets/screenshots/city.png)
+![Бой](https://game.eos-gameonline.com/assets/screenshots/combat.png)
+![Задания](https://game.eos-gameonline.com/assets/screenshots/tasks.png)
+![Карта мира](https://game.eos-gameonline.com/assets/screenshots/worldmap.png)
 \`\`\`
 
 ### Проект
@@ -137,7 +137,7 @@ Edge или Safari, 2019 года и новее. Отдельная устано
 ## Лицензия
 
 Игра — свободное программное обеспечение под
-[GNU GPL v3](https://www.game.eos-gameonline.com/LICENSE).
+[GNU GPL v3](https://game.eos-gameonline.com/LICENSE).
 Исходный код: https://github.com/borisko35/Empire-of-Safavids
 
 ## Статус
@@ -163,8 +163,8 @@ Edge или Safari, 2019 года и новее. Отдельная устано
 
 В разделе Metadata → External links:
 
-- **Homepage** → https://www.game.eos-gameonline.com/
-- **Community** → https://www.game.eos-gameonline.com/forum.html
+- **Homepage** → https://game.eos-gameonline.com/
+- **Community** → https://game.eos-gameonline.com/forum.html
 - **Source code** → https://github.com/borisko35/Empire-of-Safavids (репозиторий уже публичный)
 
 ## Шаг 7. Проверить, как это выглядит
@@ -184,9 +184,9 @@ Edge или Safari, 2019 года и новее. Отдельная устано
 и r/BrowserGaming правилами запрещён, второй пост удалят, аккаунт могут
 пометить.
 
-1. Открыть https://www.game.eos-gameonline.com/trailer.html
+1. Открыть https://game.eos-gameonline.com/trailer.html
 2. Нажать «Смотреть» и записать экран — **или** отдать прямую ссылку на
-   ролик: https://www.game.eos-gameonline.com/assets/trailer.mp4
+   ролик: https://game.eos-gameonline.com/assets/trailer.mp4
 3. Выбрать **один** сабреддит: r/webgames или r/BrowserGaming
 4. Текст поста — из tools/itch-reddit-draft.md, на языке сабреддита
 5. Первый комментарий — тот же текст, что под каждым постом в сообществе.

@@ -3,8 +3,16 @@
 import paramiko, os, sys, time, secrets
 from pathlib import Path
 
-HOST = "45.32.220.58"
-USER = "root"
+# Хост и пользователь задаются окружением. Раньше адрес был зашит в файл, и
+# после переезда он указывал на отключённый сервер: скрипт падал бы на
+# подключении, а причина — неверный адрес — читалась только при удаче.
+#   PowerShell:  $env:EOS_VPS_HOST = "<ip-машины>"
+#   bash:        export EOS_VPS_HOST="<ip-машины>"
+# Пользователь зависит от хоста: root у Vultr и Timeweb, ubuntu у Oracle.
+HOST = os.environ.get("EOS_VPS_HOST")
+if not HOST:
+    sys.exit("EOS_VPS_HOST не задан — адрес машины нельзя хранить в коде")
+USER = os.environ.get("EOS_VPS_USER", "root")
 # Пароль в коде не хранится — иначе он уедет в репозиторий.
 # Перед запуском задайте его в окружении:
 #   PowerShell:  $env:EOS_VPS_PASSWORD = "..."

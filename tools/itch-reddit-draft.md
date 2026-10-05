@@ -25,8 +25,8 @@ Reddit — первый комментарий к ссылке.
 >
 > Игра на русском, английском и азербайджанском.
 >
-> ▶️ Трейлер, 48 секунд: https://www.game.eos-gameonline.com/trailer.html
-> ▶️ Играть: https://www.game.eos-gameonline.com/
+> ▶️ Трейлер, 48 секунд: https://game.eos-gameonline.com/trailer.html
+> ▶️ Играть: https://game.eos-gameonline.com/
 
 ### EN
 
@@ -38,8 +38,8 @@ Reddit — первый комментарий к ссылке.
 >
 > Available in English, Russian and Azerbaijani.
 >
-> ▶️ Trailer, 48 seconds: https://www.game.eos-gameonline.com/trailer.html
-> ▶️ Play: https://www.game.eos-gameonline.com/
+> ▶️ Trailer, 48 seconds: https://game.eos-gameonline.com/trailer.html
+> ▶️ Play: https://game.eos-gameonline.com/
 
 ### AZ
 
@@ -51,8 +51,8 @@ Reddit — первый комментарий к ссылке.
 >
 > İngilis, rus və azərbaycan dillərində mövcuddur.
 >
-> ▶️ Treylер, 48 saniyə: https://www.game.eos-gameonline.com/trailer.html
-> ▶️ Oyna: https://www.game.eos-gameonline.com/
+> ▶️ Treylер, 48 saniyə: https://game.eos-gameonline.com/trailer.html
+> ▶️ Oyna: https://game.eos-gameonline.com/
 
 ---
 
@@ -117,10 +117,10 @@ column mode that **hides the screenshot column**».
 подойдут - они https, а itch.io требует именно https для внешних ресурсов:
 
 ```
-![Город](https://www.game.eos-gameonline.com/assets/screenshots/city.png)
-![Бой](https://www.game.eos-gameonline.com/assets/screenshots/combat.png)
-![Задания](https://www.game.eos-gameonline.com/assets/screenshots/tasks.png)
-![Карта мира](https://www.game.eos-gameonline.com/assets/screenshots/worldmap.png)
+![Город](https://game.eos-gameonline.com/assets/screenshots/city.png)
+![Бой](https://game.eos-gameonline.com/assets/screenshots/combat.png)
+![Задания](https://game.eos-gameonline.com/assets/screenshots/tasks.png)
+![Карта мира](https://game.eos-gameonline.com/assets/screenshots/worldmap.png)
 ```
 
 Либо переключить в редакторе темы «Screenshots: Sidebar» - тогда колонка

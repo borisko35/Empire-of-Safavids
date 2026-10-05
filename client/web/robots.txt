@@ -18,4 +18,4 @@ Disallow: /socket.io/
 Disallow: /download/
 Disallow: /health
 
-Sitemap: https://www.game.eos-gameonline.com/sitemap.xml
+Sitemap: https://game.eos-gameonline.com/sitemap.xml

@@ -76,7 +76,7 @@ scenes=(
   "$shots/combat.png|8|1.06|1.15|Бой. Ловкость. PvP|"
   "$shots/worldmap.png|7|1.04|1.13|Карта мира|форты, лагеря, караван-саиды"
   "$shots/tasks.png|8|1.08|1.16|Задания каждый день|и что за них дают"
-  "$assets/og-screenshot.png|9|1.00|1.06|Бесплатно. В браузере.|www.game.eos-gameonline.com"
+  "$assets/og-screenshot.png|9|1.00|1.06|Бесплатно. В браузере.|game.eos-gameonline.com"
   "$assets/bg-history.png|3|1.12|1.00||"
 )
 SEGMENTS=${#scenes[@]}
