@@ -2340,6 +2340,32 @@ export function buildPassRocks(scene: THREE.Scene): void {
     });
   }
 }
+
+// ── Сторожевая башня на дальней восточной дороге ────────────────
+//
+// Тринадцатый пакет из Assets. Одинокая башня в песках: ориентир для
+// путников на краю мира. База модели на нуле — подъём не нужен.
+// Фас проверен рендером (камень, окна, дверь со ступенями, балкон).
+export const DESERT_TOWER = { x: 2600, z: 800, ry: 0.7 };
+
+export function buildDesertTower(scene: THREE.Scene): void {
+  // Коллайдер по основанию (r = 4): башня 7 м в поперечнике.
+  addCollider(DESERT_TOWER.x, DESERT_TOWER.z, 4);
+  void loadDecorModel('decor/desert-tower.glb').then((модель) => {
+    if (!модель) return;
+    const башня = модель.clone();
+    башня.position.set(DESERT_TOWER.x, groundHeight(DESERT_TOWER.x, DESERT_TOWER.z), DESERT_TOWER.z);
+    башня.rotation.y = DESERT_TOWER.ry;
+    башня.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(башня);
+  });
+}
+
 // ── Руина ворот у дороги на столицу ──────────────────────────────
 //
 // Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не

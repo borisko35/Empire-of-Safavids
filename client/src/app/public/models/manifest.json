@@ -326,6 +326,11 @@
       "file": "models/decor/pass-rocks.glb",
       "name": "pass-rocks",
       "bytes": 65212
+    },
+    {
+      "file": "models/decor/desert-tower.glb",
+      "name": "desert-tower",
+      "bytes": 6475792
     }
   ],
   "weapons": [

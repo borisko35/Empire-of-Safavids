@@ -476,3 +476,125 @@ describe('Мост и скалы: рухнувший пролёт и валун�
     );
   });
 });
+
+// ── Сторожевая башня на дальней восточной дороге ───────────────────
+//
+// Тринадцатый пакет из Assets. Конвейер тот же: FBX/OBJ из архива →
+// Blender (подъём из лежачего положения, Draco, JPEG) → public/models/decor
+// → сцена с коллайдером. Башня 7 м в поперечнике и 24 м высотой, фас
+// проверен рендером.
+
+describe('Сторожевая башня в песках: модель на месте и в сцене', () => {
+  it('файл башни в источнике сборки и совпадает с манифестом', () => {
+    const запись = МАНИФЕСТ.decor?.find((д) => д.file === 'models/decor/desert-tower.glb');
+    must(запись !== undefined, 'в манифесте нет башни: файл никто не сверяет с диском');
+    const путь = join(корень, 'client/src/app/public', запись!.file);
+    must(existsSync(путь), 'нет файла башни: в мире будет пустое место');
+    must(
+      statSync(путь).size === запись!.bytes,
+      `башня: на диске ${statSync(путь).size}, в манифесте ${запись!.bytes}`
+    );
+  });
+
+  it('башня сжата Draco и влезает в веб', () => {
+    const путь = join(корень, 'client/src/app/public/models/decor/desert-tower.glb');
+    must(existsSync(путь), 'файла башни нет: проверять нечего');
+    const buf = readFileSync(путь);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as {
+      extensionsUsed?: string[];
+      images?: { mimeType?: string }[];
+    };
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'башня без Draco: геометрия весит как сырая'
+    );
+    must(
+      buf.length < 10 * 1024 * 1024,
+      `башня весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`
+    );
+    must(
+      (json.images ?? []).length > 0,
+      'в башне нет текстур: камень в игре будет серым мешем'
+    );
+  });
+
+  it('башня стоит вертикально, а не лежит на боку', () => {
+    // Исходная модель лежала: длина 24 м шла по Y, а не по Z. Если кто-то
+    // вернёт такое в сборку, башня встанет плашмя и займёт 24 м дороги.
+    const путь = join(корень, 'client/src/app/public/models/decor/desert-tower.glb');
+    const buf = readFileSync(путь);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as {
+      accessors?: { min?: number[]; max?: number[] }[];
+      meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+    };
+    let высота = 0;
+    let поперечник = 0;
+    for (const м of json.meshes ?? []) {
+      for (const п of м.primitives) {
+        const a = json.accessors?.[п.attributes.POSITION];
+        if (!a?.min || !a?.max) continue;
+        // glTF — Y вверх, X/Z поперёк.
+        высота = Math.max(высота, a.max[1] - a.min[1]);
+        поперечник = Math.max(поперечник, a.max[0] - a.min[0], a.max[2] - a.min[2]);
+      }
+    }
+    must(высота > 20, `высота башни ${высота.toFixed(1)} м: не сторож, а пень`);
+    must(
+      высота > поперечник * 2,
+      `высота ${высота.toFixed(1)} м против поперечника ${поперечник.toFixed(1)} м: башня лежит`
+    );
+  });
+
+  it('сцена грузит башню с коллайдером у основания', () => {
+    must(
+      /void loadDecorModel\('decor\/desert-tower\.glb'\)/.test(ТЕРРЕЙН),
+      'модель башни не подключена к сцене: файл лежит, а башни нет'
+    );
+    const начало = ТЕРРЕЙН.indexOf('export function buildDesertTower(');
+    must(начало > 0, 'построитель башни не найден: вызывать нечего');
+    const тело = ТЕРРЕЙН.slice(начало);
+    const конец = тело.search(/\r?\n\}\r?\n/);
+    const код = конец > 0 ? тело.slice(0, конец) : '';
+    must(/addCollider\(DESERT_TOWER\.x, DESERT_TOWER\.z, 4\)/.test(код),
+      'нет коллайдера по основанию башни: игрок пройдёт сквозь стену');
+    must(/position\.set\(DESERT_TOWER\.x, groundHeight\(/.test(код),
+      'башня не ставится на землю: повиснет в воздухе или уйдёт под склон');
+  });
+
+  it('башня стоит на сухой равнине дальнего востока', () => {
+    const м = /export const DESERT_TOWER = \{ x: (-?\d+), z: (-?\d+), ry: ([-\d.]+) \};/.exec(ТЕРРЕЙН);
+    must(м !== null, 'константа башни не найдена');
+    const x = Number(м![1]);
+    const z = Number(м![2]);
+    must(!isWater(x, z), 'башня стоит в воде');
+    for (let dx = -8; dx <= 8; dx += 4) {
+      for (let dz = -8; dz <= 8; dz += 4) {
+        must(!isWater(x + dx, z + dz), `под башней вода в (${x + dx}, ${z + dz})`);
+      }
+    }
+    const зона = getZoneAt(x, z);
+    must(зона !== null, 'башня вне зон: игрок не увидит её на карте');
+    must(
+      зона!.region === 'east_frontier',
+      `башня в зоне ${зона!.id}: песочная башня должна стоять на дальнем востоке`
+    );
+    // Вне стен города (-1025, 505, r = 42) с запасом на подошву.
+    must(
+      Math.hypot(x + 1025, z - 505) >= 42 + 7,
+      'башня внутри стен города: ориентир замурован'
+    );
+    // Площадка под башней мерялась портом математики террейна: сухо,
+    // размах рельефа 2.7 м на пятне 12×12 м. Подъём идёт из одной точки
+    // (groundHeight в центре), так что склон в 2.7 м — это перепад у
+    // подошвы, а не висящая башня. Ровнялка здесь не нужна: каменное
+    // основание такой перепад перекрывает.
+  });
+
+  it('башня построена в мире', () => {
+    const мир = читать('client/src/app/game3d/world3d.ts');
+    must(
+      /buildDesertTower\(this\.scene\);/.test(мир),
+      'построитель башни не вызван из мира: код есть, а башни нет'
+    );
+  });
+});
