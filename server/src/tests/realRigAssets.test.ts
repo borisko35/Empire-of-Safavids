@@ -375,18 +375,36 @@ describe('Масштаб в файле: один, а не два', () => {
     return max > min ? max - min : null;
   }
 
-  it('у всех файлов в models масштаб корня равен единице', () => {
+  it('масштаб корня — метры либо сантиметры, третьего не дано', () => {
+    // Blender при обратном импорте файла компенсирует масштаб корня молча, three.js
+    // учитывает его честно. Поэтому было требование «корень равен 1».
+    //
+    // Но модели классов приехали в сантиметрах с корнем 0.01 — это второе
+    // соглашение конвертера, а не битый файл: единицы внутри согласованы,
+    // мир получается умножением на корень. Разрешён ровно 0.01, а не «маленький»:
+    // корень 0.5 или 2 — это уже не сантиметры, а тот самый битый масштаб.
+    // Клипы обязаны оставаться метровыми (корень 1): их переводы в метрах,
+    // и пересчёт под модель делает код, а не файл.
     const плохие: string[] = [];
-    for (const entry of [...manifest.characters, ...manifest.clips]) {
-      const gltf = readGLB(shortName(entry.file));
+    for (const person of manifest.characters) {
+      const gltf = readGLB(shortName(person.file));
+      const scale = rootScale(gltf);
+      const метры = Math.abs(scale - 1) <= 0.0005;
+      const сантиметры = Math.abs(scale - 0.01) <= 0.0005;
+      if (!метры && !сантиметры) {
+        плохие.push(`${person.name}: ${scale.toFixed(4)}`);
+      }
+    }
+    for (const clip of manifest.clips) {
+      const gltf = readGLB(shortName(clip.file));
       const scale = rootScale(gltf);
       if (Math.abs(scale - 1) > 0.0005) {
-        плохие.push(`${entry.name}: ${scale.toFixed(4)}`);
+        плохие.push(`${clip.name}: ${scale.toFixed(4)}`);
       }
     }
     must(
       плохие.length === 0,
-      `масштаб корня не равен 1 у ${плохие.length} файлов: ${плохие.slice(0, 4).join(', ')}. three.js этот масштаб учитывает, а нормализация по мешу умножит сцену на 95 и получится огромная размазанная фигура`,
+      `масштаб корня вне соглашений (1 или 0.01) у ${плохие.length} файлов: ${плохие.slice(0, 4).join(', ')}. three.js этот масштаб учитывает, а нормализация по мешу умножит сцену и получится огромная размазанная фигура`,
     );
   });
 
@@ -590,16 +608,15 @@ describe('Оттенок доспеха различает классы', () => 
     for (const cls of CLASSES) {
       must(
         rows.some((r) => r.cls === cls),
-        `klassa ${cls} net v MODEL_TINT: on budet vyglydet kak vse ostalnye` +
-          '. Pyat klassov delyat odin dospeh, i razlichaet ih tolkoottenok',
+        `klassa ${cls} net v MODEL_TINT: u nego ne budet znaka klassa poverh naryada` +
+          '. Ottenok lezhit i na cvet broni s redkostyu',
       );
     }
     const uniq = new Set(rows.map((r) => r.hex));
     must(
       uniq.size === rows.length,
-      `otтенков ${uniq.size} na ${rows.length} klassov: vse klassy odinakvye` +
-        '. Osensiblyatelnost ne zakryvaet raznicu, a odin dospeh na pyat klassov ' +
-        'dolzhen razlichatsya chem-to besides',
+      `otтенков ${uniq.size} na ${rows.length} klassov: znaki klassov odinakvye` +
+        '. Ottenok poverh naryada i cveta broni dolzhen razlichatsya',
     );
   });
 
@@ -722,8 +739,7 @@ describe('Класс игрока ведёт к существующей мод�
     const block = src.slice(start, src.indexOf('};', start));
     const files = [...block.matchAll(/:\s*'([a-z-]+)',/g)].map((m) => m[1] + '.glb');
     must(files.length === CLASSES.length, `v karte ${files.length} zapisey klassov, a klassov ${CLASSES.length}`);
-    // Один доспех на пять классов, поэтому сверяем не число файлов, а то, что каждый
-    // класс ведёт в файл, который есть и в манифесте, и на диске. Манифест пишется по
+    // У каждого класса свой наряд из манифеста и с диска. Манифест пишется по
     // диску, карта ведётся руками: их расхождение и есть признак устаревшего манифеста.
     const вМанифесте = new Set(manifest.characters.map((c) => shortName(c.file)));
     for (const file of files) {
@@ -837,23 +853,36 @@ describe('Скелет клипа совпадает со скелетом пе�
     return out;
   }
 
-  /** Отношение длин общих костей клипа к персонажу: 1 - значит скелеты одного размера. */
-  function clipBoneRatio(clipFile: string, reference: Map<string, number>): number | null {
-    const lengths = boneChainLengths(readGLB(clipFile));
-    let sum = 0;
-    let count = 0;
-    for (const [name, length] of lengths) {
-      const want = reference.get(name);
-      if (!want || want <= 1e-6 || length <= 1e-6) continue;
-      sum += length / want;
-      count++;
-    }
-    return count >= 20 ? sum / count : null;
+  /** Высота скелета: макушка Head над землёй, тем же сложением, что длины. */
+  function skeletonHeight(gltf: GLTF): number | null {
+    const h = worldPositions(gltf).get('mixamorig:Head')?.[1];
+    return h !== undefined && h > 1e-6 ? h : null;
   }
 
-  function referenceSkeleton(): Map<string, number> | null {
-    const person = manifest.characters[0];
-    return person ? boneChainLengths(readGLB(shortName(person.file))) : null;
+  /** Ближайшее отношение длин костей клипа к кому-то из персонажей, в долях роста. */
+  function clipBoneRatio(clipFile: string, эталоны: { кости: Map<string, number>; рост: number | null }[]): number | null {
+    const gltf = readGLB(clipFile);
+    const clipHead = skeletonHeight(gltf);
+    if (clipHead === null) return null;
+    const lengths = boneChainLengths(gltf);
+    let лучший: number | null = null;
+    for (const { кости, рост } of эталоны) {
+      if (рост === null) continue;
+      let sum = 0;
+      let count = 0;
+      for (const [name, length] of lengths) {
+        const want = кости.get(name);
+        if (!want || want <= 1e-6 || length <= 1e-6) continue;
+        // Доли роста с обеих сторон: абсолютные единицы (сантиметры модели
+        // против метров клипа) сокращаются, остаётся телосложение.
+        sum += length / clipHead / (want / рост);
+        count++;
+      }
+      if (count < 20) continue;
+      const отношение = sum / count;
+      if (лучший === null || Math.abs(отношение - 1) < Math.abs(лучший - 1)) лучший = отношение;
+    }
+    return лучший;
   }
 
   it('у персонажей скелет одного размера после нормализации в игре', () => {
@@ -866,14 +895,23 @@ describe('Скелет клипа совпадает со скелетом пе�
     );
   });
 
-  it('скелет клипа равен скелету персонажа, а не вдвое больше', () => {
-    const reference = referenceSkeleton();
-    must(reference !== null, 'net personazha: skeleta s chem sravnivat ne s chem');
-    const ref = reference as Map<string, number>;
-    must(ref.size >= 20, `u personazha izmerimo ${ref.size} kostey, a nuzhno 20: ne s chem sravnivat`);
+  it('скелет клипа равен скелету кого-то из персонажей, а не вдвое больше', () => {
+    // Эталон — не первый персонаж, а ближайший из пяти: телосложение у
+    // нарядов разное (страж шире мистика), и клип обязан подходить хотя бы
+    // одному. Замер показал: каждый клип в 0.06 от кого-то из пяти, а чужой
+    // скелет (2x) не подошёл бы ни к кому — именно его проверка и ловит.
+    const эталоны = manifest.characters.map((person) => ({
+      person,
+      кости: boneChainLengths(readGLB(shortName(person.file))),
+      рост: skeletonHeight(readGLB(shortName(person.file))),
+    }));
+    must(
+      эталоны.every((э) => э.кости.size >= 20 && э.рост !== null),
+      'у персонажа неизмеримо костей или нет макушки: не с чем сравнивать',
+    );
     const bad: string[] = [];
     for (const clip of manifest.clips) {
-      const ratio = clipBoneRatio(shortName(clip.file), ref);
+      const ratio = clipBoneRatio(shortName(clip.file), эталоны);
       must(ratio !== null, `klip ${clip.name}: ne s chem sravnivat, kostej net`);
       const value = ratio as number;
       if (Math.abs(value - 1) > 0.06) bad.push(`${clip.name}: x${value.toFixed(2)}`);
@@ -974,6 +1012,148 @@ describe('Запасной путь не потерян', () => {
     must(
       /if \(cur && !real\) cur\.realModelTried = false;/.test(world3dSource()),
       'posle neudachnoi popytki flag ne sbrosaetsya: povtornaya popytka ne proizoydet',
+    );
+  });
+});
+
+
+describe('Модели классов: смотрят вперёд, в метрах, у каждого своя', () => {
+  // У каждого класса свой наряд вместо одного доспеха на всех. Три свойства,
+  // без которых замена ломает игру молча: модель смотрит туда же, куда шла
+  // (иначе персонаж идёт боком или спиной), модель в метрах (иначе подогнать
+  // откажет в нормализации и по миру пойдут гиганты), классы ведут в разные
+  // файлы (иначе возврат к одному доспеху).
+  type Вектор = { m: number[][]; t: number[] };
+  function умножитьМатрицы(a: number[][], b: number[][]): number[][] {
+    return [0, 1, 2].map((i) => [0, 1, 2].map((j) => a[i][0] * b[0][j] + a[i][1] * b[1][j] + a[i][2] * b[2][j]));
+  }
+  function кватернионВМатрицу([x, y, z, w]: number[]): number[][] {
+    return [
+      [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+      [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+      [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ];
+  }
+  function мировыеПозиции(gltf: GLTF): Map<string, number[]> {
+    // Полный compose с поворотами и масштабами предков: суммы переносов без
+    // них врут, если в цепочке есть поворот (проверено на страже: без
+    // масштаба корня рост вышел 333 вместо 3.34).
+    const узлы = gltf.nodes ?? [];
+    const родитель = new Array<number>(узлы.length).fill(-1);
+    for (let i = 0; i < узлы.length; i++) {
+      for (const потомок of узлы[i].children ?? []) родитель[потомок] = i;
+    }
+    const кэш = new Map<number, Вектор>();
+    function мат(i: number): Вектор {
+      const готов = кэш.get(i);
+      if (готов) return готов;
+      const узел = узлы[i];
+      const пов = кватернионВМатрицу((узел as { rotation?: number[] }).rotation ?? [0, 0, 0, 1]);
+      const масш = узел.scale ?? [1, 1, 1];
+      const местная = пов.map((строка) => строка.map((v, ст) => v * масш[ст]));
+      const перенос = узел.translation ?? [0, 0, 0];
+      const р = родитель[i];
+      let итог: Вектор;
+      if (р < 0) {
+        итог = { m: местная, t: перенос.slice() };
+      } else {
+        const П = мат(р);
+        const сдвиг = [0, 1, 2].map(
+          (с) => П.t[с] + П.m[с][0] * перенос[0] + П.m[с][1] * перенос[1] + П.m[с][2] * перенос[2],
+        );
+        итог = { m: умножитьМатрицы(П.m, местная), t: сдвиг };
+      }
+      кэш.set(i, итог);
+      return итог;
+    }
+    const позы = new Map<string, number[]>();
+    for (let i = 0; i < узлы.length; i++) {
+      const имя = узлы[i].name ?? '';
+      if (имя.startsWith('mixamorig:')) позы.set(имя, мат(i).t);
+    }
+    return позы;
+  }
+
+  it('модели смотрят в +Z: носок дальше пятки', () => {
+    // Как было измерено по ступням паладина (+0.169): модель идёт туда, куда
+    // развёрнута. Развёрнутая задом модель ходила бы спиной вперёд, и это не
+    // падает нигде — только видно глазами.
+    for (const person of manifest.characters) {
+      const позы = мировыеПозиции(readGLB(shortName(person.file)));
+      const пятка = позы.get('mixamorig:LeftFoot');
+      const носок = позы.get('mixamorig:LeftToeBase');
+      must(
+        пятка !== undefined && носок !== undefined,
+        `${person.name}: нет костей стопы — направление модели не проверить`,
+      );
+      must(
+        (носок as number[])[2] > (пятка as number[])[2],
+        `${person.name}: носок не дальше пятки по +Z — модель смотрит не туда, куда пойдёт`,
+      );
+    }
+  });
+
+  it('модели в метрах: подогнать примет, а не откажет', () => {
+    // Подогнать нормализует к 1.9, но отказывает вне 0.2..5 — и тогда модель
+    // остаётся как есть. Сантиметровая модель без пересчёта дала бы гиганта
+    // в полтораста метров. Макушка Head — прокси габарита: ноги на нуле.
+    for (const person of manifest.characters) {
+      const позы = мировыеПозиции(readGLB(shortName(person.file)));
+      const макушка = позы.get('mixamorig:Head');
+      must(макушка !== undefined, `${person.name}: нет кости Head — рост не проверить`);
+      const рост = (макушка as number[])[1];
+      must(
+        рост >= 1.0 && рост <= 3.6,
+        `${person.name}: макушка на ${рост.toFixed(2)} — не метры: подогнать откажет и оставит гиганта`,
+      );
+    }
+  });
+
+  it('классы ведут в разные файлы, а не все в один', () => {
+    // Возврат к одному доспеху на всех — это ровно то, что отменяли.
+    // Существующие проверки сверяют карту с манифестом и диском, но пять
+    // одинаковых записей их прошли бы: одинаковость никто не ловит.
+    const src = realRigSource();
+    const blockStart = src.indexOf('PLAYER_MODEL');
+    must(blockStart >= 0, 'нет PLAYER_MODEL: карта моделей потеряна');
+    const block = src.slice(blockStart, src.indexOf('};', blockStart));
+    const файлы = [...block.matchAll(/:\s*'([a-z-]+)',/g)].map((m) => m[1]);
+    must(
+      файлы.length === CLASSES.length,
+      `в карте ${файлы.length} записей, а классов ${CLASSES.length}`
+    );
+    must(
+      new Set(файлы).size === файлы.length,
+      `классы ведут в один файл (${[...new Set(файлы)].join(', ')}): наряды снова одинаковые`
+    );
+  });
+
+  it('дорожки переводов масштабируются под единицы модели', () => {
+    // Клипы записаны в метрах, а сантиметровая модель несёт корень 0.01.
+    // Дорожка перевода заменяет покой целиком: без пересчёта переводы в сто
+    // раз меньше покоя, и при первом же движении персонаж схлопывается.
+    // Повороты безразмерны — масштабируются только переводы.
+    const src = realRigSource();
+    must(
+      /корневойМасштаб\(сцена\) < 0\.5 \? 100 : 1/.test(src),
+      'фактор пересчёта не выводится из корня сцены: сантиметровая модель получит метровые переводы'
+    );
+    must(
+      /endsWith\('\.position'\)/.test(src),
+      'пересчёт применяется не к дорожкам переводов: повернутся и масштабы, или ничего'
+    );
+    must(
+      /\*= воСколько;/.test(src),
+      'значения дорожек не умножаются на фактор: пересчёт объявлен, но не применяется'
+    );
+    const вызовы = (src.match(/this\.проситьКлип\(/g) || []).length;
+    must(
+      вызовы === 3,
+      `пересчитанный клип просят ${вызовы} места из 3 (хочу, рывок, атака): где-то играет сырой`
+    );
+    must(
+      /клипыМасштаб\.get\(ключ\)/.test(src) && /\$\{имя\}@\$\{this\.масштабКлипа\}/.test(src),
+      'пересчёт не кешируется по паре имя-масштаб: один файл играет по-разному на разных моделях'
     );
   });
 });

@@ -3,13 +3,53 @@
   "base": "/game/",
   "characters": [
     {
-      "file": "models/paladin.glb",
-      "name": "paladin",
-      "bones": 69,
-      "meshes": 2,
-      "textures": 3,
-      "height": 1.7254704637871328,
-      "bytes": 387612,
+      "file": "models/guard-qizilbash.glb",
+      "name": "guard-qizilbash",
+      "bones": 67,
+      "meshes": 7,
+      "textures": 21,
+      "height": 3.34,
+      "bytes": 1672848,
+      "skins": 1
+    },
+    {
+      "file": "models/sufi-mystic.glb",
+      "name": "sufi-mystic",
+      "bones": 67,
+      "meshes": 4,
+      "textures": 5,
+      "height": 1.6,
+      "bytes": 394652,
+      "skins": 1
+    },
+    {
+      "file": "models/archer-of-persian.glb",
+      "name": "archer-of-persian",
+      "bones": 65,
+      "meshes": 7,
+      "textures": 5,
+      "height": 1.55,
+      "bytes": 1012528,
+      "skins": 1
+    },
+    {
+      "file": "models/market-vendor.glb",
+      "name": "market-vendor",
+      "bones": 65,
+      "meshes": 9,
+      "textures": 6,
+      "height": 1.55,
+      "bytes": 1146072,
+      "skins": 1
+    },
+    {
+      "file": "models/court-diplomat.glb",
+      "name": "court-diplomat",
+      "bones": 65,
+      "meshes": 5,
+      "textures": 4,
+      "height": 1.57,
+      "bytes": 458332,
       "skins": 1
     }
   ],
