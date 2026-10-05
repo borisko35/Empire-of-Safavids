@@ -301,6 +301,16 @@
       "file": "models/decor/bastion.glb",
       "name": "bastion",
       "bytes": 8126420
+    },
+    {
+      "file": "models/decor/ruin-chapel.glb",
+      "name": "ruin-chapel",
+      "bytes": 3584340
+    },
+    {
+      "file": "models/decor/ruin-court.glb",
+      "name": "ruin-court",
+      "bytes": 3560284
     }
   ],
   "weapons": [

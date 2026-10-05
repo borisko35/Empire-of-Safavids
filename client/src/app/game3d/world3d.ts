@@ -15,7 +15,7 @@ import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
-  buildFortBastions,
+  buildFortBastions, buildRuinChapel, buildRuinCourt,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -475,6 +475,9 @@ private roll = 0;
     buildRuinGate(this.scene);
     // Бастионы по бокам ворот горной крепости.
     buildFortBastions(this.scene);
+    // Руины: капелла у Месопотамии и двор у святилища.
+    buildRuinChapel(this.scene);
+    buildRuinCourt(this.scene);
     const flame = this.scene.getObjectByName('campfire-flame');
     if (flame) {
       this.flames.push(flame as THREE.Mesh);

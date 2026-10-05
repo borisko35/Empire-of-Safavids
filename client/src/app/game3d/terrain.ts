@@ -2233,6 +2233,22 @@ export function buildFortBastions(scene: THREE.Scene): void {
     });
   }
 }
+// ── Руины: капелла у Месопотамии и двор у святилища ─────────────
+//
+// Восьмой и девятый пакеты из Assets. Капелла — разрушенная часовня в
+// пустыне к востоку от города (свой регион, сухо). Двор — заросший дворик
+// у зороастрийского святилища. Обе метровые, база на нуле — подъём не нужен,
+// масштаб 8 (иначе кукольные домики в метр). Коллайдеры по габариту.
+export const RUIN_CHAPEL = { x: -1105, z: -355, scale: 8 };
+export const RUIN_COURT = { x: 1225, z: 1215, scale: 8 };
+
+export function buildRuinChapel(scene: THREE.Scene): void {
+  placeDecor(scene, 'decor/ruin-chapel.glb', RUIN_CHAPEL.x, RUIN_CHAPEL.z, 0, 0, 4, RUIN_CHAPEL.scale);
+}
+
+export function buildRuinCourt(scene: THREE.Scene): void {
+  placeDecor(scene, 'decor/ruin-court.glb', RUIN_COURT.x, RUIN_COURT.z, 0, 0, 4, RUIN_COURT.scale);
+}
 // ── Руина ворот у дороги на столицу ──────────────────────────────
 //
 // Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не
