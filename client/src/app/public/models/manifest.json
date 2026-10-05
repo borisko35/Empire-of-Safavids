@@ -296,6 +296,11 @@
       "file": "models/decor/gate-ruin.glb",
       "name": "gate-ruin",
       "bytes": 3867780
+    },
+    {
+      "file": "models/decor/bastion.glb",
+      "name": "bastion",
+      "bytes": 8126420
     }
   ],
   "weapons": [

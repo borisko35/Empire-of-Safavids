@@ -2205,6 +2205,34 @@ export function buildVillageForge(scene: THREE.Scene): void {
   placeDecor(scene, 'decor/village-forge.glb', VILLAGE_FORGE.x, VILLAGE_FORGE.z, VILLAGE_FORGE.lift, VILLAGE_FORGE.ry, 1.0);
 }
 
+// ── Бастионы ворот горной крепости ─────────────────────────────────
+//
+// Седьмой пакет из Assets: два бастиона по бокам ворот крепости (дверь
+// fortress в (-320, -677)). Механика дверей не тронута: бастионы стоят
+// сбоку проёма, проход 4 м между коллайдерами. База модели на нуле —
+// подъём не нужен. Текстура проверена рендером с ambient (без него EEVEE
+// даёт чёрный кадр и врёт про материал).
+export const FORT_BASTIONS = { z: -677, dx: 10, r: 8 } as const;
+
+export function buildFortBastions(scene: THREE.Scene): void {
+  for (const сторона of [-1, 1]) {
+    const px = -320 + сторона * FORT_BASTIONS.dx;
+    const pz = FORT_BASTIONS.z;
+    addCollider(px, pz, FORT_BASTIONS.r);
+    void loadDecorModel('decor/bastion.glb').then((модель) => {
+      if (!модель) return;
+      const бастион = модель.clone();
+      бастион.position.set(px, groundHeight(px, pz), pz);
+      бастион.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(бастион);
+    });
+  }
+}
 // ── Руина ворот у дороги на столицу ──────────────────────────────
 //
 // Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не
