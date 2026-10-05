@@ -349,6 +349,11 @@
       "file": "models/decor/desert-tower.glb",
       "name": "desert-tower",
       "bytes": 6475792
+    },
+    {
+      "file": "models/decor/signpost.glb",
+      "name": "signpost",
+      "bytes": 2092
     }
   ],
   "weapons": [

@@ -15,6 +15,7 @@ import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
+  buildSignposts,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -469,6 +470,8 @@ private roll = 0;
     // Стоят на своих якорях, поэтому игрок, выбравший регион, возрождается
     // у ворот города, а не в пустом поле.
     buildRegionTowns(this.scene);
+    // Указатели сбоку от дорог: «здесь начинается путь к порту».
+    buildSignposts(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.
