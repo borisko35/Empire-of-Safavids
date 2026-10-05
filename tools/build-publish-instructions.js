@@ -38,7 +38,14 @@ node tools/build-itch-bundle.js
 (около 2 МБ, 9 файлов, 2.1 МБ распакованного — вчетверо меньше
 предела itch.io в 500 МБ).
 
-## Шаг 2. Создать страницу на itch.io
+## Шаг 2. Страница на itch.io
+
+**Сначала посмотрите, есть ли она уже.** Если при попытке создать
+страницу itch.io отвечает «You already have a game on your account with
+that URL», страница уже создана — новую создавать не надо, идите
+редактировать её.
+
+**Если страницы ещё нет** (обычный порядок для первого раза):
 
 1. Открыть https://itch.io/game/new
 2. **Kind Of Game** → **HTML Game**
@@ -50,8 +57,18 @@ node tools/build-itch-bundle.js
    \`mmorpg\` \`browser-game\` \`multiplayer\` \`free\` \`persia\` \`historical\` \`pvp\`
 7. **Release status** → **In development** или **Ongoing**
 8. **Pricing** → **No monetization** / donations
-9. Сохранить. Загрузить \`tools/itch-bundle.zip\` в поле загрузки файла.
-10. Дождаться: itch.io «take a moment to process the archive».
+9. Сохранить.
+
+**Если страница уже создана** (itch.io сказал «already have a game») —
+пункты 1–9 пропустить и сделать только это:
+
+1. Открыть страницу игры в списке своих проектов на itch.io.
+2. Кнопка **Edit** (или **Manage project** → **Edit**).
+3. В поле **Upload files** удалить старый архив, если он есть, и загрузить
+   свежий \`tools/itch-bundle.zip\`.
+4. **Save**. Дождаться: itch.io «take a moment to process the archive».
+5. Открыть адрес страницы и убедиться, что витрина грузится: должен
+   появиться трейлер, а не «404» и не пустая страница.
 
 ## Шаг 3. Настройка встраивания (Embed options)
 
