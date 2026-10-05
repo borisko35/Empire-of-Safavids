@@ -63,6 +63,12 @@
       "name": "citizen2",
       "bytes": 1193248,
       "bones": 65
+    },
+    {
+      "file": "models/citizen3.glb",
+      "name": "citizen3",
+      "bytes": 658296,
+      "bones": 65
     }
   ],
   "clips": [
