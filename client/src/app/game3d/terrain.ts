@@ -2104,18 +2104,23 @@ export function buildSettlements(scene: THREE.Scene): void {
 export const AQUEDUCT = { x: VILLAGE.x + 20, z: VILLAGE.z - 2, count: 5, step: 1.0 };
 const AQUEDUCT_MODEL = 'decor/aqueduct-seg.glb';
 
-let aqueductCache: Promise<THREE.Group | null> | null = null;
+/**
+ * Готовые модели декора: шатёр, кузница, аркада. Один загрузчик на всех,
+ * а не копия на модель: копии расходились бы молча (путь, Draco, fallback).
+ */
+const decorCache = new Map<string, Promise<THREE.Group | null>>();
 
-function loadAqueductModel(): Promise<THREE.Group | null> {
-  if (aqueductCache) return aqueductCache;
-  aqueductCache = new Promise<THREE.Group | null>((готово) => {
+export function loadDecorModel(path: string): Promise<THREE.Group | null> {
+  const готовый = decorCache.get(path);
+  if (готовый) return готовый;
+  const задача = new Promise<THREE.Group | null>((готово) => {
     try {
       const draco = new DRACOLoader();
       draco.setDecoderPath('/game/draco/');
       const l = new GLTFLoader();
       l.setDRACOLoader(draco);
       l.load(
-        `/game/models/${AQUEDUCT_MODEL}`,
+        `/game/models/${path}`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),
         undefined,
         () => готово(null),
@@ -2124,7 +2129,35 @@ function loadAqueductModel(): Promise<THREE.Group | null> {
       готово(null);
     }
   });
-  return aqueductCache;
+  decorCache.set(path, задача);
+  return задача;
+}
+
+function placeDecor(
+  scene: THREE.Scene,
+  path: string,
+  px: number,
+  pz: number,
+  lift: number,
+  ry: number,
+  colliderR: number,
+): void {
+  // Коллайдер ставится сразу, модель доезжает: иначе в окно загрузки сквозь
+  // стену проходят, а потом стена «появляется» вокруг игрока.
+  addCollider(px, pz, colliderR);
+  void loadDecorModel(path).then((модель) => {
+    if (!модель) return;
+    const вещь = модель.clone();
+    вещь.position.set(px, groundHeight(px, pz) + lift, pz);
+    вещь.rotation.y = ry;
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(вещь);
+  });
 }
 
 export function buildAqueduct(scene: THREE.Scene): void {
@@ -2133,7 +2166,7 @@ export function buildAqueduct(scene: THREE.Scene): void {
     const pz = AQUEDUCT.z;
     // Аркада — стена: пролезть между сегментами нельзя, это завал, а не ворота.
     addCollider(px, pz, 0.9);
-    void loadAqueductModel().then((модель) => {
+    void loadDecorModel(AQUEDUCT_MODEL).then((модель) => {
       if (!модель) return;
       const seg = модель.clone();
       seg.position.set(px, groundHeight(px, pz), pz);
@@ -2152,6 +2185,22 @@ export function buildAqueduct(scene: THREE.Scene): void {
       scene.add(seg);
     });
   }
+}
+
+// ── Шатёр базара и кузница деревни ─────────────────────────────────
+// Третий и четвёртый пакеты из Assets: торговый шатёр в базарный квартал
+// столицы и кузница в деревню (у деревни кузницы не было — workshop живёт
+// в столице). Подъём над землёй — из габаритов моделей: обе отцентрены,
+// низ на −0.91/−0.95, ставить на groundHeight значило бы вкопать.
+export const TRADE_TENT = { x: CITY.x + 96, z: CITY.z, lift: 0.91, ry: -0.2 };
+export const VILLAGE_FORGE = { x: VILLAGE.x, z: VILLAGE.z - 14, lift: 0.95, ry: 0.15 };
+
+export function buildTradeTent(scene: THREE.Scene): void {
+  placeDecor(scene, 'decor/trade-tent.glb', TRADE_TENT.x, TRADE_TENT.z, TRADE_TENT.lift, TRADE_TENT.ry, 1.2);
+}
+
+export function buildVillageForge(scene: THREE.Scene): void {
+  placeDecor(scene, 'decor/village-forge.glb', VILLAGE_FORGE.x, VILLAGE_FORGE.z, VILLAGE_FORGE.lift, VILLAGE_FORGE.ry, 1.0);
 }
 // ── Города регионов ────────────────────────────────────────────────────
 //

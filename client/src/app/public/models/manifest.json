@@ -281,6 +281,16 @@
       "file": "models/decor/throne.glb",
       "name": "throne",
       "bytes": 706992
+    },
+    {
+      "file": "models/decor/trade-tent.glb",
+      "name": "trade-tent",
+      "bytes": 1126048
+    },
+    {
+      "file": "models/decor/village-forge.glb",
+      "name": "village-forge",
+      "bytes": 925816
     }
   ]
 }
