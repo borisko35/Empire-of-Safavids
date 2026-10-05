@@ -11,6 +11,8 @@
 // телепорта и не верит клиентским координатам (защита от абьюза).
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // Столы с документами берём из правила: сервер проверяет по тем же
 // координатам, иначе игрок увидит одно, а проверят другое.
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
@@ -262,6 +264,30 @@ function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z
 // книгами (библиотека из списка владельца). Всё в одной комнате: в модели
 // интерьеров переходов между комнатами нет, и делать четыре комнаты из одной
 // означало бы выдумать систему, которой нет.
+const THRONE_MODEL = 'decor/throne.glb';
+let throneCache: Promise<THREE.Group | null> | null = null;
+
+/** Готовая модель трона с текстурой. Кеш общий: трон в зале один. */
+function loadThroneModel(): Promise<THREE.Group | null> {
+  if (throneCache) return throneCache;
+  throneCache = new Promise<THREE.Group | null>((готово) => {
+    try {
+      const draco = new DRACOLoader();
+      draco.setDecoderPath('/game/draco/');
+      const l = new GLTFLoader();
+      l.setDRACOLoader(draco);
+      l.load(
+        `/game/models/${THRONE_MODEL}`,
+        (gltf) => готово((gltf.scene as THREE.Group) ?? null),
+        undefined,
+        () => готово(null),
+      );
+    } catch {
+      готово(null);
+    }
+  });
+  return throneCache;
+}
 function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   // ── Колонны: два ряда по десять ──
@@ -282,8 +308,22 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   // Трон напротив двери (юг): входящий видит его сразу, а не за спиной.
   g.add(box(9, 0.06, 7, M.woodDark, cx, FLOOR_Y + 0.03, cz - 4.5));
   g.add(box(9, 0.06, 7, M.red, cx, FLOOR_Y + 0.05, cz - 4.5));
-  g.add(box(2.4, 0.5, 1.6, M.stone, cx, FLOOR_Y + 0.3, cz - 8));
-  g.add(box(2.1, 2.6, 0.4, M.gold, cx, FLOOR_Y + 1.6, cz - 8.2));
+  // Сам трон — готовая модель с текстурой (красная кожа, золото, камень),
+  // а не коробки. Рендер в Blender подтвердил: смотрит в +Z, то есть ровно
+  // на дверь, доворот не нужен. Грузится асинхронно: нет файла — стоит
+  // пустой ковёр, игра не падает.
+  void loadThroneModel().then((модель) => {
+    if (!модель) return;
+    const трон = модель.clone();
+    трон.position.set(cx, FLOOR_Y, cz - 8);
+    трон.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(трон);
+  });
   cols.push({ x: cx, z: cz - 8, r: 1.4 });
   // ── Столы по сторонам ──
   for (const side of [-1, 1]) {

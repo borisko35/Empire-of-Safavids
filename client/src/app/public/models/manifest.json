@@ -276,6 +276,11 @@
       "file": "models/decor/aqueduct-seg.glb",
       "name": "aqueduct-seg",
       "bytes": 3504392
+    },
+    {
+      "file": "models/decor/throne.glb",
+      "name": "throne",
+      "bytes": 706992
     }
   ]
 }
