@@ -59,13 +59,13 @@ echo "[8/10] Настройка .env..."
 if [ -f .env ]; then
     sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=your_db_password/g" .env
     sed -i "s/JWT_SECRET=.*/JWT_SECRET=dev-secret-change-me-to-something-secure/g" .env
-    sed -i "s/CLIENT_ORIGIN=.*/CLIENT_ORIGIN=http:\/\/localhost:8080,http:\/\/localhost:3000,http:\/\/45.32.220.58:3000/g" .env
+    sed -i "s/CLIENT_ORIGIN=.*/CLIENT_ORIGIN=http:\/\/localhost:8080,http:\/\/localhost:3000,https:\/\/game.eos-gameonline.com/g" .env
 else
     echo ".env not found, creating..."
     cp .env.example .env
     sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=your_db_password/g" .env
     sed -i "s/JWT_SECRET=.*/JWT_SECRET=dev-secret-change-me-to-something-secure/g" .env
-    sed -i "s/CLIENT_ORIGIN=.*/CLIENT_ORIGIN=http:\/\/localhost:8080,http:\/\/localhost:3000,http:\/\/45.32.220.58:3000/g" .env
+    sed -i "s/CLIENT_ORIGIN=.*/CLIENT_ORIGIN=http:\/\/localhost:8080,http:\/\/localhost:3000,https:\/\/game.eos-gameonline.com/g" .env
 fi
 echo ".env настроен"
 
@@ -102,7 +102,7 @@ echo "=========================================="
 echo "✅ Установка завершена!"
 echo ""
 echo "Игра доступна по адресу:"
-echo "http://45.32.220.58:3000/game/"
+echo "https://game.eos-gameonline.com/game/"
 echo ""
 echo "Проверь статус:"
 echo "  pm2 status"

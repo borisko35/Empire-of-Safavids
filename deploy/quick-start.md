@@ -1,7 +1,7 @@
-# Empire of Safavids — Быстрый старт на Vultr
+# Empire of Safavids — Быстрый старт на VPS
 
 ## Справочные данные
-- **IP сервера:** 45.32.220.58
+- **IP сервера:** адрес вашей машины (см. «Бесплатный хостинг» в deploy/README.md)
 - **Логин:** root
 - **Пароль:** ваш (в репозиторий не вносится — храните в менеджере паролей)
 
@@ -12,14 +12,14 @@
 ### Вариант А: PowerShell (Windows)
 Открой PowerShell и введи:
 ```powershell
-ssh root@45.32.220.58
+ssh <пользователь>@<ip-машины>
 ```
 Введи пароль root.
 
 ### Вариант Б: WinSCP
 1. Запусти WinSCP
 2. Заполни:
-   - Хост: `45.32.220.58`
+   - Хост: `<ip-машины>`
    - Пользователь: `root`
    - Пароль: ваш пароль root
 3. Нажми "Подключиться"
@@ -30,7 +30,7 @@ ssh root@45.32.220.58
 
 ### Из PowerShell (после загрузки WinSCP не нужен):
 ```powershell
-scp -r "D:\My Projects\Empire of Sefevids\deploy" root@45.32.220.58:~/
+scp -r "D:\My Projects\Empire of Sefevids\deploy" <пользователь>@<ip-машины>:~/
 ```
 
 ### Или из WinSCP:
@@ -94,4 +94,4 @@ curl http://localhost:3000/health
 
 ## Готово!
 
-Игра доступна: http://45.32.220.58:3000/game/
+Игра доступна: https://game.eos-gameonline.com/game/
