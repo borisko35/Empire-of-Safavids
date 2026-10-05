@@ -16,6 +16,7 @@ import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
+  buildRuinBridge, buildPassRocks,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -480,6 +481,9 @@ private roll = 0;
     buildRuinCourt(this.scene);
     // Дубы у лесной деревни.
     buildOaks(this.scene);
+    // Рухнувший мост у реки и скалы перевала.
+    buildRuinBridge(this.scene);
+    buildPassRocks(this.scene);
     const flame = this.scene.getObjectByName('campfire-flame');
     if (flame) {
       this.flames.push(flame as THREE.Mesh);

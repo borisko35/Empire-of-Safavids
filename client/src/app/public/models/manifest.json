@@ -316,6 +316,16 @@
       "file": "models/decor/oak.glb",
       "name": "oak",
       "bytes": 1508824
+    },
+    {
+      "file": "models/decor/bridge-ruin.glb",
+      "name": "bridge-ruin",
+      "bytes": 3786956
+    },
+    {
+      "file": "models/decor/pass-rocks.glb",
+      "name": "pass-rocks",
+      "bytes": 65212
     }
   ],
   "weapons": [

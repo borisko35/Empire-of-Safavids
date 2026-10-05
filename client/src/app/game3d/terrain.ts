@@ -2282,6 +2282,64 @@ export function buildOaks(scene: THREE.Scene): void {
     });
   }
 }
+// ── Рухнувший мост и скалы перевала ──────────────────────────────
+//
+// Одиннадцатый и двенадцатый пакеты из Assets. Мост — обломок пролёта,
+// смытый на восточный берег RIVER_A: лежать поперёк русла ему не хватает
+// длины (мокрый разрыв 10 м при пролоте 10 м), а рабочим переходам он
+// конкурент, а не замена. Лежит вдоль берега, завал, не переход.
+// Скалы — две группы у Кавказского перевала, в своей полосе, вне стен.
+//
+// Масштаб моста 10 (пролёт 1 м → 10 м), скал 2.5 (валуны 2.5 м).
+export const RUIN_BRIDGE = { x: -365, z: -400, ry: -1.75, scale: 10 };
+export const PASS_ROCKS = [
+  { x: -975, z: 505, ry: 0.6, scale: 2.5 },
+  { x: -950, z: 510, ry: 2.4, scale: 2.5 },
+] as const;
+
+export function buildRuinBridge(scene: THREE.Scene): void {
+  const { x, z, ry, scale } = RUIN_BRIDGE;
+  // Завал целиком: три коллайдера вдоль пролёта в мировых единицах,
+  // пролезть негде.
+  for (const s of [-3, 0, 3]) {
+    addCollider(x + Math.cos(ry) * s, z - Math.sin(ry) * s, 2);
+  }
+  void loadDecorModel('decor/bridge-ruin.glb').then((модель) => {
+    if (!модель) return;
+    const мост = модель.clone();
+    мост.position.set(x, groundHeight(x, z), z);
+    мост.rotation.y = ry;
+    мост.scale.setScalar(scale);
+    мост.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(мост);
+  });
+}
+
+export function buildPassRocks(scene: THREE.Scene): void {
+  for (const скалы of PASS_ROCKS) {
+    // Группа целиком: коллайдер один, середина тоже камень.
+    addCollider(скалы.x, скалы.z, 6);
+    void loadDecorModel('decor/pass-rocks.glb').then((модель) => {
+      if (!модель) return;
+      const группа = модель.clone();
+      группа.position.set(скалы.x, groundHeight(скалы.x, скалы.z), скалы.z);
+      группа.rotation.y = скалы.ry;
+      группа.scale.setScalar(скалы.scale);
+      группа.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(группа);
+    });
+  }
+}
 // ── Руина ворот у дороги на столицу ──────────────────────────────
 //
 // Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не
