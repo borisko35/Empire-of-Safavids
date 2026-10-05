@@ -187,8 +187,11 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
           { monsterId: 'boss_ottoman_pasha', count: 1, positions: [{ x: 0, y: 0, z: 30 }] },{ monsterId: 'mob_ottoman_janissary', count: 8, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 15 }, { x: 15, y: 0, z: 10 }, { x: -15, y: 0, z: 10 }, { x: 0, y: 0, z: 25 }, { x: 20, y: 0, z: 20 }, { x: -20, y: 0, z: 20 }] }],
         isBossRoom: true,
         bossId: 'boss_ottoman_pasha',
-        chestPositions: [{ x: -3.6, z: -10.4 }, { x: 3.6, z: -10.4 }, { x: -3.6, z: -15 }, { x: 3.6, z: -15 }, { x: 0, z: -15 }],
-        treasureChests: 5,
+        // Шестой сундук — в тайнике за ложной стеной (см. furnishPalaceDungeon).
+        // Позиция комнатная и обязана совпадать с mesh один в один: вскрытие
+        // идёт по этим координатам, а рисуется по тем.
+        chestPositions: [{ x: -3.6, z: -10.4 }, { x: 3.6, z: -10.4 }, { x: -3.6, z: -15 }, { x: 3.6, z: -15 }, { x: 0, z: -15 }, { x: 14.5, z: -13.5 }],
+        treasureChests: 6,
       },
     ],
     rewards: {

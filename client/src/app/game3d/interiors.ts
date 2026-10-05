@@ -107,6 +107,16 @@ export const POCKET_Z = 4000;
 const ROOM_DX = 44;
 export const ROOM_W = 22;
 export const ROOM_D = 16;
+/**
+ * Размер зала подземелий: 32x32, половина 16.
+ *
+ * Совпадает с серверной ROOM_HALF = 16 (server/src/data/interiors.ts):
+ * сервер раскладывает монстров и сундуки по залу 32, и клиент обязан
+ * строить тот же зал, иначе мебель встаёт за стеной. Комнаты зданий
+ * остаются 22x16 — их обстановка влезает.
+ */
+export const DUNGEON_W = 32;
+export const DUNGEON_D = 32;
 export const ROOM_WALL_H = 4.5;
 export const ROOM_WALL_T = 0.6;
 export const ROOM_DOOR_GAP = 3.2;
@@ -255,10 +265,14 @@ function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z
 function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   // ── Колонны: два ряда по десять ──
+  // Ряды идут по диагонали зала и целиком внутри комнаты (z от −7 до +6.5
+  // при стене на ±8). Раньше шаг был 2.05 от −9: последняя пара вставала на
+  // +9.45, то есть ЗА южной стеной, и её не было видно — а описание обещает
+  // двадцать сосчитанных колонн. Их по-прежнему двадцать: 10 × 2 стороны.
   for (let i = 0; i < 10; i++) {
     for (const side of [-1, 1]) {
       const px = cx + side * (2.2 + i * 0.75);
-      const pz = cz - 9 + side * 0 + i * 2.05;
+      const pz = cz - 7 + i * 1.5;
       g.add(cyl(0.34, 4.6, 0.34, M.stone, px, FLOOR_Y + 2.3, pz));
       g.add(box(0.9, 0.3, 0.9, M.gold, px, FLOOR_Y + 4.55, pz));
       cols.push({ x: px, z: pz, r: 0.7 });
@@ -292,8 +306,10 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
     cols.push({ x: px, z: cz + 3, r: 1.5 });
   }
   // ── Жаровни у входа ──
-  brazier(g, cx - 9.4, cz + 8.4, FLOOR_Y);
-  brazier(g, cx + 9.4, cz + 8.4, FLOOR_Y);
+  // Стоят по бокам двери внутри зала. Раньше были на cz + 8.4, то есть за
+  // южной стеной (стена на +8): их не было видно, как и последнюю пару колонн.
+  brazier(g, cx - 2.5, cz + 6.9, FLOOR_Y);
+  brazier(g, cx + 2.5, cz + 6.9, FLOOR_Y);
   // ── Страж тронного зала ──
   // Фигура видимая, и её координата — ровно та, что в правиле стелса:
   // cx - 8, cz + 6 = (4476, 4006). Проверка сверяет ту же формулу.
@@ -847,11 +863,40 @@ function furnishPalaceDungeon(
     [cx - 3.6, cz - 15],
     [cx + 3.6, cz - 15],
     [cx, cz - 15],
+    // Шестой — в тайнике (см. ниже): позиция обязана совпадать с данными
+    // комнаты один в один, иначе сундук нарисуется не там, где вскроется.
+    [cx + 14.5, cz - 13.5],
   ];
   for (const [px, pz] of местаСундуков) {
     g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
     cols.push({ x: px, z: pz, r: 1 });
   }
+  // ── Тайный коридор: ложная стена, гобелен и тайник ──
+  //
+  // Просили тайные коридоры дворца. Это узкий проход между ложной стеной
+  // и восточной стеной зала: вход с севера, в глубине — тайник с сундуком
+  // (шестой в данных комнаты). Механика та же, что у остальных сундуков, —
+  // вскрытие через заход, золото и опыт, — поэтому тайник работает, а не
+  // стоит мебелью. Стражей в проходе нет: янычары держат середину зала.
+  //
+  // Координаты комнатные (от cx, cz). Зал подземелий 32x32, стены на ±16:
+  // проход x 13..16 и сундук (14.5, −13.5) внутри. В комнате 22x16 здесь была
+  // бы стена — тайник построен под большой зал. Северо-восточный светильник
+  // (11.4, −9.4) оставлен на месте: от входа в проход (x 13..15.5) до него 2.6,
+  // протиснуться можно, а столпотворения нет.
+  const тайникСтенаX = 13;
+  const тайникЮг = -15, тайникСевер = -11;
+  // Ширина входа 2.5: персонаж (радиус 1) проходит, шеренгой не пройти.
+  const тайникПроход = 2.5;
+  g.add(box(0.6, 3, тайникСевер - тайникЮг, M.wallDark, cx + тайникСтенаX, FLOOR_Y + 1.5, cz + (тайникЮг + тайникСевер) / 2));
+  cols.push({ x: cx + тайникСтенаX, z: cz - 14.5, r: 1 });
+  cols.push({ x: cx + тайникСтенаX, z: cz - 12.5, r: 1 });
+  cols.push({ x: cx + тайникСтенаX, z: cz - 10.5, r: 1 });
+  // Приоткрытый гобелен на входе: метка тайника. Коллайдера нет — это ткань,
+  // сквозь неё протискиваются, а не обходят.
+  const гобелен = box(0.15, 2.6, тайникПроход, M.teal, cx + тайникСтенаX, FLOOR_Y + 1.3, cz + тайникСевер + тайникПроход / 2);
+  гобелен.rotation.y = 0.18;
+  g.add(гобелен);
   // Светильники в обоих залах
   for (const [px, pz] of [
     [cx - 11.4, cz + 9.4],
@@ -1473,13 +1518,24 @@ interface Room {
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
   const g = new THREE.Group();
   const cx = def.roomCx, cz = def.roomCz;
-  const hw = ROOM_W / 2, hd = ROOM_D / 2;
+  // Залы подземелий — 32x32, комнаты зданий — 22x16.
+  //
+  // Сервер считает все залы половиной 16 (ROOM_HALF), а мебель подземелий
+  // нарисована под неё: трон дворца стоит на cz − 13, сундуки — на cz − 15.
+  // В комнате 22x16 (стены на ±11/±8) всё это оказывалось ЗА стеной:
+  // трон не видно, сундуки не достать. Залы выросли до серверных 32,
+  // комнаты зданий остались 22x16 — их обстановка влезает (дворец правился
+  // отдельно, см. furnishPalace).
+  const dungeonKinds = new Set(['catacombs', 'palace_dungeon', 'khorasan_caves', 'caucasus_fort']);
+  const ширина = dungeonKinds.has(def.kind) ? DUNGEON_W : ROOM_W;
+  const глубина = dungeonKinds.has(def.kind) ? DUNGEON_D : ROOM_D;
+  const hw = ширина / 2, hd = глубина / 2;
 
-  const floor = box(ROOM_W, 0.4, ROOM_D, M.stone, cx, FLOOR_Y - 0.2, cz);
+  const floor = box(ширина, 0.4, глубина, M.stone, cx, FLOOR_Y - 0.2, cz);
   floor.receiveShadow = true;
   g.add(floor);
   const rugColor = def.kind === 'tavern' ? M.red : def.kind === 'science' ? M.purple : M.teal;
-  g.add(box(ROOM_W * 0.4, 0.06, ROOM_D * 0.4, rugColor, cx, FLOOR_Y + 0.03, cz));
+  g.add(box(ширина * 0.4, 0.06, глубина * 0.4, rugColor, cx, FLOOR_Y + 0.03, cz));
 
   const colliders: { x: number; z: number; r: number }[] = [];
   const wallRun = (
