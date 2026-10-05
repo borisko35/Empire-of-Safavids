@@ -15,7 +15,7 @@ import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
-  buildSignposts, buildGameTable, buildCows, updateCows,
+  buildSignposts, buildGameTable, buildCows, updateCows, buildBazaarStatue,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -478,6 +478,8 @@ private roll = 0;
     buildGameTable(this.scene);
     // Коровы на выпасе в лесной деревне.
     this.cowMixers = buildCows(this.scene);
+    // Статуя у базарного квартала: видно с улицы, не занимает место торговле.
+    buildBazaarStatue(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.
