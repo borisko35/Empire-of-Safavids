@@ -23,6 +23,7 @@ import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
 import { createCivilians, CiviliansHandle } from './civilians';
+import { createTownfolk, TownfolkHandle } from './townfolk';
 import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
@@ -145,6 +146,7 @@ export class World3D {
   private fauna!: FaunaHandle;
   private npcs!: NpcsHandle;
   private civilians!: CiviliansHandle;
+  private townfolk!: TownfolkHandle;
   private roadTraffic!: RoadTrafficHandle;
   private weather!: WeatherHandle;
   private interiors!: InteriorsHandle;
@@ -500,6 +502,8 @@ private roll = 0;
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
     this.civilians = createCivilians(this.scene);
+    // Жители трёх региональных городов на настоящих моделях.
+    this.townfolk = createTownfolk(this.scene);
     this.roadTraffic = createRoadTraffic(this.scene);
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
@@ -1618,6 +1622,8 @@ if (isMe && moving) {
     this.npcs.update(dt, now);
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
+    // Смесители жителей: без update они стоят столбом, а сцена формально жива.
+    this.townfolk.update(dt);
     this.roadTraffic.update(dt, now, me.pos.x, me.pos.z);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
@@ -1691,6 +1697,7 @@ if (isMe && moving) {
     this.fauna?.dispose();
     this.npcs?.dispose();
     this.civilians?.dispose();
+    this.townfolk?.dispose();
     this.weather?.dispose();
     this.interiors?.dispose();
     this.navigator?.dispose();

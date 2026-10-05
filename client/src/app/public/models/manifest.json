@@ -51,6 +51,12 @@
       "height": 1.57,
       "bytes": 458332,
       "skins": 1
+    },
+    {
+      "file": "models/citizen.glb",
+      "name": "citizen",
+      "bytes": 1012188,
+      "bones": 65
     }
   ],
   "clips": [
