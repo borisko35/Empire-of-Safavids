@@ -364,6 +364,11 @@
       "file": "models/decor/game-board.glb",
       "name": "game-board",
       "bytes": 20840
+    },
+    {
+      "file": "models/decor/cow.glb",
+      "name": "cow",
+      "bytes": 2157912
     }
   ],
   "weapons": [

@@ -15,7 +15,7 @@ import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
-  buildSignposts, buildGameTable,
+  buildSignposts, buildGameTable, buildCows, updateCows,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -148,6 +148,8 @@ export class World3D {
   private npcs!: NpcsHandle;
   private civilians!: CiviliansHandle;
   private townfolk!: TownfolkHandle;
+  /** Смесители коров: список пуст, пока модель не приехала. */
+  private cowMixers: THREE.AnimationMixer[] = [];
   private roadTraffic!: RoadTrafficHandle;
   private weather!: WeatherHandle;
   private interiors!: InteriorsHandle;
@@ -474,6 +476,8 @@ private roll = 0;
     buildSignposts(this.scene);
     // Стол с доской во дворе караван-сарая: караван ждёт утра, люди играют.
     buildGameTable(this.scene);
+    // Коровы на выпасе в лесной деревне.
+    this.cowMixers = buildCows(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.
@@ -1629,6 +1633,7 @@ if (isMe && moving) {
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.
     this.townfolk.update(dt);
+    updateCows(this.cowMixers, dt);
     this.roadTraffic.update(dt, now, me.pos.x, me.pos.z);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 

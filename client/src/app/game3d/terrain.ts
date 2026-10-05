@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterTexture, waterfallTexture,
@@ -2617,6 +2618,81 @@ export function buildGameTable(scene: THREE.Scene): void {
     });
     scene.add(доска);
   });
+}
+
+// ── Коровы на выпасе в лесной деревне ───────────────────────────
+//
+// Восемнадцатый пакет из Assets: ShepherdValley_Cow_FBX. Первый пакет, где
+// масштаб НЕ пришлось применять — у модели scale = 1.0, она пришла в метрах
+// и уже стоит на земле. Три предыдущих к каждому приходили с 0.01 и 0.35.
+//
+// АНИМАЦИЯ В МОДЕЛИ, А НЕ КЛИПОМ ИГРЫ. Игровые клипы лежат в mixamorig:*,
+// кости коровы — DEF-*, и клип человека к ней не подойдёт. Своего клипа для
+// скота в игре нет. Так что простояка едет в модели.
+//
+// В пакете было пять настоящих анимаций: 135-219 подвижных кривых и 13-21
+// разных поз. Для сравнения, у трёх гражданских анимация была одна — поза
+// привязки, 0 подвижных кривых. Разница измерена.
+//
+// Две коровы, а не одна: одна корова на лугу — это не стадо. Места выбраны
+// сканом: под четырьмя копытами размах не больше 10 см, под коровой — сухо,
+// и она ни на что не наезжает. Земля в деревне лежит на 2.97-3.04, хотя
+// ровнялка задаёт 2.0: ровнялка Залива (центр 0, -820, радиус 900) накрывает
+// деревню целиком и тянет вверх. Ровнота проверена между точками, а не до
+// уровня.
+//
+// Скелет клонируется через SkeletonUtils: обычный Object3D.clone делит
+// Skeleton с оригиналом, и обе коровы шевелились бы от одной кости.
+export const VILLAGE_COWS: { x: number; z: number; ry: number }[] = [
+  { x: VILLAGE.x - 9, z: VILLAGE.z - 20, ry: 1.148 },
+  { x: VILLAGE.x - 3, z: VILLAGE.z - 20, ry: 1.422 },
+];
+
+export function buildCows(scene: THREE.Scene): THREE.AnimationMixer[] {
+  const смесители: THREE.AnimationMixer[] = [];
+  void loadDecorModel('decor/cow.glb').then((модель) => {
+    if (!модель) return;
+    const клип = (модель.animations && модель.animations[0]) ?? null;
+    if (!клип) return;
+    for (const [номер, точка] of VILLAGE_COWS.entries()) {
+      const корова = копияСкелета(модель) as THREE.Group;
+      корова.position.set(точка.x, groundHeight(точка.x, точка.z), точка.z);
+      корова.rotation.y = точка.ry;
+      корова.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(корова);
+      // Коллайдер — по длине коровы, а не точкой: игрок должен обходить её
+      // носом, а не проваливаться между ног.
+      addCollider(точка.x, точка.z, 1.1);
+      // Свой смеситель на корову: дорожки клипа ищут кости по именам внутри
+      // поддерева, и один смеситель на группу двигал бы обе от первого.
+      const смеситель = new THREE.AnimationMixer(корова);
+      const действие = смеситель.clipAction(клип);
+      действие.reset().setLoop(THREE.LoopRepeat, Infinity).play();
+      // Фаза своя: иначе обе коровы жуют синхронно, и это сразу видно.
+      действие.time = номер * 3.1;
+      смесители.push(смеситель);
+    }
+  });
+  return смесители;
+}
+
+/**
+ * Двигает коров.
+ *
+ * Отдельная функция, а не только buildCows: без неё коровы стоят столбом,
+ * потому что у mix.update нет вызывающего. Список заполняется асинхронно,
+ * когда приедет модель, поэтому update честно берёт наличное.
+ */
+export function updateCows(смесители: THREE.AnimationMixer[], dt: number): void {
+  // Нечисловой кадр ломает смеситель: он начинает считать время в NaN и
+  // возвращается к работе только после перезагрузки страницы.
+  const шаг = Number.isFinite(dt) ? dt : 1 / 60;
+  for (const смеситель of смесители) смеситель.update(шаг);
 }
 
 export const REGION_TOWNS: RegionTownDef[] = [
