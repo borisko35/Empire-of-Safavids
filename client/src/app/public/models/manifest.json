@@ -291,6 +291,11 @@
       "file": "models/decor/village-forge.glb",
       "name": "village-forge",
       "bytes": 925816
+    },
+    {
+      "file": "models/decor/gate-ruin.glb",
+      "name": "gate-ruin",
+      "bytes": 3867780
     }
   ]
 }

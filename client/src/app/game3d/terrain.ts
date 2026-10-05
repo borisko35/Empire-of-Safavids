@@ -2141,6 +2141,7 @@ function placeDecor(
   lift: number,
   ry: number,
   colliderR: number,
+  scale = 1,
 ): void {
   // Коллайдер ставится сразу, модель доезжает: иначе в окно загрузки сквозь
   // стену проходят, а потом стена «появляется» вокруг игрока.
@@ -2150,6 +2151,7 @@ function placeDecor(
     const вещь = модель.clone();
     вещь.position.set(px, groundHeight(px, pz) + lift, pz);
     вещь.rotation.y = ry;
+    вещь.scale.setScalar(scale);
     вещь.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
@@ -2201,6 +2203,54 @@ export function buildTradeTent(scene: THREE.Scene): void {
 
 export function buildVillageForge(scene: THREE.Scene): void {
   placeDecor(scene, 'decor/village-forge.glb', VILLAGE_FORGE.x, VILLAGE_FORGE.z, VILLAGE_FORGE.lift, VILLAGE_FORGE.ry, 1.0);
+}
+
+// ── Руина ворот у дороги на столицу ──────────────────────────────
+//
+// Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не
+// доходя городских ворот. Проход сквозной (коллайдеры только на устоях),
+// механики дверей у неё нет и не нужно: рабочие створки стоят в самих
+// воротах, их не трогали. Фас проверен рендером: проём вдоль локальной Z.
+//
+// Масштаб 8: модель метрового обломка (0.98 × 0.74 × 0.94) становится аркой
+// 7.8 × 5.9 × 7.5 — в рост дороги, а не садовой аркой.
+export const RUIN_GATE = (() => {
+  const a = Math.atan2(-CITY.z, -CITY.x);
+  const dist = CITY.radius + 35;
+  const x = CITY.x + Math.cos(a) * dist;
+  const z = CITY.z + Math.sin(a) * dist;
+  return {
+    x,
+    z,
+    // Локальная +Z (ось проёма) ложится на радиус дороги.
+    ry: Math.atan2(Math.cos(a), Math.sin(a)),
+    scale: 8,
+  };
+})();
+
+export function buildRuinGate(scene: THREE.Scene): void {
+  const { x, z, ry, scale } = RUIN_GATE;
+  // Устои по бокам проёма: середина свободна, ворота проходные.
+  // Смещение ±3.0 в локальных X, повёрнутое на ry.
+  const бок = 3.0;
+  const dx = Math.sin(ry + Math.PI / 2) * бок;
+  const dz = Math.cos(ry + Math.PI / 2) * бок;
+  addCollider(x + dx, z + dz, 1.5);
+  addCollider(x - dx, z - dz, 1.5);
+  void loadDecorModel('decor/gate-ruin.glb').then((модель) => {
+    if (!модель) return;
+    const арка = модель.clone();
+    арка.position.set(x, groundHeight(x, z), z);
+    арка.rotation.y = ry;
+    арка.scale.setScalar(scale);
+    арка.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(арка);
+  });
 }
 // ── Города регионов ────────────────────────────────────────────────────
 //

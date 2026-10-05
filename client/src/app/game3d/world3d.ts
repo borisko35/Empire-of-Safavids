@@ -14,7 +14,7 @@ import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig
 import { loadRealPlayerRig } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
-  buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge,
+  buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -470,6 +470,8 @@ private roll = 0;
     // Шатёр в базарном квартале и кузница в деревне.
     buildTradeTent(this.scene);
     buildVillageForge(this.scene);
+    // Руина ворот поперёк южной дороги, не доходя городских ворот.
+    buildRuinGate(this.scene);
     const flame = this.scene.getObjectByName('campfire-flame');
     if (flame) {
       this.flames.push(flame as THREE.Mesh);
