@@ -311,6 +311,11 @@
       "file": "models/decor/ruin-court.glb",
       "name": "ruin-court",
       "bytes": 3560284
+    },
+    {
+      "file": "models/decor/oak.glb",
+      "name": "oak",
+      "bytes": 1508824
     }
   ],
   "weapons": [

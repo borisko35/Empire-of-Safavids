@@ -2249,6 +2249,39 @@ export function buildRuinChapel(scene: THREE.Scene): void {
 export function buildRuinCourt(scene: THREE.Scene): void {
   placeDecor(scene, 'decor/ruin-court.glb', RUIN_COURT.x, RUIN_COURT.z, 0, 0, 4, RUIN_COURT.scale);
 }
+// ── Дубы у лесной деревни ────────────────────────────────────────
+//
+// Десятый пакет из Assets (плюс кусты без текстур — пропущены: голая
+// низкополигонка ничего не добавляет к процедурным). Три hero-дуба вокруг
+// деревни, а не замена всего леса: лес — это рассеивание по маске, его
+// трогать нельзя. Площадки замерены: сухо, размах до 0.8, вне домов,
+// кузницы, аркады и полей. База модели на нуле — подъём не нужен.
+// Альфа листвы MASK: экспорт её не записал, проставлена в glb руками.
+export const OAKS = [
+  { x: -520, z: -420, ry: 0.4 },
+  { x: -515, z: -401, ry: 2.2 },
+  { x: -485, z: -435, ry: 4.1 },
+] as const;
+
+export function buildOaks(scene: THREE.Scene): void {
+  for (const дуб of OAKS) {
+    // Коллайдер только ствол (r = 1): крона висит выше роста.
+    addCollider(дуб.x, дуб.z, 1);
+    void loadDecorModel('decor/oak.glb').then((модель) => {
+      if (!модель) return;
+      const дерево = модель.clone();
+      дерево.position.set(дуб.x, groundHeight(дуб.x, дуб.z), дуб.z);
+      дерево.rotation.y = дуб.ry;
+      дерево.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(дерево);
+    });
+  }
+}
 // ── Руина ворот у дороги на столицу ──────────────────────────────
 //
 // Пятый пакет из Assets: замшелая каменная арка поперёк южной дороги, не
