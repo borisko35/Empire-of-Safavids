@@ -376,7 +376,7 @@ describe('Дворец: проходимость', () => {
     // с чужой стороны, где глухая меша.
     const блок = блокПоселений();
     must(
-      /addCollider\(PALACE\.x \+ wx, PALACE\.z \+ wallZ0, [\d.]+\);\s*\n\s*if \(Math\.abs\(wx\) >= GATE_W \/ 2\) addCollider/.test(
+      /addCollider\(PALACE\.x \+ wx, PALACE\.z \+ wallZ0, [\d.]+\);\s*\r?\n\s*if \(Math\.abs\(wx\) >= GATE_W \/ 2\) addCollider/.test(
         блок,
       ),
       'условие проёма ворот не привязано к южной стене: дыра появляется и в ' +
