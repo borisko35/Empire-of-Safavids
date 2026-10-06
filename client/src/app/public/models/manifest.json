@@ -374,6 +374,11 @@
       "file": "models/decor/statue.glb",
       "name": "statue",
       "bytes": 54952
+    },
+    {
+      "file": "models/decor/torch.glb",
+      "name": "torch",
+      "bytes": 274180
     }
   ],
   "weapons": [
