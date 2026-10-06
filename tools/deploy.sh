@@ -351,15 +351,24 @@ if [ "$TUNNEL" -eq 1 ]; then
   # запись в журнале о регистрации соединения с Cloudflare. Проверка, которая
   # может пройти при мёртвом туннеле, хуже её отсутствия: она снимает последний
   # рубеж и при этом создаёт видимость работы.
-  CF_LOG=$(docker logs "$CF_ID" 2>&1 | tail -40 | tr -d '\r')
-  if ! printf '%s' "$CF_LOG" | grep -q 'Registered tunnel connection'; then
+  #
+  # ИМЕННО ПО ВСЕМУ ЖУРНАЛУ, А НЕ ПО ХВОСТУ. Первая версия брала `tail -40` и
+  # остановила исправную выкатку на живой машине: туннель был подключён (4
+  # соединения), сайт отдавал 200, а строки регистрации лежали на 15, 18, 20 и
+  # 22 — после них cloudflared допечатал ещё двадцать строк проверок, и окно их
+  # выкинуло. Проверка, которая не может ПРОПУСТИТЬ живой туннель, хуже
+  # отсутствующей: она останавливает выкатку и приучает читателя, что «TUNNEL NE
+  # PODKLYUCHILSYA» — обычное дело, а значит её перестанут читать.
+  CF_LOG=$(docker logs "$CF_ID" 2>&1 | tr -d '\r')
+  CF_CONN=$(printf '%s' "$CF_LOG" | grep -c 'Registered tunnel connection' || true)
+  if [ "${CF_CONN:-0}" -lt 1 ]; then
     say ""
     say "  TUNNEL NE PODKLYUCHILSYA: v zhurnale net zapisi o registracii soedineniya."
     say "  Poslednie stroki zhurnala cloudflared:"
     printf '%s\n' "$CF_LOG" | tail -15 | sed 's/^/    /'
     stop "cloudflared is running but not connected: the site is unreachable outside"
   fi
-  say "  cloudflared zaregistriroval soedinenie s Cloudflare"
+  say "  cloudflared zaregistriroval soedinenie s Cloudflare: soedineniy $CF_CONN"
 fi
 
 say ""
