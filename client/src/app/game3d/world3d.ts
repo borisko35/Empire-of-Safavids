@@ -16,7 +16,7 @@ import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   buildSignposts, buildGameTable, buildCows, updateCows, buildBazaarStatue,
-buildCaravanseraiTorches,
+buildCaravanseraiTorches, buildVillageSwords,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -483,6 +483,8 @@ private roll = 0;
     buildBazaarStatue(this.scene);
     // Два факела у ворот караван-сарая: игрок проходит между ними внутрь.
     buildCaravanseraiTorches(this.scene);
+    // Два меча у кузницы деревни, воткнутые остриём в землю.
+    buildVillageSwords(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.

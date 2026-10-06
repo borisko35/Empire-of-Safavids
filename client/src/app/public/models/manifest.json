@@ -379,6 +379,11 @@
       "file": "models/decor/torch.glb",
       "name": "torch",
       "bytes": 274180
+    },
+    {
+      "file": "models/decor/sword.glb",
+      "name": "sword",
+      "bytes": 7892
     }
   ],
   "weapons": [
