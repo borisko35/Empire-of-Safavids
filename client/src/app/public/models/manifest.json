@@ -389,6 +389,11 @@
       "file": "models/decor/chest.glb",
       "name": "chest",
       "bytes": 1357180
+    },
+    {
+      "file": "models/decor/mosque.glb",
+      "name": "mosque",
+      "bytes": 1892044
     }
   ],
   "weapons": [

@@ -17,7 +17,7 @@ import {
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   buildSignposts, buildGameTable, buildCows, updateCows, buildBazaarStatue,
 buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
-  ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ,
+  ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ, buildMosqueCourtyard,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -508,6 +508,9 @@ private roll = 0;
     buildVillageSwords(this.scene);
     // Два сундука у шатра в базарном квартале.
     buildBazaarChests(this.scene);
+    // Двор мечети с куполом и минаретом: первое здание из шести, которому
+    // владелец велел достроить экстерьер.
+    buildMosqueCourtyard(this.scene);
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.
