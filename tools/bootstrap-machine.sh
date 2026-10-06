@@ -110,6 +110,51 @@ docker compose version >/dev/null 2>&1 \
   || die "the compose plugin is missing: `docker compose` does not work, and the whole deploy is written for it"
 say "  OK: $(docker --version), compose $(docker compose version --short 2>/dev/null || echo '?')"
 
+# ── Группа docker ───────────────────────────────────────────────────────────
+# БЫЛ БАГ, ИЗ-ЗА КОТОРОГО ПЕРЕЕЗД ОСТАНОВАЛСЯ. На AWS 10 октября 2026 скрипт
+# поставил Docker, рапортовал «OK» — и пошёл выкатывать, где compose ответил
+#   permission denied while trying to connect to the docker API
+#   at unix:///var/run/docker.sock
+#
+# Причина: установщик Docker добавляет пользователя в группу `docker`, но права
+# группы действуют ТОЛЬКО В НОВОЙ СЕССИИ. Переезд запускается по ssh, сессия
+# уже открыта — значит `usermod` отработал вхолостую, и `docker` остался
+# недоступен. На новой машине это воспроизводится всегда.
+#
+# Поэтому `docker --version` тут недостаточно: он читает файл и отвечает, а
+# не работает. Проверять надо `docker info` — он идёт к сокету по-настоящему.
+#
+# `usermod` без перезапуска скрипта не помогает, поэтому после правки группы
+# скрипт ПЕРЕЗАПУСКАЕТ СЕБЯ через `sg docker`. Это применяет новую группу к
+# текущей сессии, без выхода и входа по ssh.
+docker_usable() { docker info >/dev/null 2>&1; }
+
+if ! docker_usable; then
+  say "  docker is installed but NOT usable by the current user"
+  say "  this is the group problem: session rights apply only at login"
+  # Латиница в имени переменной — обязательно: оболочка читает файл в кодировке
+  # терминала, и кириллица в имени ломает разбор (см. deploy.sh).
+  if ! sudo usermod -aG docker "$(id -un)" 2>/dev/null; then
+    die "could not add $(id -un) to the docker group — see the error above"
+  fi
+  # Без этого предохранителя повторный запуск через sg зациклился бы: он и
+  # снова не был бы в группе, и снова перезапустил бы себя.
+  if [ "${EOS_DOCKER_REEXEC:-}" = "1" ]; then
+    die "still cannot talk to Docker after sg docker: check 'id' and the docker group"
+  fi
+  say "  added $(id -un) to the docker group; restarting the script in that group"
+  SCRIPT_ABS=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "")
+  [ -n "$SCRIPT_ABS" ] || die "could not resolve the script path for the restart"
+  if ! command -v sg >/dev/null 2>&1; then
+    say "  sg is missing (package util-linux). Log out and back in, then run:"
+    say "    bash $SCRIPT_ABS"
+    die "no way to apply the docker group to this session"
+  fi
+  export EOS_DOCKER_REEXEC=1
+  exec sg docker -c "bash '$SCRIPT_ABS'"
+fi
+say "  OK: docker works for the current user ($(id -un))"
+
 # ── 2. Репозиторий ─────────────────────────────────────────────────────────
 step "2. REPOZITORIY"
 

@@ -166,6 +166,29 @@ if command -v git >/dev/null 2>&1; then
   fi
 fi
 
+# ── 4. Docker вообще работает ─────────────────────────────────
+# БЫЛ НЕДОЧЁТ, ИЗ-ЗА КОТОРОГО ОШИБКА ВЫГЛЯДЕЛА НЕ ТАК, КАКАЯ ОНА БЫЛА.
+# 10 октября 2026 переезд на AWS остановился здесь:
+#   permission denied while trying to connect to the docker API
+#   at unix:///var/run/docker.sock
+# и deploy.sh обернул это в «контейнеры не перебрались». Настоящая причина —
+# пользователь не в группе `docker`: на новой машине установщик добавляет его
+# в группу, но права группы действуют только в НОВОЙ сессии, а переезд идёт по
+# уже открытой. Лечится перезаходом по ssh.
+#
+# Проверяется `docker info`, а не `docker --version`: версия читает файл и
+# отвечает всегда, а info идёт к сокету по-настоящему.
+if ! command -v docker >/dev/null 2>&1; then
+  problems+=("docker не найден в PATH — пересобирать нечем. На новой машине
+    сначала запустите: bash tools/bootstrap-machine.sh")
+elif ! docker info >/dev/null 2>&1; then
+  problems+=("docker есть, но не отвечает: permission denied ... /var/run/docker.sock
+    Пользователь не в группе docker, а права группы действуют только в НОВОЙ
+    сессии. Выйдите из ssh и зайдите снова, либо выполните:
+      sudo usermod -aG docker \$(id -un) && newgrp docker
+    Если выкатка идёт через tools/bootstrap-machine.sh, он поправит это сам.")
+fi
+
 # ── Итог ─────────────────────────────────────────────────────
 if [ ${#notes[@]} -gt 0 ]; then
   echo "Проверено:"
