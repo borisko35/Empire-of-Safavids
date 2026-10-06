@@ -142,6 +142,77 @@ export const GATE_Z = 24;
 /** Проём двери зала: 4.6 м. Ровно по ширине дверного полотна. */
 export const ПАЛАЦНЫЙ_ПРОЁМ = 4.6;
 
+// ── Таможенный двор ────────────────────────────────────────────────
+//
+// Продолжение заказа владельца «заполним здание экстерьером». Мечетный двор —
+// §63, дворец — §65, таможня — здесь.
+//
+// ГДЕ. Запись интерьера стоит в (-900, 800) с пометкой «Таможенный двор.
+// Западнее города: проверяет идущих снаружи внутрь». В мире по этой точке не
+// было НИЧЕГО: ни здания, ни ровнялки, ни двери — запись интерьера без дома.
+// Проверено замером соседей: ближайшая постройка, город Исфахан, в 1204 м, то
+// есть место свободно и ничего не пересекается.
+//
+// ПОЧЕМУ ПРИМИТИВЫ, А НЕ ГОТОВАЯ МОДЕЛЬ. Дворец собран из BoxGeometry, и это
+// оказалось правильным решением: таможня по смыслу состоит из стены, ворот,
+// навеса и ящиков, а подходящего пакета в Assets под неё нет. Мечетный двор
+// взят моделью потому, что она уже была разобрана и оказалась двором «вокруг».
+//
+// УРОВЕНЬ ПЛОЩАДКИ ВЫБРАН ЗАМЕРОМ, А НЕ НА ГЛАЗ. Место стоит на склоне: в
+// пределах 40 м перепад 2.05 м, в 60 м уже 3.57 м. По габариту 26 x 24 собрано
+// 1155 точек высоты: минимум -0.05, максимум 1.45, среднее 0.39, медиана 0.23.
+// Уровень 0.2 м даёт минимум суммы «срез плюс засыпка» — 270.5 против 320.8 у
+// 0.4 и 454.7 у 0.0, то есть ровно медиана, как и должно быть. Срез в склон
+// выглядит естественно, засыпка — цоколь с видимым краем, поэтому уровень и не
+// занижался: при 0.2 срез до 1.25 м и засыпка до 0.25 м. Замером же подтверждено
+// после постройки: дверь и точка выхода ровно 0.2000, отклонение 0.0000.
+//
+// РАДИУС 46. Ровная часть ровнялки — это 55 процентов радиуса, см. комментарий
+// к flatten в terrainHeight. Построенный габарит 26 x 24 м с выступами башен
+// требует полудиагонали 23.3 м, и 46 * 0.55 = 25.3 м, то есть запас 2.0 м.
+// Перебором проверено: 42 не хватает (23.1 м), 44 проходит впритык, 46 даёт
+// запас, который держит даже угол ячейки рельефа в 14.11 м.
+export const CUSTOMS = { x: -900, z: 800, radius: 46, level: 0.2 };
+
+// ── Габариты таможни ───────────────────────────────────────────────
+//
+// Всё в МЕТРАХ и в МЕСТНЫХ координатах группы. Начало координат — линия двери,
+// а не центр площадки. Это противоположно дворцу, где начало — центр: у
+// дворца точка выхода задана в данных как (620, -296), то есть в четырёх
+// метрах от двери, и начало координат пришлось сдвинуть назад. Здесь в данных
+// (-900, 800) — это сама дверь, а выход (-900, 804) — четыре метра дальше по
+// плюс z. Ставить начало в дверь значит не сдвигать ничего и не ошибиться на
+// метр, как у дворца.
+export const CUSTOMS_GEO = {
+  /** Стена комплекса: 26 м в ширину, высота 5 м, толщина 0.6 м. */
+  wall: { w: 26, h: 5.0, t: 0.6 },
+  /** Ворота: 4.2 м в проёме, 4.6 м в высоту. Проезд для каравана. */
+  gate: { w: 4.2, h: 4.6 },
+  /** Таможенный дом: 14 x 10, стены 6.2 м. В нём дверь. */
+  house: { w: 14, d: 10, h: 6.2, t: 0.5 },
+  /** Будка караула у ворот: 3.2 x 3.2, высота 3 м. */
+  booth: { w: 3.2, d: 3.2, h: 3.0 },
+} as const;
+
+/** Местная линия задней стены дома. Дом стоит от неё до нуля. */
+export const ТАМОЖНЯ_ЗАДНЯЯ_Z = -CUSTOMS_GEO.house.d;
+
+/**
+ * Местная линия стены с воротами. Проём посередине.
+ *
+ * 14, А НЕ 10. При 10 двор от двери до ворот был бы 10 м, а навес досмотра
+ * занимает 6 м из них: проход мимо стола сужался бы до двух метров, и караван
+ * застрял бы на въезде. 14 даёт двор 14 м, из которых 6 под навес и 8 чистых.
+ */
+export const ТАМОЖНЯ_ВОРОТА_Z = 14;
+
+/** Проём двери дома: 2.4 м. Узко для каравана, но это дверь, а не ворота. */
+export const ТАМОЖЕННЫЙ_ПРОЁМ = 2.4;
+
+/** Плита двора: толщина и подъём над землёй. Подъём 4 см — почти вровень. */
+export const ТАМОЖЕННЫЙ_ДВОР = { t: 0.2, подъём: 0.04 };
+
+
 /**
  * Пиштак — парадный портал зала: 12 м в ширину, 15 м в высоту, выступает на
  * 2.6 м.
@@ -366,6 +437,10 @@ export function terrainHeight(x: number, z: number): number {
   // Что из этого следует на будущее: НОВУЮ ПЛОЩАДКУ СТАВИТЬ ТОЛЬКО СЮДА.
   // Строка выше залива — место, где площадка проигрывает молча.
   h = flatten(h, x, z, PALACE.x, PALACE.z, PALACE.radius, PALACE.level);
+  // Таможенный двор. ПОСЛЕ залива — см. правило выше. Уровень 0.2 и радиус 46
+  // выбраны замером: медиана высот по габариту и перебор радиусов против
+  // полудиагонали. Подробности у самого объявления CUSTOMS.
+  h = flatten(h, x, z, CUSTOMS.x, CUSTOMS.z, CUSTOMS.radius, CUSTOMS.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -2573,6 +2648,360 @@ export function buildSettlements(scene: THREE.Scene): void {
 
     scene.add(g);
   }
+
+    // ── Таможенный двор ────────────────────────────────────────────
+    //
+    // Третий по счёту экстерьер по заказу «заполним здание экстерьером».
+    // Мечетный двор — §63, дворец — §65.
+    //
+    // ЧТО ЭТО. Запись интерьера «Таможенный двор. Западнее города: проверяет
+    // идущих снаружи внутрь» существовала без дома: по точке (-900, 800) не
+    // стояло ничего. Собрано то, что заявлено смыслом записи:
+    //
+    //   стена комплекса с воротами посередине (+z) — въезд снаружи;
+    //   двор за воротами — то место, где досматривают;
+    //   навес на четырёх столбах и стол под ним — «стол с документами», он же
+    //     предмет в интерьере таможни, и двор теперь объясняет, откуда он;
+    //   будка караула у ворот;
+    //   дом с дверью в глубине — вход в интерьер.
+    //
+    // ПОЧЕМУ ВОРОТА НА +z. Точка выхода в данных — (-900, 804), то есть на
+    // четыре метра больше z двери (-900, 800). Значит игрок выходит наружу в
+    // сторону плюс z, и ворота должны быть с этой стороны: иначе он появился бы
+    // за глухой стеной. Начало местных координат — сама линия двери, поэтому
+    // дверь стоит в нуле, двор тянется от нуля до ворот, а дом уходит в
+    // минус.
+    {
+      const {
+        wall: { w: WALL_W, h: WALL_H, t: WALL_T },
+        gate: { w: GATE_W, h: GATE_H },
+        house: { w: HOUSE_W, d: HOUSE_D, h: HOUSE_H, t: HOUSE_T },
+        booth: { w: BOOTH_W, d: BOOTH_D, h: BOOTH_H },
+      } = CUSTOMS_GEO;
+      const zBack = ТАМОЖНЯ_ЗАДНЯЯ_Z;
+      const zGate = ТАМОЖНЯ_ВОРОТА_Z;
+
+      const g = new THREE.Group();
+      g.position.set(CUSTOMS.x, CUSTOMS.level, CUSTOMS.z);
+
+      // Плита двора. От линии двери до ворот, почти вровень с землёй: подъём
+      // 4 см — это читается как мощение, а не как цоколь. Толщина 0.2 м.
+      const court = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_W - WALL_T, ТАМОЖЕННЫЙ_ДВОР.t, zGate),
+        MAT.sand,
+      );
+      court.position.set(0, ТАМОЖЕННЫЙ_ДВОР.подъём - ТАМОЖЕННЫЙ_ДВОР.t / 2, zGate / 2);
+      court.receiveShadow = true;
+      g.add(court);
+
+      // ── Стены комплекса ──
+      // Боковые — сплошные, от задней стены дома до ворот.
+      for (const s of [-1, 1] as const) {
+        const w = new THREE.Mesh(
+          new THREE.BoxGeometry(WALL_T, WALL_H, zGate - zBack),
+          MAT.sandstoneDark,
+        );
+        w.position.set(s * (WALL_W / 2 - WALL_T / 2), WALL_H / 2, (zBack + zGate) / 2);
+        w.castShadow = true;
+        w.receiveShadow = true;
+        g.add(w);
+      }
+      // Передняя стена — двумя полотнами, проём посередине это ворота.
+      const seg = (WALL_W - WALL_T * 2 - GATE_W) / 2;
+      for (const s of [-1, 1] as const) {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(seg, WALL_H, WALL_T), MAT.sandstoneDark);
+        w.position.set(
+          s * (GATE_W / 2 + seg / 2),
+          WALL_H / 2,
+          zGate - WALL_T / 2,
+        );
+        w.castShadow = true;
+        w.receiveShadow = true;
+        g.add(w);
+      }
+      // Перемычка над воротами — проём закрыт сверху, иначе ворота читались бы
+      // как дыра в стене до самого верха.
+      const lintel = new THREE.Mesh(
+        new THREE.BoxGeometry(GATE_W, WALL_H - GATE_H, WALL_T),
+        MAT.sandstoneDark,
+      );
+      lintel.position.set(0, GATE_H + (WALL_H - GATE_H) / 2, zGate - WALL_T / 2);
+      lintel.castShadow = true;
+      g.add(lintel);
+
+      // ── Столбы ворот ──
+      // По одному с каждой стороны проёма, на 0.4 м шире стены: они держат
+      // перемычку и читаются как въезд, а не как прореха.
+      for (const s of [-1, 1] as const) {
+        const pier = new THREE.Mesh(
+          new THREE.BoxGeometry(0.9, GATE_H + 1.2, WALL_T + 0.7),
+          MAT.sandstone,
+        );
+        pier.position.set(s * (GATE_W / 2 + 0.45), (GATE_H + 1.2) / 2, zGate - WALL_T / 2);
+        pier.castShadow = true;
+        g.add(pier);
+      }
+      // Угловые башни — по четыре, квадратные в плане, как у городской стены.
+      for (const [tx, tz] of [
+        [-WALL_W / 2, zBack], [WALL_W / 2, zBack],
+        [-WALL_W / 2, zGate], [WALL_W / 2, zGate],
+      ] as const) {
+        const t2 = new THREE.Mesh(new THREE.BoxGeometry(2.6, WALL_H + 1.8, 2.6), MAT.sandstone);
+        t2.position.set(tx, (WALL_H + 1.8) / 2, tz);
+        t2.castShadow = true;
+        t2.receiveShadow = true;
+        g.add(t2);
+        // Зубцы по краю — башня должна читаться как башня.
+        for (let i = 0; i < 4; i++) {
+          const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), MAT.sandstoneDark);
+          const a = (i * Math.PI) / 2 + Math.PI / 4;
+          merlon.position.set(tx + Math.cos(a) * 0.95, WALL_H + 2.1, tz + Math.sin(a) * 0.95);
+          g.add(merlon);
+        }
+      }
+
+      // ── Таможенный дом ──
+      // Стена сплошная с трёх сторон, четвёртая — с проёмом двери. Крыша плоская
+      // с бортиком: дом служебный, и башня на нём была бы враньём.
+      for (const [hx, hz, hw, hd] of [
+        [0, zBack + HOUSE_T / 2, HOUSE_W, HOUSE_T],
+        [-HOUSE_W / 2 + HOUSE_T / 2, zBack + HOUSE_D / 2, HOUSE_T, HOUSE_D],
+        [HOUSE_W / 2 - HOUSE_T / 2, zBack + HOUSE_D / 2, HOUSE_T, HOUSE_D],
+      ] as const) {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(hw, HOUSE_H, hd), MAT.sandstone);
+        w.position.set(hx, HOUSE_H / 2, hz);
+        w.castShadow = true;
+        w.receiveShadow = true;
+        g.add(w);
+      }
+      // Передняя стена — двумя полотнами по бокам проёма.
+      const hSeg = (HOUSE_W - ТАМОЖЕННЫЙ_ПРОЁМ) / 2;
+      for (const s of [-1, 1] as const) {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(hSeg, HOUSE_H, HOUSE_T), MAT.sandstone);
+        w.position.set(s * (ТАМОЖЕННЫЙ_ПРОЁМ / 2 + hSeg / 2), HOUSE_H / 2, HOUSE_T / 2);
+        w.castShadow = true;
+        w.receiveShadow = true;
+        g.add(w);
+      }
+      // Перемычка над дверью.
+      const hLintel = new THREE.Mesh(
+        new THREE.BoxGeometry(ТАМОЖЕННЫЙ_ПРОЁМ, HOUSE_H - 3.4, HOUSE_T),
+        MAT.sandstone,
+      );
+      hLintel.position.set(0, 3.4 + (HOUSE_H - 3.4) / 2, HOUSE_T / 2);
+      g.add(hLintel);
+      // Крыша и бортик по периметру.
+      const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(HOUSE_W + 0.5, 0.4, HOUSE_D + 0.5),
+        MAT.sandstoneDark,
+      );
+      roof.position.set(0, HOUSE_H + 0.2, zBack + HOUSE_D / 2);
+      roof.castShadow = true;
+      g.add(roof);
+      for (const [bx, bz, bw, bd] of [
+        [0, zBack + 0.2, HOUSE_W + 0.7, 0.4],
+        [0, zBack + HOUSE_D - 0.2, HOUSE_W + 0.7, 0.4],
+        [-HOUSE_W / 2 + 0.2, zBack + HOUSE_D / 2, 0.4, HOUSE_D + 0.7],
+        [HOUSE_W / 2 - 0.2, zBack + HOUSE_D / 2, 0.4, HOUSE_D + 0.7],
+      ] as const) {
+        const par = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.7, bd), MAT.sandstoneDark);
+        par.position.set(bx, HOUSE_H + 0.75, bz);
+        g.add(par);
+      }
+
+      // Дверь. Лицо в плоскости стены плюс половина толщины: игрок выходит
+      // в (-900, 804), то есть на четыре метра впереди, и должен оказаться
+      // перед дверью, а не внутри её полотна.
+      const door = new THREE.Mesh(
+        new THREE.BoxGeometry(ТАМОЖЕННЫЙ_ПРОЁМ, 3.4, 0.3),
+        MAT.wood,
+      );
+      door.position.set(0, 1.7, HOUSE_T / 2 + 0.15);
+      door.userData = {
+        doorBuilding: 'customs',
+        doorAction: 'enter',
+        doorName: t('buildings.customs'),
+      };
+      g.add(door);
+      // Тёмная заглушка в проёме. Без неё сквозь дверной проём видно небо:
+      // зала снаружи нет, и дверь читалась бы как дыра в стене.
+      const jamb = new THREE.Mesh(
+        new THREE.BoxGeometry(ТАМОЖЕННЫЙ_ПРОЁМ, 3.4, 0.25),
+        MAT.dark,
+      );
+      jamb.position.set(0, 1.7, -0.12);
+      g.add(jamb);
+      // Наличник и клин над дверью — вход виден издалека, а это дорога, мимо
+      // которой едут.
+      const casing = new THREE.Mesh(
+        new THREE.BoxGeometry(ТАМОЖЕННЫЙ_ПРОЁМ + 0.7, 0.35, HOUSE_T + 0.35),
+        MAT.sandstoneDark,
+      );
+      casing.position.set(0, 3.55, HOUSE_T / 2);
+      g.add(casing);
+
+      // ── Навес досмотра ──
+      // Четыре столба и плоская кровля над столом. Без него двор читается как
+      // пустая площадка между стеной и домом.
+      //
+      // ПОЗИЦИЯ ВЫБРАНА ПРОХОДОМ, А НЕ СИММЕТРИЕЙ. Навес стоит у ворот, а не
+      // посередине двора: посередине он перекрыл бы проход от ворот к двери, и
+      // караван встал бы под крышей вместо того, чтобы въехать. Столы стоят
+      // сбоку от оси проезда, а проезд остаётся свободным.
+      const CANOPY_W = 7.0;
+      const CANOPY_D = 6.0;
+      const CANOPY_H = 3.2;
+      const canopyZ = zGate - CANOPY_D / 2 - 1.5;
+      // Столы — по краям навеса, ось проезда между ними свободна.
+      for (const s of [-1, 1] as const) {
+        const cx = s * (CANOPY_W / 2 - 1.1);
+        for (const sz of [-1, 1] as const) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, CANOPY_H, 0.3), MAT.wood);
+          post.position.set(
+            cx + sz * (CANOPY_D / 2 - 0.4),
+            CANOPY_H / 2,
+            canopyZ + sz * (CANOPY_D / 2 - 0.4),
+          );
+          post.castShadow = true;
+          g.add(post);
+        }
+        // Стол досмотра под навесом: длинная доска на двух чурках.
+        const table = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 2.6), MAT.wood);
+        table.position.set(cx, 0.95, canopyZ);
+        table.castShadow = true;
+        g.add(table);
+        for (const sz of [-1, 1] as const) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 0.16), MAT.wood);
+          leg.position.set(cx, 0.45, canopyZ + sz * 1.0);
+          g.add(leg);
+        }
+        // Свитки и ящик на столе — то самое, что лежит в интерьере.
+        const scroll = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.7), MAT.sand);
+        scroll.position.set(cx + 0.3, 1.16, canopyZ - 0.6);
+        g.add(scroll);
+      }
+      const canopy = new THREE.Mesh(
+        new THREE.BoxGeometry(CANOPY_W, 0.18, CANOPY_D),
+        MAT.wood,
+      );
+      canopy.position.set(0, CANOPY_H + 0.09, canopyZ);
+      canopy.castShadow = true;
+      g.add(canopy);
+      // Черепица узкой полосой по кровле — «навес», а не «крыша».
+      const tiles = new THREE.Mesh(
+        new THREE.BoxGeometry(CANOPY_W + 0.4, 0.12, CANOPY_D + 0.4),
+        MAT.sandstoneDark,
+      );
+      tiles.position.set(0, CANOPY_H + 0.24, canopyZ);
+      g.add(tiles);
+
+      // ── Будка караула ──
+      // Справа от ворот, внутри. Стоит на плите двора, поэтому подъём площадки
+      // и не подъём будки совпадают.
+      const boothX = WALL_W / 2 - BOOTH_W / 2 - 2.2;
+      const boothZ = zGate - BOOTH_D / 2 - 1.6;
+      for (const [bx, bz, bw, bd] of [
+        [boothX, boothZ - BOOTH_D / 2, BOOTH_W, 0.3],
+        [boothX - BOOTH_W / 2, boothZ, 0.3, BOOTH_D],
+        [boothX + BOOTH_W / 2, boothZ, 0.3, BOOTH_D],
+      ] as const) {
+        const w = new THREE.Mesh(new THREE.BoxGeometry(bw, BOOTH_H, bd), MAT.sandstone);
+        w.position.set(bx, BOOTH_H / 2, bz);
+        w.castShadow = true;
+        w.receiveShadow = true;
+        g.add(w);
+      }
+      const boothRoof = new THREE.Mesh(
+        new THREE.BoxGeometry(BOOTH_W + 0.6, 0.22, BOOTH_D + 0.6),
+        MAT.wood,
+      );
+      boothRoof.position.set(boothX, BOOTH_H + 0.11, boothZ);
+      boothRoof.castShadow = true;
+      g.add(boothRoof);
+
+      // ── Конфискованный груз ──
+      // Ящики у будки. Это причина, по которой таможня вообще нужна, и без них
+      // двор читается как пустая площадка.
+      const CRATES: [number, number, number][] = [
+        [-8.5, zGate - 3.0, 1.0],
+        [-7.2, zGate - 3.4, 0.8],
+        [-8.2, zGate - 4.4, 0.9],
+        [8.6, zGate - 6.2, 1.1],
+        [7.2, zGate - 6.6, 0.85],
+      ];
+      for (const [cx, cz, cs] of CRATES) {
+        const crate = new THREE.Mesh(
+          new THREE.BoxGeometry(cs, cs, cs),
+          MAT.wood,
+        );
+        crate.position.set(cx, cs / 2, cz);
+        crate.castShadow = true;
+        crate.receiveShadow = true;
+        g.add(crate);
+      }
+      // Бочка у стены — круглая, чтобы силуэт читался разнообразным.
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.45, 0.45, 1.0, 12),
+        MAT.wood,
+      );
+      barrel.position.set(-WALL_W / 2 + 1.4, 0.5, zGate - 2.2);
+      barrel.castShadow = true;
+      g.add(barrel);
+
+      // ── Коллайдеры ──
+      // Цепочкой мелких кругов по 2 м, а не одним кругом на стену: крупный
+      // круг держал бы игрока в метрах от проёма, и войти было бы нельзя.
+      // Проём оставлен ТОЛЬКО в воротах на плюс z.
+      for (let wx = -WALL_W / 2; wx <= WALL_W / 2; wx += 2) {
+        // Задняя стена сплошная, проём только в воротах.
+        addCollider(CUSTOMS.x + wx, CUSTOMS.z + zBack, 1.2);
+        if (Math.abs(wx) >= GATE_W / 2) {
+          addCollider(CUSTOMS.x + wx, CUSTOMS.z + zGate - WALL_T / 2, 1.2);
+        }
+      }
+      for (let wz = zBack; wz <= zGate; wz += 2) {
+        addCollider(CUSTOMS.x - WALL_W / 2, CUSTOMS.z + wz, 1.2);
+        addCollider(CUSTOMS.x + WALL_W / 2, CUSTOMS.z + wz, 1.2);
+      }
+      // Угловые башни — сплошные.
+      for (const [tx, tz] of [
+        [-WALL_W / 2, zBack], [WALL_W / 2, zBack],
+        [-WALL_W / 2, zGate], [WALL_W / 2, zGate],
+      ] as const) {
+        addCollider(CUSTOMS.x + tx, CUSTOMS.z + tz, 2.2);
+      }
+      // Столбы ворот коллайдерами НЕ перекрываются, и это не упущение.
+      // Столб стоит на местных от 2.1 до 3.0, то есть ровно там, где уже лежит
+      // стена, и стена закрыта коллайдером на |wx| = 3. Отдельный круг радиусом
+      // 1.0 заходил в проём на 0.55 м с каждой стороны и сужал свободную полосу
+      // игрока с 1.6 м до 1.1 м. Геометрия столба нужна, чтобы он держал
+      // перемычку; коллайдер от него только мешал.
+      // Дом: три глухие стены сплошной цепочкой, передняя — с проёмом двери.
+      //
+      // ПОЧЕМУ ПЕРЕДНИЙ РЯД ПРОПУСКАЕТ |wx| < 1.6. Без этого игрок подойдёт к
+      // стене вплотную и не сможет её кликнуть, то есть не сможет войти.
+      // Ровно та же причина, по которой у караван-сарая убран коллайдер в
+      // середине ворот.
+      for (let wx = -HOUSE_W / 2; wx <= HOUSE_W / 2; wx += 2) {
+        addCollider(CUSTOMS.x + wx, CUSTOMS.z + zBack + HOUSE_T / 2, 1.2);
+        if (Math.abs(wx) >= ТАМОЖЕННЫЙ_ПРОЁМ / 2 + 1.6) {
+          addCollider(CUSTOMS.x + wx, CUSTOMS.z + HOUSE_T / 2, 1.2);
+        }
+      }
+      for (let wz = zBack + HOUSE_T; wz <= HOUSE_T; wz += 2) {
+        addCollider(CUSTOMS.x - HOUSE_W / 2 + HOUSE_T / 2, CUSTOMS.z + wz, 1.2);
+        addCollider(CUSTOMS.x + HOUSE_W / 2 - HOUSE_T / 2, CUSTOMS.z + wz, 1.2);
+      }
+      // Будка — сплошная: это глухая коробка 3.2 м, войти туда не надо.
+      addCollider(CUSTOMS.x + boothX, CUSTOMS.z + boothZ, 2.4);
+      // Ящики: по одному кругу на ящик, иначе игрок проходил бы сквозь груз.
+      for (const [cx, cz, cs] of CRATES) {
+        addCollider(CUSTOMS.x + cx, CUSTOMS.z + cz, cs * 0.8);
+      }
+      addCollider(CUSTOMS.x + barrel.position.x, CUSTOMS.z + barrel.position.z, 0.7);
+
+      scene.add(g);
+    }
 }
 
 
@@ -3838,6 +4267,7 @@ export function buildRegionTowns(scene: THREE.Scene): void {
 
     scene.add(g);
   }
+
 }
 
 /**
