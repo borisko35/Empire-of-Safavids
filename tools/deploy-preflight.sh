@@ -63,8 +63,31 @@ fi
 # ── 2. В файле все нужные переменные ─────────────────────────
 # Пустое значение — не ошибка: так помечается выключенный вход.
 # Значит проверяем, что переменная ПРИСУТСТВУЕТ, а не что она не пуста.
-REQUIRED="POSTGRES_PASSWORD JWT_SECRET CLIENT_ORIGIN DOMAIN DB_NAME DB_USER"
-OPTIONAL="GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET FACEBOOK_CLIENT_ID FACEBOOK_CLIENT_SECRET"
+#
+# СПИСОК ОБЯЗАТЕЛЬНЫХ БЕРЁТСЯ ИЗ COMPOSE, А НЕ ПЕРЕЧИСЛЕН ЗДЕСЬ.
+# Compose различает два вида подстановок:
+#   ${VAR:?текст}  — без VAR контейнер НЕ СТАРТУЕТ, переменная обязательна;
+#   ${VAR:-знач}   — есть значение по умолчанию, переменную можно не задавать.
+# Список, выписанный руками, разошёлся с compose молча: требовались DB_NAME и
+# DB_USER, у которых в compose значения по умолчанию
+# (`${DB_NAME:-empire_of_safavids}`), и такую РАБОЧУЮ конфигурацию проверка
+# объявляла неполной. Теперь обязательным считается ровно то, на что compose
+# сам ставит `:?`.
+COMPOSE="deploy/docker-compose.prod.yml"
+REQUIRED=""
+if [ -f "$COMPOSE" ]; then
+  REQUIRED=$(grep -o '\${[A-Z_][A-Z0-9_]*:?' "$COMPOSE" | sed 's/^\${//; s/:?$//' | sort -u | tr '\n' ' ')
+fi
+if [ -z "${REQUIRED// /}" ]; then
+  # Файл compose не найден или в нём нет ни одной обязательной подстановки.
+  # Молча пропускать проверку нельзя: она стала бы проверкой пустоты.
+  REQUIRED="POSTGRES_PASSWORD JWT_SECRET DOMAIN"
+  notes+=("Список обязательных переменных не выведен из $COMPOSE — берётся запасной список")
+fi
+# Туннель проверяется отдельно и только когда он используется: его
+# CLOUDFLARE_TUNNEL_TOKEN compose сам требует через `:?`, и подставлять его
+# в общий список нельзя — на VPS без туннеля переменной нет и не нужно.
+OPTIONAL="DB_NAME DB_USER CLIENT_ORIGIN TRUST_PROXY_HOPS GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET FACEBOOK_CLIENT_ID FACEBOOK_CLIENT_SECRET"
 
 if [ -f "$ENV_FILE" ]; then
   missing=""
@@ -87,23 +110,53 @@ if [ -f "$ENV_FILE" ]; then
     fi
   done
 
-  # Права: секрет должен быть доступен только владельцу
-  perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo '?')"
-  if [ "$perms" != "600" ] && [ "$perms" != "400" ]; then
-    notes+=("права на $ENV_FILE — $perms. Рекомендуется 600: chmod 600 $ENV_FILE")
-  fi
+  # Права: секрет должен быть доступен только владельцу.
+  #
+  # СОВЕТ ПРО chmod 600 НА WINDOWS БЕСПОЛЕЗЕН. В Git Bash `stat -c %a` показывает
+  # 644 для любого файла, потому что прав POSIX у NTFS нет, а `chmod` там
+  # ничего не меняет. Советовать владельцу chmod на его же машине — значит
+  # отправить его искать несуществующую проблему. Поэтому на Windows говорим
+  # правду: секрет защищён учётной записью, отдельных прав у файла нет.
+  uname_s="$(uname -s 2>/dev/null || echo '?')"
+  case "$uname_s" in
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      notes+=("Windows: POSIX-прав у файла нет, deploy/.env защищён учётной записью. chmod здесь не нужен")
+      ;;
+    *)
+      perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo '?')"
+      if [ "$perms" != "600" ] && [ "$perms" != "400" ]; then
+        notes+=("права на $ENV_FILE — $perms. Рекомендуется 600: chmod 600 $ENV_FILE")
+      fi
+      ;;
+  esac
 fi
 
 # ── 3. Куда наведён git ───────────────────────────────────────
 # Главная причина сегодняшней потери. Если репозиторий указывает не
 # туда, любая команда git бьёт не по игре.
+#
+# СРАВНИВАЕТСЯ ПО ПРИВЕДЁННОМУ ВИДУ. Оболочка и git показывают одно и то же
+# место по-разному: в Git Bash `pwd -P` даёт `/d/My Projects/Empire of Sefevids`,
+# а git (он windows-бинарник) отдаёт `D:/My Projects/Empire of Sefevids`. Это
+# один и тот же путь, и проверка объявляла его РАЗНЫМИ — то есть останавливала
+# выкатку на заведомо правильной папке.
+canon() {
+  local p="$1"
+  # cygpath -m переводит путь MSYS в смешанный вид `D:/...`. На Linux его нет,
+  # и путь остаётся как есть — там обе стороны и так в одном формате.
+  if command -v cygpath >/dev/null 2>&1; then
+    p="$(cygpath -m "$p" 2>/dev/null || echo "$p")"
+  fi
+  # Регистр не различаем: в Windows он не значим, и git иногда пишет букву
+  # диска в другом регистре. Хвостовой слеш тоже: он не часть пути.
+  printf '%s' "$p" | tr 'A-Z' 'a-z' | tr '\\' '/' | sed 's#/*$##'
+}
+
 if command -v git >/dev/null 2>&1; then
   if [ -d .git ] || [ -f .git ]; then
     top="$(git rev-parse --show-toplevel 2>/dev/null || echo '?')"
-    # Сравниваем по канонизированному пути: оболочка и git иногда
-    # показывают одно и то же место по-разному.
     here="$(cd "$ROOT" && pwd -P)"
-    if [ "$top" = "$here" ]; then
+    if [ "$(canon "$top")" = "$(canon "$here")" ]; then
       notes+=("git наведён правильно: $top")
     else
       problems+=("git наведён на '$top', а папка игры — '$here'.

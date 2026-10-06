@@ -48,8 +48,20 @@ describe('Сторож выкатки: проверяет до пересбор�
   });
 
   it('обязательные и необязательные переменные разделены', () => {
-    expect(guard).toMatch(/REQUIRED="POSTGRES_PASSWORD JWT_SECRET CLIENT_ORIGIN DOMAIN DB_NAME DB_USER"/);
-    expect(guard).toMatch(/OPTIONAL="GOOGLE_CLIENT_ID/);
+    // ПРЕЖНЯЯ ПРОВЕРКА ТРЕБОВАЛА БУКВАЛЬНОЙ СТРОКИ
+    //   REQUIRED="POSTGRES_PASSWORD JWT_SECRET CLIENT_ORIGIN DOMAIN DB_NAME DB_USER"
+    // то есть ЗАКРЕПЛЯЛА ОШИБКУ: DB_NAME и DB_USER в compose имеют значения
+    // по умолчанию (`${DB_NAME:-empire_of_safavids}`), и требование этих
+    // переменных объявляло рабочую конфигурацию неполной. На этой машине
+    // предварительная проверка из-за этого останавливала каждую выкатку.
+    //
+    // Теперь обязательным считается ровно то, на что compose ставит `:?`.
+    // Проверяется и вывод списка из compose, и отсутствие прежней строки.
+    expect(guard).toMatch(/REQUIRED=""/);
+    expect(guard).toMatch(/docker-compose\.prod\.yml/);
+    expect(guard).toMatch(/OPTIONAL="DB_NAME DB_USER/);
+    expect(guard).not.toMatch(/REQUIRED="[^"]*\bDB_NAME\b/);
+    expect(guard).not.toMatch(/REQUIRED="[^"]*\bDB_USER\b/);
   });
 
   it('пустой секрет провайдера — предупреждение, не ошибка', () => {
@@ -69,7 +81,14 @@ describe('Сторож выкатки: ловит неверный git', () => {
     // сервера, а не в папку игры; из-за этого сброс выписал копию
     // проекта не туда, а команда pull тянула бы не то
     expect(guard).toMatch(/git rev-parse --show-toplevel/);
-    expect(guard).toMatch(/--show-toplevel -ne|\[ "\$top" = "\$here" \]/);
+    // ПРЕЖНЕЕ ТРЕБОВАНИЕ `[ "$top" = "$here" ]` ЗАКРЕПЛЯЛО ОШИБКУ: в Git Bash
+    // `pwd -P` даёт `/d/My Projects/...`, а git — `D:/My Projects/...`, то
+    // есть один и тот же каталог сравнивался как два разных, и проверка
+    // останавливала выкатку на заведомо правильной папке. Теперь сравнение
+    // идёт через приведение пути, и требуется именно ВЫЗОВ этого приведения.
+    expect(guard).toMatch(/canon "\$top"/);
+    expect(guard).toMatch(/canon "\$here"/);
+    expect(guard).toMatch(/cygpath -m/);
   });
 
   it('сравнивает канонизированные пути, а не строки', () => {

@@ -35,23 +35,36 @@ describe('Выкатка не может отрапортовать об усп�
     const п = join(корень, 'tools/deploy.sh');
     must(existsSync(п), 'нет tools/deploy.sh');
     const код = читать('tools/deploy.sh');
-    // Ключевое: pull идёт БЕЗ пайпа, и код возврата проверяется явно.
-    // Регулярка требует, чтобы после pull шла проверка кода - иначе скрипт
-    // повторит ровно ту ошибку, ради которой написан.
-    const pull = /git pull --ff-only origin main\s*>\/tmp\/deploy-pull\.log 2>&1\s*\n\s*KOD=\$\?/;
+    // ЧТО ИЗМЕНИЛОСЬ И ПОЧЕМУ ПРЕЖНЯЯ ПРОВЕРКА БОЛЬШЕ НЕ ГОДИТСЯ.
+    // Прежняя требовала `git pull --ff-only ... > log` сразу за `KOD=$?`.
+    // Эта связка появилась 30 сентября на VPS, где код приезжал с origin.
+    // Сейчас игра крутится на домашней машине, репозиторий ЗДЕСЬ и есть
+    // источник сборки: pull не нужен и вреден (он откажется на
+    // незакоммиченных файлах). Прежняя проверка требовала возврата вещи,
+    // которая ломает выкатку, — и от неё надо было избавиться, а не от
+    // самой идеи «код возврата проверяется явно».
+    //
+    // Смысл сохранён: код возврата снимается напрямую и ПУСТАЯ выкатка
+    // запрещена. «Пустой» теперь означает другое: не «коммит не сдвинулся»,
+    // а «локальный код разошёлся с запушенным».
+    const строкаСборки = код.split('\n').find((с) => с.includes('up -d --force-recreate --build'));
     expect({
-      // Пайпа нет: вывод уходит в файл, а не в пайп.
-      pull_bez_pajpa: pull.test(код),
-      // И код проверяется ДО любых других действий.
-      proverka_koda: /if \[ "\$KOD" -ne 0 \]/.test(код),
-      // И пустая выкатка запрещена: если коммит не сдвинулся, стоп.
-      proverka_kega_sdvinulsya: /= "\$posle" \]/.test(код),
+      // Пайпа нет: команда пересборки не идёт через пайп, иначе код
+      // возврата возьмётся у последней команды пайпа, то есть будет ноль.
+      sborka_bez_pajpa: строкаСборки !== undefined && !строкаСборки.includes('|'),
+      // И код проверяется явно.
+      proverka_koda: /KOD_BUILD=\$\?/.test(код) && /if \[ "\$KOD_BUILD" -ne 0 \]/.test(код),
+      // И пустая выкатка запрещена: локальный коммит обязан равняться
+      // запушенному, иначе на прод уедет не то, что в репозитории.
+      proverka_kega_sdvinulsya:
+        /if \[ "\$LOCAL" != "\$REMOTE" \]/.test(код) &&
+        /rev-parse origin\/main/.test(код),
       // И есть предварительная проверка, без неё пересборка может убить сайт.
       predproverka: /deploy-preflight\.sh/.test(код),
       // И сервер опрашивается с ожиданием: контейнеру нужно время на миграции.
       proverka_posle: /gotovo=0/.test(код),
     }).toEqual({
-      pull_bez_pajpa: true, proverka_koda: true, proverka_kega_sdvinulsya: true,
+      sborka_bez_pajpa: true, proverka_koda: true, proverka_kega_sdvinulsya: true,
       predproverka: true, proverka_posle: true,
     });
   });
@@ -73,15 +86,30 @@ describe('Выкатка не может отрапортовать об усп�
   });
 
   it('причина сбоя объяснена там, где её ищут', () => {
-    // «untracked working tree files would be overwritten by merge» — фраза,
-    // ради которой человек открывает скрипт. Рядом должна быть команда,
-    // которой эти файлы ищутся.
+    // Смысл проверки тот же: человек, у которого выкатка встала, должен по
+    // тексту понять причину и получить команду, которой её исправить.
+    //
+    // ЧТО ИЗМЕНИЛОСЬ. Прежняя фраза «untracked working tree files would be
+    // overwritten by merge» была про `git pull` на VPS. На этой машине
+    // pull нет, а сбои двух других видов, и для каждого должен быть назван
+    // и указан выход:
+    //   1. локальный коммит не запушен — сказать, что запушить;
+    //   2. есть незакоммиченные правки в коде игры — сказать, что
+    //      закоммитить или отменить, и назвать обходной путь.
     const код = читать('tools/deploy.sh');
     expect({
-      // Сама причина названа.
-      называет_prichinu: /незакоммиченн|neotslezhivaem|untracked/i.test(код),
-      // И дана команда, чтобы их найти.
-      dayot_komandu: /git status --porcelain \| grep '\^\?\?'/.test(код),
-    }).toEqual({ называет_prichinu: true, dayot_komandu: true });
+      // Причина расхождения коммитов названа и указан выход.
+      rasshozhdenie_nazvano: /lokal'nyy kommit ne Raven zapushennomu/.test(код),
+      dayot_komandu_push: /git push origin main/.test(код),
+      // Причина незакоммиченных правок названа, файлы перечисляются, и назван
+      // обходной путь — иначе единственный выход был бы «ничего не делать».
+      nekommit_nazvano: /NEZAKOMMITENNYE PRAVKI/.test(код),
+      dayot_obhod: /DEPLOY_ALLOW_DIRTY=1/.test(код),
+      // И команда, которой эти правки видны.
+      dayot_komandu: /git status --porcelain -- client server shared/.test(код),
+    }).toEqual({
+      rasshozhdenie_nazvano: true, dayot_komandu_push: true,
+      nekommit_nazvano: true, dayot_obhod: true, dayot_komandu: true,
+    });
   });
 });

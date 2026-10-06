@@ -12,21 +12,61 @@
 # неотслеживаемые файлы. Дальше команда шла по цепочке `&&` с пайпом:
 #
 #   git pull --ff-only origin main 2>&1 | tail -3 && docker compose ... up
-#                                                 ^^^^^^^^^ к��д `tail`
+#                                                 ^^^^^^^^^ код `tail`
 #
 # Код возврата пайпа берётся у ПОСЛЕДНЕЙ команды, то есть у `tail`, а он всегда
 # ноль. `&&` исполнился, контейнеры пересобрались на СТАРОМ коде, и выкатка
 # рапортовала «Updating deef120..ec30537» - а эта строка печатается ДО отказа.
 # Итог: три коммита на прод не попали, и это выглядело как успех.
 #
-# Здесь три проверки, любая из которых останавливает выкатку:
-#   1. код возврата `git pull`, без пайпа;
-#   2. коммит ДО и ПОСЛЕ - если не изменился, деплоить нечего;
-#   3. после пересборки - что сервер отвечает.
+# Здесь четыре проверки, любая из которых останавливает выкатку:
+#   1. код возврата docker compose, без пайпа;
+#   2. ЛОКАЛЬНЫЙ коммит равен ЗАПУШЕННОМУ — иначе на прод уедет не то, что в
+#      репозитории, либо не уедет ничего;
+#   3. незакоммиченные правки в client/, server/, shared/ — запрещены;
+#   4. после пересборки — что сервер отвечает И что образ пересобран.
+#
+# ЧТО ПОМЕНЯЛОСЬ ПРИ ПЕРЕЕЗДЕ НА ДОМАШНЮЮ МАШИНУ
+# -----------------------------------------------
+# Скрипт писался под VPS, где игра живёт на отдельной машине и код приезжает
+# через `git pull`. Домашняя машина устроена наоборот: репозиторий ЗДЕСЬ и есть
+# источник, из которого собираются образы. Из этого следовало две поломки,
+# и обе выкатывали бы не то:
+#
+#   1. `git pull` + проверка «коммит изменился». На VPS их смысл — забрать
+#      свежее с origin. Дома `git pull` не нужен, а проверка «коммит
+#      изменился» срабатывала наоборот: мы уже запушили, HEAD == origin/main,
+#      и выкатка останавливалась с «коммитить нечего» — то есть НИ ОДНА
+#      выкатка на этой машине не прошла бы. Сравнение перевёрнуто: теперь
+#      останавливает РАЗНИЦА, а не её отсутствие.
+#
+#   2. Стек без профиля туннеля. Снаружи игра выходит через cloudflared, а
+#      Caddy на этом пути выключен профилем `tls-direct`. Если собрать compose
+#      только из docker-compose.prod.yml, то сервис cloudflared в проекте не
+#      существует и не пересоздаётся, а при `up` без имён сервисов compose
+#      попытался бы поднять ещё и Caddy — и тот перехватил бы 80 и 443 на
+#      домашней машине. Профиль добавляется сам, если в deploy/.env задан
+#      CLOUDFLARE_TUNNEL_TOKEN.
 set -u
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || { echo "НЕ НАШЁЛ КОРЕНЬ"; exit 1; }
-C="docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env"
+ENV_FILE="deploy/.env"
+
+# ── Режим выкатки ───────────────────────────────────────────────────────────
+# Туннель включается сам по наличию токена: не надо вспоминать флаги, и нельзя
+# забыть профиль и уронить сайт.
+#
+# ИМЕНА ПЕРЕМЕННЫХ — ТОЛЬКО ЛАТИНИЦА. Оболочка читает файл в кодировке
+# терминала, а не UTF-8: в Git Bash кириллическое `ТУННЕЛЬ=0` не распознавалось
+# как присваивание, и выкатка падала с «command not found» на строке, где
+# ничего не написано, кроме присваивания. Русские слова оставлены в комментариях
+# и в выводе — они не разбираются оболочкой и потому безопасны.
+C="docker compose -f deploy/docker-compose.prod.yml --env-file $ENV_FILE"
+TUNNEL=0
+if [ -f "$ENV_FILE" ] && grep -q '^CLOUDFLARE_TUNNEL_TOKEN=..*' "$ENV_FILE"; then
+  C="$C -f deploy/docker-compose.tunnel.yml"
+  TUNNEL=1
+fi
 
 # Момент начала выкатки: по нему потом сверяется возраст образа.
 DEPLOY_STARTED=$(date +%s)
@@ -37,33 +77,58 @@ stop() { printf '\nВЫКАТКА ОСТАНОВЛЕНА: %s\n' "$*" >&2; exit 1
 # ── 1. Предварительная проверка ────────────────────────────────────────────
 say "=== 1. PREDVARIТEL'NAYA PROVERKA ==="
 bash tools/deploy-preflight.sh || stop "предварительная проверка не пройдена"
+if [ "$TUNNEL" -eq 1 ]; then
+  say "  rezhim: tunnel Cloudflare (docker-compose.tunnel.yml podklyuchen)"
+else
+  say "  rezhim: pryamye porty (Caddy, bez tunnelya)"
+fi
 
-# ── 2. Забрать изменения ───────────────────────────────────────────────────
+# ── 2. Сверить локальный код с запушенным ─────────────────────────────────
 say ""
-say "=== 2. ZABRAT IZMENENIYA ==="
-do="$(git rev-parse --short HEAD)"
-say "  bylo:  $do"
+say "=== 2. SVERKA KODA ==="
+# `git pull` тут НЕ выполняется сознательно. Домашняя машина — источник
+# сборки, и тянуть в неё удалённые коммиты не нужно: незакоммиченные файлы
+# владельца git при этом не перезаписывает, а `pull` всё равно откажется.
+# Вместо этого сверяется ровно то, что попадёт в образ, с тем, что лежит в
+# репозитории.
+LOCAL="$(git rev-parse HEAD 2>/dev/null || true)"
+[ -n "$LOCAL" ] || stop "git ne otvetil: ne iz chego sobrat' obraz"
 git fetch origin main >/tmp/deploy-fetch.log 2>&1 || stop "git fetch ne udalsya"
-git pull --ff-only origin main >/tmp/deploy-pull.log 2>&1
-KOD=$?
-posle="$(git rev-parse --short HEAD)"
-say "  stalo: $posle"
-if [ "$KOD" -ne 0 ]; then
-  # Лог git печатается ЦЕЛИКОМ: строка «Updating a..b» появляется до отказа,
-  # и по ней легко решить, что всё прошло.
-  say "  git pull NE UDALSYA (kod $KOD):"
-  sed 's/^/    /' /tmp/deploy-pull.log
-  say "  ChASTO PRICHINA: na servere lezhit nezakommitovannyy fail, kotoryy by
-  push zaper. Git ne perepisyvaet neotslezhivaemye faily i otmenyaet merge.
-  Takih failov net v spiske untracked: git status --porcelain | grep '^??'"
-  stop "izmeneniya ne zabraty"
-fi
-if [ "$do" = "$posle" ]; then
-  stop "commit ne izmenilsya - vykaty nechego, a konteynery by perezabralis vkhudyost"
-fi
-say "  OK: kommit povednyatsya"
+REMOTE="$(git rev-parse origin/main 2>/dev/null || true)"
+[ -n "$REMOTE" ] || stop "net lokal'noy ветки origin/main — ne iz chego sravnivat'"
+say "  lokalno:  $LOCAL"
+say "  v origin:  $REMOTE"
+say "  tema:     $(git log -1 --pretty=%s 2>/dev/null)"
 
-# ── 3. Пересобрать и перезапустить ──────────────────────────────────────────
+if [ "$LOCAL" != "$REMOTE" ]; then
+  say ""
+  say "  lokal'nyy kommit ne Raven zapushennomu."
+  say "  Esli eto ne zabytyy push — zapushite: git push origin main"
+  say "  Esli eto neobizanno izmeneniye — provedite ego cherez pravki, a ne cherez force."
+  stop "na prod uekhal by ne tot kod, chto v repozitorii"
+fi
+say "  OK: lokal'nyy kod raven zapushennomu"
+
+# Незакоммиченные правки. Именно они вводили в заблуждение 30 сентября, только
+# с другой стороны: там на прод уехал старый код, а здесь уедет код, которого
+# нет в репозитории и который нельзя потом воспроизвести.
+#
+# Проверяются только пути, попадающие в образ. Правки в ROADMAP или в deploy/
+# на образ не влияют и выкатку не блокируют.
+DIRTY="$(git status --porcelain -- client server shared 2>/dev/null)"
+if [ -n "$DIRTY" ]; then
+  say ""
+  say "  V KODE EST NEZAKOMMITENNYE PRAVKI:"
+  printf '%s\n' "$DIRTY" | sed 's/^/    /'
+  say "  Na prod uekhalo by imenno eto, a ne to, chto v repozitorii."
+  if [ "${DEPLOY_ALLOW_DIRTY:-}" = "1" ]; then
+    say "  DEPLOY_ALLOW_DIRTY=1 — prodolzhaem na vash risk."
+  else
+    stop "zkommit'te ili otmenite ih. Obhod: DEPLOY_ALLOW_DIRTY=1"
+  fi
+fi
+
+# ── 3. Пересобрать и перезапустить ─────────────────────────────────────────
 say ""
 say "=== 3. PERESBORKA ==="
 # ПОЧЕМУ ТАК. Здесь раньше стояло:
@@ -79,6 +144,18 @@ say "=== 3. PERESBORKA ==="
 # напрямую, и вывод показывается ПОСЛЕ проверки кода. Значит, упавшая
 # сборка печатается целиком и останавливает выкатку, а не теряется в
 # хвосте пайпа.
+#
+# Пересобираются ТОЛЬКО server и client. cloudflared не трогаем: у него
+# тег `latest` и нет нужды в пересборке, а его пересоздание означало бы
+# падение сайта на минуту без причины.
+#
+# ID ОБРАЗА ЗАПОМИНАЕТСЯ ДО СБОРКИ. Он нужен для проверки после: пересборка
+# обязана либо дать новый образ, либо честно сказать «слои не изменились».
+SERVER_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+CLIENT_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+say "  obraz server do sborki:  ${SERVER_ID_BEFORE:-(netu)}"
+say "  obraz klienta do sborki: ${CLIENT_ID_BEFORE:-(netu)}"
+
 $C up -d --force-recreate --build server client >/tmp/deploy-build.log 2>&1
 KOD_BUILD=$?
 tail -25 /tmp/deploy-build.log | sed 's/^/  /'
@@ -102,54 +179,123 @@ for _ in $(seq 1 30); do
   sleep 3
 done
 [ "$gotovo" -eq 1 ] || stop "server ne otvetil za 90 sekund posle peresborki"
-say "  server otvechaet"
+say "  server otvechaet: $($C exec -T server sh -c 'wget -qO- http://localhost:3000/health' 2>/dev/null | tr -d '\r\n')"
 
-# Проверка ВРЕМЕНИ ОБРАЗА. Ответ /health ничего не говорит о том, какой
-# код запущен: старый контейнер, оставшийся на месте, отвечает так же
-# хорошо. Именно поэтому 1 октября скрипт сказал "PASS" при упавшей
-# сборке.
+# Проверка ОБРАЗА. Ответ /health ничего не говорит о том, какой код запущен:
+# старый контейнер, оставшийся на месте, отвечает так же хорошо. Именно
+# поэтому 1 октября скрипт сказал "PASS" при упавшей сборке.
 #
-# ЧТО БЫЛО НЕ ТАК. Проверка смотрела на mtime файла package.json внутри
-# контейнера. Docker копирует файл СОХРАНЯЯ его время, а package.json
-# меняется редко, поэтому проверка всегда показывала «возраст» в
-# несколько дней и останавливала исправную выкатку: 1 октября она
-# написала «obraz server starshe 1 chasa (698720 s)» при только что
-# пересобранных контейнерах.
+# ПОЧЕМУ НЕ ВОЗРАСТ ОБРАЗА. Тут было три попытки, и все три были негодными:
+#   1. mtime файла package.json внутри контейнера. Docker копирует файл
+#      СОХРАНЯЯ его время, а package.json меняется редко — проверка всегда
+#      показывала «возраст» в несколько дней.
+#   2. .Created образа, сравниваемое с началом выкатки. Выглядит правильно,
+#      но Docker НЕ трогает .Created, когда слои не изменились: повторная
+#      выкатка без правок кода честно печатает «Built» и оставляет дату старой.
+#      Проверка объявляла это бедой и останавливала исправную выкатку.
+#   3. CreatedAtUnix — не поддерживается, шаблон не парсится, проверка молча
+#      ничего не делала.
 #
-# Теперь сверяется дата создания ОБРАЗА, которую Docker ведёт сам, и
-# сравнивается с моментом начала выкатки. Это ровно то, что нужно:
-# пересобрался образ или едет старый.
-say "  proverka vozrasta obraza"
-# ИДЁМ ОБРАЗА, А НЕ ВОЗРАСТ. Сначала берём id контейнера сервиса,
-# потом узнаём, когда создан его образ. Так надёжнее, чем парсить вывод
-# docker images: у compose-версий фильтр по сервису отдаёт пустую строку.
-OBRAZ_ID=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
-VOZRAST=0
-if [ -n "${OBRAZ_ID:-}" ] && [ "$OBRAZ_ID" != "0" ]; then
-  # .Created отдаётся как дата в ISO ("2026-10-01T17:27:55.953336178Z"),
-  # а не числом, поэтому переводим её через date -d. Две попытки сделать
-  # это неверно - CreatedAtUnix (не поддерживается в Docker 29.1.3, шаблон
-  # не парсится) и арифметика по .Created как по числу (всегда уходило в
-  # пропуск, и проверка молча ничего не делала).
-  DATA=$(docker inspect -f '{{.Created}}' "$OBRAZ_ID" 2>/dev/null | tr -d '\r')
-  VOSRAT_OTKAZ=$(date -d "$DATA" +%s 2>/dev/null)
-  case "${VOSRAT_OTKAZ:-}" in
-    ''|*[!0-9]*) VOSRAT_OTKAZ="" ;;
-  esac
-  VOSRAT=$(( ${DEPLOY_STARTED:-0} - ${VOSRAT_OTKAZ:-0} ))
+# ЧТО ПРАВИЛЬНО. Сравнивается ID ОБРАЗА ДО и ПОСЛЕ сборки:
+#   - ID изменился — образ пересобран, всё честно;
+#   - ID тот же — сборка была холостой, слои не изменились. Это НЕ бедствие,
+#     а правильное поведение: код в репозитории не менялся, пересобирать
+#     было нечего. Доказать, что в контейнере правильный код, в этом случае
+#     невозможно по дате, зато можно по содержимому — см. проверку моделей
+#     ниже.
+# Содержимое — единственная проверка, которая отличает «правильный старый
+# образ» от «неправильного нового». Поэтому она обязательна в обоих случаях.
+say "  proverka obraza: id do i posle sborki"
+SERVER_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+CLIENT_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+
+check_image() {
+  # Имена локальных переменных — латиницей, как и все остальные: оболочка
+  # читает файл в кодировке терминала, и кириллица в имени ломает разбор
+  # так же, как ломала в имени переменной режима.
+  local imya="$1" bylo="$2" stalo="$3"
+  if [ -z "$stalo" ] || [ "$stalo" = "0" ]; then
+    stop "не удалось прочитать образ $imya после пересборки"
+  fi
+  if [ -n "$bylo" ] && [ "$bylo" != "0" ] && [ "$bylo" != "$stalo" ]; then
+    say "  obraz $imya perezobran (id izmenilsya)"
+    return 0
+  fi
+  # Образ тот же. Это нормально, когда код не менялся, но сказать об этом
+  # надо прямо: иначе в отчёте «выкатка прошла» не видно, пересобиралось ли
+  # что-нибудь вообще.
+  say "  obraz $imya ne izmenilsya — sloi te zhe, kod ne menyalsya. Eto ne oshibka."
+}
+
+check_image server "$SERVER_ID_BEFORE" "$SERVER_ID_AFTER"
+check_image client "$CLIENT_ID_BEFORE" "$CLIENT_ID_AFTER"
+
+# Модели на месте. Без этой проверки выкатка с новым деко выглядит исправно:
+# сервер отвечает, страница открывается, а файлов моделей в сборке нет, и
+# игрок видит пустоту там, где должна быть статуя.
+#
+# ПРОВЕРЯЕТСЯ НЕ ПО HTTP, А ПО ФАЙЛАМ В ОБРАЗЕ.
+# Первая версия ходила за моделями через `wget http://client/models/...` и
+# получила для всех трёх ровно одно и то же число байт. Это была страница
+# заглушка: nginx отдаёт index.html на любой несуществующий путь, то есть
+# проверка возвращала «всё на месте» при полностью отсутствующих файлах.
+# Проверка, которая не может упасть, хуже её отсутствия: она снимает
+# последний рубеж перед продом и при этом создаёт видимость работы.
+# Теперь файлы читаются с диска образа, где заглушки быть не может.
+#
+# СПИСОК ФАЙЛОВ БЕРЁТСЯ ИЗ МАНИФЕСТА, А НЕ ПЕРЕЧИСЛЕН. Иначе на этой строке
+# пришлось бы дописывать каждую новую модель, и она тихо перестала бы что-то
+# проверять: как только в игру добавили новый рог, скрипт продолжал бы
+# рапортовать успех, проверяя статую и факел.
+say "  proverka modeley v obraze klienta"
+MODELS_DIR="game/models"
+CLIENT_ID_C=$(docker ps -q --filter "name=empire-of-safavids-client-1" 2>/dev/null | head -1)
+[ -n "$CLIENT_ID_C" ] || stop "konteyner klienta ne nayden"
+# ПУТЬ ПЕРЕДАЁТСЯ ВНУТРИ `sh -c`, А НЕ АРГУМЕНТОМ.
+# Git Bash (MSYS) переписывает аргумент, начинающийся с `/`, в путь Windows:
+#   cat: can't open 'C:/Program Files/Git/usr/share/nginx/html/game/models/manifest.json'
+# То есть контейнеру уходил не тот путь, команда падала, а stderr уходил в
+# /dev/null — и проверка объявляла «манифеста нет» при манифесте на месте.
+# Аргумент, не начинающийся с `/`, MSYS не трогает, поэтому путь и заносится
+# внутрь строки, а не передаётся отдельным аргументом.
+MANIFEST_RAW=$(docker exec "$CLIENT_ID_C" sh -c "cat /usr/share/nginx/html/$MODELS_DIR/manifest.json" 2>/dev/null | tr -d '\r')
+if [ -z "$MANIFEST_RAW" ]; then
+  say "  manifest ne prochitan: pokazayu, chto est v obraze"
+  docker exec "$CLIENT_ID_C" sh -c "ls -l /usr/share/nginx/html/$MODELS_DIR 2>&1" | head -10 | sed 's/^/    /'
+  stop "v obraze klienta net manifest.json: sborka clienta ne polnaya"
 fi
-if [ -z "${VOSRAT_OTKAZ:-}" ]; then
-  say "  vozrast obraza ne prochitan - propuskayu (docker bez .Created)"
-elif [ "$VOSRAT_OTKAZ" -ge "${DEPLOY_STARTED:-0}" ]; then
-  say "  obraz server perezobran v etoy vytachke (vozrast ${VOSRAT} s)"
-else
-  stop "obraz server starshe nachala vytachki (vozrast ${VOSRAT} s) - konteyner mozhet byt na starom kode"
+MODEL_FILES=$(printf '%s' "$MANIFEST_RAW" | grep -o '"file"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*:[[:space:]]*"\(.*\)"$/\1/')
+MODEL_COUNT=$(printf '%s' "$MODEL_FILES" | grep -c . )
+[ "${MODEL_COUNT:-0}" -gt 0 ] || stop "v manifest.json net polya file: razbor zony ne udalsya"
+say "  v manifest.json modeley: $MODEL_COUNT"
+
+# Один заход в контейнер на все файлы: по одному на каждый — медленно и шумно.
+MISSING=$(docker exec "$CLIENT_ID_C" sh -c "
+  cd /usr/share/nginx/html/$MODELS_DIR || exit 1
+  for f in $MODEL_FILES; do
+    n=\$(wc -c < \"\$f\" 2>/dev/null || echo 0)
+    if [ \"\$n\" -le 0 ]; then echo \"net: \$f\"; fi
+  done
+" 2>/dev/null | tr -d '\r')
+if [ -n "$MISSING" ]; then
+  say ""
+  say "  V SBORKE KLIENTA NE XT VSEKH MODELEY:"
+  printf '%s\n' "$MISSING" | sed 's/^/    /'
+  stop "dekora na prod ne popadet"
+fi
+say "  vse modeley iz manifest.json na meste v obraze"
+
+# Туннель жив: если он упал, сайт недоступен снаружи, хотя всё внутри зелёное.
+if [ "$TUNNEL" -eq 1 ]; then
+  CF_ID=$($C ps -q cloudflared 2>/dev/null | head -1)
+  if [ -z "$CF_ID" ]; then
+    stop "cloudflared ne rabotaet: stek sobiran bez nego, i site snariji nedostupen"
+  fi
+  CF_STATE=$(docker inspect -f '{{.State.Status}}' "$CF_ID" 2>/dev/null | tr -d '\r')
+  say "  cloudflared: $CF_STATE"
+  [ "$CF_STATE" = "running" ] || stop "cloudflared в состоянии $CF_STATE: сайт снаружи недоступен"
 fi
 
-for f in / /trailer.html /LICENSE; do
-  n=$($C exec -T server sh -c "wget -qO- http://client$f 2>/dev/null | wc -c")
-  say "  $f -> $n bayt"
-done
 say ""
-say "Git kommit na servere: $(git rev-parse --short HEAD)"
+say "Git kommit na servere: $LOCAL"
 say "RESULT: PASS"
