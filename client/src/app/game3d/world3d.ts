@@ -17,6 +17,7 @@ import {
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   buildSignposts, buildGameTable, buildCows, updateCows, buildBazaarStatue,
 buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
+  ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
@@ -142,7 +143,7 @@ export class World3D {
   private camera!: THREE.PerspectiveCamera;
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
-  private torches: { light: THREE.PointLight; base: number }[] = [];
+  private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
   private flames: THREE.Mesh[] = [];
   private sky!: SkyHandle;
   private fauna!: FaunaHandle;
@@ -459,11 +460,17 @@ private roll = 0;
     buildScatter(this.scene);
     buildRoads(this.scene);
     const city = buildCity(this.scene);
-    for (const l of city.userData.lights as { x: number; z: number }[]) {
+    for (const [i, l] of (city.userData.lights as { x: number; z: number }[]).entries()) {
       const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
       light.position.set(l.x, (l as { y?: number }).y ?? groundHeight(l.x, l.z) + 5.2, l.z);
       this.scene.add(light);
-      this.torches.push({ light, base: 1.6 });
+      // ФАЗА У КАЖДОГО ФАКЕЛА СВОЯ.
+      //
+      // Раньше фаза считалась как `base * 7`, а у всех городских факелов `base`
+      // одинаковый, то есть они мигали синхронно — два десятка огней в одном
+      // городе пульсировали в такт. У двух факелов у ворот это читалось бы
+      // особенно заметно: они стоят рядом и смотрели бы в унисон.
+      this.torches.push({ light, base: 1.6, phase: i * 2.4 });
     }
     for (const d of buildTownBuildings(this.scene)) this.doorTargets.push(d);
     buildCamp(this.scene);
@@ -482,7 +489,21 @@ private roll = 0;
     // Статуя у базарного квартала: видно с улицы, не занимает место торговле.
     buildBazaarStatue(this.scene);
     // Два факела у ворот караван-сарая: игрок проходит между ними внутрь.
-    buildCaravanseraiTorches(this.scene);
+    // Решение владельца — свет от них оранжевый и яркий, поэтому источники
+    // создаются здесь, а не остаются на откуп городским фонарям.
+    for (const [i, огонь] of buildCaravanseraiTorches(this.scene).entries()) {
+      const light = new THREE.PointLight(
+        ТОРЧ_СВЕТ_ЦВЕТ,
+        0,
+        ТОРЧ_СВЕТ_ДАЛЬНОСТЬ,
+        1.8,
+      );
+      light.position.set(огонь.x, огонь.y, огонь.z);
+      this.scene.add(light);
+      // Фаза своя у каждого: два факела в двух шагах друг от друга, мигающие
+      // в такт, читаются как одна лампа, а не как два огня.
+      this.torches.push({ light, base: ТОРЧ_СВЕТ_ЯРКОСТЬ, phase: 1.1 + i * 3.7 });
+    }
     // Два меча у кузницы деревни, воткнутые остриём в землю.
     buildVillageSwords(this.scene);
     // Два сундука у шатра в базарном квартале.
@@ -512,7 +533,7 @@ private roll = 0;
       const fireLight = new THREE.PointLight(0xff7a20, 0, 26, 1.6);
       fireLight.position.set(CAMP.x, groundHeight(CAMP.x, CAMP.z) + 1.6, CAMP.z);
       this.scene.add(fireLight);
-      this.torches.push({ light: fireLight, base: 3.2 });
+      this.torches.push({ light: fireLight, base: 3.2, phase: 5.5 });
     }
 
     // Небо, фауна и NPC города
@@ -1686,7 +1707,7 @@ if (isMe && moving) {
     this.weather.update(dt, me.pos.x, me.pos.z, me.pos.y, this.lastInCity);
     const torchOn = 0.35 + night * 0.65;
     for (const t of this.torches) {
-      t.light.intensity = t.base * torchOn * (0.86 + Math.sin(now / 90 + t.base * 7) * 0.14);
+      t.light.intensity = t.base * torchOn * (0.86 + Math.sin(now / 90 + t.phase) * 0.14);
     }
     for (const f of this.flames) {
       f.scale.y = 1 + Math.sin(now / 70) * 0.18;
