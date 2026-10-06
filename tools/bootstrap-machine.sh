@@ -122,23 +122,40 @@ fi
 say "  swap: $(free -m 2>/dev/null | awk '/^Swap:/ {print $2 " MB of " $3 " MB used"}')"
 
 # UDP-буферы для QUIC. cloudflared сам называет нужное значение.
-if [ -w /proc/sys/net/core/rmem_max ]; then
+#
+# ПРО ПРАВА ДОСТУПА. Первая версия спрашивала `[ -w /proc/sys/net/core/rmem_max ]`
+# и пропускала правку, если файл «не доступен на запись». Это спрашивает не то:
+# файл принадлежит root, и для пользователя без sudo он недоступен ВСЕГДА — то
+# есть правка не выполнялась никогда, ровно на живой машине:
+#   /proc/sys/net/core is not writable, skipping the UDP buffer
+#   UDP buffer: rmem_max=212992
+# Фаза молча не сделала то, ради чего добавлена, и не упала. Возможность задаётся
+# наличием параметра в ядре, а права решаются через sudo. Поэтому спрашиваем
+# `[ -e ]`, пробуем через sudo и ОБЯЗАТЕЛЬНО перечитываем результат.
+if [ -e /proc/sys/net/core/rmem_max ]; then
   CUR=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo 0)
   if [ "${CUR:-0}" -lt 7340032 ]; then
     say "  UDP buffer is $CUR, cloudflared asks for 7340032: raising"
     printf 'net.core.rmem_max=7500000\nnet.core.wmem_max=7500000\n' \
-      | sudo tee /etc/sysctl.d/60-cloudflared-quic.conf >/dev/null
+      | sudo tee /etc/sysctl.d/60-cloudflared-quic.conf >/dev/null 2>&1 \
+      || say "  could not write /etc/sysctl.d/60-cloudflared-quic.conf"
     sudo sysctl -p /etc/sysctl.d/60-cloudflared-quic.conf >/dev/null 2>&1 \
-      || sysctl -w net.core.rmem_max=7500000 >/dev/null 2>&1 \
-      || sysctl -w net.core.wmem_max=7500000 >/dev/null 2>&1 \
-      || say "  could not raise the UDP buffer, continuing"
+      || say "  sysctl -p did not apply it, trying directly"
+    sudo sysctl -w net.core.rmem_max=7500000 >/dev/null 2>&1 || true
+    sudo sysctl -w net.core.wmem_max=7500000 >/dev/null 2>&1 || true
   else
     say "  UDP buffer is already $CUR, skipping"
   fi
 else
-  say "  /proc/sys/net/core is not writable, skipping the UDP buffer"
+  say "  this kernel has no net.core.rmem_max, skipping the UDP buffer"
 fi
-say "  UDP buffer: rmem_max=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo '?')"
+# Перечитываем и говорим правду: сколько получилось, столько и сделано.
+UDP_RMEM=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo '?')
+say "  UDP buffer: rmem_max=$UDP_RMEM"
+if [ "$UDP_RMEM" != '?' ] && [ "$UDP_RMEM" -lt 7340032 ] 2>/dev/null; then
+  say "  VNIMANIE: UDP buffer ostalsya malenkim ($UDP_RMEM). Tunnel budet rvat'sya"
+  say "  chashche, chem mozhno, i site nikakoy prichiny ne pokazhet."
+fi
 
 # ── 1. Docker ──────────────────────────────────────────────────────────────
 step "1. DOCKER"
