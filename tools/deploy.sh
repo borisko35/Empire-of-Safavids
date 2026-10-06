@@ -296,15 +296,70 @@ if [ -n "$MISSING" ]; then
 fi
 say "  vse modeley iz manifest.json na meste v obraze"
 
-# Туннель жив: если он упал, сайт недоступен снаружи, хотя всё внутри зелёное.
+# ── Туннель ─────────────────────────────────────────────────────────────────
+# БЫЛ БАГ, ИЗ-ЗА КОТОРОГО ПЕРЕЕЗД ОСТАНАВЛИВАЛСЯ НА ПОСЛЕДНЕМ ШАГЕ. 10 октября
+# 2026 переезд на AWS дошёл до последней строки и упал:
+#   ВЫКАТКА ОСТАНОВЛЕНА: cloudflared ne rabotaet
+# Причина: выше поднимаются `server client` и всё, что в их depends_on
+# (client, server, migrate, postgres, redis). cloudflared НЕ ВХОДИТ НИ В ЧЬИ
+# depends_on — compose о нём не знает и на новой машине просто не создаёт его.
+# Стек внутри зелёный, /health отвечает, 66 моделей на месте — а снаружи сайта
+# нет. Этот баг ждал бы и на Oracle, и на любом VPS: выкатка написана под
+# машину, где туннель уже кто-то поднял руками.
+#
+# Пересоздавать cloudflared при этом нельзя: у него тег `latest`, нужды в
+# пересборке нет, а пересоздание роняет сайт на минуту без причины. Поэтому
+# три состояния и три разных поступка:
+#
+#   контейнера нет -> создать (это новая машина);
+#   контейнер есть, но не running -> стартовать (упал, надо поднять);
+#   контейнер running -> НЕ ТРОГАТЬ (работает, вмешиваться незачем).
 if [ "$TUNNEL" -eq 1 ]; then
-  CF_ID=$($C ps -q cloudflared 2>/dev/null | head -1)
+  CF_ID=$($C ps -aq cloudflared 2>/dev/null | head -1)
   if [ -z "$CF_ID" ]; then
-    stop "cloudflared ne rabotaet: stek sobiran bez nego, i site snariji nedostupen"
+    say "  cloudflared on this machine is absent: creating it"
+    # Тот же файл лога, что и у сборки: при отказе нужен вывод целиком,
+    # а не хвост пайпа.
+    if ! $C up -d cloudflared >>/tmp/deploy-build.log 2>&1; then
+      say ""
+      say "  CLOUDFLARED NE SOZDAN:"
+      sed 's/^/    /' /tmp/deploy-build.log
+      stop "tunnel container could not be created: the site would be unreachable"
+    fi
+    CF_ID=$($C ps -aq cloudflared 2>/dev/null | head -1)
   fi
+  if [ -z "$CF_ID" ]; then
+    stop "cloudflared still absent after up: look at deploy/docker-compose.tunnel.yml"
+  fi
+
   CF_STATE=$(docker inspect -f '{{.State.Status}}' "$CF_ID" 2>/dev/null | tr -d '\r')
+  if [ "$CF_STATE" != "running" ]; then
+    say "  cloudflared is in state $CF_STATE: starting it"
+    $C start cloudflared >>/tmp/deploy-build.log 2>&1 || true
+    for _ in $(seq 1 15); do
+      CF_STATE=$(docker inspect -f '{{.State.Status}}' "$CF_ID" 2>/dev/null | tr -d '\r')
+      [ "$CF_STATE" = "running" ] && break
+      sleep 2
+    done
+  fi
   say "  cloudflared: $CF_STATE"
   [ "$CF_STATE" = "running" ] || stop "cloudflared в состоянии $CF_STATE: сайт снаружи недоступен"
+
+  # Контейнер «running» — это ещё не туннель. cloudflared поднимается и падает,
+  # либо висит без соединения, и тогда сайт недоступен при полностью зелёном
+  # стеке внутри. Единственный честный признак живого туннеля — его собственная
+  # запись в журнале о регистрации соединения с Cloudflare. Проверка, которая
+  # может пройти при мёртвом туннеле, хуже её отсутствия: она снимает последний
+  # рубеж и при этом создаёт видимость работы.
+  CF_LOG=$(docker logs "$CF_ID" 2>&1 | tail -40 | tr -d '\r')
+  if ! printf '%s' "$CF_LOG" | grep -q 'Registered tunnel connection'; then
+    say ""
+    say "  TUNNEL NE PODKLYUCHILSYA: v zhurnale net zapisi o registracii soedineniya."
+    say "  Poslednie stroki zhurnala cloudflared:"
+    printf '%s\n' "$CF_LOG" | tail -15 | sed 's/^/    /'
+    stop "cloudflared is running but not connected: the site is unreachable outside"
+  fi
+  say "  cloudflared zaregistriroval soedinenie s Cloudflare"
 fi
 
 say ""
