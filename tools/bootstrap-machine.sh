@@ -78,6 +78,68 @@ if [ -r /etc/os-release ]; then
   say "  distro:  ${PRETTY_NAME:-?}"
 fi
 
+# ── 0.5. Ресурсы машины ─────────────────────────────────────────────────────
+# Две вещи, которые на слабой машине ломают переезд, и обе были сделаны руками
+# 10 октября 2026 — то есть следующая машина упрётся в то же самое.
+#
+# 1. СВОП. На t3.micro 911 МБ памяти, из них доступно 538 МБ. Сборка клиента
+#    (`npm ci` и Vite) столько не съедает спокойно: либо падает по OOM, либо
+#    упирается в конец и падает на середине. Своп в 2 ГБ — это страховка, а не
+#    замена памяти, и на машине с 2 ГБ и больше он не нужен.
+#
+# 2. UDP-БУФЕРЫ. cloudflared по QUIC печатает на старте:
+#      failed to sufficiently increase receive buffer size
+#      (was: 212992, wanted: 7340032)
+#    212992 — это значение по умолчанию в Linux, и cloudflared считает его
+#    недостаточным. Туннель при этом поднимается, но соединение рвётся чаще.
+#    Собственная рекомендация cloudflared — поднять net.core.rmem_max и
+#    net.core.wmem_max. Правка идёт через /etc/sysctl.d/, а не /etc/sysctl.conf:
+#    так её не затирает установка пакетов.
+RAM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+say "  RAM: ${RAM_MB} MB"
+
+# Своп. Свопа нет И он меньше нужного — создаём. Проверка по подключённому
+# свопу, а не по наличию файла: файл после остановки машины остаётся, и
+# проверка по файлу объявила бы готовность там, где своп не подключён.
+SWAP_ON=$(swapon --show=NAME --noheadings 2>/dev/null | wc -l | tr -d ' ')
+if [ "${RAM_MB:-0}" -gt 0 ] && [ "$RAM_MB" -lt 2048 ] && [ "${SWAP_ON:-0}" -eq 0 ]; then
+  say "  RAM less than 2 GB and no swap: creating /swapfile 2G"
+  sudo fallocate -l 2G /swapfile 2>/dev/null \
+    || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none \
+    || say "  could not create the swapfile, continuing without it"
+  if [ -f /swapfile ]; then
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile >/dev/null 2>&1
+    sudo swapon /swapfile 2>/dev/null || say "  swapon failed, continuing without it"
+    grep -q '^/swapfile ' /etc/fstab 2>/dev/null \
+      || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab >/dev/null
+  fi
+elif [ "${SWAP_ON:-0}" -gt 0 ]; then
+  say "  swap already connected, skipping"
+else
+  say "  RAM is ${RAM_MB} MB: swap not needed"
+fi
+say "  swap: $(free -m 2>/dev/null | awk '/^Swap:/ {print $2 " MB of " $3 " MB used"}')"
+
+# UDP-буферы для QUIC. cloudflared сам называет нужное значение.
+if [ -w /proc/sys/net/core/rmem_max ]; then
+  CUR=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo 0)
+  if [ "${CUR:-0}" -lt 7340032 ]; then
+    say "  UDP buffer is $CUR, cloudflared asks for 7340032: raising"
+    printf 'net.core.rmem_max=7500000\nnet.core.wmem_max=7500000\n' \
+      | sudo tee /etc/sysctl.d/60-cloudflared-quic.conf >/dev/null
+    sudo sysctl -p /etc/sysctl.d/60-cloudflared-quic.conf >/dev/null 2>&1 \
+      || sysctl -w net.core.rmem_max=7500000 >/dev/null 2>&1 \
+      || sysctl -w net.core.wmem_max=7500000 >/dev/null 2>&1 \
+      || say "  could not raise the UDP buffer, continuing"
+  else
+    say "  UDP buffer is already $CUR, skipping"
+  fi
+else
+  say "  /proc/sys/net/core is not writable, skipping the UDP buffer"
+fi
+say "  UDP buffer: rmem_max=$(cat /proc/sys/net/core/rmem_max 2>/dev/null || echo '?')"
+
 # ── 1. Docker ──────────────────────────────────────────────────────────────
 step "1. DOCKER"
 
