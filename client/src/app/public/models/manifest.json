@@ -419,6 +419,11 @@
       "file": "models/decor/medieval-bridge.glb",
       "name": "medieval-bridge",
       "bytes": 546836
+    },
+    {
+      "file": "models/decor/medieval-gallows.glb",
+      "name": "medieval-gallows",
+      "bytes": 464952
     }
   ],
   "weapons": [

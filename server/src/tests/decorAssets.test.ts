@@ -1645,3 +1645,277 @@ describe('Мосты через реки: модель, поперёк русл�
     }
   });
 });
+
+describe('Эшафот у стен Исфахана: модель, площадка, развёрнут на дорогу', () => {
+  // Пятый пакет из свежей пачки Assets (medieval-gallows.glb). Площадку
+  // (-67, -89) выбирал владелец из трёх замеренных. Сцена, как и выше,
+  // читается текстом: импорт terrain.ts тянет three, а тот — браузер.
+  const путьЭшафота = join(корень, 'client/src/app/public/models/decor/medieval-gallows.glb');
+
+  function габариты() {
+    must(existsSync(путьЭшафота), 'файла эшафота нет: проверять нечего');
+    const buf = readFileSync(путьЭшафота);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as {
+      extensionsUsed?: string[];
+      materials?: { pbrMetallicRoughness?: { baseColorFactor?: number[] } }[];
+      nodes?: {
+        name?: string;
+        mesh?: number;
+        translation?: number[];
+        rotation?: number[];
+        scale?: number[];
+      }[];
+      meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+      accessors?: { min: number[]; max: number[] }[];
+    };
+    // Узлы этой модели сдвинуты (у моста трансформов не было и минимумы
+    // accessor'ов читались напрямую), но не повёрнуты и не масштабированы —
+    // иначе сложение минимума со сдвигом врёт о габаритах.
+    let minX = Infinity, maxX = -Infinity, minY = Infinity;
+    let maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const node of json.nodes ?? []) {
+      if (node.mesh === undefined) continue;
+      must(
+        node.rotation === undefined && node.scale === undefined,
+        `узел ${node.name ?? '?'} повёрнут или масштабирован: габариты брать через матрицу, не сложением`
+      );
+      const acc = json.accessors![json.meshes![node.mesh].primitives[0].attributes.POSITION];
+      const t = node.translation ?? [0, 0, 0];
+      minX = Math.min(minX, acc.min[0] + t[0]);
+      maxX = Math.max(maxX, acc.max[0] + t[0]);
+      minY = Math.min(minY, acc.min[1] + t[1]);
+      maxY = Math.max(maxY, acc.max[1] + t[1]);
+      minZ = Math.min(minZ, acc.min[2] + t[2]);
+      maxZ = Math.max(maxZ, acc.max[2] + t[2]);
+    }
+    return { buf, json, minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  function площадка() {
+    const м = /export const GALLOWS = \{ x: (-?\d+), z: (-?\d+), lift: (-?[\d.]+), ry: (-?[\d.]+) \};/.exec(
+      ТЕРРЕЙН
+    );
+    must(м !== null, 'константа GALLOWS не найдена: эшафот едет неизвестно куда');
+    const г = /export const CITY = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/.exec(ТЕРРЕЙН);
+    must(г !== null, 'не нашли CITY: столица переехала, проверка слепа');
+    const п = /export const PORT = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/.exec(ТЕРРЕЙН);
+    must(п !== null, 'не нашли PORT: дорогу на порт не посчитать');
+    return {
+      x: Number(м![1]),
+      z: Number(м![2]),
+      lift: Number(м![3]),
+      ry: Number(м![4]),
+      город: { x: Number(г![1]), z: Number(г![2]), radius: Number(г![3]) },
+      порт: { x: Number(п![1]), z: Number(п![2]), radius: Number(п![3]) },
+    };
+  }
+
+  /** Расстояние от точки до края ближайшей дороги CITY -> PORT (w = 3). */
+  function отКраяДороги(px: number, pz: number, город: { x: number; z: number }, порт: { x: number; z: number }): number {
+    const dx = порт.x - город.x;
+    const dz = порт.z - город.z;
+    const u = Math.max(0, Math.min(1, ((px - город.x) * dx + (pz - город.z) * dz) / (dx * dx + dz * dz)));
+    return Math.hypot(px - (город.x + dx * u), pz - (город.z + dz * u)) - 1.5;
+  }
+
+  it('файл в источнике сборки, в манифесте и сжат Draco', () => {
+    must(МАНИФЕСТ.decor !== undefined, 'в манифесте нет раздела decor');
+    const запись = МАНИФЕСТ.decor!.find((d) => d.name === 'medieval-gallows');
+    must(запись !== undefined, 'записи medieval-gallows нет в манифесте: файл никто не сверяет с диском');
+    const { buf, json } = габариты();
+    must(buf.length === запись.bytes, `эшафот: на диске ${buf.length}, в манифесте ${запись.bytes}`);
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'эшафот без Draco: 71 тыс. граней поедут сырыми'
+    );
+    must(
+      buf.length < 10 * 1024 * 1024,
+      `эшафот весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`
+    );
+    // Текстур у модели нет — только два цвета материалов (Wood и
+    // Material.001). Без них помост встанет серым, а не тёмно-красным.
+    must(
+      (json.materials ?? []).length >= 2,
+      `материалов ${json.materials?.length ?? 0}: у эшафота не осталось цвета дерева`
+    );
+    for (const m of json.materials ?? []) {
+      must(
+        (m.pbrMetallicRoughness?.baseColorFactor ?? []).length === 4,
+        'материал без baseColorFactor: цвет задан не тем, чем задумано'
+      );
+    }
+  });
+
+  it('габариты с учётом сдвигов узлов: помост 5.71x7.72, низ на -0.048', () => {
+    const { json, minX, maxX, minY, maxY, minZ, maxZ } = габариты();
+    const ширина = maxX - minX;
+    const глубина = maxZ - minZ;
+    const высота = maxY - minY;
+    must(
+      Math.abs(ширина - 5.71) < 0.02,
+      `ширина ${ширина.toFixed(3)} вместо 5.71: модель перевыпущена — контур и подъём врут`
+    );
+    must(
+      Math.abs(глубина - 7.72) < 0.02,
+      `глубина ${глубина.toFixed(3)} вместо 7.72: лестница не там, где стоит контур`
+    );
+    must(
+      Math.abs(высота - 5.17) < 0.02,
+      `высота ${высота.toFixed(3)} вместо 5.17: рама выше или ниже, чем считали`
+    );
+    must(
+      Math.abs(minY - -0.048) < 0.005,
+      `низ модели на ${minY.toFixed(3)} вместо -0.048: подъём -0.01 вкопает помост или оставит висеть`
+    );
+    // Помост поднят на столбах: под ним проходит игрок — только поэтому
+    // закрывать приходится весь контур, а не одни ножки.
+    const плат = (json.nodes ?? []).find((n) => n.name === 'Platform');
+    must(плат !== undefined && плат.mesh !== undefined, 'меша Platform нет: сцена не та, что мерена');
+    const acc = json.accessors![json.meshes![плат.mesh!].primitives[0].attributes.POSITION];
+    const низНаст = acc.min[1] + (плат.translation?.[1] ?? 0);
+    must(
+      низНаст >= 1.7 && низНаст <= 2.0,
+      `низ настила на ${низНаст.toFixed(2)} м (мерено 1.77): структура поменялась — решение о контуре перепроверить`
+    );
+  });
+
+  it('площадка: суша, за стеной, у дороги, вне озера', () => {
+    const { x, z, lift, город, порт } = площадка();
+    must(!isWater(x, z), `эшафот в (${x}, ${z}) стоит в воде`);
+    const отСтены = Math.hypot(x - город.x, z - город.z) - город.radius;
+    must(
+      отСтены >= 25 && отСтены <= 50,
+      `эшафот в ${отСтены.toFixed(0)} м от городской стены: внутри города или в поле в километре`
+    );
+    const отДороги = отКраяДороги(x, z, город, порт);
+    must(
+      отДороги >= 25 && отДороги <= 50,
+      `эшафот в ${отДороги.toFixed(0)} м от края дороги: на проезжей части или мимо всех дорог`
+    );
+    const отОзера = Math.hypot(x - LAKE.x, z - LAKE.z) - LAKE.r;
+    must(отОзера >= 150, `эшафот в ${отОзера.toFixed(0)} м от берега озера: близко к воде`);
+    const зона = getZoneAt(x, z);
+    must(
+      зона !== null && зона.id === 'tabriz_south',
+      `зона ${зона?.id ?? 'не найдена'}: площадку замерили в tabriz_south — что-то сдвинулось`
+    );
+    // Руина ворот стоит на той же дороге: 30 м между крупными моделями —
+    // ещё рядом, в 15 м они бы срослись.
+    const а = Math.atan2(-город.z, -город.x);
+    const ворота = {
+      x: город.x + Math.cos(а) * (город.radius + 35),
+      z: город.z + Math.sin(а) * (город.radius + 35),
+    };
+    const отВорот = Math.hypot(x - ворота.x, z - ворота.z);
+    must(отВорот >= 20, `эшафот в ${отВорот.toFixed(0)} м от руины ворот: модели срастутся`);
+    // Подъём считался по замеру: низ модели -0.048, рельеф под пятном
+    // 1.001…1.125 при 1.049 в точке — низ встаёт на сантиметр ниже
+    // самого низкого грунта, ни одного просвета.
+    must(
+      Math.abs(lift - -0.01) < 0.005,
+      `подъём ${lift} вместо -0.01: рельеф под пятном замерен, пересчитать по нему`
+    );
+  });
+
+  it('разворот: петля видна с дороги, лестница смотрит на неё', () => {
+    const { x, z, ry, город, порт } = площадка();
+    const dx = порт.x - город.x;
+    const dz = порт.z - город.z;
+    const u = Math.max(0, Math.min(1, ((x - город.x) * dx + (z - город.z) * dz) / (dx * dx + dz * dz)));
+    const cx = город.x + dx * u;
+    const cz = город.z + dz * u;
+    const д = Math.hypot(cx - x, cz - z);
+    const кДороге = { x: (cx - x) / д, z: (cz - z) / д };
+    // Ось Z модели — это И лестница (вход с z = +4.85), И рама с петлёй
+    // (z = 0, столбы на z = ±2.32). Развернуть лестницу точно на дорогу
+    // значит спрятать петлю за ближний столб: лобовой вид её не даёт.
+    const ось = { x: Math.sin(ry), z: Math.cos(ry) };
+    const косинус = Math.max(-1, Math.min(1, ось.x * кДороге.x + ось.z * кДороге.z));
+    const угол = (Math.acos(косинус) * 180) / Math.PI;
+    must(
+      угол >= 40 && угол <= 70,
+      `ось под ${угол.toFixed(1)}° к дороге: меньше 40 — петля за столбом, больше 70 — лестница спиной к дороге`
+    );
+    const отсТолба = 2.317 * Math.sin((угол * Math.PI) / 180);
+    must(отсТолба >= 1.5, `петля в ${отсТолба.toFixed(2)} м от ближнего столба: её закроет`);
+  });
+
+  it('сцена грузит модель, поворачивает её и закрывает контур помоста', () => {
+    must(
+      /loadDecorModel\('decor\/medieval-gallows\.glb'\)/.test(ТЕРРЕЙН),
+      'модель эшафота не подключена к сцене: файл лежит, а помоста нет'
+    );
+    must(/эшафот\.rotation\.y = ry;/.test(ТЕРРЕЙН), 'эшафот ставится без поворота: лестница смотрит не туда');
+    must(
+      /buildGallows\(this\.scene\);/.test(читать('client/src/app/game3d/world3d.ts')),
+      'построитель не вызван из мира: код есть, а эшафота нет'
+    );
+
+    const начало = ТЕРРЕЙН.indexOf('export function buildGallows(');
+    must(начало > 0, 'buildGallows не найден: эшафоту негде встать');
+    const хвост = ТЕРРЕЙН.slice(начало);
+    const конец = хвост.search(/\r?\n\}\r?\n/);
+    const тело = конец > 0 ? хвост.slice(0, конец) : '';
+    must(
+      /addCollider\(x \+ lx \* c \+ lz \* s, z - lx \* s \+ lz \* c, 1\.2\);/.test(тело),
+      'контур не повёрнут вслед за моделью или другой радиус: круги встанут мимо стен'
+    );
+    must(/Math\.ceil\(длина \/ 2\.5\)/.test(тело), 'шаг кругов не 2.5 м: между ними останется щель');
+
+    const контурМ = /const контур: \[number, number\]\[\] = \[([\s\S]*?)\];/.exec(тело);
+    must(контурМ !== null, 'контур помоста не найден: из чего считать круги?');
+    const точки = Array.from(
+      контурМ![1].matchAll(/\[(-?[\d.]+), (-?[\d.]+)\]/g),
+      (m) => [Number(m[1]), Number(m[2])] as [number, number]
+    );
+    must(точки.length === 8, `в контуре ${точки.length} точек: доска или лестница остались без стен`);
+
+    // Контур обязан совпадать с габаритами самой модели: перевыпустили
+    // файл, а контур остался старый — и игрок лазит по воздуху.
+    const г = габариты();
+    const xs = точки.map((t) => t[0]);
+    const zs = точки.map((t) => t[1]);
+    must(
+      Math.abs(Math.min(...xs) - г.minX) < 0.05 && Math.abs(Math.max(...xs) - г.maxX) < 0.05,
+      `контур по X ${Math.min(...xs)}…${Math.max(...xs)} против модели ${г.minX.toFixed(2)}…${г.maxX.toFixed(2)}`
+    );
+    must(
+      Math.abs(Math.min(...zs) - г.minZ) < 0.05 && Math.abs(Math.max(...zs) - г.maxZ) < 0.05,
+      `контур по Z ${Math.min(...zs)}…${Math.max(...zs)} против модели ${г.minZ.toFixed(2)}…${г.maxZ.toFixed(2)}`
+    );
+
+    // Круги считаем тем же поворотом, что и построитель, и проверяем: они
+    // на суше, вне стены и вне дороги — и их хватает, чтобы контур был
+    // сплошным для игрока радиуса PLAYER_R.
+    const { x, z, ry, город, порт } = площадка();
+    const c = Math.cos(ry);
+    const s = Math.sin(ry);
+    let кругов = 0;
+    for (let i = 0; i < точки.length; i++) {
+      const [ax, az] = точки[i];
+      const [bx, bz] = точки[(i + 1) % точки.length];
+      const длина = Math.hypot(bx - ax, bz - az);
+      const шагов = Math.max(1, Math.ceil(длина / 2.5));
+      for (let k = 0; k < шагов; k++) {
+        кругов += 1;
+        const доля = k / шагов;
+        const lx = ax + (bx - ax) * доля;
+        const lz = az + (bz - az) * доля;
+        const wx = x + lx * c + lz * s;
+        const wz = z - lx * s + lz * c;
+        must(!isWater(wx, wz), `круг контура в (${wx.toFixed(1)}, ${wz.toFixed(1)}) стоит в воде`);
+        const отСтены = Math.hypot(wx - город.x, wz - город.z) - город.radius;
+        must(
+          отСтены >= 25,
+          `круг в ${отСтены.toFixed(0)} м от городской стены: игрок упрётся в эшафот раньше, чем в город`
+        );
+        const отДороги = отКраяДороги(wx, wz, город, порт);
+        must(
+          отДороги >= 25,
+          `круг в ${отДороги.toFixed(0)} м от дороги: контур налез на проезжую часть`
+        );
+      }
+    }
+    must(кругов >= 12, `кругов ${кругов}: контур не сплошной, игрок проскочит между ними`);
+  });
+});
