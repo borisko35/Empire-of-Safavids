@@ -41,6 +41,8 @@ export interface Floater {
   color: string;
   born: number;
   crit: boolean;
+  /** Порядковый номер, см. СЛЕД_ФЛОАТЕРА */
+  seq: number;
 }
 
 export interface Effect {
@@ -48,7 +50,35 @@ export interface Effect {
   kind: 'slash' | 'heal' | 'hit';
   born: number;
   color: string;
+  /** Порядковый номер, см. СЛЕД_ЭФФЕКТА */
+  seq: number;
 }
+
+/**
+ * Порядковые номера флоатеров и эффектов.
+ *
+ * Зачем они, если массивы и так упорядочены. Читатель World3D обязан узнать
+ * о новом флоатере ровно один раз, и раньше он для этого держал ИНДЕКС в
+ * `lastFx.floater` и сравнивал его с `floaters.length`. Индекс здесь не
+ * годится: массив чистится с начала — и по сроку жизни (`filter` в
+ * `World.update`), и сдвигом при переполнении лимита. Как только первый
+ * флоатер истекает, массив становится короче, а курсор остаётся на месте,
+ * `cursor < length` намертво становится ложью — и цифры урона перестают
+ * появляться. На деле это значило: в любой затяжной драке (урон каждые
+ * ~450 мс при жизни флоатера 1100 мс, то есть в массиве всегда есть
+ * живые) цифры урона пропадали через пару секунд боя и не возвращались,
+ * пока бой не замолкал. Сброс курсора был только на пустом массиве.
+ *
+ * Номер не сдвигается при уборке, поэтому «последний показанный» номер
+ * остаётся верным и при круговой переработке массива.
+ */
+let следФлоатера = 0;
+let следЭффекта = 0;
+
+/** Следующий порядковый номер флоатера (для тестов) */
+export function nextFloaterSeq(): number { return ++следФлоатера; }
+/** Следующий порядковый номер эффекта (для тестов) */
+export function nextEffectSeq(): number { return ++следЭффекта; }
 
 /** Детерминированный псевдослучайный хэш для декора тайлов */
 export function tileHash(x: number, y: number): number {
@@ -82,12 +112,12 @@ export class World {
   targetId: string | null = null;
 
   addFloater(x: number, y: number, text: string, color: string, crit = false): void {
-    this.floaters.push({ x, y, text, color, born: performance.now(), crit });
+    this.floaters.push({ x, y, text, color, born: performance.now(), crit, seq: ++следФлоатера });
     if (this.floaters.length > 60) this.floaters.shift();
   }
 
   addEffect(kind: Effect['kind'], x1: number, y1: number, x2: number, y2: number, color = '#F4D26C'): void {
-    this.effects.push({ kind, x1, y1, x2, y2, born: performance.now(), color });
+    this.effects.push({ kind, x1, y1, x2, y2, born: performance.now(), color, seq: ++следЭффекта });
     if (this.effects.length > 40) this.effects.shift();
   }
 
@@ -128,7 +158,11 @@ export class World {
     }
 
     this.floaters = this.floaters.filter((f) => now - f.born < 1100);
-    this.floaters.forEach((f, i) => { f.y -= dt * (1.6 + i * 0); });
+    // Подъём цифры урона нарисован в world3d по возрасту (`age * 1.1`).
+    // Здесь же сдвигается только координата z — по 2D-конвенции floater.y
+    // хранит именно z, а не высоту. Множитель `1.6 + i * 0` был мёртвым:
+    // i * 0 всегда ноль, индекс ни на что не влиял.
+    this.floaters.forEach((f) => { f.y -= dt * 1.6; });
     this.effects = this.effects.filter((e) => now - e.born < 320);
   }
 }

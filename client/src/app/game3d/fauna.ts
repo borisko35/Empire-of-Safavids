@@ -63,13 +63,19 @@ function makeQuadruped(
   g.add(body, head);
 
   if (opts?.hump) {
-    const hump = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), mat(bodyColor));
-    hump.scale.set(1.3, 0.9, 0.9);
-    hump.position.set(-0.05, legH + 0.72, 0);
-    hump.castShadow = true;
-    const hump2 = hump.clone();
-    hump2.position.z = 0;
-    g.add(hump);
+    // У верблюда ДВА горба, а не один: первый над лопатками, второй над
+    // крестцом. Тело вытянуто вдоль оси X (голова на +0.55), поэтому второй
+    // горб смещается по X, а не по Z. Раньше второй горб клонировали,
+    // ставили ему z = 0 — то есть ровно туда же, где стоит первый, — и
+    // НЕ добавляли в группу: он создавался, двигался и молча терялся.
+    // В итоге верблюд оставался с одним горбом.
+    for (const [gx, sc] of [[-0.05, 1.3], [-0.42, 1.15]] as const) {
+      const hump = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), mat(bodyColor));
+      hump.scale.set(sc, 0.9, 0.9);
+      hump.position.set(gx, legH + 0.72, 0);
+      hump.castShadow = true;
+      g.add(hump);
+    }
   }
   if (opts?.antlers) {
     for (const side of [-1, 1]) {

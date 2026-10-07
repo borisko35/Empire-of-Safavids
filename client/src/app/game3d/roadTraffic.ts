@@ -396,8 +396,12 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       w.group.rotation.y = w.dir > 0 ? p.angle : p.angle + Math.PI;
 
       // Не рисуем то, чего не видно. Проверка дешёвая, а дороги длинные.
+      // Именно `!==`, а не `===`: при `===` присваивание происходило ровно
+      // тогда, когда видимость УЖЕ была правильной, то есть строка ничего
+      // не меняла. Караваны за пределами видимости никогда не скрывались и
+      // целиком продолжали трансформироваться и уходить в отрисовку.
       const far = Math.hypot(p.x - px, p.z - pz) > VISIBLE_DIST;
-      if (w.group.visible === !far) w.group.visible = !far;
+      if (w.group.visible !== !far) w.group.visible = !far;
       if (far) continue;
 
       // Шаг: ноги в противофазе, частота от скорости

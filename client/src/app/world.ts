@@ -3,7 +3,7 @@
 // ============================================================
 // Протокол: shared/constants.ts (SOCKET_EVENTS / SERVER_EVENTS).
 
-import { socket } from './net';
+import { socket, attachConnectionStateTracking } from './net';
 import { api } from './api';
 import { t, detectLocale, loadLocale } from './i18n';
 import { Character, session, Vec3 } from './state';
@@ -567,6 +567,12 @@ export async function enterWorld(character: Character): Promise<void> {
   session.experience = character.experience;
 
   showScreen('screen-world');
+  // Экран потери связи показывается один раз и сам себя не прячет. Без этой
+  // строки после первого обрыва оверлей остался бы висеть поверх нового
+  // мира, и защита от повторного показа в showLostScreen() (которая нужна,
+  // чтобы события обрыва пачками не заводили по два таймера) заблокировала
+  // бы экран при следующем реальном обрыве уже в новой сессии.
+  document.getElementById('overlay-lost')?.classList.add('hidden');
   // Экран загрузки со своей темой — пока собирается мир
   showLoading(0.08, t('loading.entering'));
   audio.ensureLoading();
@@ -754,6 +760,10 @@ export function showScreen(id: string): void {
 
 function wireSocket(): void {
   socket.off();
+  // `socket.off()` без аргументов снимает все подписки, включая трекер
+  // состояния соединения из net.ts. Возвращаем его на место, иначе индикатор
+  // соединения перестаёт обновляться после первого же входа в мир.
+  attachConnectionStateTracking();
 
   // Экран смерти подписывается ЗДЕСЬ, а не в boot(): строка выше снимает
   // все подписки сокета, так что модуль обязан пересоздать их при каждом
@@ -1626,6 +1636,12 @@ function wireSocket(): void {
 function showLostScreen(reason: string): void {
   const el = document.getElementById('overlay-lost');
   if (!el) return;
+  // Оверлей уже показан — второй раз запускать таймер нельзя. Причина в том,
+  // что события обрыва приходят пачками: `force:disconnect` и следом
+  // `disconnect`, и на оба звонил один и тот же экран. Каждый заводил свой
+  // таймер на 2.2 с, а значит leaveWorld() и gotoCharacters() выполнялись
+  // дважды: повторный переход на выбор персонажа поверх уже начавшегося.
+  if (!el.classList.contains('hidden')) return;
   (document.getElementById('lost-reason') as HTMLElement).textContent = reason;
   el.classList.remove('hidden');
   setTimeout(() => {

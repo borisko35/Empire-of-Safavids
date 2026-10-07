@@ -113,8 +113,13 @@ export function refreshBars(): void {
   $('txt-stamina').textContent = `${Math.ceil(s.stamina)} / ${s.maxStamina}`;
   // Краснеет, когда выносливость на исходе (плавание её быстро съедает)
   $('bar-stamina').classList.toggle('low', s.stamina < s.maxStamina * 0.2);
-  ($('bar-exp') as HTMLElement).style.width = pct(s.experience, s.level * s.level * 100);
-  $('txt-exp').textContent = `${s.experience} / ${s.level * s.level * 100}`;
+  // Опыт на текущий уровень: level * level * 100. На первом уровне это ноль
+  // (1 * 1 * 100 = 100, но level приходит как 0 у ещё не поднятого героя, и
+  // раньше строка показывала «0 / 0», потому что делитель не был защищён, как
+  // в pct() выше). Показываем 100 при level <= 0, иначе герой увидит «0 / 0».
+  const expMax = Math.max(1, s.level * s.level * 100);
+  ($('bar-exp') as HTMLElement).style.width = pct(s.experience, expMax);
+  $('txt-exp').textContent = `${s.experience} / ${expMax}`;
   $('hud-name').textContent = s.character?.name ?? '';
   $('hud-level').textContent = `${t('badges.level')} ${s.level}`;
   $('hud-gold').textContent = `◉ ${s.character?.gold ?? 0}`;

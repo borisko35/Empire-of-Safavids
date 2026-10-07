@@ -431,6 +431,28 @@ private roll = 0;
     this.container = container;
     this.callbacks = callbacks;
 
+    // Чистим коллайдеры ПЕРЕД постройкой мира.
+    //
+    // COLLIDERS и POCKET_COLLIDERS живут на уровне модуля, а `init()`
+    // вызывается при каждом входе в мир (смерть → экран потери связи →
+    // выбор персонажа → снова вход). Обнулять их было негде: единственная
+    // чистка стояла внутри `buildCity`, и та делала не обнуление, а
+    // копирование: она снимала весь накопленный список как «коллайдеры
+    // ландшафта», строила город и возвращала список обратно целиком —
+    // вместе с коллайдерами города от ПРЕДЫДУЩЕГО мира. Итог: каждый
+    // повторный вход примерно удваивал список.
+    //
+    // Список не только рос, но и проверялся в каждом кадре по три прохода
+    // (`resolveCircleList`), а горожане перебирали его для каждого
+    // кандидата ещё и в шести проходах. Рост списка бьёт по кадру прямо
+    // пропорционально, и на «return to character select» игрок
+    // постепенно получает всё более тяжёлую физику.
+    COLLIDERS.length = 0;
+    POCKET_COLLIDERS.length = 0;
+    INTERIOR_COLLIDERS.length = 0;
+    FAUNA_COLLIDERS.length = 0;
+    CIV_COLLIDERS.length = 0;
+
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
@@ -1257,10 +1279,14 @@ private roll = 0;
   // ── FX: плавающий урон и эффекты из entities.World ──────────
   private syncFx(now: number): void {
     if (!this.entities) return;
-    // Новые флоатеры -> DOM-элементы, проецируемые из 3D
+    // Новые флоатеры -> DOM-элементы, проецируемые из 3D.
+    // Сверяемся по порядковому номеру (f.seq), а не по индексу в массиве:
+    // массив укорачивается с начала, индекс бы намертво «залипал» за длиной
+    // и цифры урона пропадали бы через пару секунд боя.
     const fl = this.entities.floaters;
-    while (this.lastFx.floater < fl.length) {
-      const f = fl[this.lastFx.floater++];
+    for (const f of fl) {
+      if (f.seq <= this.lastFx.floater) continue;
+      this.lastFx.floater = f.seq;
       const el = document.createElement('div');
       el.className = 'floater3d' + (f.crit ? ' crit' : '');
       el.textContent = f.text;
@@ -1271,16 +1297,15 @@ private roll = 0;
       this.fxLayer.appendChild(el);
       setTimeout(() => el.remove(), 1150);
     }
-    if (fl.length === 0) this.lastFx.floater = 0;
 
     // Новые эффекты -> частицы (2D-конвенция: y хранит координату z)
     const ef = this.entities.effects;
-    while (this.lastFx.effect < ef.length) {
-      const e = ef[this.lastFx.effect++];
+    for (const e of ef) {
+      if (e.seq <= this.lastFx.effect) continue;
+      this.lastFx.effect = e.seq;
       if (e.kind === 'heal') this.burst(e.x2, e.y2, 0x6ecf7a, 10);
       else this.burst(e.x2, e.y2, e.kind === 'slash' ? 0xf4d26c : 0xe07a4a, 8);
     }
-    if (ef.length === 0) this.lastFx.effect = 0;
 
     // Позиции флоатеров
     for (const el of Array.from(this.fxLayer.children) as HTMLElement[]) {
@@ -1766,6 +1791,15 @@ if (isMe && moving) {
     this.weather?.dispose();
     this.interiors?.dispose();
     this.navigator?.dispose();
+    // Дорожное движение тоже нужно снять. Его `dispose()` был написан, но не
+    // вызывался ниоткуда: караваны оставались в старой сцене вместе со своей
+    // геометрией, материалами и текстурами. При этом `makePerson` создаёт
+    // СВОЙ MeshStandardMaterial на каждый караван (роба, кожа, шляпа), так
+    // что на каждый вход в мир уезжала пачка уникальных материалов.
+    this.roadTraffic?.dispose();
+    // Миксеры анимации коров — двухуровневые ссылки на загруженные клипы;
+    // без stop() анимации продолжают крутиться для снятых сцены моделей.
+    for (const mx of this.cowMixers ?? []) mx.stopAllAction();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fxLayer?.remove();
