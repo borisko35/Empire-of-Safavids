@@ -399,6 +399,16 @@
       "file": "models/decor/church-ruin.glb",
       "name": "church-ruin",
       "bytes": 1779844
+    },
+    {
+      "file": "models/decor/village-archway.glb",
+      "name": "village-archway",
+      "bytes": 471144
+    },
+    {
+      "file": "models/decor/church-doorway.glb",
+      "name": "church-doorway",
+      "bytes": 1475140
     }
   ],
   "weapons": [
