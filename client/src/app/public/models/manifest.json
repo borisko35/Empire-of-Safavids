@@ -424,6 +424,26 @@
       "file": "models/decor/medieval-gallows.glb",
       "name": "medieval-gallows",
       "bytes": 464952
+    },
+    {
+      "file": "models/decor/medieval-cart-lite.glb",
+      "name": "medieval-cart-lite",
+      "bytes": 559220
+    },
+    {
+      "file": "models/decor/medieval-wooden-palisade.glb",
+      "name": "medieval-wooden-palisade",
+      "bytes": 109560
+    },
+    {
+      "file": "models/decor/palisadebarrier-flat-lite.glb",
+      "name": "palisadebarrier-flat-lite",
+      "bytes": 464348
+    },
+    {
+      "file": "models/decor/windmill.glb",
+      "name": "windmill",
+      "bytes": 249944
     }
   ],
   "weapons": [

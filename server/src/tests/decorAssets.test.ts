@@ -1919,3 +1919,298 @@ describe('Эшафот у стен Исфахана: модель, площад�
     must(кругов >= 12, `кругов ${кругов}: контур не сплошной, игрок проскочит между ними`);
   });
 });
+
+describe('Телега, частокол, баррикада, мельница: модели, площадки, сцена', () => {
+  // Четыре модели «требуют руки» из свежей пачки Assets. Площадки выбраны
+  // владельцем из замеренных. Сцена читается текстом: terrain.ts тянет three.
+  const МОДЕЛИ = [
+    { name: 'medieval-cart-lite', bytes: 559220, w: 1.4, d: 3.03, h: 1.588, minY: -0.004, mats: 17, images: 2 },
+    { name: 'medieval-wooden-palisade', bytes: 109560, w: 41.98, d: 27.25, h: 56.18, minY: -0.221, mats: 6, images: 0 },
+    { name: 'palisadebarrier-flat-lite', bytes: 464348, w: 27.47, d: 37.34, h: 19.035, minY: -4.116, mats: 5, images: 0 },
+    { name: 'windmill', bytes: 249944, w: 11.9, d: 11.59, h: 10.212, minY: -0.271, mats: 24, images: 0 },
+  ] as const;
+
+  type Глб = {
+    extensionsUsed?: string[];
+    materials?: { pbrMetallicRoughness?: { baseColorFactor?: number[] } }[];
+    images?: unknown[];
+    textures?: unknown[];
+    nodes?: { name?: string; mesh?: number; translation?: number[]; rotation?: number[]; scale?: number[] }[];
+    meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+    accessors?: { min: number[]; max: number[] }[];
+  };
+
+  function файл(имя: string): { buf: Buffer; json: Глб } {
+    const путь = join(корень, `client/src/app/public/models/decor/${имя}.glb`);
+    must(existsSync(путь), `файла ${имя} нет: проверять нечего`);
+    const buf = readFileSync(путь);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as Глб;
+    return { buf, json };
+  }
+
+  function измерить(имя: string): { minX: number; maxX: number; minY: number; maxY: number; minZ: number; maxZ: number } {
+    const { json } = файл(имя);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity;
+    let maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const node of json.nodes ?? []) {
+      if (node.mesh === undefined) continue;
+      must(
+        node.rotation === undefined && node.scale === undefined,
+        `узел ${node.name ?? '?'} повёрнут или масштабирован: габариты брать через матрицу, не сложением`
+      );
+      const mesh = json.meshes![node.mesh];
+      // Меши многопримитивные (у телеги 17): первый примитив — не весь габарит.
+      for (const prim of mesh.primitives) {
+        const acc = json.accessors![prim.attributes.POSITION];
+        const t = node.translation ?? [0, 0, 0];
+        minX = Math.min(minX, acc.min[0] + t[0]);
+        maxX = Math.max(maxX, acc.max[0] + t[0]);
+        minY = Math.min(minY, acc.min[1] + t[1]);
+        maxY = Math.max(maxY, acc.max[1] + t[1]);
+        minZ = Math.min(minZ, acc.min[2] + t[2]);
+        maxZ = Math.max(maxZ, acc.max[2] + t[2]);
+      }
+    }
+    return { minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  function точка(имя: 'CITY' | 'PORT' | 'CARAVANSERAI'): { x: number; z: number; radius: number } {
+    const шаблоны = {
+      CITY: /export const CITY = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/,
+      PORT: /export const PORT = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/,
+      CARAVANSERAI: /export const CARAVANSERAI = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/,
+    } as const;
+    const м = шаблоны[имя].exec(ТЕРРЕЙН);
+    must(м !== null, `не нашли ${имя}: точка переехала, проверка слепа`);
+    return { x: Number(м![1]), z: Number(м![2]), radius: Number(м![3]) };
+  }
+
+  function константа(
+    имя: 'MARKET_CART' | 'GALLOWS_PALISADE' | 'PORT_ROAD_BARRICADE' | 'CARAVANSERAI_WINDMILL'
+  ): { x: number; z: number; lift: number; ry: number; scale: number } {
+    const шаблоны = {
+      MARKET_CART: /export const MARKET_CART = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/,
+      GALLOWS_PALISADE: /export const GALLOWS_PALISADE = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/,
+      PORT_ROAD_BARRICADE: /export const PORT_ROAD_BARRICADE = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/,
+      CARAVANSERAI_WINDMILL: /export const CARAVANSERAI_WINDMILL = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/,
+    } as const;
+    const м = шаблоны[имя].exec(ТЕРРЕЙН);
+    must(м !== null, `константа ${имя} не найдена: модель едет неизвестно куда`);
+    return { x: Number(м![1]), z: Number(м![2]), lift: Number(м![3]), ry: Number(м![4]), scale: Number(м![5]) };
+  }
+
+  function крайДороги(ax: number, az: number, bx: number, bz: number, w: number, px: number, pz: number): number {
+    const dx = bx - ax;
+    const dz = bz - az;
+    const u = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz)));
+    return Math.hypot(px - (ax + dx * u), pz - (az + dz * u)) - w / 2;
+  }
+
+  function уголОсей(ax: number, az: number, bx: number, bz: number): number {
+    const n1 = Math.hypot(ax, az);
+    const n2 = Math.hypot(bx, bz);
+    const косинус = Math.max(-1, Math.min(1, (ax * bx + az * bz) / (n1 * n2)));
+    return (Math.acos(косинус) * 180) / Math.PI;
+  }
+
+  it('файлы в источнике сборки, совпадают с манифестом и сжаты Draco', () => {
+    must(МАНИФЕСТ.decor !== undefined, 'в манифесте нет раздела decor');
+    for (const м of МОДЕЛИ) {
+      const запись = МАНИФЕСТ.decor!.find((d) => d.name === м.name);
+      must(запись !== undefined, `записи ${м.name} нет в манифесте: файл никто не сверяет с диском`);
+      const { buf, json } = файл(м.name);
+      must(buf.length === запись.bytes, `${м.name}: на диске ${buf.length}, в манифесте ${запись.bytes}`);
+      must(
+        (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+        `${м.name} без Draco: геометрия весит как сырая`
+      );
+      must(
+        buf.length < 10 * 1024 * 1024,
+        `${м.name} весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`
+      );
+    }
+  });
+
+  it('текстуры у телеги, цвета-тинты у остальных', () => {
+    for (const м of МОДЕЛИ) {
+      const { json } = файл(м.name);
+      must(
+        (json.images ?? []).length === м.images,
+        `${м.name}: картинок ${(json.images ?? []).length} вместо ${м.images} — текстуры потеряны или прилипли лишние`
+      );
+      must(
+        (json.materials ?? []).length === м.mats,
+        `${м.name}: материалов ${(json.materials ?? []).length} вместо ${м.mats} — модель перевыпущена`
+      );
+      if (м.images === 0) {
+        // Три модели без текстур накрашены тинтами: каждый материал обязан
+        // нести baseColorFactor, иначе модель встанет серой/белой.
+        for (const mat of json.materials ?? []) {
+          must(
+            (mat.pbrMetallicRoughness?.baseColorFactor ?? []).length === 4,
+            `${м.name}: материал без baseColorFactor — тинт слетел, модель серая`
+          );
+        }
+      }
+    }
+  });
+
+  it('габариты: низ и мировой размер совпадают с замером', () => {
+    const масштабы: Record<string, number> = {
+      'medieval-cart-lite': 1,
+      'medieval-wooden-palisade': 0.06,
+      'palisadebarrier-flat-lite': 0.1,
+      windmill: 1,
+    };
+    for (const м of МОДЕЛИ) {
+      const г = измерить(м.name);
+      const ширина = г.maxX - г.minX;
+      const глубина = г.maxZ - г.minZ;
+      const высота = г.maxY - г.minY;
+      must(
+        Math.abs(ширина - м.w) < 0.03,
+        `${м.name}: ширина ${ширина.toFixed(3)} вместо ${м.w} — модель перевыпущена`
+      );
+      must(
+        Math.abs(глубина - м.d) < 0.03,
+        `${м.name}: глубина ${глубина.toFixed(3)} вместо ${м.d} — контур и подъём врут`
+      );
+      must(
+        Math.abs(высота - м.h) < 0.03,
+        `${м.name}: высота ${высота.toFixed(3)} вместо ${м.h} — масштаб считали не от этого`
+      );
+      must(
+        Math.abs(г.minY - м.minY) < 0.005,
+        `${м.name}: низ на ${г.minY.toFixed(3)} вместо ${м.minY} — подъём вкопает модель или оставит висеть`
+      );
+      const мировая = высота * масштабы[м.name];
+      must(
+        мировая > 1 && мировая < 13,
+        `${м.name}: мировая высота ${мировая.toFixed(2)} м — масштаб не тот`
+      );
+    }
+  });
+
+  it('телега: рынок внутри стен, оглобли к городу, колёса в грунте', () => {
+    const т = константа('MARKET_CART');
+    const город = точка('CITY');
+    const караван = точка('CARAVANSERAI');
+    must(!isWater(т.x, т.z), `телега в (${т.x}, ${т.z}) стоит в воде`);
+    const отСтены = Math.hypot(т.x - город.x, т.z - город.z) - город.radius;
+    must(отСтены <= -20 && отСтены >= -30, `телега в ${отСтены.toFixed(0)} м от стены: не на рынке внутри стен`);
+    const шатёр = { x: город.x + 96, z: город.z };
+    const отШатра = Math.hypot(т.x - шатёр.x, т.z - шатёр.z);
+    must(отШатра >= 6 && отШатра <= 14, `телега в ${отШатра.toFixed(1)} м от шатра: не у рынка`);
+    const отДороги = крайДороги(город.x, город.z, караван.x, караван.z, 3.0, т.x, т.z);
+    must(отДороги >= 1 && отДороги <= 3.5, `телега в ${отДороги.toFixed(1)} м от края дороги: на проезжей части или в стороне`);
+    const угол = уголОсей(Math.sin(т.ry), Math.cos(т.ry), город.x - т.x, город.z - т.z);
+    must(угол <= 8, `оглобли под ${угол.toFixed(1)}° к городу: телега стоит задом к базару`);
+    must(Math.abs(т.lift - -0.006) < 0.003, `подъём ${т.lift} вместо -0.006: пятно ровно 0.847, колёса повиснут`);
+    must(Math.abs(т.scale - 1) < 0.001, `масштаб ${т.scale}: телега и так в метрах`);
+  });
+
+  it('частокол: у эшафота гладью к нему, колья в грунте', () => {
+    const с = константа('GALLOWS_PALISADE');
+    const город = точка('CITY');
+    const порт = точка('PORT');
+    const м = /export const GALLOWS = \{ x: (-?\d+), z: (-?\d+), lift: (-?[\d.]+), ry: (-?[\d.]+) \};/.exec(ТЕРРЕЙН);
+    must(м !== null, 'константа GALLOWS не найдена: от чего мерить частокол');
+    const эшафот = { x: Number(м![1]), z: Number(м![2]) };
+    must(!isWater(с.x, с.z), `частокол в (${с.x}, ${с.z}) стоит в воде`);
+    const отЭшафота = Math.hypot(с.x - эшафот.x, с.z - эшафот.z);
+    must(отЭшафота >= 12 && отЭшафота <= 20, `частокол в ${отЭшафота.toFixed(0)} м от эшафота: срастётся или потеряется`);
+    const отСтены = Math.hypot(с.x - город.x, с.z - город.z) - город.radius;
+    must(отСтены >= 20 && отСтены <= 35, `частокол в ${отСтены.toFixed(0)} м от стены: не в compound эшафота`);
+    const отДороги = крайДороги(город.x, город.z, порт.x, порт.z, 3.0, с.x, с.z);
+    must(отДороги >= 30, `частокол в ${отДороги.toFixed(0)} м от дороги: налез на проезжую часть`);
+    const зона = getZoneAt(с.x, с.z);
+    must(зона !== null && зона.id === 'tabriz_south', `зона ${зона?.id ?? 'не найдена'}: мерили в tabriz_south`);
+    // Гладкая сторона с копьями — локальный −Z: смотрит на эшафот на западе.
+    const угол = уголОсей(-Math.sin(с.ry), -Math.cos(с.ry), эшафот.x - с.x, эшафот.z - с.z);
+    must(угол <= 5, `гладь под ${угол.toFixed(1)}° к эшафоту: подпорки развернутся к месту казни`);
+    must(Math.abs(с.lift - -0.05) < 0.01, `подъём ${с.lift} вместо -0.05: колья повиснут над грунтом 1.386…1.488`);
+    must(Math.abs(с.scale - 0.06) < 0.001, `масштаб ${с.scale}: стена будет не 2.52x3.37`);
+  });
+
+  it('баррикада: обочина дороги на порт, вдоль неё, концы в грунте', () => {
+    const б = константа('PORT_ROAD_BARRICADE');
+    const город = точка('CITY');
+    const порт = точка('PORT');
+    must(!isWater(б.x, б.z), `баррикада в (${б.x}, ${б.z}) стоит в воде`);
+    const отДороги = крайДороги(город.x, город.z, порт.x, порт.z, 3.0, б.x, б.z);
+    must(отДороги >= 3 && отДороги <= 7, `баррикада в ${отДороги.toFixed(1)} м от края: перекроет проезд или уйдёт в поле`);
+    const отСтены = Math.hypot(б.x - город.x, б.z - город.z) - город.radius;
+    must(отСтены >= 60, `баррикада в ${отСтены.toFixed(0)} м от стены: не на той дороге`);
+    const а = Math.atan2(-город.z, -город.x);
+    const ворота = { x: город.x + Math.cos(а) * (город.radius + 35), z: город.z + Math.sin(а) * (город.radius + 35) };
+    const отВорот = Math.hypot(б.x - ворота.x, б.z - ворота.z);
+    must(отВорот >= 25 && отВорот <= 50, `баррикада в ${отВорот.toFixed(0)} м от ворот: срастётся с руиной`);
+    const зона = getZoneAt(б.x, б.z);
+    must(зона !== null && зона.id === 'tabriz_south', `зона ${зона?.id ?? 'не найдена'}: мерили в tabriz_south`);
+    // Длинная ось — локальный Z: параллельна дороге (безразлично, каким концом).
+    const вдоль = уголОсей(Math.sin(б.ry), Math.cos(б.ry), порт.x - город.x, порт.z - город.z);
+    const разворот = Math.min(вдоль, 180 - вдоль);
+    must(разворот <= 5, `ось под ${разворот.toFixed(1)}° к дороге: баррикада встанет поперёк проезда`);
+    must(Math.abs(б.lift - 0.31) < 0.02, `подъём ${б.lift} вместо 0.31: концы повиснут над грунтом 1.516…1.694`);
+    must(Math.abs(б.scale - 0.1) < 0.001, `масштаб ${б.scale}: баррикада будет не 2.75x3.73`);
+  });
+
+  it('мельница: у караван-сарая дверью к нему, юбка на грунте', () => {
+    const м = константа('CARAVANSERAI_WINDMILL');
+    const караван = точка('CARAVANSERAI');
+    const город = точка('CITY');
+    must(!isWater(м.x, м.z), `мельница в (${м.x}, ${м.z}) стоит в воде`);
+    const отКаравана = Math.hypot(м.x - караван.x, м.z - караван.z) - караван.radius;
+    must(отКаравана >= 35 && отКаравана <= 60, `мельница в ${отКаравана.toFixed(0)} м от караван-сарая: не его мельница`);
+    const отДороги = крайДороги(город.x, город.z, караван.x, караван.z, 3.0, м.x, м.z);
+    must(отДороги >= 40, `мельница в ${отДороги.toFixed(1)} м от дороги: лопасти над проезжей частью`);
+    const зона = getZoneAt(м.x, м.z);
+    must(зона !== null && зона.id === 'isfahan_outskirts', `зона ${зона?.id ?? 'не найдена'}: мерили в isfahan_outskirts`);
+    // Дверь Box264 — локальный +Z (z ≈ +1.6): смотрит на караван-сарай.
+    const угол = уголОсей(Math.sin(м.ry), Math.cos(м.ry), караван.x - м.x, караван.z - м.z);
+    must(угол <= 5, `дверь под ${угол.toFixed(1)}° к караван-сараю: вход смотрит в пустыню`);
+    must(Math.abs(м.lift - -0.16) < 0.02, `подъём ${м.lift} вместо -0.16: юбка повиснет над грунтом 1.036…1.331`);
+    must(Math.abs(м.scale - 1) < 0.001, `масштаб ${м.scale}: мельница и так 11.9 м`);
+  });
+
+  it('сцена грузит четыре модели со сдвигом центра и коллайдерами', () => {
+    const мир = читать('client/src/app/game3d/world3d.ts');
+    for (const вызов of ['buildMarketCart', 'buildGallowsPalisade', 'buildPortRoadBarricade', 'buildCaravanseraiWindmill']) {
+      must(
+        мир.includes(`${вызов}(this.scene);`),
+        `${вызов} не вызван из мира: код есть, а модели нет`
+      );
+    }
+    const начало = ТЕРРЕЙН.indexOf('function placeCenteredDecor(');
+    must(начало > 0, 'нет центрирующего укладчика: смещённые модели встанут мимо площадок');
+    const хвост = ТЕРРЕЙН.slice(начало);
+    const конец = хвост.search(/\r?\n\}\r?\n/);
+    const тело = конец > 0 ? хвост.slice(0, конец) : '';
+    must(
+      /addCollider\(px \+ k\.x \* c \+ k\.z \* s, pz - k\.x \* s \+ k\.z \* c, k\.r\);/.test(тело),
+      'коллайдеры не повёрнуты вслед за моделью: круги встанут мимо брёвен'
+    );
+    must(
+      /px - \(cx \* c \+ cz \* s\) \* scale,/.test(тело),
+      'центр габарита не возвращается на площадку: модель уедет от своих коллайдеров'
+    );
+    must(/вещь\.rotation\.y = ry;/.test(тело), 'модель ставится без поворота: развороты врут');
+    must(/вещь\.scale\.setScalar\(scale\);/.test(тело), 'масштаб не применяется: палисады встанут в 40 метров');
+    const связки: [string, string, string][] = [
+      ['buildMarketCart', 'decor/medieval-cart-lite.glb', ', 0, 0.755, ['],
+      ['buildGallowsPalisade', 'decor/medieval-wooden-palisade.glb', ', -20.04, 12.625, ['],
+      ['buildPortRoadBarricade', 'decor/palisadebarrier-flat-lite.glb', ', 17.925, 0, ['],
+      ['buildCaravanseraiWindmill', 'decor/windmill.glb', ', -0.13, -0.455, ['],
+    ];
+    for (const [строитель, файл, центр] of связки) {
+      const с = ТЕРРЕЙН.indexOf(`export function ${строитель}(`);
+      must(с > 0, `${строитель} не найден: модели негде встать`);
+      const х = ТЕРРЕЙН.slice(с);
+      const к = х.search(/\r?\n\}\r?\n/);
+      const т = к > 0 ? х.slice(0, к) : '';
+      must(т.includes(`'${файл}'`), `${строитель} грузит не тот файл: на площадке чужая модель`);
+      must(т.includes(центр), `${строитель}: центр габарита не тот — модель и коллайдеры разъедутся`);
+      must(/\{ x: -?[\d.]+, z: -?[\d.]+, r: [\d.]+ \}/.test(т), `${строитель} без кругов коллайдеров: сквозь модель ходят`);
+    }
+  });
+});

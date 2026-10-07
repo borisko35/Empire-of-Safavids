@@ -21,6 +21,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower, buildChurchRuin,
   buildVillageArchway, buildChurchDoorway, buildOnionDomeTower, buildGallows,
+  buildMarketCart, buildGallowsPalisade, buildPortRoadBarricade, buildCaravanseraiWindmill,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -533,6 +534,12 @@ private roll = 0;
     buildOnionDomeTower(this.scene);
     // Гибельный эшафот за городской стеной, у дороги на порт.
     buildGallows(this.scene);
+    // Телега на рынке, частокол у эшафота, баррикада на дороге к порту,
+    // мельница у караван-сарая: четыре модели, доведённые руками.
+    buildMarketCart(this.scene);
+    buildGallowsPalisade(this.scene);
+    buildPortRoadBarricade(this.scene);
+    buildCaravanseraiWindmill(this.scene);
     // Дубы у лесной деревни.
     buildOaks(this.scene);
     // Рухнувший мост у реки и скалы перевала.

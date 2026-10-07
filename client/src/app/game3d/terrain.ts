@@ -5463,6 +5463,18 @@ export function buildOnionDomeTower(scene: THREE.Scene): void {
 // целиком: по ней подниматься всё равно некуда.
 export const GALLOWS = { x: -67, z: -89, lift: -0.01, ry: -1.558 };
 
+// ── Телега, частокол, баррикада, мельница ───────────────────────────
+// Площадки выбраны владельцем из замеренных: рынок внутри стен, compound
+// эшафота, обочина дороги на порт, пустыня у караван-сарая. Углы не на
+// глаз: телега оглоблями (+Z) вдоль дороги к городу, стена гладью (−Z)
+// к эшафоту и подпорками (+Z) наружу, баррикада длинной осью (Z) вдоль
+// дороги на порт, мельница дверью (+Z) к караван-сараю. Подъёмы — из
+// минимума грунта под повёрнутым пятном, а не из высоты в точке.
+export const MARKET_CART = { x: 124, z: 35, lift: -0.006, ry: -1.63229, scale: 1 };
+export const GALLOWS_PALISADE = { x: -51, z: -89, lift: -0.05, ry: 1.5708, scale: 0.06 };
+export const PORT_ROAD_BARRICADE = { x: -118, z: -85, lift: 0.31, ry: -2.16766, scale: 0.1 };
+export const CARAVANSERAI_WINDMILL = { x: 581, z: 40, lift: -0.16, ry: -1.37593, scale: 1 };
+
 export function buildGallows(scene: THREE.Scene): void {
   const { x, z, lift, ry } = GALLOWS;
   const c = Math.cos(ry);
@@ -5499,6 +5511,99 @@ export function buildGallows(scene: THREE.Scene): void {
     });
     scene.add(эшафот);
   });
+}
+
+// Модели со смещённым началом: x/z константы — центр габарита, а не начало
+// модели. Сдвиг (cx, cz) задан в единицах модели до масштаба, коллайдеры —
+// в метрах мира относительно центра. Поворот тот же, что у самой модели.
+function placeCenteredDecor(
+  scene: THREE.Scene,
+  path: string,
+  px: number,
+  pz: number,
+  lift: number,
+  ry: number,
+  scale: number,
+  cx: number,
+  cz: number,
+  colliders: { x: number; z: number; r: number }[],
+): void {
+  const c = Math.cos(ry);
+  const s = Math.sin(ry);
+  for (const k of colliders) {
+    addCollider(px + k.x * c + k.z * s, pz - k.x * s + k.z * c, k.r);
+  }
+  void loadDecorModel(path).then((модель) => {
+    if (!модель) return;
+    const вещь = модель.clone();
+    вещь.position.set(
+      px - (cx * c + cz * s) * scale,
+      groundHeight(px, pz) + lift,
+      pz - (-cx * s + cz * c) * scale,
+    );
+    вещь.rotation.y = ry;
+    вещь.scale.setScalar(scale);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(вещь);
+  });
+}
+
+// Телега с бочкой на рынке: пятно ровно 0.847…0.847, низ −0.004, lift −0.006
+// ставит колёса на сантиметр ниже грунта. Два круга закрывают кузов и оглобли.
+export function buildMarketCart(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = MARKET_CART;
+  placeCenteredDecor(scene, 'decor/medieval-cart-lite.glb', x, z, lift, ry, scale, 0, 0.755, [
+    { x: 0, z: -0.75, r: 0.95 },
+    { x: 0, z: 1.0, r: 0.75 },
+  ]);
+}
+
+// Стена частокола у эшафота: масштаб 0.06 даёт 2.52 x 3.37 x 1.64. Грунт под
+// пятном 1.386…1.488 при 1.439; низ −0.221 × 0.06, lift −0.05 ставит колья на
+// сантиметр ниже нижнего грунта, высокий угол уходит в землю на 0.11.
+// Три круга по линии кольев плюс два по подпоркам.
+export function buildGallowsPalisade(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = GALLOWS_PALISADE;
+  placeCenteredDecor(scene, 'decor/medieval-wooden-palisade.glb', x, z, lift, ry, scale, -20.04, 12.625, [
+    { x: -0.85, z: -0.76, r: 0.65 },
+    { x: 0, z: -0.76, r: 0.65 },
+    { x: 0.85, z: -0.76, r: 0.65 },
+    { x: -0.55, z: 0.35, r: 0.55 },
+    { x: 0.55, z: 0.35, r: 0.55 },
+  ]);
+}
+
+// Баррикада у дороги на порт: масштаб 0.1 даёт 2.75 x 1.90 x 3.73. Грунт под
+// пятном 1.516…1.694 при 1.607; низ −4.116 × 0.1, lift 0.31 ставит нижние
+// концы на сантиметр ниже нижнего грунта, верхний конец уходит в склон.
+// Четыре круга по углам крестов.
+export function buildPortRoadBarricade(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = PORT_ROAD_BARRICADE;
+  placeCenteredDecor(scene, 'decor/palisadebarrier-flat-lite.glb', x, z, lift, ry, scale, 17.925, 0, [
+    { x: -0.68, z: -0.93, r: 0.8 },
+    { x: 0.68, z: -0.93, r: 0.8 },
+    { x: -0.68, z: 0.93, r: 0.8 },
+    { x: 0.68, z: 0.93, r: 0.8 },
+  ]);
+}
+
+// Мельница у караван-сарая: 11.90 x 10.21 x 11.59. Крест лопастей — плита
+// Box266 в плоскости Y–Z на +X, низ 3.20: до земли не достаёт. Песчаная
+// юбка −0.04, грунт 1.036…1.331 при 1.252; lift −0.16 кладёт юбку на 2 см
+// выше нижнего грунта, башня и камни стоят в грунте, верхний край юбки уходит в склон.
+// Башня, середина и конец лестницы закрыты тремя кругами.
+export function buildCaravanseraiWindmill(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = CARAVANSERAI_WINDMILL;
+  placeCenteredDecor(scene, 'decor/windmill.glb', x, z, lift, ry, scale, -0.13, -0.455, [
+    { x: 0.31, z: 0.15, r: 2.2 },
+    { x: 1.32, z: 2.54, r: 1.2 },
+    { x: 2.75, z: 4.44, r: 1.0 },
+  ]);
 }
 
 // ── Дубы у лесной деревни ────────────────────────────────────────
