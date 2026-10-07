@@ -600,6 +600,25 @@ export const KHORASAN_CAVES_GEO = {
 export const ХОРАСАН_ДВОР_Z = 10;
 
 export const ХОРАСАН_ЗАГЛУШКА = { w: 4.0, h: 4.5, t: 0.25 };
+// ── Кавказский форпост ────────────────────────────────────────────
+//
+// Крепость: ворота с решёткой, сторожевые посты с факелами, стена с зубцами,
+// башня бури. Замер: уровень -2.4 (медиана -2.40), срез 1.24 м, засыпка 0.87 м.
+// Радиус 60, полудиагональ 29.1 м, запас 3.9 м. Сухо: 0 мокрых точек.
+export const CAUCASUS_FORT = { x: -880, z: 520, radius: 60, level: -2.4 };
+
+export const CAUCASUS_FORT_GEO = {
+  ворота: { w: 8.6, h: 4.6, t: 1.4 },
+  решётка: { w: 6.0, h: 2.6 },
+  стена: { w: 20, h: 3.0, t: 0.8 },
+  двор: { w: 24, d: 12 },
+  wallYard: { h: 1.2, t: 0.5 },
+} as const;
+
+export const КАВКАЗ_ДВОР_Z = 12;
+
+export const КАВКАЗ_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
+
 
 
 
@@ -865,6 +884,9 @@ export function terrainHeight(x: number, z: number): number {
   // Хорасанские пещеры. Уровень 3.9 вокруг медианы 3.91, радиус 60: полудиагональ
   // 29.1 м, при 48 запас был -2.7 м.
   h = flatten(h, x, z, KHORASAN_CAVES.x, KHORASAN_CAVES.z, KHORASAN_CAVES.radius, KHORASAN_CAVES.level);
+  // Кавказский форпост. Уровень -2.4 вокруг медианы -2.40, радиус 60: полудиагональ
+  // 29.1 м, при 48 запас был -2.7 м.
+  h = flatten(h, x, z, CAUCASUS_FORT.x, CAUCASUS_FORT.z, CAUCASUS_FORT.radius, CAUCASUS_FORT.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -4972,6 +4994,84 @@ export function buildSettlements(scene: THREE.Scene): void {
   }
 
   scene.add(g);
+  // ── Кавказский форпост ─────────────────────────────────────────
+//
+// Крепость: ворота с решёткой, сторожевые посты с факелами, стена с зубцами.
+// ГДЕ: exit (-880, 524), дверь (-880, 520), выход на 4 м в +z.
+{
+  const { ворота, решётка, стена, двор } = CAUCASUS_FORT_GEO;
+  const zДвор = КАВКАЗ_ДВОР_Z;
+
+  const g = new THREE.Group();
+  g.position.set(CAUCASUS_FORT.x, CAUCASUS_FORT.level, CAUCASUS_FORT.z);
+
+  // Плита двора.
+  const плита = new THREE.Mesh(new THREE.BoxGeometry(двор.w, 0.3, zДвор), MAT.sand);
+  плита.position.set(0, 0.04 - 0.15, zДвор / 2);
+  плита.receiveShadow = true;
+  g.add(плита);
+
+  // Ворота: два столба и перемычка.
+  for (const s of [-1, 1] as const) {
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(ворота.t, ворота.h, ворота.t), MAT.stone);
+    столб.position.set(s * (ворота.w / 2 - ворота.t / 2), ворота.h / 2, ворота.t / 2);
+    столб.castShadow = true;
+    g.add(столб);
+  }
+  const перемычка = new THREE.Mesh(new THREE.BoxGeometry(ворота.w, ворота.t, ворота.t), MAT.sandstone);
+  перемычка.position.set(0, ворота.h + ворота.t / 2, ворота.t / 2);
+  перемычка.castShadow = true;
+  g.add(перемычка);
+
+  // Дверной проём — тёмная заглушка.
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(решётка.w, решётка.h, 0.3), MAT.dark);
+  дверь.position.set(0, решётка.h / 2, ворота.t / 2);
+  дверь.userData = { doorBuilding: 'caucasus_fort', doorAction: 'enter', doorName: t('buildings.caucasus_fort') };
+  g.add(дверь);
+
+  // Решётка в проёме: тонкие прутья.
+  for (let i = 0; i < 5; i++) {
+    const bx = -решётка.w / 2 + (решётка.w / 4) * i;
+    const прут = new THREE.Mesh(new THREE.BoxGeometry(0.12, решётка.h, 0.12), MAT.dark);
+    прут.position.set(bx, решётка.h / 2, ворота.t / 2 + 0.1);
+    g.add(прут);
+  }
+
+  // Сторожевые посты с факелами по краям ворот.
+  for (const s of [-1, 1] as const) {
+    const px = s * (ворота.w / 2 + 2.0);
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.4, 0.4), MAT.stone);
+    столб.position.set(px, 1.2, ворота.t / 2 + 1.0);
+    столб.castShadow = true;
+    g.add(столб);
+    const факел = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), MAT.gold);
+    факел.position.set(px, 2.6, ворота.t / 2 + 1.0);
+    g.add(факел);
+  }
+
+  // Стена с зубцами по бокам двора.
+  for (const s of [-1, 1] as const) {
+    const бок = new THREE.Mesh(new THREE.BoxGeometry(стена.t, стена.h, zДвор + стена.t), MAT.sandstoneDark);
+    бок.position.set(s * (двор.w / 2 + стена.t / 2), стена.h / 2, zДвор / 2 - стена.t / 2);
+    бок.castShadow = true;
+    g.add(бок);
+    // Зубцы.
+    for (let i = 0; i < 6; i++) {
+      const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.6), MAT.sandstone);
+      зубец.position.set(s * (двор.w / 2 + стена.t / 2), стена.h + 0.25, 1 + i * 2.0);
+      g.add(зубец);
+    }
+  }
+
+  // Коллайдеры: столбы ворот, стены, сторожевые посты.
+  for (const s of [-1, 1] as const) {
+    addCollider(CAUCASUS_FORT.x + s * (ворота.w / 2 - ворота.t / 2), CAUCASUS_FORT.z + ворота.t / 2, 1.1);
+    addCollider(CAUCASUS_FORT.x + s * (двор.w / 2 + стена.t / 2), CAUCASUS_FORT.z + zДвор / 2, 1.0);
+    addCollider(CAUCASUS_FORT.x + s * (ворота.w / 2 + 2.0), CAUCASUS_FORT.z + ворота.t / 2 + 1.0, 0.7);
+  }
+
+  scene.add(g);
+}
 }
 }
 }
