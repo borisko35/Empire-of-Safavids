@@ -206,3 +206,115 @@ describe('Таверна-зал: клиент строит диораму, а н
     must(/doorAction: 'exit',/.test(тело), 'дверь зала без метки exit: клик по ней не выпустит наружу');
   });
 });
+
+describe('Комод зала: модель и место у стойки', () => {
+  // Комод из medieval-drawer.zip: родные PBR-текстуры привязаны в Blender
+  // (импорт их не подхватил — модель встала чёрной). Стоит консолью у стойки
+  // зала таверны: отдельная площадка снаружи ему не нужна.
+  const путьКомода = join(корень, 'client/src/app/public/models/decor/drawer.glb');
+
+  type ГлбКомода = {
+    extensionsUsed?: string[];
+    materials?: { name?: string }[];
+    images?: { mimeType?: string }[];
+    nodes?: { name?: string; mesh?: number; translation?: number[]; rotation?: number[]; scale?: number[] }[];
+    meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+    accessors?: { min: number[]; max: number[] }[];
+  };
+
+  function габаритыКомода() {
+    must(existsSync(путьКомода), 'файла комода нет: проверять нечего');
+    const buf = readFileSync(путьКомода);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as ГлбКомода;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity;
+    let maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const node of json.nodes ?? []) {
+      if (node.mesh === undefined) continue;
+      must(
+        node.rotation === undefined && node.scale === undefined,
+        `узел ${node.name ?? '?'} повёрнут или масштабирован: место в зале считалось от другого`
+      );
+      for (const prim of json.meshes![node.mesh].primitives) {
+        const acc = json.accessors![prim.attributes.POSITION];
+        const t = node.translation ?? [0, 0, 0];
+        minX = Math.min(minX, acc.min[0] + t[0]);
+        maxX = Math.max(maxX, acc.max[0] + t[0]);
+        minY = Math.min(minY, acc.min[1] + t[1]);
+        maxY = Math.max(maxY, acc.max[1] + t[1]);
+        minZ = Math.min(minZ, acc.min[2] + t[2]);
+        maxZ = Math.max(maxZ, acc.max[2] + t[2]);
+      }
+    }
+    return { buf, json, minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  it('файл в источнике сборки, в манифесте и сжат Draco', () => {
+    must(МАНИФЕСТ.decor !== undefined, 'в манифесте нет раздела decor');
+    const запись = МАНИФЕСТ.decor!.find((d) => d.name === 'drawer');
+    must(запись !== undefined, 'записи drawer нет в манифесте: файл никто не сверяет с диском');
+    const { buf, json } = габаритыКомода();
+    must(buf.length === запись.bytes, `комод: на диске ${buf.length}, в манифесте ${запись.bytes}`);
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'комод без Draco: геометрия весит как сырая'
+    );
+    must(buf.length < 10 * 1024 * 1024, `комод весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`);
+  });
+
+  it('родные текстуры привязаны: три webp вместо черного ящика', () => {
+    const { json } = габаритыКомода();
+    must((json.images ?? []).length === 3, `картинок ${(json.images ?? []).length} вместо 3 — импорт снова их потерял`);
+    must((json.materials ?? []).length === 1, `материалов ${(json.materials ?? []).length} вместо 1`);
+    must(
+      (json.materials ?? [])[0]?.name === 'Medieval_Drawer',
+      `материал ${(json.materials ?? [])[0]?.name ?? '?'} вместо Medieval_Drawer: не та модель`
+    );
+  });
+
+  it('габариты 4.17x6.97, низ на нуле — масштаб 0.2 даёт консоль', () => {
+    const { minX, maxX, minY, maxY, minZ, maxZ } = габаритыКомода();
+    must(Math.abs(maxX - minX - 4.17) < 0.03, `ширина ${(maxX - minX).toFixed(2)} вместо 4.17`);
+    must(Math.abs(maxZ - minZ - 6.97) < 0.03, `глубина ${(maxZ - minZ).toFixed(2)} вместо 6.97: модель перевыпущена`);
+    must(Math.abs(maxY - minY - 5.163) < 0.03, `высота ${(maxY - minY).toFixed(2)} вместо 5.163`);
+    must(Math.abs(minX + maxX) < 0.02 && Math.abs(minZ + maxZ) < 0.02, 'комод не отцентрован: место в зале считалось от центра');
+    must(Math.abs(minY - 0) < 0.005, `низ на ${minY.toFixed(3)} вместо 0: встанет в пол или повиснет`);
+  });
+
+  it('комод стоит в зале консолью у стойки с двумя кругами', () => {
+    const с = клиент.indexOf('function buildTavernRoom(');
+    must(с > 0, 'buildTavernRoom не найден: комоду негде встать');
+    const х = клиент.slice(с);
+    const к = х.search(/\r?\n\}\r?\n/);
+    const тело = к > 0 ? х.slice(0, к) : '';
+    must(тело.includes('loadDrawerModel()'), 'комод не грузится в зал: стоит неизвестно где');
+    const з = клиент.indexOf('function loadDrawerModel(');
+    must(з > 0, 'loadDrawerModel не найден: комоду не на чем ехать');
+    const хз = клиент.slice(з);
+    const кз = хз.search(/\r?\n\}\r?\n/);
+    const телоЗагрузчика = кз > 0 ? хз.slice(0, кз) : '';
+    must(
+      телоЗагрузчика.includes('/game/models/${DRAWER_MODEL}'),
+      'загрузчик комода едет не за ним: кэш общий, а путь чужой'
+    );
+    must(
+      /const DRAWER_MODEL = 'decor\/drawer\.glb';/.test(клиент),
+      'константа комода не найдена: грузится неизвестно что'
+    );
+    // Место (-6.5, -5) и подход с запада проверены открытым полом сеткой 1 м.
+    must(/комод\.position\.set\(cx - 6\.5, FLOOR_Y, cz - 5\);/.test(тело), 'комод не на проверенном месте: пол и подход не меряны');
+    // Дверцы — локальный +Z: на запад, к стойке.
+    must(/комод\.rotation\.y = -Math\.PI \/ 2;/.test(тело), 'комод развёрнут не дверцами к стойке');
+    must(/комод\.scale\.setScalar\(0\.2\);/.test(тело), 'масштаб не 0.2: комод будет 7 метров глубиной');
+    must(
+      /\{ x: cx - 6\.85, z: cz - 5, r: 0\.55 \}/.test(тело) && /\{ x: cx - 6\.15, z: cz - 5, r: 0\.55 \}/.test(тело),
+      'кругов комода нет: сквозь дверцы ходят'
+    );
+  });
+
+  it('жаровня-3 переехала от комода: (-4, -8) вместо (-8, -6)', () => {
+    // Комод встал в 1.8 м от старой жаровни — круги налезали. Новая точка
+    // проверена открытым полом с запасом 2.0 м.
+    must(клиент.includes('[-4, -8]'), 'новой жаровни нет: старая осталась впритык к комоду');
+    must(!клиент.includes('[-8, -6]'), 'старая жаровня на месте: два круга в одной точке');
+  });
+});

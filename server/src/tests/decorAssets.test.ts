@@ -2341,3 +2341,136 @@ describe('Плуг у мельницы: модель, площадка, сцен
     );
   });
 });
+
+describe('Точило у кузницы: модель, площадка, сцена', () => {
+  // Точило из GrindStone_FBX: текстур не было — рама накрашена деревом, круг
+  // камнем. Площадку (-488, -429) выбирал владелец из двух замеренных.
+  const путьТточила = join(корень, 'client/src/app/public/models/decor/grindstone.glb');
+
+  type ГлбТточила = {
+    extensionsUsed?: string[];
+    materials?: { name?: string; pbrMetallicRoughness?: { baseColorFactor?: number[] } }[];
+    images?: unknown[];
+    nodes?: { name?: string; mesh?: number; translation?: number[]; rotation?: number[]; scale?: number[] }[];
+    meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+    accessors?: { min: number[]; max: number[] }[];
+  };
+
+  function габаритыТточила() {
+    must(existsSync(путьТточила), 'файла точила нет: проверять нечего');
+    const buf = readFileSync(путьТточила);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as ГлбТточила;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity;
+    let maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const node of json.nodes ?? []) {
+      if (node.mesh === undefined) continue;
+      must(
+        node.rotation === undefined && node.scale === undefined,
+        `узел ${node.name ?? '?'} повёрнут или масштабирован: габариты брать через матрицу, не сложением`
+      );
+      for (const prim of json.meshes![node.mesh].primitives) {
+        const acc = json.accessors![prim.attributes.POSITION];
+        const t = node.translation ?? [0, 0, 0];
+        minX = Math.min(minX, acc.min[0] + t[0]);
+        maxX = Math.max(maxX, acc.max[0] + t[0]);
+        minY = Math.min(minY, acc.min[1] + t[1]);
+        maxY = Math.max(maxY, acc.max[1] + t[1]);
+        minZ = Math.min(minZ, acc.min[2] + t[2]);
+        maxZ = Math.max(maxZ, acc.max[2] + t[2]);
+      }
+    }
+    return { buf, json, minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  function константаТточила(): { x: number; z: number; lift: number; ry: number; scale: number } {
+    const м = /export const VILLAGE_GRINDSTONE = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/.exec(
+      ТЕРРЕЙН
+    );
+    must(м !== null, 'константа VILLAGE_GRINDSTONE не найдена: точило едет неизвестно куда');
+    return { x: Number(м![1]), z: Number(м![2]), lift: Number(м![3]), ry: Number(м![4]), scale: Number(м![5]) };
+  }
+
+  it('файл в источнике сборки, в манифесте и сжат Draco', () => {
+    must(МАНИФЕСТ.decor !== undefined, 'в манифесте нет раздела decor');
+    const запись = МАНИФЕСТ.decor!.find((d) => d.name === 'grindstone');
+    must(запись !== undefined, 'записи grindstone нет в манифесте: файл никто не сверяет с диском');
+    const { buf, json } = габаритыТточила();
+    must(buf.length === запись.bytes, `точило: на диске ${buf.length}, в манифесте ${запись.bytes}`);
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'точило без Draco: геометрия весит как сырая'
+    );
+    must(buf.length < 10 * 1024 * 1024, `точило весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`);
+  });
+
+  it('тинты: рама дерево, круг камень', () => {
+    const { json } = габаритыТточила();
+    must((json.images ?? []).length === 0, 'у точила взялись картинки: текстуры не shipping, тинт врёт');
+    must((json.materials ?? []).length === 2, `материалов ${(json.materials ?? []).length} вместо 2`);
+    const цвета: Record<string, number[]> = {};
+    for (const m of json.materials ?? []) {
+      const ф = m.pbrMetallicRoughness?.baseColorFactor ?? [];
+      must(ф.length === 4, `материал ${m.name ?? '?'} без baseColorFactor: тинт слетел`);
+      цвета[m.name ?? '?'] = ф;
+    }
+    const рамка = цвета['Base1'] ?? [];
+    must(
+      Math.abs(рамка[0] - 0.35) < 0.01 && Math.abs(рамка[1] - 0.21) < 0.01 && Math.abs(рамка[2] - 0.1) < 0.01,
+      `рама ${(рамка.slice(0, 3)).join('/')} вместо дерева 0.35/0.21/0.1`
+    );
+    const круг = цвета['lambert2'] ?? [];
+    must(
+      Math.abs(круг[0] - 0.55) < 0.01 && Math.abs(круг[1] - 0.55) < 0.01 && Math.abs(круг[2] - 0.57) < 0.01,
+      `круг ${(круг.slice(0, 3)).join('/')} вместо камня 0.55/0.55/0.57`
+    );
+  });
+
+  it('габариты 0.89x1.69, низ на нуле', () => {
+    const { minX, maxX, minY, maxY, minZ, maxZ } = габаритыТточила();
+    must(Math.abs(maxX - minX - 0.89) < 0.02, `ширина ${(maxX - minX).toFixed(3)} вместо 0.89`);
+    must(Math.abs(maxZ - minZ - 1.69) < 0.02, `длина ${(maxZ - minZ).toFixed(3)} вместо 1.69: модель перевыпущена`);
+    must(Math.abs(maxY - minY - 1.557) < 0.02, `высота ${(maxY - minY).toFixed(3)} вместо 1.557`);
+    must(
+      Math.abs(minY - -0.003) < 0.005,
+      `низ на ${minY.toFixed(3)} вместо -0.003: подъём -0.01 вкопает станину или оставит висеть`
+    );
+  });
+
+  it('площадка: 7 м восточнее кузницы, круг к ней', () => {
+    const т = константаТточила();
+    const д = деревня();
+    const кузница = { x: д.x, z: д.z - 14 };
+    must(!isWater(т.x, т.z), `точило в (${т.x}, ${т.z}) стоит в воде`);
+    const отКузницы = Math.hypot(т.x - кузница.x, т.z - кузница.z);
+    must(отКузницы >= 5 && отКузницы <= 9, `точило в ${отКузницы.toFixed(1)} м от кузницы: в горне или в поле`);
+    const отДомов = Math.hypot(т.x - д.x, т.z - д.z);
+    must(отДомов >= 12 && отДомов <= 20, `точило в ${отДомов.toFixed(0)} м от центра деревни: в кольце домов`);
+    const зона = getZoneAt(т.x, т.z);
+    must(зона !== null && зона.id === 'mesopotamia_ruins', `зона ${зона?.id ?? 'не найдена'}: мерили в mesopotamia_ruins`);
+    // Круг — локальный -Z: смотрит на кузницу на западе.
+    const угол = (() => {
+      const ax = -Math.sin(т.ry), az = -Math.cos(т.ry);
+      const bx = кузница.x - т.x, bz = кузница.z - т.z;
+      const косинус = Math.max(-1, Math.min(1, (ax * bx + az * bz) / Math.hypot(bx, bz)));
+      return (Math.acos(косинус) * 180) / Math.PI;
+    })();
+    must(угол <= 5, `круг под ${угол.toFixed(1)}° к кузнице: точить придётся спиной`);
+    must(Math.abs(т.lift - -0.01) < 0.005, `подъём ${т.lift} вместо -0.01: пятно ровное 0.01, станина повиснет`);
+    must(Math.abs(т.scale - 1) < 0.001, `масштаб ${т.scale}: точило и так в метрах`);
+  });
+
+  it('сцена грузит точило со сдвигом центра и одним кругом', () => {
+    must(
+      /placeCenteredDecor\(scene, 'decor\/grindstone\.glb', x, z, lift, ry, scale, 0\.165, 0\.305, \[/.test(ТЕРРЕЙН),
+      'точило ставится не укладчиком с центром: начало модели уедет от площадки'
+    );
+    must(
+      /export function buildVillageGrindstone\(scene: THREE\.Scene\): void/.test(ТЕРРЕЙН),
+      'нет построителя точила: ему негде встать'
+    );
+    must(
+      /buildVillageGrindstone\(this\.scene\);/.test(читать('client/src/app/game3d/world3d.ts')),
+      'построитель не вызван из мира: код есть, а точила нет'
+    );
+  });
+});

@@ -317,6 +317,32 @@ function loadTavernRoomModel(): Promise<THREE.Group | null> {
   });
   return tavernRoomCache;
 }
+
+// Комод-консоль зала: резное красное дерево с родными PBR-текстурами.
+const DRAWER_MODEL = 'decor/drawer.glb';
+let drawerCache: Promise<THREE.Group | null> | null = null;
+
+/** Комод зала таверны. Кеш общий: комод в зале один. */
+function loadDrawerModel(): Promise<THREE.Group | null> {
+  if (drawerCache) return drawerCache;
+  drawerCache = new Promise<THREE.Group | null>((готово) => {
+    try {
+      const draco = new DRACOLoader();
+      draco.setDecoderPath('/game/draco/');
+      const l = new GLTFLoader();
+      l.setDRACOLoader(draco);
+      l.load(
+        `/game/models/${DRAWER_MODEL}`,
+        (gltf) => готово((gltf.scene as THREE.Group) ?? null),
+        undefined,
+        () => готово(null),
+      );
+    } catch {
+      готово(null);
+    }
+  });
+  return drawerCache;
+}
 function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   // ── Колонны: два ряда по десять ──
@@ -1570,7 +1596,7 @@ interface Room {
 // ближе 2.3 м (проверено тем же замером). Дверь выхода — в южной стене зала,
 // у устья коридора (-1, -16): там стена, игрок выходит только кликом.
 const TAVERN_EXIT: [number, number] = [-1, -16];
-const TAVERN_BRAZIERS: [number, number][] = [[-12, 4], [-10, -2], [-8, -6], [-2, -10]];
+const TAVERN_BRAZIERS: [number, number][] = [[-12, 4], [-10, -2], [-4, -8], [-2, -10]];
 const TAVERN_COLLIDERS: [number, number][] = [
   [-25.25, -3.48], [-25.25, -1.98], [-25.25, -0.48], [-25.25, +1.02],
   [-25.25, +2.52], [-25.25, +4.02], [-25.25, +5.52], [-25.25, +7.02],
@@ -1650,6 +1676,27 @@ function buildTavernRoom(scene: THREE.Scene, def: BuildingDef): Room {
     });
     g.add(зал);
   });
+  // Комод-консоль у стойки: дверцы (-Z) смотрят на запад, к стойке. Масштаб
+  // 0.2 даёт 0.83 x 1.03 x 1.39. Место (-6.5, -5) и подход с запада проверены
+  // открытым полом сеткой 1 м; два круга r = 0.55 закрывают корпус.
+  void loadDrawerModel().then((модель) => {
+    if (!модель) return;
+    const комод = модель.clone();
+    комод.position.set(cx - 6.5, FLOOR_Y, cz - 5);
+    комод.rotation.y = -Math.PI / 2;
+    комод.scale.setScalar(0.2);
+    комод.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(комод);
+  });
+  colliders.push(
+    { x: cx - 6.85, z: cz - 5, r: 0.55 },
+    { x: cx - 6.15, z: cz - 5, r: 0.55 },
+  );
   // Столов с документами у таверны нет (только тронный зал) — цикл общий,
   // чтобы будущий стол встал сам, без новой ветки.
   const documentTargets: THREE.Object3D[] = [];

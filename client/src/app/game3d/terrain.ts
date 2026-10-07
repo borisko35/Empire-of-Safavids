@@ -5482,6 +5482,13 @@ export const CARAVANSERAI_WINDMILL = { x: 581, z: 40, lift: -0.16, ry: -1.37593,
 // lift 0.237 ставит лемех на сантиметр ниже нижнего грунта.
 export const MILL_PLOUGH = { x: 581, z: 52, lift: 0.237, ry: 0, scale: 1 };
 
+// ── Точило у кузницы ─────────────────────────────────────────
+// Площадка выбрана владельцем: 7 м восточнее кузницы, 16 м от центра деревни
+// (вне кольца домов), дуб в 3 м. Рельеф под пятном ровный 0.01. Круг (-Z)
+// смотрит на кузницу, ry = π/2 считан. Низ модели -0.003; lift -0.01 ставит
+// станину на сантиметр ниже нижнего грунта.
+export const VILLAGE_GRINDSTONE = { x: -488, z: -429, lift: -0.01, ry: 1.5708, scale: 1 };
+
 export function buildGallows(scene: THREE.Scene): void {
   const { x, z, lift, ry } = GALLOWS;
   const c = Math.cos(ry);
@@ -5618,6 +5625,16 @@ export function buildCaravanseraiWindmill(scene: THREE.Scene): void {
 export function buildMillPlough(scene: THREE.Scene): void {
   const { x, z, lift, ry, scale } = MILL_PLOUGH;
   placeDecor(scene, 'decor/plough.glb', x, z, lift, ry, 0.9, scale);
+}
+
+// Точило у кузницы: 0.89 x 1.56 x 1.69, начало смещено (центр X +0.165,
+// Z +0.305) — возвращается укладчиком с центром. Один круг r = 1.0 закрывает
+// раму и круг: диагональ 0.96.
+export function buildVillageGrindstone(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = VILLAGE_GRINDSTONE;
+  placeCenteredDecor(scene, 'decor/grindstone.glb', x, z, lift, ry, scale, 0.165, 0.305, [
+    { x: 0, z: 0, r: 1.0 },
+  ]);
 }
 
 // ── Дубы у лесной деревни ────────────────────────────────────────

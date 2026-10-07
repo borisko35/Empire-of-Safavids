@@ -22,7 +22,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildRuinBridge, buildPassRocks, buildDesertTower, buildChurchRuin,
   buildVillageArchway, buildChurchDoorway, buildOnionDomeTower, buildGallows,
   buildMarketCart, buildGallowsPalisade, buildPortRoadBarricade, buildCaravanseraiWindmill,
-  buildMillPlough,
+  buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -543,6 +543,8 @@ private roll = 0;
     buildCaravanseraiWindmill(this.scene);
     // Плуг у мельницы: фермерская связка караван-сарая.
     buildMillPlough(this.scene);
+    // Точило у кузницы деревни.
+    buildVillageGrindstone(this.scene);
     // Дубы у лесной деревни.
     buildOaks(this.scene);
     // Рухнувший мост у реки и скалы перевала.

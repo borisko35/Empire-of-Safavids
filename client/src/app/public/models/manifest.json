@@ -454,6 +454,16 @@
       "file": "models/decor/plough.glb",
       "name": "plough",
       "bytes": 300344
+    },
+    {
+      "file": "models/decor/drawer.glb",
+      "name": "drawer",
+      "bytes": 3984572
+    },
+    {
+      "file": "models/decor/grindstone.glb",
+      "name": "grindstone",
+      "bytes": 20488
     }
   ],
   "weapons": [
