@@ -486,6 +486,63 @@ export const ХАНЗА_ЗАГЛУШКА = { w: 3.4, h: 3.6, t: 0.25 };
 
 /** Плита двора: толщина и подъём. Подъём 4 см — мощение, а не цоколь. */
 export const ХАНЗА_ПЛИТА = { t: 0.3, подъём: 0.04 };
+// ── Гробница Шеиха ─────────────────────────────────────────────────
+//
+// Седьмое по счёту здание с экстерьером. Мечетный двор — §63, дворец — §65,
+// таможня — §68, ткацкая — §69, святилище — §70, ханза — §72, гробница — здесь.
+//
+// ГДЕ. Запись интерьера: гробница, (1400, 1400), выход (1400, 1404).
+//
+// ЗАМЕР. Уровень −2.5, срез до 1.29 м, засыпка до 1.78 м, перепад 2.96 м на
+// 20 м. Сухо: water задана контурами, 0 мокрых точек из 1089.
+//
+// РАДИУС 50. Полудиагональ комплекса 24.8 м, ровная часть 27.5 м, запас 2.7 м.
+// При 48 запас 1.6 м — тот же малой запас, что у святилища.
+//
+// СКЛОН И ВХОД. В интерьере вход — лестница вниз (интерьер начинается ниже).
+// Значит снаружи надземный корпус, в который входят по лестнице. Уровень земли
+// здесь −2.5, и склон 2.96 м на 20 м намекает: корпус стоит на уступе, врезанном
+// в склон, а лестница ведёт вниз к его двери. Ограда двора закрывает край
+// подсыпки.
+export const TOMB = { x: 1400, z: 1400, radius: 50, level: -2.5 };
+
+// ── Габариты гробницы ──────────────────────────────────────────────
+//
+// Всё в МЕТРАХ и в МЕСТНЫХ координатах группы. Начало — линия двери:
+// (1400, 1400) это сама дверь, выход (1400, 1404) на четыре метра дальше по
+// плюс z.
+//
+// ЧЕМ ОТЛИЧАЕТСЯ. Таможня — застава, ткацкая — мастерская, святилище — руина
+// на уступе, ханза — товарный двор. Здесь гробница: надземный корпус, в
+// который спускаются по лестнице. Дверь подземной комнаты закрыта решёткой,
+// снаружи — портик и лестница.
+export const TOMB_GEO = {
+  /** Надземный корпус гробницы: 18 x 14. */
+  корпус: { w: 18, d: 14, h: 4.2, t: 0.8 },
+  /** Дверной проём: 2.4 м. */
+  door: { w: 2.4, h: 3.0 },
+  /** Лестница вниз к двери: сколько ступеней и высота каждой. */
+  лестница: { число: 5, подъём: 0.35, ширина: 4.0, шаг: 1.1 },
+  /** Ограда двора: ширина двора. */
+  двор: { w: 26, d: 12 },
+  /** Стенки двора. */
+  wallYard: { h: 1.2, t: 0.5 },
+  /** Плита двора. */
+  плита: { t: 0.3, подъём: 0.04 },
+} as const;
+
+/** Местная линия задней стены корпуса. */
+export const ГРОБНИЦА_ЗАДНЯЯ_Z = -14;
+
+/** Местная линия дальней границы двора. */
+export const ГРОБНИЦА_ДВОР_Z = 12;
+
+/** Заглушка в проёме двери: за дверью подземный зал, и небо видно не должно. */
+export const ГРОБНИЦА_ЗАГЛУШКА = { w: 2.4, h: 3.0, t: 0.25 };
+
+/** Плита пола корпуса и двора. */
+export const ГРОБНИЦА_ПЛИТА = { t: 0.3, подъём: 0.04 };
+
 
 
 
@@ -734,6 +791,10 @@ export function terrainHeight(x: number, z: number): number {
   // ВОКРУГ МЕДИАНЫ (-8.38 по габариту 775 точек), а не перебором от нуля.
   // Радиус 52: полудиагональ комплекса 25.6 м, при 48 запас 0.8 м.
   h = flatten(h, x, z, HANZA.x, HANZA.z, HANZA.radius, HANZA.level);
+  // Гробница. ПОСЛЕ залива — см. правило выше. Уровень -2.5 выбран замером
+  // ВОКРУГ МЕДИАНЫ (-2.49), а не перебором от нуля. Радиус 50: полудиагональ
+  // комплекса 24.8 м, при 48 запас 1.6 м.
+  h = flatten(h, x, z, TOMB.x, TOMB.z, TOMB.radius, TOMB.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -4434,6 +4495,218 @@ export function buildSettlements(scene: THREE.Scene): void {
     // Мешки и короба: по кругу на каждый. Игрок не проходит сквозь товар.
     for (const [mx, mz] of МЕШКИ) {
       addCollider(HANZA.x + mx, HANZA.z + mz, 0.8);
+    }
+
+    scene.add(g);
+  }
+  // ── Гробница Шеиха ─────────────────────────────────────────────
+  //
+  // Седьмое по счёту здание с экстерьером. Мечетный двор — §63, дворец — §65,
+  // таможня — §68, ткацкая — §69, святилище — §70, ханза — §72.
+  //
+  // ГДЕ. Залив — §63, дворнett — §65, таможня — §68, ткацкая — §69, святилище —
+  // §70, ханза — §72.
+  //
+  // ЧЕМ ОТЛИЧАЕТСЯ. Таможня — застава, ткацкая — мастерская, святилище —
+  // руина на уступе, ханза — товарный двор. Здесь гробница: надземный корпус, в
+  // который спускаются по лестнице. Дверь подземной комнаты, снаружи — портик.
+  //
+  // ДВОР ОБЪЯСНЯЕТ ИНТЕРЬЕР, а всё из furnishTomb: саркофаг в центре, решётка,
+  // лестница вниз у входа, ниши со свитками, светильники, 20 сундуков. Снаружи:
+  //   * лестница вниз к двери — внутри лестница продолжается вниз;
+  //   * надземный корпус — внутри подземный зал;
+  //   * ворота в ограде — интерьер даётся только после входа.
+  //
+  // УРОВЕНЬ -2.5. Гробница зарыта в склон: корпус врезается в ложбину задней
+  // стеной, а лестница спускается с уровня земли к двери.
+  //
+  // НАЧАЛО МЕСТНЫХ КООРДИНАТ — ЛИНИЯ ДВЕРИ. В (1400, 1400) сама дверь, выход
+  // (1400, 1404) на четыре метра дальше.
+  {
+    const {
+      корпус: { w: HALL_W, d: HALL_D, h: HALL_H, t: WALL_T },
+      door: { w: DOOR_W, h: DOOR_H },
+      лестница,
+      двор: { w: YARD_W },
+      wallYard,
+    } = TOMB_GEO;
+    const zЗад = ГРОБНИЦА_ЗАДНЯЯ_Z;
+    const zДвор = ГРОБНИЦА_ДВОР_Z;
+
+    const g = new THREE.Group();
+    g.position.set(TOMB.x, TOMB.level, TOMB.z);
+
+    // ── Плита двора ──
+    const плитаДвора = new THREE.Mesh(
+      new THREE.BoxGeometry(YARD_W, ГРОБНИЦА_ПЛИТА.t, zДвор),
+      MAT.sand,
+    );
+    плитаДвора.position.set(0, ГРОБНИЦА_ПЛИТА.подъём - ГРОБНИЦА_ПЛИТА.t / 2, zДвор / 2);
+    плитаДвора.receiveShadow = true;
+    g.add(плитаДвора);
+
+    // Плита пола корпуса.
+    const пол = new THREE.Mesh(
+      new THREE.BoxGeometry(HALL_W, ГРОБНИЦА_ПЛИТА.t, HALL_D),
+      MAT.sandstone,
+    );
+    пол.position.set(0, ГРОБНИЦА_ПЛИТА.подъём - ГРОБНИЦА_ПЛИТА.t / 2, zЗад + HALL_D / 2);
+    пол.receiveShadow = true;
+    g.add(пол);
+
+    // ── Ограда двора ──
+    for (const s of [-1, 1] as const) {
+      const бок = new THREE.Mesh(
+        new THREE.BoxGeometry(wallYard.t, wallYard.h, zДвор + wallYard.t),
+        MAT.sandstoneDark,
+      );
+      бок.position.set(s * (YARD_W / 2 + wallYard.t / 2), wallYard.h / 2, zДвор / 2 - wallYard.t / 2);
+      бок.castShadow = true;
+      бок.receiveShadow = true;
+      g.add(бок);
+    }
+    // Передняя стенка с проёмом.
+    const проём = DOOR_W + 2.4;
+    const полотно = (YARD_W + wallYard.t * 2 - проём) / 2;
+    for (const s of [-1, 1] as const) {
+      const w = new THREE.Mesh(
+        new THREE.BoxGeometry(полотно, wallYard.h, wallYard.t),
+        MAT.sandstoneDark,
+      );
+      w.position.set(s * (проём / 2 + полотно / 2), wallYard.h / 2, zДвор + wallYard.t / 2);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+    const зад = new THREE.Mesh(
+      new THREE.BoxGeometry(YARD_W + wallYard.t * 2, wallYard.h, wallYard.t),
+      MAT.sandstoneDark,
+    );
+    зад.position.set(0, wallYard.h / 2, zЗад - wallYard.t / 2);
+    зад.castShadow = true;
+    зад.receiveShadow = true;
+    g.add(зад);
+
+    // ── Корпус гробницы: три глухие стены и передняя ──
+    for (const [hx, hz, hw, hd] of [
+      [0, zЗад + WALL_T / 2, HALL_W, WALL_T],
+      [-HALL_W / 2 + WALL_T / 2, zЗад + HALL_D / 2, WALL_T, HALL_D],
+      [HALL_W / 2 - WALL_T / 2, zЗад + HALL_D / 2, WALL_T, HALL_D],
+    ] as const) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(hw, HALL_H, hd), MAT.sandstone);
+      w.position.set(hx, HALL_H / 2, hz);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+    // Передняя стена с проёмом двери.
+    const сегмент = (HALL_W - DOOR_W) / 2;
+    for (const s of [-1, 1] as const) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(сегмент, HALL_H, WALL_T), MAT.sandstone);
+      w.position.set(s * (DOOR_W / 2 + сегмент / 2), HALL_H / 2, WALL_T / 2);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+    const перемычка = new THREE.Mesh(
+      new THREE.BoxGeometry(DOOR_W, HALL_H - DOOR_H, WALL_T),
+      MAT.sandstone,
+    );
+    перемычка.position.set(0, DOOR_H + (HALL_H - DOOR_H) / 2, WALL_T / 2);
+    перемычка.castShadow = true;
+    g.add(перемычка);
+
+    // Купол/пирамидальная кровля.
+    const крыша = new THREE.Mesh(
+      new THREE.ConeGeometry(HALL_W / 2 + 1.0, 2.2, 4),
+      MAT.sandstoneDark,
+    );
+    крыша.position.set(0, HALL_H + 1.1, zЗад + HALL_D / 2);
+    крыша.rotation.y = Math.PI / 4;
+    крыша.castShadow = true;
+    g.add(крыша);
+
+    // ── Дверь с решёткой ──
+    const дверь = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.3), MAT.wood);
+    дверь.position.set(0, DOOR_H / 2, WALL_T / 2 + 0.15);
+    дверь.userData = {
+      doorBuilding: 'tomb',
+      doorAction: 'enter',
+      doorName: t('buildings.tomb'),
+    };
+    g.add(дверь);
+    const заглушка = new THREE.Mesh(
+      new THREE.BoxGeometry(ГРОБНИЦА_ЗАГЛУШКА.w, ГРОБНИЦА_ЗАГЛУШКА.h, ГРОБНИЦА_ЗАГЛУШКА.t),
+      MAT.dark,
+    );
+    заглушка.position.set(0, DOOR_H / 2, WALL_T / 2 - 0.05);
+    g.add(заглушка);
+    // Решётка в проёме: тонкие прутья, как в интерьере.
+    for (let i = 0; i < 5; i++) {
+      const bx = -DOOR_W / 2 + (DOOR_W / 4) * i;
+      const прут = new THREE.Mesh(new THREE.BoxGeometry(0.08, DOOR_H, 0.08), MAT.dark);
+      прут.position.set(bx, DOOR_H / 2, WALL_T / 2 + 0.1);
+      g.add(прут);
+    }
+
+    // ── Лестница к двери ──
+    // Ступени поднимаются от земли к уровню двери, как в интерьере — вниз.
+    let ступеньY = 0;
+    for (let i = 0; i < лестница.число; i++) {
+      ступеньY -= лестница.подъём;
+      const ст = new THREE.Mesh(
+        new THREE.BoxGeometry(лестница.ширина, лестница.подъём + 0.15, лестница.шаг),
+        MAT.stone,
+      );
+      ст.position.set(0, ступеньY + лестница.подъём / 2, WALL_T / 2 + лестница.шаг / 2 + i * лестница.шаг);
+      ст.castShadow = true;
+      ст.receiveShadow = true;
+      g.add(ст);
+    }
+
+    // ── Тенистая площадь перед дверью: столб со светильником ──
+    for (const s of [-1, 1] as const) {
+      const столб = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.6, 0.4), MAT.stone);
+      столб.position.set(s * (DOOR_W / 2 + 1.6), 1.3, WALL_T / 2 + 1.2);
+      столб.castShadow = true;
+      g.add(столб);
+      const фонарь = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), MAT.gold);
+      фонарь.position.set(s * (DOOR_W / 2 + 1.6), 2.8, WALL_T / 2 + 1.2);
+      g.add(фонарь);
+    }
+
+    // ── Коллайдеры ──
+    // Передняя стена: цепочка с проёмом двери.
+    for (let sx = -HALL_W / 2; sx <= HALL_W / 2; sx += 2) {
+      if (Math.abs(sx) >= DOOR_W / 2 + 1.5) {
+        addCollider(TOMB.x + sx, TOMB.z + WALL_T / 2, 1.1);
+      }
+    }
+    // Задняя и боковые стены корпуса.
+    for (let sx = -HALL_W / 2; sx <= HALL_W / 2; sx += 2) {
+      addCollider(TOMB.x + sx, TOMB.z + zЗад + WALL_T / 2, 1.1);
+    }
+    for (let sz = zЗад + WALL_T; sz <= 0; sz += 2) {
+      addCollider(TOMB.x - HALL_W / 2 - WALL_T / 2, TOMB.z + sz, 1.1);
+      addCollider(TOMB.x + HALL_W / 2 + WALL_T / 2, TOMB.z + sz, 1.1);
+    }
+    // Ограда двора: передняя с проёмом, боковые глухие, задняя под корпусом.
+    const проём2 = DOOR_W + 2.4;
+    for (let tx = -YARD_W / 2; tx <= YARD_W / 2; tx += 2) {
+      if (Math.abs(tx) >= проём2 / 2 + 0.6) {
+        addCollider(TOMB.x + tx, TOMB.z + zДвор + wallYard.t / 2, 1.0);
+      }
+    }
+    for (let tz = 0; tz <= zДвор; tz += 2) {
+      addCollider(TOMB.x - YARD_W / 2 - wallYard.t / 2, TOMB.z + tz, 1.0);
+      addCollider(TOMB.x + YARD_W / 2 + wallYard.t / 2, TOMB.z + tz, 1.0);
+    }
+    for (let tx = -YARD_W / 2; tx <= YARD_W / 2; tx += 2) {
+      addCollider(TOMB.x + tx, TOMB.z + zЗад - wallYard.t / 2, 1.0);
+    }
+    // Столбы фонарей.
+    for (const s of [-1, 1] as const) {
+      addCollider(TOMB.x + s * (DOOR_W / 2 + 1.6), TOMB.z + WALL_T / 2 + 1.2, 0.7);
     }
 
     scene.add(g);
