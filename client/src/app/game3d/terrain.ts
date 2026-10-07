@@ -414,6 +414,79 @@ export const СВЯТИЛИЩЕ_ЗАГЛУШКА = { w: 2.8, h: 3.2, t: 0.25 };
  * Подъём 4 см — мощение, а не второй цоколь поверх первого.
  */
 export const СВЯТИЛИЩЕ_ПЛИТА = { t: 0.3, подъём: 0.04 };
+// ── Ханза: караванный двор ─────────────────────────────────────────
+//
+// Шестой и последний экстерьер по заказу «заполним здание экстерьером».
+// Мечетный двор — §63, дворец — §65, таможня — §68, ткацкая — §69, святилище —
+// §70, ханза — здесь.
+//
+// ГДЕ. Запись интерьера: ханза, (1600, 1000), выход (1600, 1004). Комментарий в
+// interiors: «караван-селение: длинные ряды, товар, весы». Замер подтверждает,
+// что точка — караванная, но не «селение в широкой долине», а ложбина: земля
+// здесь на 10 м ниже ровни улиц.
+//
+// УРОВЕНЬ ВЫБРАН ЗАМЕРОМ ВОКРУГ МЕДИАНЫ, а не перебором от нуля. Медиана по
+// габариту 775 точек -8.38, диапазон перебора был от -10.38 до -6.38, и минимум
+// суммы «срез плюс засыпка» выпал на -8.4 при сумме 419.4. Оптимум внутри
+// диапазона, то есть найден, а не выдан краем — как оказалось в случае ткацки,
+// где перебор от нуля выдал нижнюю границу.
+//
+// Срез до 1.66 м и засыпка до 1.19 м — больше метра в обе стороны. Это значите,
+// нижняя частьплощадки режется в склон ложбины, а с подветренной стороны
+// подсыпается метр насыпи. Продуктовое решение за владельцем: двор вровень с
+// выровненной площадкой, а подпорка решена в стенках по периметру, которые
+// закрывают и срез, и подсыпку.
+//
+// РАДИУС 52. Полудиагональ комплекса 25.6 м: двор уходит на 16 м назад и на
+// 12 м вперёд, обе стороны шире зала. При радиусе 48 ровная часть 26.4 м,
+// запас 0.8 м — площадка почти вровень с углом комплекса. Взято 52: ровная
+// часть 28.6 м, запас 3.0 м.
+//
+// ДАЛЕКО ЛИ ОТ СОСЕДЕЙ. До гробницы 447 м, до святилища 447 м, до дворца 1627 м,
+// до города 1887 м. Круги смешивания не пересекаются.
+export const HANZA = { x: 1600, z: 1000, radius: 52, level: -8.4 };
+
+// ── Габариты ханзы ─────────────────────────────────────────────────
+//
+// Всё в МЕТРАХ и в МЕСТНЫХ координатах группы. Начало — линия двери, как у всех
+// предыдущих экстерьеров: в данных (1600, 1000) это сама дверь, выход
+// (1600, 1004) на четыре метра дальше по плюс z.
+//
+// ЧЕМ ОТЛИЧАЕТСЯ ОТ ПРЕДЫДУЩИХ. Таможня — застава (стена, ворота, навес),
+// ткацкая — мастерская, святилище — руина на уступе. Здесь торговый двор:
+// длинные товарные ряды под навесом, весы у ворот, надписи на столбах, мешки и
+// короба, следы копыт к въезду. Двор не защищают, а принимаюттовар.
+export const HANZA_GEO = {
+  /** Торговый зал: 22 x 16. Глубина 16 — это ROOM_D в interiors. */
+  зал: { w: 22, d: 16 },
+  /** Стена: толщина 1.4. */
+  wall: { t: 1.4 },
+  /** Дверной проём (въезд): 3.4 м. Шире, чем у остальных: сюда везут товар. */
+  door: { w: 3.4, h: 3.6 },
+  /** Двор перед залом: ширина 28, глубина 12. */
+  yard: { w: 28, d: 12 },
+  /** Стенки по периметру двора: удерживают подсыпку и читают, как ограда рынка. */
+  wallYard: { h: 1.2, t: 0.5 },
+  /** Навес над товарными рядами. */
+  canopy: { w: 22, d: 4.2, h: 3.4 },
+  /** Ряды товара: два ряда мешков и коробов. */
+  rows: { count: 2, len: 18 },
+  /** Весы у въезда: стойка, чашечные весы. */
+  scales: { h: 2.6 },
+} as const;
+
+/** Местная линия задней стены зала. */
+export const ХАНЗА_ЗАДНЯЯ_Z = -16;
+
+/** Местная линия дальней границы двора. */
+export const ХАНЗА_ДВОР_Z = 12;
+
+/** Заглушка в проёме двери: за ханзой нет зала, и небо видно не должно. */
+export const ХАНЗА_ЗАГЛУШКА = { w: 3.4, h: 3.6, t: 0.25 };
+
+/** Плита двора: толщина и подъём. Подъём 4 см — мощение, а не цоколь. */
+export const ХАНЗА_ПЛИТА = { t: 0.3, подъём: 0.04 };
+
 
 
 
@@ -657,6 +730,10 @@ export function terrainHeight(x: number, z: number): number {
   // Радиус 56: полудиагональ комплекса со стенкой и ступенями 27.1 м, при 48
   // он был БОЛЬШЕ комплекса, а при 52 запас 1.5 м был мал.
   h = flatten(h, x, z, SHRINE.x, SHRINE.z, SHRINE.radius, SHRINE.level);
+  // Ханза. ПОСЛЕ залива — см. правило выше. Уровень -8.4 выбран замером
+  // ВОКРУГ МЕДИАНЫ (-8.38 по габариту 775 точек), а не перебором от нуля.
+  // Радиус 52: полудиагональ комплекса 25.6 м, при 48 запас 0.8 м.
+  h = flatten(h, x, z, HANZA.x, HANZA.z, HANZA.radius, HANZA.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -4036,6 +4113,327 @@ export function buildSettlements(scene: THREE.Scene): void {
       for (let tx = от; tx <= TERR_W / 2; tx += 2) {
         addCollider(SHRINE.x + s * tx, SHRINE.z + TERR_D - 0.225, 0.9);
       }
+    }
+
+    scene.add(g);
+  }
+  // ── Ханза: караванный двор ─────────────────────────────────────
+  //
+  // Шестой и последний экстерьер по заказу «заполним здание экстерьером».
+  // Мечетный двор — §63, дворец — §65, таможня — §68, ткацкая — §69, святилище —
+  // §70.
+  //
+  // ПЛАНИРОВКА ИЗ ИНТЕРЬЕРА. Зал 22 x 16 (ROOM_W x ROOM_D), дверь на локальном
+  // z = 0, задняя стена на z = -16. Двор перед дверью — главный, 28 x 12.
+  //
+  // ЧЕМ ОТЛИЧАЕТСЯ ОТ ПРЕДЫДУЩИХ. Таможня — застава, ткацкая — мастерская,
+  // святилище — руина на уступе. Здесь торговый двор: товарные ряды под навесом,
+  // весы у въезда, надписи на столбах, мешки и короба, следы копыт к воротам.
+  // Двор не защищают — сюда принимают товар.
+  //
+  // ДВОР ОБЪЯСНЯЕТ ИНТЕРЬЕР, а всё из furnishHanza: столы со свитками, стеллажи,
+  // надписи плитами разной высоты, сломанные весы — чаша на боку, стрелка упала
+  // отдельно — и следы копыт дугой к двери. Соответствие такое:
+  //
+  //   сломанные весы в интерьере -> целые весы у въезда: взвешивают товар;
+  //   надписи плитами на стене -> надписи на столбах у въезда;
+  //   стеллажи и столы со свитками -> товарные ряды под навесом: свитки и товар
+  //     — одно и то же по смыслу «ханжа читает письма и письма»;
+  //   следы копыт дугой к двери -> следы выезда с двора в плюс z.
+  //
+  // УРОВЕНЬ -8.4: ханза стоит в старой ложбине. Срез до 1.66 м в склон, засыпка
+  // до 1.19 м с подветренной стороны. Стенки двора высотой 1.2 м закрывают край
+  // насыпи и читаются как ограда рынка.
+  //
+  // НАЧАЛО МЕСТНЫХ КООРДИНАТ — ЛИНИЯ ДВЕРИ. В (1600, 1000) сама дверь, выход
+  // (1600, 1004) на четыре метра дальше по плюс z.
+  {
+    const {
+      зал: { w: HALL_W },
+      wall: { t: WALL_T },
+      door: { w: DOOR_W, h: DOOR_H },
+      yard: { w: YARD_W, d: YARD_D },
+      wallYard,
+      canopy,
+      rows,
+      scales,
+    } = HANZA_GEO;
+    const zЗад = ХАНЗА_ЗАДНЯЯ_Z;
+    // Граница двора — из YARD_D, константа ХАНЗА_ДВОР_Z остаётся числом в ROADMAP.
+
+    const g = new THREE.Group();
+    g.position.set(HANZA.x, HANZA.level, HANZA.z);
+
+    // ── Плита двора ──
+    const плита = new THREE.Mesh(
+      new THREE.BoxGeometry(YARD_W, ХАНЗА_ПЛИТА.t, YARD_D),
+      MAT.sand,
+    );
+    плита.position.set(0, ХАНЗА_ПЛИТА.подъём - ХАНЗА_ПЛИТА.t / 2, YARD_D / 2);
+    плита.receiveShadow = true;
+    g.add(плита);
+
+    // Плита зала.
+    const пол = new THREE.Mesh(
+      new THREE.BoxGeometry(HALL_W, ХАНЗА_ПЛИТА.t, -zЗад),
+      MAT.sandstone,
+    );
+    пол.position.set(0, ХАНЗА_ПЛИТА.подъём - ХАНЗА_ПЛИТА.t / 2, zЗад / 2);
+    пол.receiveShadow = true;
+    g.add(пол);
+
+    // ── Стенки двора ──
+    // Высота 1.2 м: ограда рынка и край насыпи в одном. Глухие с боков, с
+    // проёмом у въезда спереди.
+    for (const s of [-1, 1] as const) {
+      const бок = new THREE.Mesh(
+        new THREE.BoxGeometry(wallYard.t, wallYard.h, YARD_D + wallYard.t),
+        MAT.sandstoneDark,
+      );
+      бок.position.set(s * (YARD_W / 2 + wallYard.t / 2), wallYard.h / 2, YARD_D / 2 - wallYard.t / 2);
+      бок.castShadow = true;
+      бок.receiveShadow = true;
+      g.add(бок);
+      // Дальняя стенка под стеной зала.
+      const зад = new THREE.Mesh(
+        new THREE.BoxGeometry(YARD_W + wallYard.t * 2, wallYard.h, wallYard.t),
+        MAT.sandstoneDark,
+      );
+      зад.position.set(0, wallYard.h / 2, zЗад - wallYard.t / 2);
+      зад.castShadow = true;
+      зад.receiveShadow = true;
+      g.add(зад);
+    }
+    // Передняя стенка — двумя полотнами, проём под въезд.
+    const проём = DOOR_W + 2.0;
+    const полотно = (YARD_W + wallYard.t * 2 - проём) / 2;
+    for (const s of [-1, 1] as const) {
+      const w = new THREE.Mesh(
+        new THREE.BoxGeometry(полотно, wallYard.h, wallYard.t),
+        MAT.sandstoneDark,
+      );
+      w.position.set(s * (проём / 2 + полотно / 2), wallYard.h / 2, YARD_D + wallYard.t / 2);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+
+    // ── Зал: стены ──
+    // Три глухие стены и передняя с проёмом двери.
+    for (const [hx, hz, hw, hd] of [
+      [0, zЗад + WALL_T / 2, HALL_W, WALL_T],
+      [-HALL_W / 2 + WALL_T / 2, zЗад + (HALL_W - WALL_T) / 2, WALL_T, HALL_W - WALL_T],
+      [HALL_W / 2 - WALL_T / 2, zЗад + (HALL_W - WALL_T) / 2, WALL_T, HALL_W - WALL_T],
+    ] as const) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(hw, 4.4, hd), MAT.sandstone);
+      w.position.set(hx, 2.2, hz);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+    // Передняя стена с проёмом.
+    const сегмент = (HALL_W - DOOR_W) / 2;
+    for (const s of [-1, 1] as const) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(сегмент, 4.4, WALL_T), MAT.sandstone);
+      w.position.set(s * (DOOR_W / 2 + сегмент / 2), 2.2, WALL_T / 2);
+      w.castShadow = true;
+      w.receiveShadow = true;
+      g.add(w);
+    }
+    const перемычка = new THREE.Mesh(
+      new THREE.BoxGeometry(DOOR_W, 0.8, WALL_T),
+      MAT.sandstone,
+    );
+    перемычка.position.set(0, DOOR_H + 0.4, WALL_T / 2);
+    перемычка.castShadow = true;
+    g.add(перемычка);
+
+    // Крыша хана: двускатная, читается издалека.
+    const крыша = new THREE.Mesh(
+      new THREE.ConeGeometry(HALL_W / 2 + 1.2, 2.4, 4),
+      MAT.sandstoneDark,
+    );
+    крыша.position.set(0, 4.4 + 1.2, zЗад + 8);
+    крыша.rotation.y = Math.PI / 4;
+    крыша.castShadow = true;
+    g.add(крыша);
+
+    // ── Дверь ──
+    const дверь = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, DOOR_H, 0.3), MAT.wood);
+    дверь.position.set(0, DOOR_H / 2, WALL_T / 2 + 0.15);
+    дверь.userData = {
+      doorBuilding: 'hanza',
+      doorAction: 'enter',
+      doorName: t('buildings.hanza'),
+    };
+    g.add(дверь);
+    const заглушка = new THREE.Mesh(
+      new THREE.BoxGeometry(ХАНЗА_ЗАГЛУШКА.w, ХАНЗА_ЗАГЛУШКА.h, ХАНЗА_ЗАГЛУШКА.t),
+      MAT.dark,
+    );
+    заглушка.position.set(0, DOOR_H / 2, WALL_T / 2 - 0.05);
+    g.add(заглушка);
+
+    // ── Навес над товарными рядами ──
+    // Стойки и скат: ряды товара под крышей, как в караван-сарае.
+    const навесZ = 3.0;
+    for (const s of [-1, 1] as const) {
+      for (const pz of [навесZ - canopy.d / 2, навесZ + canopy.d / 2]) {
+        const столб = new THREE.Mesh(new THREE.BoxGeometry(0.3, canopy.h, 0.3), MAT.wood);
+        столб.position.set(s * (canopy.w / 2 - 0.4), canopy.h / 2, pz);
+        столб.castShadow = true;
+        g.add(столб);
+      }
+    }
+    const навес = new THREE.Mesh(
+      new THREE.BoxGeometry(canopy.w, 0.18, canopy.d),
+      MAT.sandstoneDark,
+    );
+    навес.position.set(0, canopy.h + 0.09, навесZ);
+    навес.castShadow = true;
+    навес.receiveShadow = true;
+    g.add(навес);
+
+    // ── Товарные ряды: мешки и короба ──
+    const МЕШКИ: [number, number, number, number][] = [];
+    for (let i = 0; i < rows.len; i += 1.6) {
+      const mx = -rows.len / 2 + i;
+      // Центральный проход от двери до дальнего края двора оставлен свободным:
+      // мешок на оси перекроет подъезд и сам проезд. Ширина прохода семь метров.
+      if (Math.abs(mx) < 3.5) continue;
+      for (const rz of [навесZ - 1.2, навесZ + 1.2]) {
+        МЕШКИ.push([mx, rz, 0.5 + (i % 3) * 0.15, (i * 0.7) % 1.2]);
+      }
+    }
+    for (const [mx, mz, mh, rot] of МЕШКИ) {
+      const мешок = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.55, mh, 8),
+        MAT.sand,
+      );
+      мешок.position.set(mx, mh / 2, mz);
+      мешок.rotation.y = rot;
+      мешок.castShadow = true;
+      g.add(мешок);
+      // Палитра помельче — коробы.
+      const короб = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 1.0), MAT.wood);
+      короб.position.set(mx + 0.8, 0.35, mz + 0.2);
+      короб.rotation.y = rot * 1.3;
+      короб.castShadow = true;
+      g.add(короб);
+    }
+
+    // ── Весы у въезда ──
+    // Целая пара: стойка, перекладина, чаши. Сломанные весы внутри объясняются
+    // этими: товар взвешивали здесь, потом сломали, но двор не закрыли.
+    const весыX = YARD_W / 2 - 3.0;
+    const весыZ = 2.0;
+    const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.3, scales.h, 0.3), MAT.wood);
+    стойка.position.set(весыX, scales.h / 2, весыZ);
+    стойка.castShadow = true;
+    g.add(стойка);
+    const перекладина = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.16, 0.16), MAT.wood);
+    перекладина.position.set(весыX, scales.h - 0.1, весыZ);
+    g.add(перекладина);
+    for (const s of [-1, 1] as const) {
+      const чаша = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.4, 0.25, 10),
+        MAT.gold,
+      );
+      чаша.position.set(весыX + s * 1.15, scales.h - 0.9, весыZ);
+      чаша.castShadow = true;
+      g.add(чаша);
+      const тяга = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.8, 0.06), MAT.wood);
+      тяга.position.set(весыX + s * 1.15, scales.h - 0.5, весыZ);
+      g.add(тяга);
+    }
+
+    // ── Надписи на столбах у въезда ──
+    // Плиты разной высоты и наклона, как в интерьере.
+    for (let i = 0; i < 3; i++) {
+      const высота = 2.0 + (i % 2) * 0.5;
+      const столб = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, высота, 0.6),
+        MAT.stone,
+      );
+      столб.position.set(-YARD_W / 2 + 2.5 + i * 2.4, высота / 2, YARD_D - 1.2);
+      столб.castShadow = true;
+      g.add(столб);
+      const плита = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, высота * 0.7, 0.14),
+        MAT.sandstone,
+      );
+      плита.position.set(-YARD_W / 2 + 2.5 + i * 2.4, высота * 0.55, YARD_D - 0.85);
+      плита.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.05;
+      g.add(плита);
+    }
+
+    // ── Следы копыт к въезду и со двора ──
+    // Дугой от въезда в плюс z, как в интерьере — отпечатки ведут к выходу.
+    const СЛЕДЫ: [number, number][] = [];
+    for (let i = 0; i < 8; i++) {
+      const side = i % 2 === 0 ? 1 : -1;
+      СЛЕДЫ.push([side * (1.8 + i * 0.35), YARD_D + 1.0 + i * 1.6]);
+    }
+    for (const [sx, sz] of СЛЕДЫ) {
+      const след = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.05, 0.5),
+        MAT.dark,
+      );
+      след.position.set(sx, 0.06, sz);
+      след.rotation.y = (sx > 0 ? 1 : -1) * 0.2;
+      g.add(след);
+    }
+
+    // ── Коллайдеры ──
+    // Цепочками мелких кругов. Проёмы остаются открытыми: дверь в зале, проём в
+    // стенке двора у въезда.
+    //
+    // Особое внимание к въезду: ворота шире двери на метр с каждой стороны, и
+    // проём в стенке двора должен оставаться открытым, иначе торговец не везёт.
+    // Передняя стена зала с проёмом двери.
+    // Проём считает передняя цепочка по DOOR_W, дубль сегмента не нужен.
+    for (let sx = -HALL_W / 2; sx <= HALL_W / 2; sx += 2) {
+      if (Math.abs(sx) >= DOOR_W / 2 + 1.5) {
+        addCollider(HANZA.x + sx, HANZA.z + WALL_T / 2, 1.1);
+      }
+    }
+    // Задняя и боковые стены зала.
+    for (let sx = -HALL_W / 2; sx <= HALL_W / 2; sx += 2) {
+      addCollider(HANZA.x + sx, HANZA.z + zЗад + WALL_T / 2, 1.1);
+    }
+    for (let sz = zЗад + WALL_T; sz <= 0; sz += 2) {
+      addCollider(HANZA.x - HALL_W / 2 - WALL_T / 2, HANZA.z + sz, 1.1);
+      addCollider(HANZA.x + HALL_W / 2 + WALL_T / 2, HANZA.z + sz, 1.1);
+    }
+    // Стенки двора: передняя с проёмом, боковые глухие, задняя под залом.
+    const проём2 = DOOR_W + 2.0;
+    for (let tx = -YARD_W / 2; tx <= YARD_W / 2; tx += 2) {
+      if (Math.abs(tx) >= проём2 / 2 + 0.6) {
+        addCollider(HANZA.x + tx, HANZA.z + YARD_D + wallYard.t / 2, 1.0);
+      }
+    }
+    for (let tz = 0; tz <= YARD_D; tz += 2) {
+      addCollider(HANZA.x - YARD_W / 2 - wallYard.t / 2, HANZA.z + tz, 1.0);
+      addCollider(HANZA.x + YARD_W / 2 + wallYard.t / 2, HANZA.z + tz, 1.0);
+    }
+    for (let tx = -YARD_W / 2; tx <= YARD_W / 2; tx += 2) {
+      addCollider(HANZA.x + tx, HANZA.z + zЗад - wallYard.t / 2, 1.0);
+    }
+    // Стойки навеса.
+    for (const s of [-1, 1] as const) {
+      for (const pz of [навесZ - canopy.d / 2, навесZ + canopy.d / 2]) {
+        addCollider(HANZA.x + s * (canopy.w / 2 - 0.4), HANZA.z + pz, 0.5);
+      }
+    }
+    // Весы: одно кольцо, иначе игрок проходит сквозь стойку.
+    addCollider(HANZA.x + весыX, HANZA.z + весыZ, 1.2);
+    // Надписи на столбах: у каждого столб-и-плита.
+    for (let i = 0; i < 3; i++) {
+      addCollider(HANZA.x - YARD_W / 2 + 2.5 + i * 2.4, HANZA.z + YARD_D - 1.2, 0.8);
+    }
+    // Мешки и короба: по кругу на каждый. Игрок не проходит сквозь товар.
+    for (const [mx, mz] of МЕШКИ) {
+      addCollider(HANZA.x + mx, HANZA.z + mz, 0.8);
     }
 
     scene.add(g);
