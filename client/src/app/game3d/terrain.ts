@@ -564,6 +564,24 @@ export const CATACOMBS_GEO = {
 export const КАТАКОМБЫ_ДВОР_Z = 10;
 
 export const КАТАКОМБЫ_ЗАГЛУШКА = { w: 4.0, h: 4.5, t: 0.25 };
+// ── Дворцовый данж ────────────────────────────────────────────────
+//
+// Подземный данж 32x32 под дворцом. Вход — лестница вниз через арку.
+// Замер: уровень 2.7 (медиана 2.71), срез 2.16 м, засыпка 3.23 м. Радиус 60,
+// полудиагональ 29.1 м, запас 3.9 м. Центр сухой.
+export const PALACE_DUNGEON = { x: -160, z: 240, radius: 60, level: 2.7 };
+
+export const PALACE_DUNGEON_GEO = {
+  арка: { w: 6.0, h: 5.0, t: 1.0 },
+  лестница: { число: 6, подъём: 0.3, ширина: 4.5, шаг: 1.0 },
+  двор: { w: 20, d: 10 },
+  wallYard: { h: 1.0, t: 0.5 },
+} as const;
+
+export const ДВОРЦОВЫЙ_ДАНЖ_ДВОР_Z = 10;
+
+export const ДВОРЦОВЫЙ_ДАНЖ_ЗАГЛУШКА = { w: 4.0, h: 4.5, t: 0.25 };
+
 
 
 
@@ -821,6 +839,9 @@ export function terrainHeight(x: number, z: number): number {
   // Катакомбы. Уровень 1.2 вокруг медианы 1.23, радиус 60: полудиагональ 29.1,
   // при 48 запас был -2.7 м.
   h = flatten(h, x, z, CATACOMBS.x, CATACOMBS.z, CATACOMBS.radius, CATACOMBS.level);
+  // Дворцовый данж. Уровень 2.7 вокруг медианы 2.71, радиус 60: полудиагональ
+  // 29.1 м, при 48 запас был -2.7 м.
+  h = flatten(h, x, z, PALACE_DUNGEON.x, PALACE_DUNGEON.z, PALACE_DUNGEON.radius, PALACE_DUNGEON.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -4802,6 +4823,70 @@ export function buildSettlements(scene: THREE.Scene): void {
   }
 
   scene.add(g);
+  // ── Дворцовый данж ───────────────────────────────────────────
+//
+// Подземный данж 32x32 под дворцом. Вход — арка с лестницей вниз.
+// ГДЕ: exit (-160, 244), дверь (-160, 240), выход на 4 м в +z.
+{
+  const { арка, лестница, двор, wallYard } = PALACE_DUNGEON_GEO;
+  const zДвор = ДВОРЦОВЫЙ_ДАНЖ_ДВОР_Z;
+
+  const g = new THREE.Group();
+  g.position.set(PALACE_DUNGEON.x, PALACE_DUNGEON.level, PALACE_DUNGEON.z);
+
+  // Плита двора.
+  const плита = new THREE.Mesh(new THREE.BoxGeometry(двор.w, 0.3, zДвор), MAT.sand);
+  плита.position.set(0, 0.04 - 0.15, zДвор / 2);
+  плита.receiveShadow = true;
+  g.add(плита);
+
+  // Входная арка: два столба и перемычка.
+  for (const s of [-1, 1] as const) {
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(арка.t, арка.h, арка.t), MAT.stone);
+    столб.position.set(s * (арка.w / 2 - арка.t / 2), арка.h / 2, арка.t / 2);
+    столб.castShadow = true;
+    g.add(столб);
+  }
+  const перемычка = new THREE.Mesh(new THREE.BoxGeometry(арка.w, арка.t, арка.t), MAT.sandstone);
+  перемычка.position.set(0, арка.h + арка.t / 2, арка.t / 2);
+  перемычка.castShadow = true;
+  g.add(перемычка);
+
+  // Дверной проём — темная заглушка.
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(арка.w - арка.t * 2, арка.h, 0.3), MAT.dark);
+  дверь.position.set(0, арка.h / 2, арка.t / 2);
+  дверь.userData = { doorBuilding: 'palace_dungeon', doorAction: 'enter', doorName: t('buildings.palace_dungeon') };
+  g.add(дверь);
+
+  // Лестница вниз перед аркой.
+  let ступеньY = 0;
+  for (let i = 0; i < лестница.число; i++) {
+    ступеньY -= лестница.подъём;
+    const ст = new THREE.Mesh(new THREE.BoxGeometry(лестница.ширина, лестница.подъём + 0.15, лестница.шаг), MAT.stone);
+    ст.position.set(0, ступеньY + лестница.подъём / 2, арка.t + лестница.шаг / 2 + i * лестница.шаг);
+    ст.castShadow = true;
+    g.add(ст);
+  }
+
+  // Низкая ограда двора по бокам.
+  for (const s of [-1, 1] as const) {
+    const бок = new THREE.Mesh(new THREE.BoxGeometry(wallYard.t, wallYard.h, zДвор + wallYard.t), MAT.sandstoneDark);
+    бок.position.set(s * (двор.w / 2 + wallYard.t / 2), wallYard.h / 2, zДвор / 2 - wallYard.t / 2);
+    бок.castShadow = true;
+    g.add(бок);
+  }
+
+  // Коллайдеры: столбы арки, бока ограды.
+  for (const s of [-1, 1] as const) {
+    addCollider(PALACE_DUNGEON.x + s * (арка.w / 2 - арка.t / 2), PALACE_DUNGEON.z + арка.t / 2, 1.1);
+  }
+  for (let tz = 0; tz <= zДвор; tz += 2) {
+    addCollider(PALACE_DUNGEON.x - двор.w / 2 - wallYard.t / 2, PALACE_DUNGEON.z + tz, 1.0);
+    addCollider(PALACE_DUNGEON.x + двор.w / 2 + wallYard.t / 2, PALACE_DUNGEON.z + tz, 1.0);
+  }
+
+  scene.add(g);
+}
 }
 }
 
