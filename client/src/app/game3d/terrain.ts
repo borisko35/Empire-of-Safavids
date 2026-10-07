@@ -43,6 +43,7 @@ export const CAMP = { x: 167, z: 132, radius: 16 }; // Полевой лагер
 import {
   LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
   seaMask, seaIslandAt, waterMask, isWater, isDeepWater, canFloatAt,
+  bridgeDeckY, BRIDGE_DECK_END, BRIDGE_SPAN,
 } from '../../../../shared/water';
 export {
   LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
@@ -52,14 +53,15 @@ export {
 export const WATERFALL = { x: -352, z: -568, width: 11, height: 15 };
 
 
-/** Проверяет, находится ли точка на мосту. Возвращает высоту поверхности или null */
+/** Проверяет, находится ли точка на мосту. Возвращает высоту настила
+ *  (по дуге - см. bridgeDeckY) или null, если моста нет */
 export function bridgeAt(x: number, z: number): number | null {
   for (const b of BRIDGES) {
     // Преобразуем точку в локальные координаты моста
     const lx = (x - b.x) * b.dx + (z - b.z) * b.dz;   // вдоль моста
     const lz = -(x - b.x) * b.dz + (z - b.z) * b.dx;  // поперёк моста
     if (Math.abs(lx) < b.length / 2 && Math.abs(lz) < b.width / 2) {
-      return b.height;
+      return bridgeDeckY(b, lx);
     }
   }
   return null;
@@ -1096,18 +1098,23 @@ export function buildWater(scene: THREE.Scene): void {
   sea.name = 'sea';
   water.add(sea);
 
-  // Река — перекрывающиеся диски вдоль русла
-  const riverPts = [...RIVER_A, ...RIVER_B];
-  for (let i = 0; i < riverPts.length - 1; i++) {
-    const a = riverPts[i], b = riverPts[i + 1];
-    const len = Math.hypot(b.x - a.x, b.z - a.z);
-    const steps = Math.ceil(len / 9);
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      const disc = new THREE.Mesh(discGeo, MAT.water);
-      disc.scale.set(8.5, 1, 8.5);
-      disc.position.set(a.x + (b.x - a.x) * t, LAKE.level, a.z + (b.z - a.z) * t);
-      water.add(disc);
+  // Река — перекрывающиеся диски вдоль русла. Каждая река отдельным
+  // циклом: склейка [RIVER_A, ...RIVER_B] добавляла между ними фантомный
+  // сегмент, и его диски уходили на 17 м вне берега озера, где рельеф ниже
+  // плоскости (-2.78 при воде -2.0), а isWater по близко этой точки считает
+  // сушей: вода рисовалась прямо на траве.
+  for (const river of [RIVER_A, RIVER_B]) {
+    for (let i = 0; i < river.length - 1; i++) {
+      const a = river[i], b = river[i + 1];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const steps = Math.ceil(len / 9);
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const disc = new THREE.Mesh(discGeo, MAT.water);
+        disc.scale.set(8.5, 1, 8.5);
+        disc.position.set(a.x + (b.x - a.x) * t, LAKE.level, a.z + (b.z - a.z) * t);
+        water.add(disc);
+      }
     }
   }
 
@@ -1456,42 +1463,34 @@ export function buildRoads(scene: THREE.Scene): void {
   // а заодно и случайные путники с квестами.
 
   // ── Мосты ──
-  const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x8a7040, roughness: 0.9 });
-  const railMat = new THREE.MeshStandardMaterial({ color: 0x6a5030, roughness: 0.85 });
+  // Коробочный мост заменён моделью: medieval-bridge, арочный пролёт.
+  // Модель натягивается вдоль оси на длину моста и вширь настолько же
+  // (sx = length / BRIDGE_SPAN), а ВВЫСЬ НЕ ТРОГАЕТСЯ: поэтому столбы
+  // остаются натуральной высоты на любом пролёте, а дуга поднимается ровно
+  // на BRIDGE_ARCH_RISE - столько же, сколько считает bridgeDeckY, - и
+  // игрок идёт ПО настилу, а не над ним и не в нём. Посадка: модель
+  // садится на BRIDGE_DECK_END ниже уровня концов, чтобы концы настила
+  // легли на берег. Крен по берегам (slope) - тем же поворотом модели.
   for (const b of BRIDGES) {
-    const angle = Math.atan2(b.dx, b.dz);
-    const bridgeGroup = new THREE.Group();
-
-    // Дорожное полотно
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(b.width, 0.3, b.length), bridgeMat);
-    deck.position.y = 0;
-    deck.receiveShadow = true;
-    deck.castShadow = true;
-    bridgeGroup.add(deck);
-
-    // Балки под полотном
-    for (let i = -1; i <= 1; i += 2) {
-      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, b.length - 0.5), railMat);
-      beam.position.set(i * (b.width / 2 - 0.2), -0.4, 0);
-      bridgeGroup.add(beam);
-    }
-
-    // Перила по бокам
-    for (let side = -1; side <= 1; side += 2) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, b.length), railMat);
-      rail.position.set(side * (b.width / 2 - 0.05), 0.55, 0);
-      bridgeGroup.add(rail);
-      // Столбики перил
-      for (let p = -b.length / 2 + 1; p <= b.length / 2 - 1; p += 2.5) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 5), railMat);
-        post.position.set(side * (b.width / 2 - 0.05), 0.5, p);
-        bridgeGroup.add(post);
-      }
-    }
-
-    bridgeGroup.position.set(b.x, b.height, b.z);
-    bridgeGroup.rotation.y = angle;
-    scene.add(bridgeGroup);
+    const sx = b.length / BRIDGE_SPAN;
+    const yaw = Math.atan2(-b.dz, b.dx);
+    const roll = Math.atan(b.slope);
+    void loadDecorModel('decor/medieval-bridge.glb').then((модель) => {
+      if (!модель) return;
+      const мост = модель.clone();
+      мост.position.set(b.x, b.height - BRIDGE_DECK_END, b.z);
+      // Порядок YXZ: крен идёт ПЕРВЫМ - в системе самой модели, и наклоняет
+      // пролёт по направлению оси; yaw потом ставит локальный X на (dx,dz).
+      мост.rotation.set(0, yaw, roll, 'YXZ');
+      мост.scale.set(sx, 1, sx);
+      мост.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      scene.add(мост);
+    });
 
     // Коллайдеры по краям моста (чтобы не свалиться в воду сбоку)
     const perpX = -b.dz, perpZ = b.dx;

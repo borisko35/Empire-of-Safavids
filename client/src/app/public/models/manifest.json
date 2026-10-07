@@ -414,6 +414,11 @@
       "file": "models/decor/onion-dome-tower.glb",
       "name": "onion-dome-tower",
       "bytes": 1523704
+    },
+    {
+      "file": "models/decor/medieval-bridge.glb",
+      "name": "medieval-bridge",
+      "bytes": 546836
     }
   ],
   "weapons": [

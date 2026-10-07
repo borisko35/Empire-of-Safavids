@@ -10,7 +10,10 @@
 // суше, вне домов; сегментов несколько (аркада, а не камень).
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { isWater } from '../../../shared/water';
+import {
+  isWater, RIVER_A, RIVER_B, BRIDGES, LAKE,
+  bridgeDeckY, BRIDGE_SPAN, BRIDGE_ARCH_RISE, BRIDGE_DECK_END,
+} from '../../../shared/water';
 import { getZoneAt } from '../../../shared/constants';
 
 const корень = join(__dirname, '..', '..', '..');
@@ -1337,5 +1340,308 @@ describe('Купольная башня у мечети: модель, площ�
       /buildOnionDomeTower\(this\.scene\);/.test(мир),
       'построитель не вызван из мира: код есть, а башни нет'
     );
+  });
+});
+
+// ── Мосты через реки ─────────────────────────────────────────
+//
+// Пятый пакет из Assets: a-simple-medieval-wooden-bridge — арочный мост из
+// балок, досок и канатов, семь мешей, Draco, 546836 байт.
+//
+// ЧТО БЫЛО НЕ ТАК. Все три моста лежали ВДОЛЬ реки: направление оси взято
+// от русла, а не поперёк ему. Замер по оси моста давал 45-54 м воды при
+// ширине русла 11-12 м — пролёт 14-18 м кончался на середине реки и никуда
+// не вёл. Плюс один мост вообще стоял в озере: прежний центр (-405,-230)
+// внутри LAKE r=170, до берега 72 м.
+//
+// ЧТО ПРОВЕРЯЕТСЯ. Файл лежит в источнике сборки и совпадает с манифестом;
+// габариты — пролёт, ширина, база на нуле; каждый мост идёт поперёк своей
+// реки: центр в русле, концы на суше за видимым диском воды и вне озера;
+// настил дугой — концы на берегах, середина на замеренный подъём и нигде
+// ниже поверхности воды; сцена грузит модель вместо коробок и ведёт ходьбу
+// по той же дуге.
+describe('Мосты через реки: модель, поперёк русла, дуга настила', () => {
+  const путьКМодели = join(корень, 'client/src/app/public/models/decor/medieval-bridge.glb');
+
+  /** Габариты модели по accessor'ам примитивов: glTF Y вверх, узлы без
+   *  трансформаций, поэтому accessor — это и есть габарит в её метрах. */
+  const габариты = (): { пролёт: number; ширина: number; низ: number; верх: number; настил: number } => {
+    const buf = readFileSync(путьКМодели);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as {
+      accessors?: { min?: number[]; max?: number[] }[];
+      meshes?: { name?: string; primitives: { attributes: { POSITION: number } }[] }[];
+    };
+    let низ = Infinity;
+    let верх = -Infinity;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    let настил = 0;
+    for (const м of json.meshes ?? []) {
+      for (const п of м.primitives) {
+        const a = json.accessors?.[п.attributes.POSITION];
+        if (!a?.min || !a?.max) continue;
+        низ = Math.min(низ, a.min[1]);
+        верх = Math.max(верх, a.max[1]);
+        x0 = Math.min(x0, a.min[0]);
+        x1 = Math.max(x1, a.max[0]);
+        z0 = Math.min(z0, a.min[2]);
+        z1 = Math.max(z1, a.max[2]);
+        if ((м.name ?? '').toLowerCase() === 'planks') настил = a.max[2] - a.min[2];
+      }
+    }
+    return { пролёт: x1 - x0, ширина: z1 - z0, низ, верх, настил };
+  };
+
+  /** Радиус дисков реки в buildWater: от него зависит, где видна вода,
+   *  а значит и где конец моста стоит на земле, а не в реке. */
+  const дискВоды = (() => {
+    const м = /disc\.scale\.set\(([\d.]+), 1, [\d.]+\);/.exec(ТЕРРЕЙН);
+    must(м !== null, 'радиус диска реки не найден: от него меряется берег');
+    return Number(м![1]);
+  })();
+
+  // Расстояние до русла — свой счёт, а не isWater: нужны и метры, и само
+  // русло для проверки «поперёк». Реки склеиваются только по сегментам,
+  // без стыка: такой же стык и был багом в buildWater.
+  const сегменты = (река: { x: number; z: number }[]): { ax: number; az: number; bx: number; bz: number }[] =>
+    река.slice(0, -1).map((п, i) => ({ ax: п.x, az: п.z, bx: река[i + 1].x, bz: река[i + 1].z }));
+  const русла = [...сегменты(RIVER_A), ...сегменты(RIVER_B)];
+  const близко = (x: number, z: number): { d: number; i: number } => {
+    let d = Infinity;
+    let idx = 0;
+    русла.forEach((s, i) => {
+      const dx = s.bx - s.ax;
+      const dz = s.bz - s.az;
+      const len2 = dx * dx + dz * dz;
+      let t = len2 === 0 ? 0 : ((x - s.ax) * dx + (z - s.az) * dz) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const dd = Math.hypot(x - (s.ax + t * dx), z - (s.az + t * dz));
+      if (dd < d) {
+        d = dd;
+        idx = i;
+      }
+    });
+    return { d, i: idx };
+  };
+
+  it('модель на месте, сжата Draco и по весу влезает в декор', () => {
+    const запись = МАНИФЕСТ.decor?.find((д) => д.file === 'models/decor/medieval-bridge.glb');
+    must(запись !== undefined, 'в манифесте нет моста: файл никто не сверяет с диском');
+    must(existsSync(путьКМодели), 'нет файла моста: три переправы останутся без модели');
+    must(
+      statSync(путьКМодели).size === запись!.bytes,
+      `мост: на диске ${statSync(путьКМодели).size}, в манифесте ${запись!.bytes}`
+    );
+    const buf = readFileSync(путьКМодели);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as {
+      extensionsUsed?: string[];
+      images?: unknown[];
+    };
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'мост без Draco: балки и доски потянут сырыми'
+    );
+    must((json.images ?? []).length >= 1, `текстур ${(json.images ?? []).length}: доски будут цвета пластилина`);
+    must(
+      buf.length < 2 * 1024 * 1024,
+      `мост весит ${(buf.length / 1048576).toFixed(1)} МБ: многовато для одного декора`
+    );
+  });
+
+  it('габариты: пролёт тот, что натягивается, база на нуле', () => {
+    must(existsSync(путьКМодели), 'файла моста нет: габариты мерять не по чему');
+    const { пролёт, ширина, низ, верх, настил } = габариты();
+    must(пролёт > 10.1 && пролёт < 10.3, `пролёт ${пролёт.toFixed(2)} м: мост не тот или он повернут`);
+    must(ширина > 2.4 && ширина < 2.5, `ширина ${ширина.toFixed(2)} м: габарит не тот`);
+    must(настил > 1.8 && настил < 1.9, `настил ${настил.toFixed(2)} м: доски не те`);
+    must(
+      Math.abs(пролёт - BRIDGE_SPAN) < 0.01,
+      `пролёт ${пролёт.toFixed(4)} против BRIDGE_SPAN ${BRIDGE_SPAN}: натяжка длины посчитается мимо`
+    );
+    must(Math.abs(низ) < 0.02, `база модели на ${низ.toFixed(3)} м: посадка BRIDGE_DECK_END перестанет сходиться`);
+    must(верх - низ > 2.4 && верх - низ < 2.7, `высота ${(верх - низ).toFixed(2)} м: модель не та`);
+  });
+
+  it('три моста идут поперёк русла: центр в воде, концы на суше', () => {
+    must(BRIDGES.length === 3, `мостов ${BRIDGES.length}: список изменился, проверка не знает всех`);
+    for (const b of BRIDGES) {
+      const кл = `мост (${b.x}, ${b.z})`;
+      must(Math.abs(b.dx * b.dx + b.dz * b.dz - 1) < 1e-3, `${кл}: направление не единичное`);
+      must(b.length >= 20, `${кл}: пролёт ${b.length} м не доходит через русло до берега`);
+      must(b.width >= 4 && b.width <= 5.5, `${кл}: ширина ${b.width} м: либо не влезает в настил, либо свес`);
+
+      const центр = близко(b.x, b.z);
+      must(центр.d < 3, `${кл}: центр в ${центр.d.toFixed(1)} м от русла — переправа мимо реки`);
+      must(
+        центр.d < дискВоды,
+        `${кл}: центр в ${центр.d.toFixed(1)} м от русла при диске ${дискВоды} — мост стоит рядом с рекой, а не через неё`
+      );
+
+      // Ось поперёк руслу: косинус угла мал. Как было (вдоль реки) — 0.95+.
+      const s = русла[центр.i];
+      const ux = s.bx - s.ax;
+      const uz = s.bz - s.az;
+      const косо = Math.abs((b.dx * ux + b.dz * uz) / Math.hypot(ux, uz));
+      must(
+        косо < 0.35,
+        `${кл}: ось под ${Math.round((Math.acos(Math.min(1, косо)) * 180) / Math.PI)}° к руслу — лежит вдоль реки`
+      );
+
+      const концы: [number, number][] = [];
+      for (const sgn of [1, -1]) {
+        const ex = b.x + (b.dx * b.length * sgn) / 2;
+        const ez = b.z + (b.dz * b.length * sgn) / 2;
+        концы.push([ex, ez]);
+        must(!isWater(ex, ez), `${кл}: конец (${ex.toFixed(0)}, ${ez.toFixed(0)}) в воде — берег не взят`);
+        const д = близко(ex, ez).d;
+        must(
+          д >= дискВоды,
+          `${кл}: конец в ${д.toFixed(1)} м от русла при диске ${дискВоды} — стоит на видимой воде`
+        );
+        const о = Math.hypot(ex - LAKE.x, ez - LAKE.z);
+        must(о >= LAKE.r + 2, `${кл}: конец в ${о.toFixed(0)} м от центра озера — на мелководье`);
+      }
+      const з1 = getZoneAt(концы[0][0], концы[0][1]);
+      const з2 = getZoneAt(концы[1][0], концы[1][1]);
+      must(з1 !== null && з2 !== null, `${кл}: концы вне зон — игрок не увидит их на карте`);
+      must(
+        з1!.id === з2!.id,
+        `${кл}: концы в разных зонах (${з1!.id} и ${з2!.id}) — мост начинается в одном регионе, кончается в другом`
+      );
+    }
+  });
+
+  it('настил дугой: концы на берегах, середина над водой', () => {
+    must(
+      Math.abs(BRIDGE_ARCH_RISE - 1.155) < 0.005,
+      `подъём дуги ${BRIDGE_ARCH_RISE}: замер профиля настила даёт 1.155 (корона 1.452 минус концы 0.297)`
+    );
+    must(
+      Math.abs(BRIDGE_DECK_END - 0.297) < 0.01,
+      `посадка ${BRIDGE_DECK_END}: замер концов настила даёт 0.297`
+    );
+    for (const b of BRIDGES) {
+      const кл = `мост (${b.x}, ${b.z})`;
+      const лево = bridgeDeckY(b, -b.length / 2);
+      const право = bridgeDeckY(b, b.length / 2);
+      // Концы — это береги: дуга в них сходит на ноль, остаётся уровень
+      // плюс уклон, а среднее ровно height.
+      must(
+        Math.abs((лево + право) / 2 - b.height) < 1e-9,
+        `${кл}: среднее концов ${(лево + право) / 2} не равно height ${b.height}`
+      );
+      must(
+        Math.abs(право - лево - b.slope * b.length) < 1e-9,
+        `${кл}: разбег концов ${(право - лево).toFixed(3)} не равен уклону`
+      );
+      const корона = bridgeDeckY(b, 0);
+      must(
+        Math.abs(корона - (b.height + BRIDGE_ARCH_RISE)) < 1e-9,
+        `${кл}: середина ${корона} не сходится с замеренным подъёмом`
+      );
+      // Дуга дугой: середина выше концов, а не наоборот — иначе игрок
+      // провалится в арку.
+      for (const доля of [0.25, 0.5, 0.75]) {
+        must(
+          bridgeDeckY(b, (b.length * доля) / 2) <= корона + 1e-9 &&
+            bridgeDeckY(b, (-b.length * доля) / 2) <= корона + 1e-9,
+          `${кл}: настил в ${(доля * 100).toFixed(0)}% пролёта выше середины — дуга перевёрнута`
+        );
+      }
+      // Над видимой водой настил выше её поверхности: иначе игрок идёт по
+      // мосту, погрузившись в реку по щиколотку.
+      for (let k = -b.length / 2; k <= b.length / 2 + 1e-9; k += 0.5) {
+        const x = b.x + b.dx * k;
+        const z = b.z + b.dz * k;
+        if (близко(x, z).d >= дискВоды) continue;
+        const y = bridgeDeckY(b, k);
+        must(
+          y > LAKE.level + 0.1,
+          `${кл}: настил ${y.toFixed(2)} ниже поверхности воды ${LAKE.level} в точке (${x.toFixed(0)}, ${z.toFixed(0)})`
+        );
+      }
+      // Крен берегов мягкий: дальше ступаешь через край моста.
+      must(
+        Math.abs(b.slope) * (b.length / 2) <= 0.5,
+        `${кл}: уклон ${b.slope} разводит концы на ${(Math.abs(b.slope) * b.length).toFixed(2)} м`
+      );
+    }
+  });
+
+  it('сцена строит модель вместо коробок, ходьба ведётся дугой', () => {
+    const начало = ТЕРРЕЙН.indexOf('export function buildRoads(');
+    must(начало > 0, 'построитель дорог не найден: мосты строились именно в нём');
+    const тело = ТЕРРЕЙН.slice(начало);
+    const конец = тело.search(/\r?\n\}\r?\n/);
+    const код = конец > 0 ? тело.slice(0, конец) : '';
+    must(код.length > 0, 'тело построителя не вырезалось: граница (следующая export function) потеряна');
+    must(
+      /void loadDecorModel\('decor\/medieval-bridge\.glb'\)/.test(код),
+      'мост не грузится мимо общего загрузчика: Draco и кэш в обход'
+    );
+    must(!/BoxGeometry\(b\.width/.test(код), 'коробочный мост остался: модель его должна заменить');
+    must(!/bridgeMat|railMat/.test(код), 'материалы коробочного моста остались в коде');
+    must(
+      /const sx = b\.length \/ BRIDGE_SPAN;/.test(код),
+      'мост не натягивается на свою длину: пролёт модели не совпадёт с полем length'
+    );
+    must(
+      /rotation\.set\(0, yaw, roll, 'YXZ'\)/.test(код),
+      'крен по берегам не задан поворотом модели: визуал и уклон настила разойдутся'
+    );
+    must(
+      /b\.height - BRIDGE_DECK_END/.test(код),
+      'мост не посажен по уровню концов: концы настила не лягут на берег'
+    );
+    must(/scale\.set\(sx, 1, sx\)/.test(код), 'мост растянут и по высоте: столбы удвоятся');
+    // Боковые коллайдеры — те же, что были: без них с моста сваливаются.
+    must(
+      /COLLIDERS\.push\(\{ x: cx, z: cz, r: 0\.4 \}\)/.test(код),
+      'боковые коллайдеры потеряны при замене коробок'
+    );
+    const сдвиг = /perpX \* side \* \(b\.width \/ 2 - ([\d.]+)\)/.exec(код);
+    must(сдвиг !== null, 'отступ бокового коллайдера не читается: полосу ходьбы не отмерить');
+
+    // Ходьба — по той же дуге, что и настил.
+    const началоХодьбы = ТЕРРЕЙН.indexOf('export function bridgeAt(');
+    must(началоХодьбы > 0, 'bridgeAt не найден: ходьбе по мосту не от чего считать высоту');
+    const ходьба = ТЕРРЕЙН.slice(началоХодьбы);
+    const конецХодьбы = ходьба.search(/\r?\n\}\r?\n/);
+    const телоХодьбы = конецХодьбы > 0 ? ходьба.slice(0, конецХодьбы) : '';
+    must(
+      /return bridgeDeckY\(b, lx\);/.test(телоХодьбы),
+      'bridgeAt не возвращает дугу: игрок вонзится в арку или повиснет над ней'
+    );
+    must(!/return b\.height;/.test(телоХодьбы), 'старая плоская высота настила осталась');
+
+    // Полоса ходьбы должна помещаться в доски: коллайдеры держат центр
+    // игрока на (width/2 - сдвиг) минус (r + PLAYER_R), тело доходит на
+    // PLAYER_R дальше. Вне досок — игрок висит над рекой.
+    const мир = читать('client/src/app/game3d/world3d.ts');
+    const pr = /const PLAYER_R = ([\d.]+);/.exec(мир);
+    must(pr !== null, 'радиус игрока не найден: полосу ходьбы не от чего мерить');
+    const радиус = Number(pr![1]);
+    const rr = /COLLIDERS\.push\(\{ x: cx, z: cz, r: ([\d.]+) \}\)/.exec(код);
+    must(rr !== null, 'радиус бокового коллайдера не найден');
+    const r = Number(rr![1]);
+    const отступ = Number(сдвиг![1]);
+    const { настил } = габариты();
+    must(настил > 0, 'настил не измерен: проверка полосы ходьбы пустая');
+    for (const b of BRIDGES) {
+      const sx = b.length / BRIDGE_SPAN;
+      const центрМакс = b.width / 2 - отступ - (r + радиус);
+      const крайТела = центрМакс + радиус;
+      const крайДосок = (настил / 2) * sx;
+      must(
+        центрМакс > 0.2,
+        `мост (${b.x}, ${b.z}): полоса ходьбы ${центрМакс.toFixed(2)} м — игрока зажмут коллайдеры`
+      );
+      must(
+        крайТела <= крайДосок,
+        `мост (${b.x}, ${b.z}): тело доходит до ${крайТела.toFixed(2)} м, а доски кончаются на ${крайДосок.toFixed(2)} — игрок свесится с настила`
+      );
+    }
   });
 });
