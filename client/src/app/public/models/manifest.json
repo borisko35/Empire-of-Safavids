@@ -444,6 +444,11 @@
       "file": "models/decor/windmill.glb",
       "name": "windmill",
       "bytes": 249944
+    },
+    {
+      "file": "models/decor/tavern-room.glb",
+      "name": "tavern-room",
+      "bytes": 728856
     }
   ],
   "weapons": [

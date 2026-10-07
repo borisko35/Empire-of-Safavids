@@ -288,6 +288,35 @@ function loadThroneModel(): Promise<THREE.Group | null> {
   });
   return throneCache;
 }
+
+// Зал таверны — glb-диорама вместо процедурной коробки: пол, стены, стойка,
+// столы, сцена и верхняя галерея. Пол модели на 0.40 = FLOOR_Y, начало модели —
+// центр зала, разворота нет. Текстуры свои (16 webp), материалы переведены с
+// unlit на lit — иначе зал не брал бы свет жаровен и светился ночью.
+const TAVERN_ROOM_MODEL = 'decor/tavern-room.glb';
+let tavernRoomCache: Promise<THREE.Group | null> | null = null;
+
+/** Диорама зала таверны с текстурами. Кеш общий: зал в кармане один. */
+function loadTavernRoomModel(): Promise<THREE.Group | null> {
+  if (tavernRoomCache) return tavernRoomCache;
+  tavernRoomCache = new Promise<THREE.Group | null>((готово) => {
+    try {
+      const draco = new DRACOLoader();
+      draco.setDecoderPath('/game/draco/');
+      const l = new GLTFLoader();
+      l.setDRACOLoader(draco);
+      l.load(
+        `/game/models/${TAVERN_ROOM_MODEL}`,
+        (gltf) => готово((gltf.scene as THREE.Group) ?? null),
+        undefined,
+        () => готово(null),
+      );
+    } catch {
+      готово(null);
+    }
+  });
+  return tavernRoomCache;
+}
 function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   // ── Колонны: два ряда по десять ──
@@ -1348,28 +1377,6 @@ function furnishWorkshop(g: THREE.Group, cx: number, cz: number): { x: number; z
   return cols;
 }
 
-function furnishTavern(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
-  const cols: { x: number; z: number; r: number }[] = [];
-  g.add(box(7, 1.1, 1.4, M.woodDark, cx - 4, FLOOR_Y + 0.55, cz - 5.5));
-  cols.push({ x: cx - 4, z: cz - 5.5, r: 3.8 });
-  for (const [tx, tz] of [[-2, 1], [4, 2.5]] as const) {
-    g.add(cyl(1.3, 1.3, 0.18, M.wood, cx + tx, FLOOR_Y + 1.0, cz + tz, 12));
-    g.add(cyl(0.18, 0.24, 1.0, M.woodDark, cx + tx, FLOOR_Y + 0.5, cz + tz, 8));
-    cols.push({ x: cx + tx, z: cz + tz, r: 1.6 });
-    for (const [ox, oz] of [[-1.9, 0.4], [1.9, -0.4]] as const) {
-      g.add(cyl(0.42, 0.42, 0.55, M.woodDark, cx + tx + ox, FLOOR_Y + 0.28, cz + tz + oz, 8));
-    }
-    g.add(cyl(0.12, 0.1, 0.28, M.gold, cx + tx + 0.4, FLOOR_Y + 1.22, cz + tz - 0.2, 6));
-  }
-  g.add(box(2.6, 2.2, 0.8, M.stone, cx + 8, FLOOR_Y + 1.1, cz - 5.2));
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.2, 6), M.fire);
-  flame.position.set(cx + 8, FLOOR_Y + 1.4, cz - 4.6);
-  g.add(flame);
-  g.add(box(2.6, 0.5, 1.4, M.woodDark, cx + 8, FLOOR_Y + 2.5, cz - 5.2));
-  cols.push({ x: cx + 8, z: cz - 5.2, r: 1.8 });
-  return cols;
-}
-
 function furnishObservatory(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   g.add(cyl(6.5, 7, 0.5, M.stone, cx, FLOOR_Y + 0.25, cz, 20));
@@ -1555,7 +1562,121 @@ interface Room {
   documentTargets: THREE.Object3D[];
 }
 
+// ── Зал таверны из диорамы ────────────────────────────────────
+// Габариты модели 30.92 x 16.34 x 58.77, пол на 0.40, стены до ±15.5/±29.4.
+// Кругов 148, r = 0.9 через ~1.5 м: замерены по геометрии сеткой 0.5 м в поясе
+// тела 0.6…2.6 м над полом. Проёмы арок открыты — их верх выше пояса.
+// Спавн (-8, +6) и четыре жаровни стоят на открытом полу: ближайший круг не
+// ближе 2.3 м (проверено тем же замером). Дверь выхода — в южной стене зала,
+// у устья коридора (-1, -16): там стена, игрок выходит только кликом.
+const TAVERN_EXIT: [number, number] = [-1, -16];
+const TAVERN_BRAZIERS: [number, number][] = [[-12, 4], [-10, -2], [-8, -6], [-2, -10]];
+const TAVERN_COLLIDERS: [number, number][] = [
+  [-25.25, -3.48], [-25.25, -1.98], [-25.25, -0.48], [-25.25, +1.02],
+  [-25.25, +2.52], [-25.25, +4.02], [-25.25, +5.52], [-25.25, +7.02],
+  [-25.25, +8.52], [-23.75, -3.48], [-23.75, -1.98], [-23.75, +9.02],
+  [-22.25, -3.48], [-22.25, -1.98], [-22.25, +3.02], [-22.25, +4.52],
+  [-22.25, +9.02], [-20.75, -3.48], [-20.75, -1.98], [-20.75, +3.02],
+  [-20.75, +4.52], [-20.75, +9.02], [-19.75, -0.48], [-19.25, -3.48],
+  [-19.25, -1.98], [-19.25, +9.02], [-18.25, -0.48], [-17.75, -3.48],
+  [-17.75, -1.98], [-17.75, +8.02], [-16.75, -0.48], [-16.25, -7.48],
+  [-16.25, -5.98], [-16.25, -4.48], [-16.25, -2.98], [-16.25, +8.02],
+  [-14.75, -7.48], [-14.75, -5.98], [-14.75, -4.48], [-14.75, -2.98],
+  [-14.75, +8.02], [-13.25, -7.48], [-13.25, -5.98], [-13.25, -4.48],
+  [-13.25, -2.98], [-13.25, +8.02], [-11.75, -7.48], [-11.75, -5.98],
+  [-11.75, -4.48], [-11.75, +8.02], [-11.75, +10.52], [-11.75, +12.02],
+  [-11.75, +13.52], [-11.75, +15.02], [-11.75, +16.52], [-10.25, -7.98],
+  [-10.25, +10.52], [-10.25, +17.52], [-9.75, -15.98], [-9.75, -14.48],
+  [-9.75, -12.98], [-9.75, -11.48], [-9.75, -9.98], [-8.75, -8.48],
+  [-8.75, +17.52], [-8.25, -15.98], [-8.25, -10.98], [-8.25, +10.52],
+  [-7.25, -8.48], [-7.25, +17.52], [-6.75, -15.98], [-6.75, +10.52],
+  [-5.75, +3.52], [-5.75, +8.52], [-5.75, +17.52], [-5.25, -15.98],
+  [-5.25, +5.02], [-5.25, +10.52], [-4.75, +12.02], [-4.75, +13.52],
+  [-4.75, +15.02], [-4.25, -25.48], [-4.25, -23.98], [-4.25, -22.48],
+  [-4.25, -20.98], [-4.25, -19.48], [-4.25, -17.98], [-4.25, +3.02],
+  [-4.25, +9.02], [-3.75, -16.48], [-3.75, +4.52], [-2.75, -25.48],
+  [-2.75, +9.02], [-2.25, -16.48], [-2.25, -7.48], [-2.25, -5.98],
+  [-2.25, -4.48], [-2.25, -2.98], [-2.25, -1.48], [-2.25, +0.02],
+  [-2.25, +1.52], [-1.75, +6.02], [-1.75, +7.52], [-1.25, -25.48],
+  [-1.25, +9.02], [-0.75, -16.48], [-0.75, -7.98], [-0.75, -6.48],
+  [-0.75, -4.98], [-0.75, -3.48], [-0.75, -1.98], [-0.75, -0.48],
+  [-0.75, +1.02], [-0.25, +2.52], [-0.25, +4.02], [-0.25, +6.02],
+  [-0.25, +7.52], [0.25, -25.48], [0.25, -10.48], [0.25, +9.02],
+  [0.75, -23.98], [0.75, -22.48], [0.75, -20.98], [0.75, -19.48],
+  [0.75, -17.98], [0.75, -16.48], [0.75, -8.98], [0.75, -7.48],
+  [0.75, -5.98], [0.75, -3.48], [0.75, +0.02], [1.25, -14.98],
+  [1.25, -13.48], [1.25, -11.98], [1.25, -1.98], [1.25, +1.52],
+  [1.25, +3.02], [1.25, +4.52], [1.25, +6.02], [1.25, +7.52],
+  [2.25, -3.48], [2.25, -0.48], [2.75, -1.98], [3.75, -3.48],
+  [3.75, -0.48], [5.25, -3.48], [5.25, -1.98], [5.25, -0.48],
+];
+
+function buildTavernRoom(scene: THREE.Scene, def: BuildingDef): Room {
+  const g = new THREE.Group();
+  const cx = def.roomCx, cz = def.roomCz;
+  const colliders: { x: number; z: number; r: number }[] = [];
+  for (const [lx, lz] of TAVERN_COLLIDERS) colliders.push({ x: cx + lx, z: cz + lz, r: 0.9 });
+  for (const [lx, lz] of TAVERN_BRAZIERS) {
+    brazier(g, cx + lx, cz + lz, FLOOR_Y);
+    colliders.push({ x: cx + lx, z: cz + lz, r: 0.9 });
+  }
+  // Дверь выхода (клик = выйти). Стоит в стене — пешком не выйти, как и у
+  // остальных: круг в проёме держит игрока, выход только кликом.
+  const d = box(2.4, 3.2, 0.25, M.woodDark, cx + TAVERN_EXIT[0], FLOOR_Y + 1.6, cz + TAVERN_EXIT[1]);
+  d.userData = {
+    doorBuilding: def.id,
+    doorAction: 'exit',
+    doorName: t(def.nameKey),
+    entranceId: '',
+  };
+  g.add(d);
+  const exitDoors = [d];
+  colliders.push({ x: cx + TAVERN_EXIT[0], z: cz + TAVERN_EXIT[1], r: 1.4 });
+  const exitSign = signMesh(t('buildings.exit'));
+  exitSign.position.set(cx + TAVERN_EXIT[0], FLOOR_Y + 3.9, cz + TAVERN_EXIT[1] + 0.4);
+  exitSign.rotation.y = Math.PI;
+  g.add(exitSign);
+  // Диорама доезжает асинхронно, коллайдеры уже стоят: иначе в окно загрузки
+  // сквозь стены проходят, а потом стены «появляются» вокруг игрока.
+  void loadTavernRoomModel().then((модель) => {
+    if (!модель) return;
+    const зал = модель.clone();
+    зал.position.set(cx, 0, cz);
+    зал.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(зал);
+  });
+  // Столов с документами у таверны нет (только тронный зал) — цикл общий,
+  // чтобы будущий стол встал сам, без новой ветки.
+  const documentTargets: THREE.Object3D[] = [];
+  for (const place of DOCUMENT_SPOTS) {
+    if (place.buildingId !== def.id) continue;
+    g.add(box(2.2, 0.16, 1.4, M.woodDark, place.x, FLOOR_Y + 0.92, place.z));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x - 0.9, FLOOR_Y + 0.46, place.z - 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x + 0.9, FLOOR_Y + 0.46, place.z - 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x - 0.9, FLOOR_Y + 0.46, place.z + 0.5));
+    g.add(box(0.22, 0.9, 0.22, M.wood, place.x + 0.9, FLOOR_Y + 0.46, place.z + 0.5));
+    const list = box(0.7, 0.08, 0.5, M.hay, place.x, FLOOR_Y + 1.04, place.z);
+    list.rotation.y = 0.4;
+    g.add(list);
+    const hit = box(2.4, 1.3, 1.6, M.woodDark, place.x, FLOOR_Y + 0.65, place.z);
+    hit.userData = { documentSpot: place.id, documentName: place.nameRu };
+    g.add(hit);
+    documentTargets.push(hit);
+    colliders.push({ x: place.x, z: place.z, r: 1.2 });
+  }
+  scene.add(g);
+  return { def, group: g, colliders, exitDoors, documentTargets };
+}
+
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
+  // Таверна живёт в диораме, а не в процедурной коробке 22x16: стены, мебель
+  // и свет — из модели, планировка — замером, а не коробками.
+  if (def.kind === 'tavern') return buildTavernRoom(scene, def);
   const g = new THREE.Group();
   const cx = def.roomCx, cz = def.roomCz;
   // Залы подземелий — 32x32, комнаты зданий — 22x16.
@@ -1574,7 +1695,7 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
   const floor = box(ширина, 0.4, глубина, M.stone, cx, FLOOR_Y - 0.2, cz);
   floor.receiveShadow = true;
   g.add(floor);
-  const rugColor = def.kind === 'tavern' ? M.red : def.kind === 'science' ? M.purple : M.teal;
+  const rugColor = def.kind === 'science' ? M.purple : M.teal;
   g.add(box(ширина * 0.4, 0.06, глубина * 0.4, rugColor, cx, FLOOR_Y + 0.03, cz));
 
   const colliders: { x: number; z: number; r: number }[] = [];
@@ -1648,7 +1769,6 @@ function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
     stable: furnishStable,
     barracks: furnishBarracks,
     workshop: furnishWorkshop,
-    tavern: furnishTavern,
     observatory: furnishObservatory,
     science: furnishScience,
     arena: furnishArena,
