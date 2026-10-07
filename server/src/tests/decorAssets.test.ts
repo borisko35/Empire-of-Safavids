@@ -2214,3 +2214,130 @@ describe('Телега, частокол, баррикада, мельница: 
     }
   });
 });
+
+describe('Плуг у мельницы: модель, площадка, сцена', () => {
+  // Плуг из medieval_plough.zip: glTF с тремя PBR-текстурами, 13 тыс. вершин —
+  // децимация не нужна. Площадку (581, 52) выбирал владелец из трёх замеренных.
+  const путьПлуга = join(корень, 'client/src/app/public/models/decor/plough.glb');
+
+  type ГлбПлуга = {
+    extensionsUsed?: string[];
+    materials?: { name?: string; pbrMetallicRoughness?: { baseColorFactor?: number[] } }[];
+    images?: unknown[];
+    nodes?: { name?: string; mesh?: number; translation?: number[]; rotation?: number[]; scale?: number[] }[];
+    meshes?: { primitives: { attributes: { POSITION: number } }[] }[];
+    accessors?: { min: number[]; max: number[] }[];
+  };
+
+  function габаритыПлуга() {
+    must(existsSync(путьПлуга), 'файла плуга нет: проверять нечего');
+    const buf = readFileSync(путьПлуга);
+    const json = JSON.parse(buf.slice(20, 20 + buf.readUInt32LE(12)).toString('utf-8')) as ГлбПлуга;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity;
+    let maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const node of json.nodes ?? []) {
+      if (node.mesh === undefined) continue;
+      must(
+        node.rotation === undefined && node.scale === undefined,
+        `узел ${node.name ?? '?'} повёрнут или масштабирован: габариты брать через матрицу, не сложением`
+      );
+      for (const prim of json.meshes![node.mesh].primitives) {
+        const acc = json.accessors![prim.attributes.POSITION];
+        const t = node.translation ?? [0, 0, 0];
+        minX = Math.min(minX, acc.min[0] + t[0]);
+        maxX = Math.max(maxX, acc.max[0] + t[0]);
+        minY = Math.min(minY, acc.min[1] + t[1]);
+        maxY = Math.max(maxY, acc.max[1] + t[1]);
+        minZ = Math.min(minZ, acc.min[2] + t[2]);
+        maxZ = Math.max(maxZ, acc.max[2] + t[2]);
+      }
+    }
+    return { buf, json, minX, maxX, minY, maxY, minZ, maxZ };
+  }
+
+  function константаПлуга(): { x: number; z: number; lift: number; ry: number; scale: number } {
+    const м = /export const MILL_PLOUGH = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/.exec(
+      ТЕРРЕЙН
+    );
+    must(м !== null, 'константа MILL_PLOUGH не найдена: плуг едет неизвестно куда');
+    return { x: Number(м![1]), z: Number(м![2]), lift: Number(м![3]), ry: Number(м![4]), scale: Number(м![5]) };
+  }
+
+  it('файл в источнике сборки, в манифесте и сжат Draco', () => {
+    must(МАНИФЕСТ.decor !== undefined, 'в манифесте нет раздела decor');
+    const запись = МАНИФЕСТ.decor!.find((d) => d.name === 'plough');
+    must(запись !== undefined, 'записи plough нет в манифесте: файл никто не сверяет с диском');
+    const { buf, json } = габаритыПлуга();
+    must(buf.length === запись.bytes, `плуг: на диске ${buf.length}, в манифесте ${запись.bytes}`);
+    must(
+      (json.extensionsUsed ?? []).includes('KHR_draco_mesh_compression'),
+      'плуг без Draco: геометрия весит как сырая'
+    );
+    must(buf.length < 10 * 1024 * 1024, `плуг весит ${(buf.length / 1048576).toFixed(1)} МБ: в веб столько не возят`);
+  });
+
+  it('три PBR-текстуры и один материал: красить нечего', () => {
+    const { json } = габаритыПлуга();
+    must((json.images ?? []).length === 3, `картинок ${(json.images ?? []).length} вместо 3 — текстуры потеряны`);
+    must((json.materials ?? []).length === 1, `материалов ${(json.materials ?? []).length} вместо 1 — модель перевыпущена`);
+    must(
+      (json.materials ?? [])[0]?.name === 'plough_31',
+      `материал ${(json.materials ?? [])[0]?.name ?? '?'} вместо plough_31: не та модель`
+    );
+  });
+
+  it('габариты 0.48x1.33, лемех на -0.254', () => {
+    const { minX, maxX, minY, maxY, minZ, maxZ } = габаритыПлуга();
+    must(Math.abs(maxX - minX - 0.48) < 0.02, `ширина ${(maxX - minX).toFixed(3)} вместо 0.48: колёса не там`);
+    must(Math.abs(maxZ - minZ - 1.33) < 0.02, `длина ${(maxZ - minZ).toFixed(3)} вместо 1.33: модель перевыпущена`);
+    must(Math.abs(maxY - minY - 0.488) < 0.02, `высота ${(maxY - minY).toFixed(3)} вместо 0.488: ручки не те`);
+    must(
+      Math.abs(minY - -0.254) < 0.005,
+      `низ на ${minY.toFixed(3)} вместо -0.254: подъём 0.237 вкопает плуг или оставит висеть`
+    );
+  });
+
+  it('площадка: 12 м южнее мельницы, крюк в поле, лемех в грунте', () => {
+    const п = константаПлуга();
+    const м = /export const CARAVANSERAI_WINDMILL = \{ x: (-?[\d.]+), z: (-?[\d.]+), lift: (-?[\d.]+), ry: (-?[\d.]+), scale: ([\d.]+) \};/.exec(
+      ТЕРРЕЙН
+    );
+    must(м !== null, 'константа CARAVANSERAI_WINDMILL не найдена: от чего мерить плуг');
+    const мельница = { x: Number(м![1]), z: Number(м![2]) };
+    const к = /export const CARAVANSERAI = \{ x: (-?\d+), z: (-?\d+), radius: (\d+)/.exec(ТЕРРЕЙН);
+    must(к !== null, 'не нашли CARAVANSERAI: караван-сарай переехал, проверка слепа');
+    const караван = { x: Number(к![1]), z: Number(к![2]), radius: Number(к![3]) };
+    must(!isWater(п.x, п.z), `плуг в (${п.x}, ${п.z}) стоит в воде`);
+    const отМельницы = Math.hypot(п.x - мельница.x, п.z - мельница.z);
+    must(отМельницы >= 10 && отМельницы <= 14, `плуг в ${отМельницы.toFixed(0)} м от мельницы: на юбке или в поле`);
+    const отКаравана = Math.hypot(п.x - караван.x, п.z - караван.z) - караван.radius;
+    must(отКаравана >= 40 && отКаравана <= 55, `плуг в ${отКаравана.toFixed(0)} м от караван-сарая: не его поле`);
+    const зона = getZoneAt(п.x, п.z);
+    must(зона !== null && зона.id === 'isfahan_outskirts', `зона ${зона?.id ?? 'не найдена'}: мерили в isfahan_outskirts`);
+    // Крюк — локальный +Z: смотрит от мельницы в поле (на юг).
+    const угол = (() => {
+      const ax = Math.sin(п.ry), az = Math.cos(п.ry);
+      const bx = п.x - мельница.x, bz = п.z - мельница.z;
+      const косинус = Math.max(-1, Math.min(1, (ax * bx + az * bz) / Math.hypot(bx, bz)));
+      return (Math.acos(косинус) * 180) / Math.PI;
+    })();
+    must(угол <= 5, `крюк под ${угол.toFixed(1)}° от мельницы: плуг уткнулся в юбку`);
+    must(Math.abs(п.lift - 0.237) < 0.005, `подъём ${п.lift} вместо 0.237: лемех повиснет над грунтом`);
+    must(Math.abs(п.scale - 1) < 0.001, `масштаб ${п.scale}: плуг и так в метрах`);
+  });
+
+  it('сцена грузит плуг общим загрузчиком с одним кругом', () => {
+    must(
+      /placeDecor\(scene, 'decor\/plough\.glb', x, z, lift, ry, 0\.9, scale\);/.test(ТЕРРЕЙН),
+      'плуг ставится не общим загрузчиком: путь, Draco или коллайдер не те'
+    );
+    must(
+      /export function buildMillPlough\(scene: THREE\.Scene\): void/.test(ТЕРРЕЙН),
+      'нет построителя плуга: ему негде встать'
+    );
+    must(
+      /buildMillPlough\(this\.scene\);/.test(читать('client/src/app/game3d/world3d.ts')),
+      'построитель не вызван из мира: код есть, а плуга нет'
+    );
+  });
+});

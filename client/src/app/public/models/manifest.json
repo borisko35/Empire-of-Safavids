@@ -449,6 +449,11 @@
       "file": "models/decor/tavern-room.glb",
       "name": "tavern-room",
       "bytes": 728856
+    },
+    {
+      "file": "models/decor/plough.glb",
+      "name": "plough",
+      "bytes": 300344
     }
   ],
   "weapons": [

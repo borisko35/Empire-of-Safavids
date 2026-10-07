@@ -5475,6 +5475,13 @@ export const GALLOWS_PALISADE = { x: -51, z: -89, lift: -0.05, ry: 1.5708, scale
 export const PORT_ROAD_BARRICADE = { x: -118, z: -85, lift: 0.31, ry: -2.16766, scale: 0.1 };
 export const CARAVANSERAI_WINDMILL = { x: 581, z: 40, lift: -0.16, ry: -1.37593, scale: 1 };
 
+// ── Плуг у мельницы ────────────────────────────────────────────
+// Площадка выбрана владельцем: 12 м южнее мельницы, 46 м от караван-сарая.
+// Рельеф под пятном 0.4 м: ровный 0.01. Крюк (+Z) смотрит от мельницы в поле,
+// ry = 0 считан, а не выбран. Низ модели -0.254 (лемех зарывается сам);
+// lift 0.237 ставит лемех на сантиметр ниже нижнего грунта.
+export const MILL_PLOUGH = { x: 581, z: 52, lift: 0.237, ry: 0, scale: 1 };
+
 export function buildGallows(scene: THREE.Scene): void {
   const { x, z, lift, ry } = GALLOWS;
   const c = Math.cos(ry);
@@ -5604,6 +5611,13 @@ export function buildCaravanseraiWindmill(scene: THREE.Scene): void {
     { x: 1.32, z: 2.54, r: 1.2 },
     { x: 2.75, z: 4.44, r: 1.0 },
   ]);
+}
+
+// Плуг у мельницы: 0.48 x 0.49 x 1.32, почти отцентрован (Z -0.69…0.64).
+// Один круг r = 0.9 закрывает и колёса, и ручки, и крюк: диагональ 0.71.
+export function buildMillPlough(scene: THREE.Scene): void {
+  const { x, z, lift, ry, scale } = MILL_PLOUGH;
+  placeDecor(scene, 'decor/plough.glb', x, z, lift, ry, 0.9, scale);
 }
 
 // ── Дубы у лесной деревни ────────────────────────────────────────
