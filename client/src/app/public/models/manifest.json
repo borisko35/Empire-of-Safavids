@@ -409,6 +409,11 @@
       "file": "models/decor/church-doorway.glb",
       "name": "church-doorway",
       "bytes": 1475140
+    },
+    {
+      "file": "models/decor/onion-dome-tower.glb",
+      "name": "onion-dome-tower",
+      "bytes": 1523704
     }
   ],
   "weapons": [
