@@ -5235,6 +5235,62 @@ export function buildRuinChapel(scene: THREE.Scene): void {
 export function buildRuinCourt(scene: THREE.Scene): void {
   placeDecor(scene, 'decor/ruin-court.glb', RUIN_COURT.x, RUIN_COURT.z, 0, 0, 4, RUIN_COURT.scale);
 }
+// ── Руины церкви на Кавказе ────────────────────────────
+//
+// Двадцать третий пакет из свежей пачки Assets (pieve_san_martinos_ruins).
+// Конвейер: glTF из архива → Blender (Draco, WEBP 1024) → public/models/decor
+// → сцена с коллайдерами по замеру проекции (footprint.py, порог 3 м).
+//
+// ПЛОЩАДКА. (-1010, 646), зона caucasus_peaks: суша на всём пятне 24x40,
+// размах рельефа 0.88 м, город Кавказ в 100 м от края пятна. Церковь на
+// Кавказе читается: регион с христианским прошлым.
+//
+// ПОДЪЯМ. Пол нефа мерен отдельно: 0.93…1.32 от низа модели, медиана 1.07.
+// Низ модели (−1.505) — кромка её собственного грунта. Кладём пол на землю
+// (lift −0.95): грунт уходит на 2.46 м вглубь и прячется под террейном,
+// а пол остаётся на нуле. Подъём по низу (1.505) поднял бы пол на 3.5 м.
+//
+// КОЛЛАИДЕРЫ. По проекции: внешние стены x −7.9/+8.1, торцы z −13/+15.5,
+// аркады x −3.9/+3.1. Южный торец разорван проёмом x −2.4…3.6 (замер при
+// пороге 1.5 м) — вход. Приделы (4 м между стеной и аркадой) закрыты:
+// с игроком R = 1 там не разойтись. Неф (7 м) проходим: просвет 2.6 м.
+export const CHURCH_RUIN = { x: -1010, z: 646, lift: -0.95 };
+
+export function buildChurchRuin(scene: THREE.Scene): void {
+  const { x, z, lift } = CHURCH_RUIN;
+  const ЛЕВАЯ = -7.9;
+  const ПРАВАЯ = 8.1;
+  const ЮГ = -13;
+  const СЕВЕР = 15.5;
+  // Шаг 3.5 при радиусе 1.2: щель между кругами 1.1 м, игрок (R = 1) не пролезет.
+  for (let lz = ЮГ; lz <= СЕВЕР; lz += 3.5) {
+    addCollider(x + ЛЕВАЯ, z + lz, 1.2);
+    addCollider(x + ПРАВАЯ, z + lz, 1.2);
+  }
+  // Северный торец закрыт целиком: проём только в южном.
+  for (let lx = ЛЕВАЯ; lx <= ПРАВАЯ; lx += 3.5) addCollider(x + lx, z + СЕВЕР, 1.2);
+  // Южный торец: два круга по краям проёма (окно −2.4…3.4 внутри проёма −2.4…3.6).
+  addCollider(x - 4.6, z + ЮГ, 1.2);
+  addCollider(x + 5.6, z + ЮГ, 1.2);
+  // Аркады: приделы закрыты, неф проходим.
+  for (let lz = -8; lz <= 15; lz += 3.5) {
+    addCollider(x - 3.9, z + lz, 1.2);
+    addCollider(x + 3.1, z + lz, 1.2);
+  }
+
+  void loadDecorModel('decor/church-ruin.glb').then((модель) => {
+    if (!модель) return;
+    const вещь = модель.clone();
+    вещь.position.set(x, groundHeight(x, z) + lift, z);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    scene.add(вещь);
+  });
+}
 // ── Дубы у лесной деревни ────────────────────────────────────────
 //
 // Десятый пакет из Assets (плюс кусты без текстур — пропущены: голая

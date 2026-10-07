@@ -19,7 +19,7 @@ import {
 buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ, buildMosqueCourtyard,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
-  buildRuinBridge, buildPassRocks, buildDesertTower,
+  buildRuinBridge, buildPassRocks, buildDesertTower, buildChurchRuin,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -523,6 +523,8 @@ private roll = 0;
     // Руины: капелла у Месопотамии и двор у святилища.
     buildRuinChapel(this.scene);
     buildRuinCourt(this.scene);
+    // Руины церкви на Кавказе, к востоку от горного города.
+    buildChurchRuin(this.scene);
     // Дубы у лесной деревни.
     buildOaks(this.scene);
     // Рухнувший мост у реки и скалы перевала.
