@@ -7,7 +7,7 @@
 // рисуется на земле, стрелка смотрит на ближайшую точку маршрута.
 
 import * as THREE from 'three';
-import { CITY, GATE, LAKE, groundHeight } from './terrain';
+import { CITY, CITY_INNER, GATE, LAKE, groundHeight } from './terrain';
 
 export interface NavTarget {
   x: number;
@@ -39,13 +39,22 @@ function segCircleDist(a: Pt, b: Pt, c: Pt): number {
 /** Маршрут от игрока к цели: ворота + обход озера */
 function buildRoute(from: Pt, to: Pt): Pt[] {
   const cityC: Pt = { x: CITY.x, z: CITY.z };
-  const inCity = (p: Pt): boolean => dist(p, cityC) < CITY.radius - 2;
+  // Граница города — ВНУТРЕННЯЯ грань кладки, а не ось стены.
+  //
+  // Раньше здесь стояло `CITY.radius - 2`, и это было верно только пока стена
+  // имела нулевую толщину. Теперь кладка занимает 13.06 м: ось 116, внутренняя
+  // грань 109.47. Со старой строкой навигатор считал городом 4.5 м камня, и
+  // маршрут между точкой «внутри кладки» и точкой «в поле» шёл напрямую —
+  // то есть сквозь стену в стороне от ворот. Минус два метра оставлен как
+  // запас, чтобы путь не липла к самой грани.
+  const граница = CITY_INNER - 2;
+  const inCity = (p: Pt): boolean => dist(p, cityC) < граница;
   const pts: Pt[] = [];
 
   // Через стену — только в ворота
   if (inCity(from) !== inCity(to)) {
     pts.push({ x: GATE.x, z: GATE.z });
-  } else if (!inCity(from) && segCircleDist(from, to, cityC) < CITY.radius - 2) {
+  } else if (!inCity(from) && segCircleDist(from, to, cityC) < граница) {
     pts.push({ x: GATE.x, z: GATE.z });
   }
   pts.push(to);

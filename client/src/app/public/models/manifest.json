@@ -416,6 +416,11 @@
       "bytes": 1523704
     },
     {
+      "file": "models/decor/Wall-Type01.glb",
+      "name": "Wall-Type01",
+      "bytes": 519148
+    },
+    {
       "file": "models/decor/medieval-bridge.glb",
       "name": "medieval-bridge",
       "bytes": 546836
