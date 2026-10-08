@@ -443,7 +443,7 @@ fetch('/health')
 const VOTE_URL = 'https://browsermmorpg.com/vote.php?id=1854';
 
 /** Человекочитаемое «через 11 ч 59 мин» из ISO-метки. */
-function через(метка: string | null): string {
+function через(метка) {
   if (!метка) return '';
   const мс = new Date(метка).getTime() - Date.now();
   if (мс <= 0) return '';
@@ -453,16 +453,34 @@ function через(метка: string | null): string {
   return `${минут} мин`;
 }
 
-async function renderVoteStatus(): Promise<void> {
-  const note = $('vote-note');
-  const claim = $('vote-claim') as HTMLButtonElement | null;
+/**
+ * Строка из словаря site.* текущего языка.
+ *
+ * В лендинге нет функции t(): локализация идёт через
+ * data-i18n и applyLocale. Динамические строки берутся из
+ * того же словаря напрямую; loadLocale кэширует его, так
+ * что вызов на кнопке не ходит в сеть повторно.
+ */
+async function строка(ключ, параметры) {
+  const словарь = await loadLocale(document.documentElement.lang || 'ru').catch(() => null);
+  const шаблон = словарь?.site?.[ключ] ?? '';
+  if (!параметры) return шаблон;
+  return Object.entries(параметры).reduce(
+    (текст, [имя, значение]) => текст.replace(`{${имя}}`, String(значение)),
+    шаблон,
+  );
+}
+
+async function renderVoteStatus() {
+  const note = document.getElementById('vote-note');
+  const claim = document.getElementById('vote-claim');
   if (!note || !claim) return;
   const token = localStorage.getItem('eos_token');
   if (!token) {
     claim.hidden = true;
     return;
   }
-  let ответ: { success: boolean; canVote?: boolean; nextVoteAt?: string | null };
+  let ответ;
   try {
     const res = await fetch('/api/game/vote/status', {
       headers: { Authorization: `Bearer ${token}` },
@@ -474,7 +492,7 @@ async function renderVoteStatus(): Promise<void> {
   const ждать = через(ответ.nextVoteAt);
   if (ждать) {
     note.hidden = false;
-    note.textContent = t('site.vote_cooldown').replace('{time}', ждать);
+    note.textContent = await строка('vote_cooldown', { time: ждать });
     claim.hidden = true;
   } else {
     note.hidden = true;
@@ -482,9 +500,10 @@ async function renderVoteStatus(): Promise<void> {
   }
 }
 
-async function wireVote(): Promise<void> {
-  const openBtn = $('vote-open') as HTMLButtonElement | null;
-  const claimBtn = $('vote-claim') as HTMLButtonElement | null;
+async function wireVote() {
+  const openBtn = document.getElementById('vote-open');
+  const claimBtn = document.getElementById('vote-claim');
+  const note = document.getElementById('vote-note');
   if (openBtn) {
     openBtn.addEventListener('click', () => {
       window.open(VOTE_URL, '_blank', 'noopener');
@@ -495,6 +514,7 @@ async function wireVote(): Promise<void> {
     const token = localStorage.getItem('eos_token');
     if (!token) return;
     claimBtn.disabled = true;
+    let сообщение;
     try {
       const res = await fetch('/api/game/vote', {
         method: 'POST',
@@ -503,15 +523,24 @@ async function wireVote(): Promise<void> {
       });
       const ответ = await res.json().catch(() => ({}));
       if (!res.ok || ответ?.success !== true) {
-        toast(t('site.vote_err'), 'error');
+        сообщение = await строка('vote_err');
       } else {
-        toast(t('site.vote_ok').replace('{gold}', String(ответ.gold ?? '')), 'success');
+        сообщение = await строка('vote_ok', { gold: ответ.gold });
       }
     } catch {
-      toast(t('site.vote_err'), 'error');
+      сообщение = await строка('vote_err');
     } finally {
       claimBtn.disabled = false;
-      await renderVoteStatus();
+    }
+    // Тостов на лендинге нет — результат идёт в строку
+    // состояния. Успех прячет кнопку: кулдаун начался,
+    // и повторное нажатие всё равно откажет на сервере.
+    if (note) {
+      note.hidden = false;
+      note.textContent = сообщение;
+    }
+    if (сообщение && !сообщение.startsWith('Не удалось')) {
+      claimBtn.hidden = true;
     }
   });
 }
