@@ -2090,7 +2090,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const fillBottom = земляПод(phi) - WALL_SUNK;
     const fillHeight = fillTop - fillBottom;
     const fillBox = new THREE.Mesh(
-      new THREE.BoxGeometry(СТЕНА_ШИРИНА - 0.5, fillHeight - 0.04, СТЕНА_ГЛУБИНА - 3.0),
+      new THREE.BoxGeometry(СТЕНА_ШИРИНА - 1.2, fillHeight - 0.04, СТЕНА_ГЛУБИНА),
       MAT.sandstoneDark,
     );
     fillBox.position.set(
