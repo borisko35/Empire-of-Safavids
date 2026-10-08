@@ -79,14 +79,101 @@ if [ -f "$ENV_FILE" ] && grep -q '^CLOUDFLARE_TUNNEL_TOKEN=..*' "$ENV_FILE"; the
   TUNNEL=1
 fi
 
-# Момент начала выкатки: по нему потом сверяется возраст образа.
-DEPLOY_STARTED=$(date +%s)
-
 say()  { printf '%s\n' "$*"; }
 stop() { printf '\nВЫКАТКА ОСТАНОВЛЕНА: %s\n' "$*" >&2; exit 1; }
 
+# ── Куда выкатываем ──────────────────────────────────────────────────────────
+#
+# ЧТО БЫЛО. Скрипт собирал и поднимал стек ТОЛЬКО на той машине, где запущен.
+# Прод при этом живёт на AWS (§67), и одноимённый туннель Cloudflare сидит
+# сразу на двух машинах. 8 октября 2026 выкатка отработала целиком, оба образа
+# пересобрались, 80 моделей на месте, и скрипт напечатал `RESULT: PASS` —
+# а живой сайт отдавал СТАРУЮ сборку:
+#
+#   контейнер отдаёт  index-D24E_uzX.js
+#   сайт снаружи      index-CuOyWCn8.js   (новый отдаёт 404)
+#
+# Причина в том, что все проверки скрипта смотрели на локальный контейнер, а
+# не на то, что реально получает игрок. Третья по счёту история «выглядит как
+# успех» из этой же серии.
+#
+# ЧТО ТЕПЕРЬ. Появился явный выбор цели, и — главное — проверка отдаваемого
+# сайта. Она не знает про цели ничего и работает всегда: скрипт достаёт из
+# отдаваемого index.html имя бандла, сверяет его с тем, что лежит в
+# выкатанном контейнере, и останавливается, если не совпало. Именно эту
+# сверку и предписывала карта в §71, но в скрипте её не было.
+#
+# ИМЕНА ПЕРЕМЕННЫХ — ЛАТИНИЦА, см. замечание выше про `ТУННЕЛЬ=0`.
+#
+# Всё читается ИЗ deploy/.env, а не из окружения оболочки. Первая версия
+# брала цель из окружения и настройки из файла, то есть половину просили
+# вводить в одной строке команды, а половину — в .env. На практике это
+# выглядело так: владелец положил `EOS_DEPLOY_TARGET=aws` в .env, запустил
+# выкатку — а она отработала для local и рапортовала PASS. Ровно та поломка,
+# ради которой всё затевалось, только теперь по собственной небрежности.
+# Если переменная есть и в окружении, и в файле — побеждает окружение, это
+# удобно для разового запуска.
+env_get() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$ENV_FILE" 2>/dev/null | tail -1 | tr -d '\r'; }
+[ -f "$ENV_FILE" ] || stop "net $ENV_FILE"
+
+TARGET="$(env_get EOS_DEPLOY_TARGET)"
+[ -n "$TARGET" ] || TARGET="local"
+if [ -n "${EOS_DEPLOY_TARGET:-}" ]; then
+  TARGET="$EOS_DEPLOY_TARGET"
+fi
+PUBLIC_URL="$(env_get PUBLIC_URL)"
+
+case "$TARGET" in
+  local) : ;;
+  aws)
+    AWS_HOST="$(env_get EOS_AWS_HOST)"
+    AWS_USER="$(env_get EOS_AWS_USER)"
+    AWS_KEY="$(env_get EOS_AWS_KEY)"
+    AWS_DIR="$(env_get EOS_AWS_DIR)"
+    [ -n "$AWS_HOST" ] || stop "cel aws: v $ENV_FILE net EOS_AWS_HOST"
+    [ -n "$AWS_USER" ] || stop "cel aws: v $ENV_FILE net EOS_AWS_USER"
+    [ -n "$AWS_KEY" ]  || stop "cel aws: v $ENV_FILE net EOS_AWS_KEY"
+    [ -n "$AWS_DIR" ]  || stop "cel aws: v $ENV_FILE net EOS_AWS_DIR"
+    [ -f "$AWS_KEY" ]   || stop "cel aws: klyuch ne nayden: $AWS_KEY"
+    ;;
+  *) stop "neizvestnaya cel vykati: '$TARGET' (ozhidaetsya local ili aws)" ;;
+esac
+[ -n "$PUBLIC_URL" ] || stop "v $ENV_FILE net PUBLIC_URL: bez nego ne proverit, chto otdayot sajt"
+
+# Параметры ssh и сама функция remote() заводятся ТОЛЬКО для цели aws.
+# При `set -u` обращение к $AWS_KEY при цели local — это «unbound variable» и
+# падение на ровном месте: впервые оно и случилось, когда блок цели стоял
+# выше проверки на aws, а скрипт запускали с local.
+if [ "$TARGET" = "aws" ]; then
+  SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -i $AWS_KEY"
+  remote() { ssh $SSH_OPTS "$AWS_USER@$AWS_HOST" "$@"; }
+fi
+
+# Момент начала выкатки: по нему потом сверяется возраст образа.
+DEPLOY_STARTED=$(date +%s)
+
 # ── 1. Предварительная проверка ────────────────────────────────────────────
 say "=== 1. PREDVARIТEL'NAYA PROVERKA ==="
+say "  cel vykati: $TARGET"
+say "  sajt:       $PUBLIC_URL"
+if [ "$TARGET" = "aws" ]; then
+  say "  mashina:    $AWS_USER@$AWS_HOST, katalog $AWS_DIR"
+  say "  eto NE lokal'nyy stend. Posle etoy komandy prod menyaetsya."
+  # Проверка связи ДО сборки: доезжать до конца выкатки и упасть на сети
+  # дороже, чем остановиться заранее.
+  MY_IP="$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || echo neopredeleno)"
+  say "  nashiy publichnyy IP: $MY_IP"
+  if ! remote "true" >/dev/null 2>&1; then
+    say ""
+    say "  SSH NE DOSTUPEN: $AWS_USER@$AWS_HOST"
+    say "  Nashiy IP: $MY_IP"
+    say "  Gruppa bezopasnosti AWS dolzhna puskat' s nego port 22."
+    say "  Esli v ney zapisan drugoy adres (naprimer, izmenilsya IP u provaydera) —"
+    say "  dobav'te $MY_IP/32 ryalom s SSH-22."
+    stop "do AWS ne dostuchaet'sya: vykatka ne nachinalsya, prod ne tronut"
+  fi
+  say "  SSH ok"
+fi
 bash tools/deploy-preflight.sh || stop "предварительная проверка не пройдена"
 if [ "$TUNNEL" -eq 1 ]; then
   say "  rezhim: tunnel Cloudflare (docker-compose.tunnel.yml podklyuchen)"
@@ -162,19 +249,62 @@ say "=== 3. PERESBORKA ==="
 #
 # ID ОБРАЗА ЗАПОМИНАЕТСЯ ДО СБОРКИ. Он нужен для проверки после: пересборка
 # обязана либо дать новый образ, либо честно сказать «слои не изменились».
-SERVER_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
-CLIENT_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+#
+# Для цели aws образы пересобираются ТАМ, поэтому и «до» снимается удалённо.
+if [ "$TARGET" = "aws" ]; then
+  SERVER_ID_BEFORE=$(remote "docker inspect -f '{{.Image}}' \$(\$($C ps -q server 2>/dev/null | head -1)) 2>/dev/null" | tr -d '\r')
+  CLIENT_ID_BEFORE=$(remote "docker inspect -f '{{.Image}}' \$(\$($C ps -q client 2>/dev/null | head -1)) 2>/dev/null" | tr -d '\r')
+else
+  SERVER_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+  CLIENT_ID_BEFORE=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+fi
 say "  obraz server do sborki:  ${SERVER_ID_BEFORE:-(netu)}"
 say "  obraz klienta do sborki: ${CLIENT_ID_BEFORE:-(netu)}"
 
-$C up -d --force-recreate --build server client >/tmp/deploy-build.log 2>&1
-KOD_BUILD=$?
-tail -25 /tmp/deploy-build.log | sed 's/^/  /'
-if [ "$KOD_BUILD" -ne 0 ]; then
-  say ""
-  say "  SBORKA NE UDALAS (kod $KOD_BUILD). Polnyi vyvod:"
-  sed 's/^/    /' /tmp/deploy-build.log
-  stop "konteynery ne perezabralis"
+# На aws код едет в репозиторий, а пересборка идёт ТАМ. Собирать на t3.micro
+# с 911 МБ памяти нельзя, там под это разбит своп.
+#
+# ПОЧЕМУ УДАЛЁННЫЙ ВЫЗОВ ИМЕННО ТАКОЙ. Вместо того чтобы повторять здесь всю
+# пересборку и её проверки через ssh, на удалённой машине запускается ТОТ ЖЕ
+# сценарий с `EOS_DEPLOY_TARGET=local` — то есть ровно то, что уже доказало
+# работоспособность на этой машине. Так на прод едет минимум непроверенного
+# кода: одна команда с двумя аргументами вместо десятка вызовов docker через
+# ssh, где любая неверная кавычка означала бы пустую выкатуку на боевом стенде.
+if [ "$TARGET" = "aws" ]; then
+  say "  otdayom kommit $LOCAL na $AWS_HOST"
+  if ! remote "cd '$AWS_DIR' && git fetch --quiet origin main && git checkout -q $LOCAL && git reset --hard $LOCAL" >/tmp/deploy-remote.log 2>&1; then
+    say ""
+    say "  UDALENNYY KOD NE POSTAVLEN:"
+    sed 's/^/    /' /tmp/deploy-remote.log
+    stop "ne udalos dostavit kod na $AWS_HOST"
+  fi
+  REMOTE_HEAD=$(remote "cd '$AWS_DIR' && git rev-parse HEAD" | tr -d '\r')
+  say "  kod na mashine: $REMOTE_HEAD"
+  [ "$REMOTE_HEAD" = "$LOCAL" ] || stop "na $AWS_HOST kommit $REMOTE_HEAD, a otdayom $LOCAL"
+  say "  zapuskayem tot zhe stsenariy tam"
+  # Проверки образа, моделей и туннеля на удалённой машине выполняет сам
+  # запущенный там сценарий: у него свой стек и свои контейнеры.
+  if ! remote "cd '$AWS_DIR' && EOS_DEPLOY_TARGET=local bash tools/deploy.sh" >/tmp/deploy-remote.log 2>&1; then
+    say ""
+    say "  VYKATKA NA AWS NE UDALAS. Polnyi vyvod:"
+    sed 's/^/    /' /tmp/deploy-remote.log
+    stop "stsenariy na $AWS_HOST zavershilsya s oshibkoy"
+  fi
+  tail -20 /tmp/deploy-remote.log | sed 's/^/  /'
+  say "  na AWS stsenariy zavershilsya uspeshno"
+  # Дальше идут проверки ТОЛЬКО локального стека: на aws их уже сделали там.
+  SKIP_LOCAL_CHECKS=1
+else
+  $C up -d --force-recreate --build server client >/tmp/deploy-build.log 2>&1
+  KOD_BUILD=$?
+  tail -25 /tmp/deploy-build.log | sed 's/^/  /'
+  if [ "$KOD_BUILD" -ne 0 ]; then
+    say ""
+    say "  SBORKA NE UDALAS (kod $KOD_BUILD). Polnyi vyvod:"
+    sed 's/^/    /' /tmp/deploy-build.log
+    stop "konteynery ne perezabralis"
+  fi
+  SKIP_LOCAL_CHECKS=0
 fi
 
 # ── 4. Убедиться, что сервер отвечает ──────────────────────────────────────
@@ -183,14 +313,19 @@ say "=== 4. PROVERKA POSLE DEPLOYA ==="
 # Таймаут: контейнеру нужно время на миграции. Без него проверка успела бы
 # сработать на старом ещё работающем контейнере и сказать «всё хорошо».
 gotovo=0
-for _ in $(seq 1 30); do
-  if $C exec -T server sh -c 'wget -qO- http://localhost:3000/health' >/dev/null 2>&1; then
-    gotovo=1; break
-  fi
-  sleep 3
-done
-[ "$gotovo" -eq 1 ] || stop "server ne otvetil za 90 sekund posle peresborki"
-say "  server otvechaet: $($C exec -T server sh -c 'wget -qO- http://localhost:3000/health' 2>/dev/null | tr -d '\r\n')"
+if [ "${SKIP_LOCAL_CHECKS:-0}" -eq 0 ]; then
+  for _ in $(seq 1 30); do
+    if $C exec -T server sh -c 'wget -qO- http://localhost:3000/health' >/dev/null 2>&1; then
+      gotovo=1; break
+    fi
+    sleep 3
+  done
+  [ "$gotovo" -eq 1 ] || stop "server ne otvetil za 90 sekund posle peresborki"
+  HEALTH=$($C exec -T server sh -c 'wget -qO- http://localhost:3000/health' 2>/dev/null | tr -d '\r\n')
+  say "  server otvechaet: ${HEALTH:-(netu)}"
+else
+  say "  proverki steka vypolneny na udallennoj mashine"
+fi
 
 # Проверка ОБРАЗА. Ответ /health ничего не говорит о том, какой код запущен:
 # старый контейнер, оставшийся на месте, отвечает так же хорошо. Именно
@@ -217,8 +352,12 @@ say "  server otvechaet: $($C exec -T server sh -c 'wget -qO- http://localhost:3
 # Содержимое — единственная проверка, которая отличает «правильный старый
 # образ» от «неправильного нового». Поэтому она обязательна в обоих случаях.
 say "  proverka obraza: id do i posle sborki"
-SERVER_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
-CLIENT_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+if [ "${SKIP_LOCAL_CHECKS:-0}" -eq 1 ]; then
+  say "  propushchena: obraz proverilsya na udallennoj mashine"
+else
+  SERVER_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q server 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+  CLIENT_ID_AFTER=$(docker inspect -f '{{.Image}}' "$($C ps -q client 2>/dev/null | head -1)" 2>/dev/null | tr -d '\r')
+fi
 
 check_image() {
   # Имена локальных переменных — латиницей, как и все остальные: оболочка
@@ -238,8 +377,10 @@ check_image() {
   say "  obraz $imya ne izmenilsya — sloi te zhe, kod ne menyalsya. Eto ne oshibka."
 }
 
-check_image server "$SERVER_ID_BEFORE" "$SERVER_ID_AFTER"
-check_image client "$CLIENT_ID_BEFORE" "$CLIENT_ID_AFTER"
+if [ "${SKIP_LOCAL_CHECKS:-0}" -eq 0 ]; then
+  check_image server "$SERVER_ID_BEFORE" "$SERVER_ID_AFTER"
+  check_image client "$CLIENT_ID_BEFORE" "$CLIENT_ID_AFTER"
+fi
 
 # Модели на месте. Без этой проверки выкатка с новым деко выглядит исправно:
 # сервер отвечает, страница открывается, а файлов моделей в сборке нет, и
@@ -260,8 +401,16 @@ check_image client "$CLIENT_ID_BEFORE" "$CLIENT_ID_AFTER"
 # рапортовать успех, проверяя статую и факел.
 say "  proverka modeley v obraze klienta"
 MODELS_DIR="game/models"
-CLIENT_ID_C=$(docker ps -q --filter "name=empire-of-safavids-client-1" 2>/dev/null | head -1)
-[ -n "$CLIENT_ID_C" ] || stop "konteyner klienta ne nayden"
+# Контейнер ищется по compose, а не по имени `empire-of-safavids-client-1`:
+# имя жёстко зашито было верно только для локального стенда, а префикс
+# проекта задаётся каталогом и на проде другой.
+CLIENT_ID_C=""
+if [ "${SKIP_LOCAL_CHECKS:-0}" -eq 0 ]; then
+  CLIENT_ID_C=$($C ps -q client 2>/dev/null | head -1)
+  [ -n "$CLIENT_ID_C" ] || stop "konteyner klienta ne nayden"
+else
+  say "  propushchena: modeli provereny na udallennoj mashine"
+fi
 # ПУТЬ ПЕРЕДАЁТСЯ ВНУТРИ `sh -c`, А НЕ АРГУМЕНТОМ.
 # Git Bash (MSYS) переписывает аргумент, начинающийся с `/`, в путь Windows:
 #   cat: can't open 'C:/Program Files/Git/usr/share/nginx/html/game/models/manifest.json'
@@ -269,9 +418,11 @@ CLIENT_ID_C=$(docker ps -q --filter "name=empire-of-safavids-client-1" 2>/dev/nu
 # /dev/null — и проверка объявляла «манифеста нет» при манифесте на месте.
 # Аргумент, не начинающийся с `/`, MSYS не трогает, поэтому путь и заносится
 # внутрь строки, а не передаётся отдельным аргументом.
+MANIFEST_RAW=""
+if [ "${SKIP_LOCAL_CHECKS:-0}" -eq 0 ]; then
 MANIFEST_RAW=$(docker exec "$CLIENT_ID_C" sh -c "cat /usr/share/nginx/html/$MODELS_DIR/manifest.json" 2>/dev/null | tr -d '\r')
 if [ -z "$MANIFEST_RAW" ]; then
-  say "  manifest ne prochitan: pokazayu, chto est v obraze"
+  say "  manifest ne prochitan: pokazuyu, chto est v obraze"
   docker exec "$CLIENT_ID_C" sh -c "ls -l /usr/share/nginx/html/$MODELS_DIR 2>&1" | head -10 | sed 's/^/    /'
   stop "v obraze klienta net manifest.json: sborka clienta ne polnaya"
 fi
@@ -295,6 +446,7 @@ if [ -n "$MISSING" ]; then
   stop "dekora na prod ne popadet"
 fi
 say "  vse modeley iz manifest.json na meste v obraze"
+fi
 
 # ── Туннель ─────────────────────────────────────────────────────────────────
 # БЫЛ БАГ, ИЗ-ЗА КОТОРОГО ПЕРЕЕЗД ОСТАНАВЛИВАЛСЯ НА ПОСЛЕДНЕМ ШАГЕ. 10 октября
@@ -373,4 +525,91 @@ fi
 
 say ""
 say "Git kommit na servere: $LOCAL"
+
+# ── 5. ЧТО ОТДАЁТ САЙТ ──────────────────────────────────────────────────────
+#
+# ПОЧЕМУ ЭТА ПРОВЕРКА ПОСЛЕДНЯЯ И ПОЧЕМУ ОНА ГЛАВНАЯ. Всё, что выше, смотрит
+# на контейнер: «образ пересобран», «сервер отвечает», «модели на месте»,
+# «туннель подключён». Всё это может быть правдой про СВОЙ стек, пока сайт
+# снаружи отдаёт чужую сборку.
+#
+# Так и случилось 8 октября 2026: локальный стек был полностью зелёным, а
+# живой сайт отдавал старые файлы, потому что туннель Cloudflare сидит на
+# двух машинах и запросы обслуживала та, что не пересобиралась. `RESULT: PASS`
+# был напечатан, и он ничего не значил.
+#
+# Проверка простая и не знает ни про какие цели: берётся index.html, который
+# отдаётся СНАРУЖИ, из него вытаскивается имя бандла, и этот же файл ищется в
+# выкатанном контейнере. Разошлись имена — значит игрок получает не то, что
+# выкачено, и выкатка не состоялась, сколько бы зелёных галочек ни стояло
+# выше.
+say ""
+say "=== 5. CHTO OTDAYOT SAJT ==="
+
+hash_served() {
+  # sha256 файла по сети. Без кэша: заголовок запроса не мешает Cloudflare
+  # отдать тело из edge, поэтому при расхождении проверка переспрашивает.
+  curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$1" 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+INDEX_HTML="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$PUBLIC_URL/game/" 2>/dev/null || true)"
+[ -n "$INDEX_HTML" ] || stop "sajt ne otdayot $PUBLIC_URL/game/ : proverit' chto otdayot ne udalos"
+
+# Имя главного бандла — из HTML, а не выдуманное: именно его браузер и пойдёт качать.
+SERVED_ASSET="$(printf '%s' "$INDEX_HTML" | grep -o '/game/assets/index-[A-Za-z0-9_-]*\.js' | head -1)"
+[ -n "$SERVED_ASSET" ] || stop "v otdayaemom index.html net imeni bundla: ne pochemu sveryat'"
+
+# Тот же файл внутри выкатанного контейнера.
+if [ "$TARGET" = "aws" ]; then
+  remote "cd '$AWS_DIR' && docker exec \$($C ps -q client 2>/dev/null | head -1) sh -c \"grep -o '/game/assets/index-[A-Za-z0-9_-]*\.js' /usr/share/nginx/html/game/index.html | head -1\"" 2>/dev/null | tr -d '\r' > /tmp/deployed-asset.txt
+  DEPLOYED_ASSET="$(head -1 /tmp/deployed-asset.txt 2>/dev/null)"
+else
+  DEPLOYED_ASSET="$(docker exec "$($C ps -q client 2>/dev/null | head -1)" sh -c \
+    "grep -o '/game/assets/index-[A-Za-z0-9_-]*\.js' /usr/share/nginx/html/game/index.html | head -1" 2>/dev/null | tr -d '\r')"
+fi
+
+say "  sajt otdayet:   ${SERVED_ASSET:-netu}"
+say "  konteyner vytal: ${DEPLOYED_ASSET:-netu}"
+
+if [ -z "$DEPLOYED_ASSET" ]; then
+  stop "v konteynere ne udalos nayti imya bundla: proverka otdayaemyh failov ne poluchilas"
+fi
+
+if [ "$SERVED_ASSET" != "$DEPLOYED_ASSET" ]; then
+  say ""
+  say "  SAJT OTDAYAET NE TO, CHTO VYKACHENO."
+  say "  igrok poluchit: $SERVED_ASSET"
+  say "  Vykacheno:      $DEPLOYED_ASSET"
+  say ""
+  say "  Veroyatneishaya prichina: u tunnelya Cloudflare dva konnektora —"
+  say "  zdes i na AWS — i obsluzhivaet zapyusy ne tot, chego my kachali."
+  say "  Esli cel byla aws — ne zabud'te perezapustit cloudflared tam,"
+  say "  inache staraya sboraka budet otdayatsya i posle etoy vykati."
+  stop "prod ne poluchil novyy kod"
+fi
+
+# Хэши сходятся только когда имена совпали; сверяем содержимое, потому что
+# одноимённый файл может быть пересобран иначе.
+H_SERVED="$(hash_served "$PUBLIC_URL$SERVED_ASSET")"
+# ПУТЬ ВНУТРИ `sh -c`, А НЕ АРГУМЕНТОМ — по той же причине, что и в проверке
+# моделей: Git Bash (MSYS) переписывает аргумент, начинающийся с `/`, в путь
+# Windows, и sha256sum получил бы C:/Program Files/Git/usr/share/... Первую
+# версию этой строки поймала проверка в deployScript.test.ts, и правильно.
+CLIENT_ID_H=""
+if [ "$TARGET" = "aws" ]; then
+  H_DEPLOYED=$(remote "cd '$AWS_DIR' && docker exec \$($C ps -q client 2>/dev/null | head -1) sh -c \"sha256sum /usr/share/nginx/html$SERVED_ASSET\"" 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
+else
+  CLIENT_ID_H=$($C ps -q client 2>/dev/null | head -1)
+  H_DEPLOYED=$(docker exec "$CLIENT_ID_H" sh -c "sha256sum /usr/share/nginx/html$SERVED_ASSET" 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
+fi
+if [ -z "$H_SERVED" ] || [ -z "$H_DEPLOYED" ] || [ "$H_SERVED" != "$H_DEPLOYED" ]; then
+  say ""
+  say "  KHASHI RAZOYSHIS:"
+  say "  sajt:      ${H_SERVED:-(ne prochitan)}"
+  say "  konteyner: ${H_DEPLOYED:-(ne prochitan)}"
+  stop "soderzhimoe bundla na saite i v konteynere raznoye"
+fi
+say "  sha256 sovpal: ${H_SERVED:0:16}"
+
+say ""
 say "RESULT: PASS"
