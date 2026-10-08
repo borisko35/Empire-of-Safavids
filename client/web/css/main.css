@@ -1124,3 +1124,28 @@ textarea.cms-input { resize: vertical; line-height: 1.5; min-height: 84px; }
   height: 34px;
   width: auto;
 }
+
+/* Кнопки голосования. Раньше была одна ссылка-картинка: клик по ней ничем не
+   отличить от клика мимо, и награду нельзя ни выдать, ни проверить. Теперь
+   рейтинговый сайт открывается в новой вкладке, а награда забирается здесь. */
+.vote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+.vote-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  padding: 10px 18px;
+}
+.vote-note {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: center;
+  color: var(--gold);
+  font-size: 14px;
+}

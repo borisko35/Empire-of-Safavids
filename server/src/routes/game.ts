@@ -22,6 +22,7 @@ import { TradeService } from '../systems/TradeService';
 // Награда за переход по рекламной ссылке. Ссылка собирается на
 // идентификаторе игрока, золото выдаётся один раз на персонажа.
 import { RewardService, linkFor, partnerConfigured, REWARD_GOLD } from '../services/RewardService';
+import { VoteService } from '../services/VoteService';
 import { CRAFTING_RECIPES } from '../data/crafting';
 import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -1440,6 +1441,37 @@ gameRouter.post('/reward-claim', secureMiddleware, requireCharacterOwnership(),
       return res.status(409).json({ success: false, error: итог.code });
     }
     return res.json({ success: true, gold: итог.gold });
+  }));
+
+// ── Голосование на browsermmorpg.com ─────────────────────────────────
+//
+// Сайт голосования внешний: игра не может знать, что игрок проголосовал,
+// пока он сам не скажет. Поэтому маршрут не спрашивает «голосовал ли ты», а
+// засчитывает голос по нажатию кнопки и тут же выдаёт награду.
+//
+// Кулдаун 12 часов проверяется базой, а не кодом: строка создаётся через
+// INSERT ... ON CONFLICT DO NOTHING RETURNING, и повторный запрос получает
+// пустой ответ и отказ вместе с временем следующей попытки.
+gameRouter.get('/vote/status', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    return res.json(await new VoteService().status(characterId));
+  }));
+
+gameRouter.post('/vote', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.body?.characterId ?? '');
+    const итог = await new VoteService().vote(characterId);
+    if (!итог.ok) {
+      // 409, а не 200 с нулем: игрок должен отличать «уже получено» от
+      // «начислено», иначе повторное нажатие выглядит как сбой.
+      return res.status(409).json({
+        success: false,
+        error: итог.code,
+        nextVoteAt: итог.nextVoteAt ?? null,
+      });
+    }
+    return res.json({ success: true, gold: итог.gold, nextVoteAt: итог.nextVoteAt });
   }));
 
 // POST /api/game/trade/accept — принять контракт { characterId, contractId }

@@ -204,9 +204,21 @@
     <!-- Голосование на BrowserMMORPG -->
     <section class="section" id="bmmorpg">
       <div class="bmmorc" data-id="1854" data-theme="classic" data-accent="#2563eb" data-title="#111827" data-text="#111827" data-bg="#ffffff" data-btnbg="#ffffff" data-btntxt="#111827"></div>
-      <a class="bmmorpg-vote" href="https://browsermmorpg.com/vote.php?id=1854" target="_blank" rel="noopener">
-        <img src="https://browsermmorpg.com/img/vote.svg" alt="Vote on BrowserMMORPG" />
-      </a>
+      <!-- Раньше здесь была одна ссылка-картинка. Теперь кнопка: она открывает
+           рейтинговый сайт в новой вкладке, а игрок забирает награду уже здесь —
+           иначе клик по ссылке ничем не отличить от клика мимо, и награду нельзя
+           ни выдать, ни проверить. -->
+      <div class="vote-actions">
+        <button type="button" class="btn btn-gold vote-open" id="vote-open">
+          <span data-icon="scroll" data-icon-size="18"></span>
+          <span data-i18n="site.vote_now">Проголосовать на BrowserMMORPG</span>
+        </button>
+        <button type="button" class="btn vote-claim" id="vote-claim" hidden>
+          <span data-icon="gift" data-icon-size="18"></span>
+          <span data-i18n="site.vote_claim">Забрать награду за голос</span>
+        </button>
+        <p class="vote-note" id="vote-note" hidden></p>
+      </div>
     </section>
 
     <!-- Скриншоты и геймплей -->

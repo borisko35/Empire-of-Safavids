@@ -35,6 +35,7 @@ import {
 import { initTutorial, onTutorialAction, tickTutorial } from './tutorial';
 import { initDeathScreen, hideDeathScreen, isDead } from './deathScreen';
 import { loadAccountLinks } from './accountLinks';
+import { startVoteReminder } from './voteReminder';
 import { onPvpMatchFound, onPvpArenaEnd, onPvpMyHpChanged } from './pvp';
 import { isCombatErrorCode, COMBAT_ERROR_KEYS } from '../../../shared/combatErrors';
 import { setActiveDebuffs, addDebuff, clearDebuffs, isStunnedNow } from './debuffs';
@@ -592,6 +593,7 @@ export async function enterWorld(character: Character): Promise<void> {
   navTimer = setInterval(() => void refreshNavTarget(), 3000);
   void loadRegions();
   void loadQuests();
+  void startVoteReminder();
 
   world = new World();
   world3d = new World3D();

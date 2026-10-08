@@ -425,4 +425,97 @@ fetch('/health')
     versionBadge.classList.add('offline');
   });
 
+// ── Голосование на BrowserMMORPG ─────────────────────────────────────────
+//
+// ЧТО ЗДЕСЬ БЫЛО. На странице стояла одна ссылка-картинка: клик уводил на
+// рейтинговый сайт и обратно. Но игра не могла узнать, что игрок проголосовал,
+// — значит награду было не выдать, а обещание «проголосуй и получи» было
+// обещанием ни на чём.
+//
+// ЧТО СТАЛО. Две кнопки: «проголосовать» открывает рейтинговый сайт в новой
+// вкладке, «забрать награду» засчитывает голос и выдаёт золото. Пока идёт
+// кулдаун, видно, через сколько можно голосовать снова.
+//
+// Почему голос засчитывается по кнопке, а не сам по себе. Игра не знает, что
+// игрок проголосовал на чужом сайте, — она об этом не узнаёт никогда. Значит
+// засчитывать надо по факту возврата, иначе награду получат и те, кто просто
+// открыл ссылку.
+const VOTE_URL = 'https://browsermmorpg.com/vote.php?id=1854';
+
+/** Человекочитаемое «через 11 ч 59 мин» из ISO-метки. */
+function через(метка: string | null): string {
+  if (!метка) return '';
+  const мс = new Date(метка).getTime() - Date.now();
+  if (мс <= 0) return '';
+  const минут = Math.ceil(мс / 60000);
+  const часов = Math.floor(минут / 60);
+  if (часов > 0) return `${часов} ч ${минут % 60} мин`;
+  return `${минут} мин`;
+}
+
+async function renderVoteStatus(): Promise<void> {
+  const note = $('vote-note');
+  const claim = $('vote-claim') as HTMLButtonElement | null;
+  if (!note || !claim) return;
+  const token = localStorage.getItem('eos_token');
+  if (!token) {
+    claim.hidden = true;
+    return;
+  }
+  let ответ: { success: boolean; canVote?: boolean; nextVoteAt?: string | null };
+  try {
+    const res = await fetch('/api/game/vote/status', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    ответ = await res.json();
+  } catch {
+    return;
+  }
+  const ждать = через(ответ.nextVoteAt);
+  if (ждать) {
+    note.hidden = false;
+    note.textContent = t('site.vote_cooldown').replace('{time}', ждать);
+    claim.hidden = true;
+  } else {
+    note.hidden = true;
+    claim.hidden = false;
+  }
+}
+
+async function wireVote(): Promise<void> {
+  const openBtn = $('vote-open') as HTMLButtonElement | null;
+  const claimBtn = $('vote-claim') as HTMLButtonElement | null;
+  if (openBtn) {
+    openBtn.addEventListener('click', () => {
+      window.open(VOTE_URL, '_blank', 'noopener');
+    });
+  }
+  if (!claimBtn) return;
+  claimBtn.addEventListener('click', async () => {
+    const token = localStorage.getItem('eos_token');
+    if (!token) return;
+    claimBtn.disabled = true;
+    try {
+      const res = await fetch('/api/game/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const ответ = await res.json().catch(() => ({}));
+      if (!res.ok || ответ?.success !== true) {
+        toast(t('site.vote_err'), 'error');
+      } else {
+        toast(t('site.vote_ok').replace('{gold}', String(ответ.gold ?? '')), 'success');
+      }
+    } catch {
+      toast(t('site.vote_err'), 'error');
+    } finally {
+      claimBtn.disabled = false;
+      await renderVoteStatus();
+    }
+  });
+}
+
 applyLocale(detectLocale()).catch(console.error);
+wireVote();
+renderVoteStatus().catch(console.error);
