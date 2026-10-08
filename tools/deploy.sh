@@ -619,23 +619,36 @@ fi
 # называли один и тот же бандл, а внешняя проверка упала на пустом curl.
 hash_served_retry() {
   local url="$1" hv="" i
-  # Пять попыток, а не три, и пауза растёт: 3, 5, 10, 20 секунд. Прежние три
-  # попытки за 9 секунд укладывались в окно, за которое новый контейнер и edge
-  # Cloudflare ещё не сошлись, — см. паузу перед шагом 5. Проверка, которая
-  # объявляет сеть мёртвой, не дождавшись, когда сеть встанет, мешает больше,
-  # чем молчит.
+  # Семь попыток с растущей паузой: 5, 10, 20, 30, 45, 60, 60 секунд — всего
+  # около четырёх минут.
+  #
+  # ПОЧЕМУ ТАК ДОЛГО, А НЕ ДЕСЯТЬ СЕКУНД. Первая версия ждала 9 секунд, вторая
+  # — 20 секунд плюс пять попыток за 38 секунд. Обе остановили исправную
+  # выкатку 08.10.2026, и обе на одном и том же месте.
+  #
+  # ПРИЧИНА, КОТОРУЮ ВИДНО ТОЛЬКО СО ВТОРОЙ СТОРОНЫ. Туннель Cloudflare держит
+  # 18 соединений, и после выкатки edge-узлы расходятся во времени: часть уже
+  # отдаёт новый index.html с новым именем бандла, а нового файла ещё не имеет и
+  # отдаёт 404. Через минуту-две расходится всё. Двадцать секунд не хватает,
+  # потому что это не «контейнер встаёт», а «edge сходится».
   #
   # Имена переменных латиницей — не украшение: `deployScript.test.ts` сторожит
-  # именно это правило, потому что Git Bash (MSYS) портит кириллицу в
-  # разборах. Проверка синтаксиса `bash -n` ловит ошибку сразу, на этой правке
-  # и поймала: `local -a паузы=(...)` не разбирается.
-  local -a pauses=(3 5 10 20)
-  for i in 1 2 3 4 5; do
+  # именно это правило, потому что Git Bash (MSYS) портит кириллицу в разборах.
+  # Проверка синтаксиса `bash -n` ловит ошибку сразу.
+  local -a pauses=(5 10 20 30 45 60 60)
+  local -a codes=(0 0 0 0 0 0 0)
+  LAST_STATUS="000"
+  for i in 1 2 3 4 5 6 7; do
+    local code
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$url" 2>/dev/null || true)"
     hv="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$url" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    LAST_STATUS="${code:-000}"
     # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 —
     # это хэш пустой строки, то есть скачалось ровно ничего.
-    [ "$hv" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] && return 0
-    [ "$i" -lt 5 ] && sleep "${pauses[$((i - 1))]}"
+    if [ -n "$hv" ] && [ "$hv" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]; then
+      return 0
+    fi
+    [ "$i" -lt 7 ] && sleep "${pauses[$((i - 1))]}"
   done
   return 1
 }
@@ -658,8 +671,24 @@ if [ -z "$H_DEPLOYED" ]; then
 fi
 if [ -z "$H_SERVED" ]; then
   say ""
-  say "  SAJT NE SKACHAL BUNDL (tri popytki, vse pustye)."
-  say "  Eto ne 'soderzhimoe raznoye' — eto nedostupnaya set' ili CDN."
+  # РАЗБОР ПО КОДУ ОТВЕТА. Прежний текст на любой неудаче говорил «недоступна
+  # сеть или CDN», и это было неверно дважды из двух: сеть была жива, а сайт
+  # отдавал 404 на новый файл, потому что edge Cloudflare ещё не сошёлся после
+  # пересоздания контейнера. Один и тот же текст на две разные поломки учит
+  # читателя ничему.
+  say "  SAJT NE SKACHAL BUNDL za chetyre minuty (7 popytok, vse pustye)."
+  say "  kod otveta saita: $LAST_STATUS"
+  if [ "$LAST_STATUS" = "404" ]; then
+    say ""
+    say "  ETO NE OBLIVK SETI. Sait otvechaet 404 na fайл, kotoryy v konteynere"
+    say "  lezhit — znachit, edge Cloudflare eshche ne doshol do novogo bndla."
+    say "  S momenta vykatchi proshlo mnogo vremeni: tak ne byvaet, zanachit"
+    say "  ne proshla rasprostranenie, ili na odnom iz uzlov tunnel'a sidel"
+    say "  staryi konteyner. Nuzhno smotret' zhurnal cloudflared na AWS."
+  else
+    say ""
+    say "  Eto ne 'soderzhimoe raznoye' — eto nedostupnaya set' ili CDN."
+  fi
   stop "soderzhimoe bundla na saite ne udalos skachat'"
 fi
 if [ "$H_SERVED" != "$H_DEPLOYED" ]; then
