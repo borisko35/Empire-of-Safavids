@@ -1929,16 +1929,68 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     addCollider(CITY.x + Math.cos(phi) * CITY.radius, CITY.z + Math.sin(phi) * CITY.radius, 2.2);
   }
   // Башни по углам
+  //
+  // ЧТО БЫЛО. Восемь цилиндров с конусными шляпами: CylinderGeometry(3, 3.6,
+  // 9) и ConeGeometry(3.6, 2.6). Это читалось как «город окружён трубами с
+  // колпаками», и при выходе к воротам было видно в упор.
+  //
+  // ЧТО СТАЛО. Настоящая модель `onion-dome-tower.glb` — та же, что уже стоит
+  // к востоку от мечети (§54). Она уже в игре: сжата Draco, лежит в
+  // манифесте, текстуры на месте. Сеть одна: loadDecorModel кэширует по пути,
+  // так что восемь башен — это одна загрузка и восемь копий.
+  //
+  // МАСШТАБ СЧИТАН, А НЕ ВЫБРАН. Модель в натуральном виде 8.972 × 25.504 ×
+  // 10.36 м, начало координат в основании по центру. Берём высоту 11 м:
+  //   11 / 25.504 = 0.4313.
+  // Старая башня была 9 м при диаметре 7.2 м. Новая выше на 2 м — чтобы
+  // башня читалась башней над стеной в 6 м, — и тоньше, потому что модель
+  // стройная: след 10.36 × 0.4313 = 4.47 м.
+  //
+  // РАДИУС КОЛЛАЙДЕРА ПЕРЕСЧИТАН, И ЭТО СУЩЕСТВЕННО. Прежний r = 4.1 брался
+  // от примитива с радиусом 3.6 плюс запас. У настоящей модели след 4.47 м,
+  // то есть r = 2.23, и с запасом на игрока r = 2.6. Разница заметна:
+  // раньше игрок упирался в воздух в полутора метрах от башни. Теперь
+  // коллайдер равен тому, что на самом деле стоит на месте.
+  const БАШНЯ_МОДЕЛЬ = 'decor/onion-dome-tower.glb';
+  const БАШНЯ_ВЫСОТА = 25.504;   // высота модели в натуральном виде, м
+  const БАШНЯ_ЦЕЛЬ = 11;        // сколько хотим получить, м
+  const БАШНЯ_МАСШТАБ = БАШНЯ_ЦЕЛЬ / БАШНЯ_ВЫСОТА;
+  const БАШНЯ_СЛЕД = 10.36 * БАШНЯ_МАСШТАБ;
+  const БАШНЯ_РАДИУС = БАШНЯ_СЛЕД / 2 + 0.4;
+  const БАШНЯ_ТОЧКИ: { x: number; z: number }[] = [];
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(3, 3.6, 9, 10), MAT.sandstoneDark);
-    t.position.set(Math.cos(a) * CITY.radius, 4.5, Math.sin(a) * CITY.radius);
-    t.castShadow = true;
-    const cap = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.6, 10), MAT.tealDome);
-    cap.position.set(Math.cos(a) * CITY.radius, 10.3, Math.sin(a) * CITY.radius);
-    city.add(t, cap);
-    addCollider(CITY.x + Math.cos(a) * CITY.radius, CITY.z + Math.sin(a) * CITY.radius, 4.1);
+    const wx = CITY.x + Math.cos(a) * CITY.radius;
+    const wz = CITY.z + Math.sin(a) * CITY.radius;
+    БАШНЯ_ТОЧКИ.push({ x: wx, z: wz });
+    addCollider(wx, wz, БАШНЯ_РАДИУС);
   }
+  void loadDecorModel(БАШНЯ_МОДЕЛЬ).then((модель) => {
+    if (!модель) return;
+    for (const т of БАШНЯ_ТОЧКИ) {
+      const башня = модель.clone();
+      // База по земле под каждой точкой: стена идёт по окружности 116, где
+      // рельеф меняется, и общая высота оставила бы одну из восьми башен
+      // висящей или утонувшей.
+      башня.position.set(
+        т.x - CITY.x,
+        localY(т.x, т.z),
+        т.z - CITY.z,
+      );
+      башня.scale.setScalar(БАШНЯ_МАСШТАБ);
+      // Модель нарисована лицом в одну сторону; башня круглая в плане, но
+      // с приставками и лестницей, и одинаковый разворот на всех восьми
+      // читается как «их штампавали». Разводим по кругу.
+      башня.rotation.y = (т.x * 0.7 + т.z * 1.3) % (Math.PI * 2);
+      башня.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      city.add(башня);
+    }
+  });
 
   // ── Мечеть в центре ──
   const mosque = new THREE.Group();
