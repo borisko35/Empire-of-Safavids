@@ -1813,7 +1813,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       const tz = gz + dirZ * side * 9 + Math.sin(gateAngle) * 3;
       // Корпус обзорной башни. ТУТ БЫЛО ЗАШИТО 7.5: башня стоит у ворот, а
       // земля там ниже центра города, и башня висела в воздухе.
-      const base = localY(tx, tz);
+      const base = localY(CITY.x + tx, CITY.z + tz);
       const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 10), MAT.sandstoneDark);
       tower.position.set(tx, base + 7.5, tz);
       tower.castShadow = true;
@@ -2085,6 +2085,23 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       m.receiveShadow = true;
     });
     city.add(модель);
+    // Полость внутри стены: заполняем цельным камнем, иначе через щели виден свет неба.
+    const fillTop = земляПод(phi) + WALL_TOP;
+    const fillBottom = земляПод(phi) - WALL_SUNK;
+    const fillHeight = fillTop - fillBottom;
+    const fillBox = new THREE.Mesh(
+      new THREE.BoxGeometry(СТЕНА_ШИРИНА, fillHeight, СТЕНА_ГЛУБИНА),
+      MAT.sandstoneDark,
+    );
+    fillBox.position.set(
+      Math.cos(phi) * CITY.radius,
+      fillBottom + fillHeight / 2,
+      Math.sin(phi) * CITY.radius,
+    );
+    fillBox.rotation.y = модель.rotation.y;
+    fillBox.castShadow = true;
+    fillBox.receiveShadow = true;
+    city.add(fillBox);
   };
 
   void loadDecorModel(СТЕНА_МОДЕЛЬ).then((модель) => {
