@@ -2090,12 +2090,12 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const fillBottom = земляПод(phi) - WALL_SUNK;
     const fillHeight = fillTop - fillBottom;
     const fillBox = new THREE.Mesh(
-      new THREE.BoxGeometry(СТЕНА_ШИРИНА, fillHeight, СТЕНА_ГЛУБИНА),
+      new THREE.BoxGeometry(СТЕНА_ШИРИНА + 2.0, fillHeight - 0.04, СТЕНА_ГЛУБИНА - 1.0),
       MAT.sandstoneDark,
     );
     fillBox.position.set(
       Math.cos(phi) * CITY.radius,
-      fillBottom + fillHeight / 2,
+      fillBottom + (fillHeight - 0.04) / 2,
       Math.sin(phi) * CITY.radius,
     );
     fillBox.rotation.y = модель.rotation.y;
