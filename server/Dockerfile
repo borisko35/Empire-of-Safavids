@@ -27,6 +27,24 @@ COPY client/src/app/i18n.ts ./client/src/app/i18n.ts
 # Модуль без единого импорта, поэтому в образ тянется ровно он.
 COPY client/src/app/autobattle.ts ./client/src/app/autobattle.ts
 
+# Третий такой случай: fxCursor.test.ts исполняет НАСТОЯЩИЙ World из
+# client/src/app/entities.ts. Тест поведенческий, а не сверка текста: внутри
+# набора живут оба курсора сразу, и проверка требует, чтобы старый,
+# индексный, показал 3 из 14, а новый по номеру — все 14. Сверкой текста
+# такой баг не поймать.
+#
+# entities.ts тянет './state' — там один интерфейс Vec3 и НИ ОДНОГО импорта,
+# поэтому в образ идут ровно два файла. Больше граф не замыкается.
+#
+# Что было: этой пары строк не было, и `npm run build` в образе падал на
+#   src/tests/fxCursor.test.ts(18,23): error TS2307:
+#   Cannot find module '../../../client/src/app/entities'
+# Локально `npm run typecheck` был зелёным: на машине есть весь репозиторий,
+# а в контейнер попадают только перечисленные файлы. То есть роняло не
+# тестирование, а сборку образа, и узнать об этом можно было только выкаткой.
+COPY client/src/app/entities.ts ./client/src/app/entities.ts
+COPY client/src/app/state.ts ./client/src/app/state.ts
+
 WORKDIR /app/server
 RUN npm run build
 

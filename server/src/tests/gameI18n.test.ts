@@ -47,7 +47,29 @@ declare global {
   // eslint-disable-next-line no-var, @typescript-eslint/no-explicit-any
   var navigator: Navigator;
   // eslint-disable-next-line no-var, @typescript-eslint/no-explicit-any
-  var localStorage: { getItem(key: string): string | null; setItem(key: string, value: string): void };
+  //
+  // ЗАГЛУШКА ДОЛЖНА БЫТЬ ПОЛНОЙ. Это объявление глобальное, и оно видно
+  // ВСЕЙ программе, а не только этому файлу. Раньше здесь были только
+  // getItem и setItem, и на этом держался весь набор: другой тест
+  // (`fxCursor`) подтянул `entities.ts`, а тот — `state.ts`, где
+  // `persistAuth` и `clearAuth` вызывают `localStorage.removeItem`.
+  // Сборка образа падала на четырёх строках:
+  //   TS2339: Property 'removeItem' does not exist on type
+  //   '{ getItem(key: string): string | null; setItem(...): void; }'
+  //
+  // Это была не только поломка сборки, но и замаскированная ошибка
+  // в рантайме: подставляемый ниже объект тоже не имел removeItem, то есть
+  // любой вызов под тестом дал бы `TypeError: not a function` — и тип это
+  // молча разрешал. Набор заглушек дополнен до того, что реально умеет
+  // браузерный Storage.
+  var localStorage: {
+    getItem(key: string): string | null;
+    setItem(key: string, value: string): void;
+    removeItem(key: string): void;
+    clear(): void;
+    key(index: number): string | null;
+    readonly length: number;
+  };
 }
 
 const repoRoot = join(__dirname, '..', '..', '..');
@@ -174,7 +196,19 @@ const ALL_T_CALLS = SCANS.reduce((n, s) => n + s.usedKeys.length, 0);
     json: async () => JSON.parse(readFileSync(file, 'utf-8')) as unknown,
   };
 };
-globalThis.localStorage = { getItem: () => null, setItem: () => undefined };
+// Объём localStorage внутри набора: getItem всегда null, то есть «ничего не
+// сохранено», и setItem ничего не пишет. Заглушка хранится в Map, иначе
+// removeItem и clear пришлось бы объявлять вслепую — а вслепую они и были
+// объявлены, и это кончилось ошибкой сборки.
+const хранилищеТеста = new Map<string, string>();
+globalThis.localStorage = {
+  getItem: (k: string) => хранилищеТеста.get(k) ?? null,
+  setItem: (k: string, v: string) => { хранилищеТеста.set(k, v); },
+  removeItem: (k: string) => { хранилищеТеста.delete(k); },
+  clear: () => { хранилищеТеста.clear(); },
+  key: (i: number) => [...хранилищеТеста.keys()][i] ?? null,
+  get length() { return хранилищеТеста.size; },
+};
 globalThis.document = {
   documentElement: { lang: '' },
   querySelectorAll: () => [],
