@@ -312,7 +312,6 @@ describe('Каждый вызов клиента обеспечен маршру
       'GET /api/game/quests/:',
       'GET /api/game/dungeons/:',
       'GET /api/game/world-bosses',
-      'GET /api/guilds/territories',
       'POST /api/media/gallery',
       'PATCH /api/media/gallery/:',
       'DELETE /api/media/gallery/:',

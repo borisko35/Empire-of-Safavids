@@ -148,6 +148,7 @@ describe('Русская буква вместо латинской не дох�
       'Number', 'String', 'Boolean', 'Array', 'Object', 'Math', 'JSON', 'Date',
       'Promise', 'Set', 'Map', 'Error', 'RegExp', 'parseInt', 'parseFloat', 'isNaN',
       'prompt', 'confirm', 'alert', 'fetch', 'setTimeout', 'clearTimeout',
+      'setInterval', 'clearInterval',
       'document', 'window',
       // Ключевые слова. Регулярка вызовов не понимает грамматику и берёт
       // «async (» за вызов функции: async () => - это стрелочная функция,
