@@ -723,6 +723,14 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
   }
   box.append(missionsBlock);
 
+  // ── Территории и осады ─────────────────────────────
+  // Раньше этого блока не было: сервер считал осады и урон,
+  // но игрок видел только уведомление о начале и ничего о
+  // ходе боя. «Вся гильдия участвует в осаде» без общей
+  // картины боя — это слова: каждый бьёт, а смотреть не на что.
+  const siegeBlock = await renderTerritoriesBlock(guild.id);
+  box.append(siegeBlock);
+
   // ── Выход ────────────────────────────────────────────────
   const leave = document.createElement('button');
   leave.type = 'button';
@@ -743,11 +751,170 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
   box.append(leave);
 }
 
+// ── Территории и осады ─────────────────────────────
+
+/** Таймер живого блока осад: закрывается вместе с панелью. */
+let территорииТаймер: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Дни недели в расписании осад написаны по-английски (данные на
+ * сервере — «Saturday 20:00 UTC»). Показывать игроку англицизм
+ * посреди русской панели — значит показывать сырой ключ, поэтому
+ * день переводится, а время и UTC остаются как есть.
+ */
+const ДНИ_ОСАДЫ: Record<string, string> = {
+  sunday: 'guild.day_sunday', mon: 'guild.day_monday', monday: 'guild.day_monday',
+  tue: 'guild.day_tuesday', tuesday: 'guild.day_tuesday',
+  wed: 'guild.day_wednesday', wednesday: 'guild.day_wednesday',
+  thu: 'guild.day_thursday', thursday: 'guild.day_thursday',
+  fri: 'guild.day_friday', friday: 'guild.day_friday',
+  sat: 'guild.day_saturday', saturday: 'guild.day_saturday',
+};
+
+/** «Saturday 20:00 UTC» → «суббота 20:00 UTC». */
+function расписание(строка: string): string {
+  const части = строка.trim().split(/\s+/);
+  const день = ДНИ_ОСАДЫ[(части[0] ?? '').toLowerCase()];
+  if (день === undefined) return строка;
+  return `${t(день)} ${части.slice(1).join(' ')}`;
+}
+
+/**
+ * Блок «Территории и осады» панели гильдии.
+ *
+ * ЧТО ЗДЕСЬ. Сервер считал осады, урон и захват, но игрок видел
+ * только уведомление о начале: как идёт бой, сколько осталось
+ * крепости и кто в бой вкладывается — было не видно. Осада
+ * коллективная, и её надо смотреть всей гильдии, а не узнавать
+ * итог постфактум.
+ *
+ * ПОЧЕМУ ОБНОВЛЯЕТСЯ САМА. Осада длится час, а панель держат
+ * открытой: без живого обновления картина застыла бы на моменте
+ * открытия. Обновляется блок только пока идёт хоть одна осада —
+ * тик раз в полминуты на четыре территории, и то только в час
+ * осады, а не всегда.
+ *
+ * @param myGuildId идентификатор своей гильдии: чужую территорию
+ * и свою надо отличать словами, а не по id, который игрок не читает.
+ */
+async function renderTerritoriesBlock(myGuildId: string): Promise<HTMLDivElement> {
+  const box = block('guild-block');
+  const title = document.createElement('div');
+  title.className = 'guild-sub';
+  title.textContent = t('guild.territories');
+  box.append(title);
+
+  const список = block('guild-list');
+  box.append(список);
+
+  /** Перерисовать содержимое. Вернуть true, если осада идёт. */
+  const нарисовать = async (): Promise<boolean> => {
+    let данные;
+    try {
+      данные = await api.guildTerritories(cid());
+    } catch {
+      // Не удалось загрузить — оставить то, что нарисовано.
+      // Пустой список после сбоя выглядел бы как «осад нет».
+      return false;
+    }
+    список.innerHTML = '';
+    let идётОсада = false;
+    for (const терр of данные.territories ?? []) {
+      идётОсада = идётОсада || терр.siegeActive;
+      const row = document.createElement('div');
+      row.className = `guild-territory${терр.siegeActive ? ' under-siege' : ''}`;
+
+      const head = document.createElement('div');
+      head.className = 'guild-territory-head';
+      const name = document.createElement('span');
+      name.textContent = терр.nameRu;
+      const region = document.createElement('span');
+      region.className = 'guild-territory-region';
+      region.textContent = терр.region;
+      head.append(name, region);
+
+      const meta = document.createElement('div');
+      meta.className = 'guild-territory-schedule';
+      const владелец = терр.ownerGuildId == null
+        ? t('guild.territory_none')
+        : (терр.ownerGuildId === myGuildId
+          ? t('guild.territory_ours')
+          : t('guild.territory_other'));
+      meta.textContent =
+        `${t('guild.territory_owner')}: ${владелец} · ` +
+        `${t('guild.siege_schedule')}: ${расписание(терр.siegeSchedule)}`;
+
+      // Полоса прочности. Доля, а не абсолют: крепости разные
+      // (базар 5000, порт 60000), и только доля сравнивает
+      // их между собой.
+      const доля = Math.max(0, Math.min(1, терр.defenseMax > 0 ? терр.defenseHp / терр.defenseMax : 0));
+      const bar = document.createElement('div');
+      bar.className = 'guild-bar';
+      const fill = document.createElement('div');
+      fill.className = `guild-bar-fill${доля < 1 / 3 ? ' low' : ''}`;
+      fill.style.width = `${Math.round(доля * 100)}%`;
+      bar.append(fill);
+
+      const status = document.createElement('div');
+      status.className = 'guild-siege-status';
+      status.textContent =
+        `${t('guild.siege_defense')}: ${терр.defenseHp} / ${терр.defenseMax}` +
+        (терр.siegeActive ? ` · ${t('guild.siege_active')}` : '');
+
+      row.append(head, meta, bar, status);
+
+      if (терр.siegeActive) {
+        if (терр.contributions.length === 0) {
+          const note = document.createElement('div');
+          note.className = 'guild-empty-note';
+          note.textContent = t('guild.siege_no_contributors');
+          row.append(note);
+        } else {
+          // Рейтинг вклада: первые — самые активные. Так видно,
+          // что осада — работа многих, а не одного добившего.
+          const contribTitle = document.createElement('div');
+          contribTitle.className = 'guild-territory-schedule';
+          contribTitle.textContent = t('guild.siege_contributors');
+          row.append(contribTitle);
+          for (const участник of терр.contributions) {
+            const line = document.createElement('div');
+            line.className = 'guild-contrib';
+            const кто = document.createElement('b');
+            кто.textContent = участник.nameRu;
+            const сколько = document.createElement('span');
+            сколько.textContent = ` — ${участник.damage}`;
+            line.append(кто, сколько);
+            row.append(line);
+          }
+        }
+      }
+      список.append(row);
+    }
+    return идётОсада;
+  };
+
+  const идётОсада = await нарисовать();
+  if (территорииТаймер !== null) clearInterval(территорииТаймер);
+  территорииТаймер = null;
+  if (идётОсада) {
+    // Полминуты — тот же шаг, что и у серверного планировщика:
+    // чаще картинка не меняется, реже — отстаёт от боя.
+    территорииТаймер = setInterval(() => void нарисовать(), 30 * 1000);
+  }
+  return box;
+}
+
 // ── Точка входа ────────────────────────────────────────────────
 
 export async function loadGuild(): Promise<void> {
   const box = $('panel-guild');
   if (!box) return;
+  // Панель перерисовывается целиком: живой тик осад потерял бы
+  // свой блок, а продолжал бы писать в отсоединённый элемент.
+  if (территорииТаймер !== null) {
+    clearInterval(территорииТаймер);
+    территорииТаймер = null;
+  }
   box.innerHTML = '';
   try {
     const data = await api.guildMy(cid());

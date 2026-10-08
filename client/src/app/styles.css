@@ -1598,6 +1598,36 @@ input, select { font: inherit; }
 .guild-btn-danger:hover:not(:disabled) { background: rgba(139, 26, 26, 0.45); }
 .guild-leave { width: 100%; margin-top: 12px; }
 
+/* Территории и осады. Карточка территории, полоса прочности
+   крепости и список участников осады. Раньше осада в интерфейсе
+   была только уведомлением: начать игрок знал, а как идёт бой,
+   кто в него вкладывается и сколько осталось крепости — не видел. */
+.guild-territory { margin-bottom: 8px; }
+/* Территория под осадой выделяется рамкой: не по цвету фона,
+   а по рамке, чтобы не путать с карточкой без осады при плохом
+   освещении — рамку видно и там, и там. */
+.guild-territory.under-siege { border: 1px solid rgba(201, 168, 76, 0.55); }
+.guild-territory-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  color: var(--cream); font-size: 13px;
+}
+.guild-territory-region { color: var(--cream-dim); font-size: 11px; }
+.guild-territory-schedule { color: var(--cream-dim); font-size: 11px; }
+/* Трек и заливка полосы прочности. Ширина заливки — процент
+   оставшейся прочности; цвет меняется с золотого на красный
+   только по порогу в треть: три состояния читаются лучше,
+   чем плавный градиент, который в темноте всё равно один. */
+.guild-bar {
+  height: 8px; border-radius: 4px; overflow: hidden;
+  background: rgba(0, 0, 0, 0.35); margin-top: 4px;
+}
+.guild-bar-fill { height: 100%; background: var(--gold); }
+.guild-bar-fill.low { background: #b04040; }
+.guild-siege-status { color: var(--gold-light); font-size: 12px; margin-top: 4px; }
+.guild-contrib { color: var(--cream-dim); font-size: 11px; }
+.guild-contrib b { color: var(--cream); font-weight: normal; }
+.guild-empty-note { color: var(--cream-dim); font-size: 11px; margin-top: 4px; }
+
 /* Навыки и задания гильдии.
    Эти стили ДО ОТМЕЧЕННЫХ ИТЕРАЦИЙ НЕ БЫЛИ НАПИСАНЫ ВООБЩЕ. Блок навыков
    был выкачен без единого правила, и панель рисовалась без оформления: навыки

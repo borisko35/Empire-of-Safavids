@@ -108,6 +108,31 @@ export interface ResourcesState {
   buff?: ActiveBuff | null;
 }
 
+/**
+ * Территория гильдии и её осада.
+ *
+ * defenseHp читаем как есть: сервер уже свёл его с потолком из
+ * данных, клиент не должен повторять проверку и расходиться с
+ * сервером в интерпретации «а что было в базе».
+ */
+export interface TerritoryState {
+  id: string;
+  name: string;
+  nameRu: string;
+  region: string;
+  /** null = территория никому не принадлежит. */
+  ownerGuildId: string | null;
+  capturedAt: string | null;
+  defenseHp: number;
+  defenseMax: number;
+  siegeActive: boolean;
+  siegeSchedule: string;
+  capturePoints: number;
+  bonuses: Record<string, number>;
+  /** Кто сколько урона нанёс в текущей осаде. Пусто вне осады. */
+  contributions: { characterId: string; nameRu: string; damage: number }[];
+}
+
 export interface EquipmentState {
   items: { slot: string; itemId: string; nameRu: string; rarity: string; enhancement: number }[];
   stats: Record<string, number>;
@@ -1041,6 +1066,12 @@ export const api = {
       blockedBy: string; availableAt: string | null;
     }[];
   }>(`/api/guilds/missions?characterId=${characterId}`),
+  // Территории и осады. Панель гильдии показывает их всем участникам
+  // одинаково: и владельцу, и атакующей гильдии — осада коллективная,
+  // и каждый должен видеть одну и ту же картину боя.
+  guildTerritories: (characterId: string) => req<{ territories: TerritoryState[] }>(
+    `/api/guilds/territories?characterId=${characterId}`,
+  ),
   guildMissionStart: (characterId: string, missionId: string) =>
     req<{ success: boolean }>('/api/guilds/missions/start', {
       method: 'POST',

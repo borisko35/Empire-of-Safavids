@@ -187,6 +187,12 @@ export interface СостояниеТерритории {
   siegeSchedule: string;
   capturePoints: number;
   bonuses: TerritoryDefinition['bonuses'];
+  /**
+   * Вклад участников текущей осады: кто и сколько урона нанёс.
+   * Пусто, когда осады нет — история вклада закрытой осады не
+   * читается здесь, и не должна: там читается итог, а не бой.
+   */
+  contributions: { characterId: string; nameRu: string; damage: number }[];
 }
 
 /** Строка осады из базы. */
@@ -459,6 +465,17 @@ export class SiegeSystem {
         WHERE id = $1`,
       [строка.id, урон, герой.guild_id],
     );
+    // Вклад участника. Без этой строки осада — только сумма: кто
+    // воевал, а кто смотрел, не отличишь, а «вся гильдия участвует»
+    // превращается в «осада сама по себе». Складывается на конфликте:
+    // один участник бьёт крепость много раз за одну осаду.
+    await this.db.query(
+      `INSERT INTO siege_contributions (siege_id, character_id, damage)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (siege_id, character_id)
+       DO UPDATE SET damage = siege_contributions.damage + $3`,
+      [строка.id, characterId, урон],
+    );
     const прочность = await this.db.queryOne<{ defense_hp: number; guild_id: string | null }>(
       `SELECT defense_hp, guild_id FROM guild_territories WHERE territory_id = $1`,
       [территория.id],
@@ -527,8 +544,34 @@ export class SiegeSystem {
       `SELECT territory_id, guild_id, defense_hp, captured_at FROM guild_territories`,
     );
     const поТаблице = new Map(строки.map((s) => [s.territory_id, s]));
+    // Идущие осады и вклад в них — двумя запросами, а не на
+    // территорию: их четыре, а запрос на каждую превратил бы
+    // открытие панели в четыре круга до базы.
+    const открытые = await this.db.query<{ id: string; territory_id: string }>(
+      `SELECT id, territory_id FROM guild_sieges WHERE ended_at IS NULL`,
+    );
+    const осадаПоТерритории = new Map(открытые.map((s) => [s.territory_id, s.id]));
+    const вклад = new Map<string, { characterId: string; nameRu: string; damage: number }[]>();
+    if (открытые.length > 0) {
+      const участники = await this.db.query<{
+        siege_id: string; character_id: string; damage: number; name: string;
+      }>(
+        `SELECT sc.siege_id, sc.character_id, sc.damage, c.name
+           FROM siege_contributions sc
+           JOIN characters c ON c.id = sc.character_id
+          WHERE sc.siege_id = ANY($1)
+          ORDER BY sc.damage DESC`,
+        [открытые.map((s) => s.id)],
+      );
+      for (const ряд of участники) {
+        const список = вклад.get(ряд.siege_id) ?? [];
+        список.push({ characterId: ряд.character_id, nameRu: ряд.name, damage: Number(ряд.damage) });
+        вклад.set(ряд.siege_id, список);
+      }
+    }
     return TERRITORIES.map((территория) => {
       const строка = поТаблице.get(территория.id);
+      const осада = осадаПоТерритории.get(территория.id);
       return {
         id: территория.id,
         name: территория.name,
@@ -555,6 +598,7 @@ export class SiegeSystem {
         siegeSchedule: территория.siegeSchedule,
         capturePoints: территория.capturePoints,
         bonuses: территория.bonuses,
+        contributions: осада ? (вклад.get(осада) ?? []) : [],
       };
     });
   }
