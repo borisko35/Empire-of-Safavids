@@ -590,7 +590,23 @@ fi
 
 # Хэши сходятся только когда имена совпали; сверяем содержимое, потому что
 # одноимённый файл может быть пересобран иначе.
-H_SERVED="$(hash_served "$PUBLIC_URL$SERVED_ASSET")"
+# Скачивание может не удаться, и это НЕ то же самое, что разное содержимое.
+# Пустой ответ даёт sha256 пустой строки, то есть e3b0c442... — такой «хэш
+# разошёлся» вводил в заблуждение: на самом деле файл просто не скачался.
+# Первый случай ложной тревоги — 08 октября 2026, цель aws: контейнер и сайт
+# называли один и тот же бандл, а внешняя проверка упала на пустом curl.
+hash_served_retry() {
+  local url="$1" hv="" i
+  for i in 1 2 3; do
+    hv="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$url" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+    # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 —
+    # это хэш пустой строки, то есть скачалось ровно ничего.
+    [ "$hv" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] && return 0
+    sleep 3
+  done
+  return 1
+}
+H_SERVED="$(hash_served_retry "$PUBLIC_URL$SERVED_ASSET")" || H_SERVED=""
 # ПУТЬ ВНУТРИ `sh -c`, А НЕ АРГУМЕНТОМ — по той же причине, что и в проверке
 # моделей: Git Bash (MSYS) переписывает аргумент, начинающийся с `/`, в путь
 # Windows, и sha256sum получил бы C:/Program Files/Git/usr/share/... Первую
@@ -602,14 +618,68 @@ else
   CLIENT_ID_H=$($C ps -q client 2>/dev/null | head -1)
   H_DEPLOYED=$(docker exec "$CLIENT_ID_H" sh -c "sha256sum /usr/share/nginx/html$SERVED_ASSET" 2>/dev/null | tr -d '\r' | cut -d' ' -f1)
 fi
-if [ -z "$H_SERVED" ] || [ -z "$H_DEPLOYED" ] || [ "$H_SERVED" != "$H_DEPLOYED" ]; then
+if [ -z "$H_DEPLOYED" ]; then
+  say ""
+  say "  HASH KONTEYNERA NE PROCHITAN: soderzhimoe proverit' ne udalos'"
+  stop "proverka soderzhimogo ne poluchilas"
+fi
+if [ -z "$H_SERVED" ]; then
+  say ""
+  say "  SAJT NE SKACHAL BUNDL (tri popytki, vse pustye)."
+  say "  Eto ne 'soderzhimoe raznoye' — eto nedostupnaya set' ili CDN."
+  stop "soderzhimoe bundla na saite ne udalos skachat'"
+fi
+if [ "$H_SERVED" != "$H_DEPLOYED" ]; then
   say ""
   say "  KHASHI RAZOYSHIS:"
-  say "  sajt:      ${H_SERVED:-(ne prochitan)}"
-  say "  konteyner: ${H_DEPLOYED:-(ne prochitan)}"
+  say "  sajt:      $H_SERVED"
+  say "  konteyner: $H_DEPLOYED"
   stop "soderzhimoe bundla na saite i v konteynere raznoye"
 fi
 say "  sha256 sovpal: ${H_SERVED:0:16}"
+
+# ── Каждый файл, на который ссылается страница, должен открываться ──────────
+#
+# Проверка выше смотрит на ОДИН файл — главный бандл. Этого мало, и случай
+# 08 октября 2026 это показал: главный бандл на сервере был и сайт отдавал его
+# имя, всё сошлось, а игрок получал 404 — потому что Cloudflare держал в кэше
+# отрицательный ответ на путь, который до выкатки не существовал.
+#
+# ПОЧЕМУ ТАК ПОЛУЧАЕТСЯ. Имена ассетов содержат хэш содержимого, поэтому с
+# каждой сборкой меняются. Если файл спросили, пока его нет, Cloudflare
+# кэширует 404 — иquery string его НЕ обходит: ключ кэша собран без него
+# (проверено: `Age` рос одинаково с `?cb=` и без). Ответ держится до истечения
+# TTL, и всё это время сайт отдаёт свежий index.html, который ссылается на
+# файл, недоступный снаружи. Игра не грузится, а сервер здоров и /health
+# отвечает 200 — то есть поломка невидима для всех прежних проверок.
+#
+# Лечится только сбросом кэша Cloudflare. Проверка ниже честно говорит, что
+# именно сбрасывать.
+say ""
+say "proverka vsekh faylov, na kotorye ssylaetsya stranica:"
+DOSTUPNE=0
+NEDOSTUPNE=""
+for a in $(printf '%s' "$INDEX_HTML" | grep -o '/game/assets/[A-Za-z0-9_.-]*\.\(js\|css\)' | sort -u); do
+  if curl -fsS -o /dev/null --max-time 20 "$PUBLIC_URL$a" 2>/dev/null; then
+    DOSTUPNE=$((DOSTUPNE + 1))
+  else
+    NEDOSTUPNE="$NEDOSTUPNE $a"
+  fi
+done
+say "  dostupno: $DOSTUPNE"
+if [ -n "$NEDOSTUPNE" ]; then
+  say ""
+  say "  ETI FAILY SAJT NE OTDAYOT:"
+  for a in $NEDOSTUPNE; do say "    $a"; done
+  say ""
+  say "  Server zdorov, no Cloudflare derzhit v keshe OTRITATEL'NYI otvet"
+  say "  na ety puti: takoe byvaet, kogda fail sprosili do vykati, a ego"
+  say "  eshche ne bylo na servere, i 404 zapisalsya v kesh s bolshim TTL."
+  say "  Lechitsya odnim: sbrosit' kesh Cloudflare (Caching -> Configuration"
+  say "  -> Purge Everything), ili zhdat' istecheniya TTL."
+  stop "igry ne zagruzitsya: chast' faylov nedostupna"
+fi
+say "  vse fayly stranicy dostupny"
 
 say ""
 say "RESULT: PASS"
