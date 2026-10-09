@@ -134,7 +134,9 @@ export interface TerritoryState {
 }
 
 export interface EquipmentState {
-  items: { slot: string; itemId: string; nameRu: string; rarity: string; enhancement: number }[];
+  // iconPath и description — сервер их отдаёт, рисовать и показывать обязан
+  // клиент. Без них в панели персонажа был только текст имени.
+  items: { slot: string; itemId: string; nameRu: string; rarity: string; enhancement: number; iconPath?: string; description?: string }[];
   stats: Record<string, number>;
   /** Специальные бонусы вне характеристик: вода (сапоги/плащ) */
   bonuses?: { waterSpeed: number; swimStamina: number };
@@ -440,8 +442,11 @@ export const api = {
 
   skills: (characterId: string) => req<{ skills: SkillDef[] }>(`/api/characters/${characterId}/skills`),
 
-  inventory: (characterId: string) =>
-    req<{ items: { itemId: string; nameRu: string; rarity: string; quantity: number; type: string; enhancement: number }[] }>(`/api/characters/${characterId}/inventory`),
+  // iconPath и description обязаны быть в типе: сервер их отдаёт, и без
+// объявления здесь TS отказал бы на item.iconPath — то есть нарисовать
+// иконку было нельзя даже при живых данных.
+inventory: (characterId: string) =>
+    req<{ items: { itemId: string; nameRu: string; rarity: string; quantity: number; type: string; enhancement: number; iconPath?: string; description?: string }[] }>(`/api/characters/${characterId}/inventory`),
 
   equipment: (characterId: string) =>
     req<EquipmentState>(`/api/characters/${characterId}/equipment`),

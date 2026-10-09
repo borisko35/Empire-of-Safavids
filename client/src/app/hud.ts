@@ -1,3 +1,21 @@
+/**
+ * Заглушка иконки предмета: цветная по редкости плитка с первой буквой.
+ *
+ * ЗАЧЕМ. Пути iconPath есть у 80 предметов, но САМОГО АРТА НЕТ В ПРОЕКТЕ —
+ * ни одной .png, ни папки icons. Показывать битую картинку нельзя: она
+ * выглядит как поломка игры. А пустое место выглядит как дырка рядом с
+ * настоящими иконками, когда арт появится.
+ *
+ * Непустая плитка решает и то и другое: сейчас она нарисована и читаема,
+ * а когда файлы появятся, тот же onerror просто перестанет срабатывать.
+ */
+function заглушкаПредмета(имя: string, редкость: string): HTMLSpanElement {
+  const плитка = document.createElement('span');
+  плитка.className = 'inv-icon inv-icon-fallback';
+  плитка.style.background = RARITY_COLOR[редкость] ?? RARITY_COLOR.common;
+  плитка.textContent = (имя ?? '?').trim().charAt(0).toUpperCase() || '?';
+  return плитка;
+}
 // ============================================================
 // HUD: рамки, навыки, чат, панели, тосты — Empire of Safavids
 // ============================================================
@@ -599,7 +617,31 @@ export async function loadInventory(): Promise<void> {
       const label = it.enhancement > 0 ? `${it.nameRu} +${it.enhancement}` : it.nameRu;
       row.innerHTML =
         `<span class="dot" style="background:${RARITY_COLOR[it.rarity] ?? RARITY_COLOR.common}"></span>` +
-        `<span class="inv-name">${label}</span><span class="inv-qty">×${it.quantity}</span>`;
+        `<span class="inv-name">${label}</span><span class="inv-qty">?${it.quantity}</span>`;
+      // ОПИСАНИЕ. Оно есть у 79 предметов в данных, но не доходило до клиента
+      // ни из сумки, ни из экипировки: игрок видел имя и число, и всё.
+      // Всплывающая подсказка места в ряду инвентаря не занимает, иначе список
+      // перестал бы быть списком.
+      if (it.description) row.title = it.description;
+      // ИКОНКА, И ПОЧЕМУ ЧЕРЕЗ ЗАПАСНОЙ ВАРИАНТ.
+      //
+      // Путь iconPath есть у 80 предметов, но САМИХ ФАЙЛОВ НЕТ В ПРОЕКТЕ: ни
+      // одной .png по этим путям, ни папки icons. Просто вставить <img>
+      // значило бы показывать каждому игроку битые картинки в каждой строке
+      // сумки. Поэтому картинка рисуется с onerror, который подставляет
+      // заглушку. Сейчас видна заглушка, а когда арт появится, иконки начнут
+      // работать без правки кода.
+      if (it.iconPath) {
+        const картинка = document.createElement('img');
+        картинка.className = 'inv-icon';
+        картинка.alt = '';
+        картинка.loading = 'lazy';
+        картинка.src = `/assets/${it.iconPath}`;
+        картинка.addEventListener('error', () => {
+          картинка.replaceWith(заглушкаПредмета(it.nameRu, it.rarity));
+        });
+        row.prepend(картинка);
+      }
       const actions = document.createElement('span');
       actions.className = 'inv-actions';
       if (EQUIPPABLE_TYPES.has(it.type)) {

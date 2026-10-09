@@ -910,6 +910,8 @@ export class CharacterService {
           rarity: def?.rarity ?? 'common',
           quantity: Number(r.quantity),
           enhancement: Number(r.enhancement),
+          iconPath: def?.iconPath,
+          description: def?.description,
         };
       });
   }
@@ -950,6 +952,12 @@ export class CharacterService {
         // Время замаха: у оружия это поле speed в данных предмета, у брони
         // его нет, и там остаётся пустым — клиент берёт тогда умолчание.
         swingSeconds: def?.weapon?.speed,
+        // Иконка и описание надеты тоже должны быть видны: экипировка
+        // показывается в панели персонажа, и нет причины отдавать туда
+        // меньше, чем в сумку. iconPath есть в данных, но не доходил ни сюда,
+        // ни туда.
+        iconPath: def?.iconPath,
+        description: def?.description,
       });
       for (const [key, value] of Object.entries(def?.stats ?? {})) {
         if (key in stats) stats[key as keyof CharacterStats] += Math.round(Number(value) * mult);
@@ -1118,6 +1126,20 @@ export interface InventoryEntry {
   rarity: string;
   quantity: number;
   enhancement: number;
+  /**
+   * Путь к картинке предмета.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. Поле iconPath есть у 80 предметов в ITEMS_DATABASE, а
+   * этот ответ его не отдавал: инвентарь показывал только имя, редкость и
+   * число. Данные говорили «вот как это выглядит», а рисовать было нечего.
+   *
+   * Ссылка на файл не проверяется: часть путей ведёт к моделям, которых нет
+   * в сборке, и клиент обязан с этим справляться показом заглушки. Отдавать
+   * путь с сервера и не показывать — одно из двух, и выбрано показывать.
+   */
+  iconPath?: string;
+  /** Описание предмета. Тоже не доходило: в данных оно есть у всех. */
+  description?: string;
 }
 
 export interface EquippedItem {
@@ -1128,6 +1150,10 @@ export interface EquippedItem {
   rarity: string;
   enhancement: number;
   stats?: Partial<CharacterStats>;
+  /** Иконка предмета из данных. Не доходила до клиента — рисовать было нечего. */
+  iconPath?: string;
+  /** Описание предмета из данных. */
+  description?: string;
   /**
    * Время одного замаха в секундах — из данных предмета (поле speed).
    *
