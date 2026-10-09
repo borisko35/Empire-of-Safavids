@@ -7,7 +7,12 @@
 // убирает монстров из мира. Состояние в памяти: сессии переживают
 // только текущий процесс сервера (транзиентный геймплей).
 
-import { DUNGEONS_DATABASE, DungeonDefinition, rollBonusItems } from '../data/dungeons';
+import {
+  DUNGEONS_DATABASE,
+  DungeonDefinition,
+  rollBonusItems,
+  difficultyScaling,
+} from '../data/dungeons';
 import { MONSTERS_DATABASE } from '../data/monsters';
 import { AISystem } from './AISystem';
 import { CharacterService } from '../services/CharacterService';
@@ -85,6 +90,26 @@ export interface DungeonSession {
    */
   killedBossDefs: Set<string>;
   startedAt: number;
+  /**
+   * Когда заход истекает по timeLimit. Миллисекунды, 0 — лимита нет.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. Поле `timeLimit` стояло в описании всех семи данжей
+   * (45, 60, 90, 120 минут) и не читалось нигде: таймера захода в проекте
+   * не было вообще. Игрок входил «на 45 минут» и играл сколько угодно, и
+   * никто ему об этом не говорил.
+   *
+   * Ставится при входе и при восстановлении после перезапуска: у
+   * восстановленного захода остаток должен считаться от его же времени
+   * старта, а не от момента восстановления — иначе перезапуск продлевал
+   * подземелье на полный срок.
+   */
+  expiresAt: number;
+  /**
+   * Сложность захода. Раньше бралась первая буква массива `difficulties` и
+   * больше нигде не участвовала: монстры спавнились одинаковыми, награда
+   * одинаковой. Теперь по ней масштабируются и монстры, и добыча.
+   */
+  difficulty: string;
   completedAt?: number;
   // Смерти участников ЗА ЭТУ СЕССИЮ. Нужны для достижения «пройти без
   // смертей», у которого не было условия.
@@ -204,11 +229,20 @@ export class DungeonService {
    * Войти в данж (создать сессию). Монстры спавнятся в области данжа;
    * клиенты участников получают их через обычный канал спавна региона.
    */
-  async enter(characterId: string, dungeonId: string): Promise<
+  async enter(characterId: string, dungeonId: string, difficulty?: string): Promise<
     { ok: true; session: DungeonSession; attemptsLeft: number } | { ok: false; code: string }
   > {
     const def: DungeonDefinition | undefined = DUNGEONS_DATABASE[dungeonId];
     if (!def) return { ok: false, code: 'dungeon_not_found' };
+
+    // Сложность выбирает игрок, но не всякая: объявленный у данжа список —
+    // это и есть его правила. 'normal' берётся, когда игрок ничего не прислал
+    // или прислал ерунду: отказ здесь был бы хуже, чем обычный заход, потому
+    // что непонятно, что именно игрок сделал не так.
+    const сложность =
+      difficulty && (def.difficulties as string[]).includes(difficulty)
+        ? difficulty
+        : def.difficulties[0];
 
     const existingId = this.characterToSession.get(characterId);
     if (existingId) {
@@ -262,6 +296,9 @@ export class DungeonService {
       // переживает перезапуск — в отличие от killedBossIds.
       killedBossDefs: new Set(),
       startedAt: Date.now(),
+      // Лимит захода начинает идти от входа, а не от первого тика таймера.
+      expiresAt: DungeonService.expiresAtFrom(Date.now(), def.timeLimit),
+      difficulty: сложность,
     deaths: new Map(),
     };
 
@@ -291,11 +328,12 @@ export class DungeonService {
    * заход считался бы выигранным тем, чего на самом деле не было убито.
    */
   private spawnSessionMonsters(session: DungeonSession, def: DungeonDefinition): void {
+    const сложность = difficultyScaling(session.difficulty);
     for (const planned of planDungeonRooms(def)) {
       const room = def.rooms[planned.index];
       for (const monster of planned.monsters) {
-        const monsterDef = MONSTERS_DATABASE[monster.monsterId];
-        if (!monsterDef) continue;
+        const базовый = MONSTERS_DATABASE[monster.monsterId];
+        if (!базовый) continue;
         // Босс, убитый ДО перезапуска, не воскресает: ни экземпляра, ни
         // условия захода. Спавн здесь идёт и при первом входе, и при
         // восстановлении — набор killedBossDefs пуст при первом входе и
@@ -311,6 +349,17 @@ export class DungeonService {
         // Раскладку считает dungeonLayout: позиции в данных локальны к своей
         // комнате, и свод всех комнат в одну точку выносил часть монстров за
         // стену зала. Здесь берём уже готовые координаты.
+        //
+        // Копия определения, а не сам объект: масштабирование применяется к
+        // ЗАХОДУ, а монстр в базе один на всех. Если бы мы меняли hp на
+        // месте, то после hard-захода в normal умерший монстр остался бы с
+        // тройным здоровьем до перезагрузки процесса.
+        const monsterDef: typeof базовый = {
+          ...базовый,
+          hp: Math.round(базовый.hp * сложность.hp),
+          strength: Math.round(базовый.strength * сложность.damage),
+          agility: Math.round(базовый.agility * сложность.damage),
+        };
         const ctx = this.ai.spawnMonster(
           monsterDef,
           { x: monster.x, y: monster.y, z: monster.z },
@@ -463,21 +512,23 @@ export class DungeonService {
   }
 
   private async persistSession(session: DungeonSession): Promise<void> {
-    // Размер и сложность берутся из данных подземелья, а не из вписанных
-    // значений. Раньше здесь стояло 'normal' и 5: у гробницы, где в данных
-    // maxPlayers 20, в базу всё равно писалось 5, и любое чтение этой колонки
-    // показывало неверный размер захода. Сложность остаётся первой из
-    // объявленных, потому что выбор сложности игроком в игре ещё не сделан
-    // (difficultieshard/heroic/mythic объявлены, но не используются) - врать
-    // в базе о том, чего в игре нет, не нужно.
+    // Размер берётся из данных подземелья, а не из вписанного значения.
+    // Раньше здесь стояло 5: у гробницы, где в данных maxPlayers 20, в базу
+    // всё равно писалось 5, и любое чтение этой колонки показывало неверный
+    // размер захода.
+    //
+    // Сложность, наоборот, раньше писалась первая из объявленных, потому что
+    // выбора сложности в игре не было: hard/heroic/mythic стояли в данных и
+    // нигде не участвовали. Теперь сложность выбирает игрок (enter принимает
+    // её третьим аргументом), и в базу пишется именно та, по которой идут
+    // монстры и начисляется добыча.
     const def = DUNGEONS_DATABASE[session.dungeonId];
-    const сложность = def?.difficulties[0] ?? 'normal';
     const размер = def?.maxPlayers ?? 5;
     await this.db.query(
       `INSERT INTO dungeon_sessions (id, dungeon_id, difficulty, leader_id, max_size, started_at, status)
        VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0), 'active')
        ON CONFLICT (id) DO NOTHING`,
-      [session.id, session.dungeonId, сложность, session.leaderId, размер, session.startedAt]
+      [session.id, session.dungeonId, session.difficulty, session.leaderId, размер, session.startedAt]
     );
     for (const memberId of session.members) {
       await this.db.query(
@@ -528,11 +579,12 @@ export class DungeonService {
   async restoreActiveSessions(): Promise<number> {
     const rows = await this.db.query<{
       id: string; dungeon_id: string; leader_id: string; started_at: Date;
-      opened_chests: string[] | null; killed_boss_ids: string[] | null;
+      opened_chests: string[] | null; killed_boss_ids: string[] | null; difficulty: string | null;
     }>(
       `SELECT s.id, s.dungeon_id, s.leader_id, s.started_at,
               COALESCE(s.opened_chests, '[]'::jsonb)   AS opened_chests,
-              COALESCE(s.killed_boss_ids, '[]'::jsonb) AS killed_boss_ids
+              COALESCE(s.killed_boss_ids, '[]'::jsonb) AS killed_boss_ids,
+              s.difficulty
        FROM dungeon_sessions s
        WHERE s.status = 'active'`
     ).catch((e) => {
@@ -586,6 +638,13 @@ export class DungeonService {
         chests: [],
         killedBossIds: new Set(),
         startedAt: new Date(row.started_at).getTime(),
+      // От времени старта, а не от момента восстановления: перезапуск не
+      // имеет права продлить подземелье на полный срок.
+      expiresAt: DungeonService.expiresAtFrom(new Date(row.started_at).getTime(), def.timeLimit),
+      // Сложность из базы, а не первая из списка: заход heroic, переживший
+      // перезапуск, обязан остаться heroic, иначе перезапуск тихо понижал
+      // сложность до normal.
+      difficulty: row.difficulty ?? def.difficulties[0],
       // Смерти ДО перезапуска читаются из таблицы. Раньше здесь стояло
       // «смерти восстановить нельзя, это дыра»: память умирала вместе с
       // сервером, и заход, в котором игрок умер до рестарта,
@@ -677,6 +736,12 @@ export class DungeonService {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, code: 'dungeon_session_not_found' };
     if (session.completedAt) return { ok: false, code: 'dungeon_session_closed' };
+    // Срок захода истёк, а тик таймера ещё не успел закрыть сессию. Без
+    // этой проверки вход в последние секунды проходил бы успешно, и игрок
+    // оказывался внутри захода, который вот-вот закроется под ним.
+    if (session.expiresAt > 0 && session.expiresAt <= Date.now()) {
+      return { ok: false, code: 'dungeon_time_expired' };
+    }
     if (session.members.has(characterId)) return { ok: false, code: 'dungeon_already_in_session' };
 
     const def = DUNGEONS_DATABASE[session.dungeonId];
@@ -1066,7 +1131,10 @@ export class DungeonService {
   private async complete(session: DungeonSession, killerId: string): Promise<DungeonCompleteInfo> {
     session.completedAt = Date.now();
     const def = DUNGEONS_DATABASE[session.dungeonId];
-    const gold = def.rewards.gold.min + Math.floor(Math.random() * (def.rewards.gold.max - def.rewards.gold.min + 1));
+    const множитель = difficultyScaling(session.difficulty).reward;
+    const gold = Math.round(
+      (def.rewards.gold.min + Math.floor(Math.random() * (def.rewards.gold.max - def.rewards.gold.min + 1))) * множитель
+    );
 
     // Добыча делится на весь заход и выдаётся один раз. Порядок обхода
     // members — это порядок входа: на нём стоит остаток золота лидеру и
@@ -1091,7 +1159,7 @@ export class DungeonService {
     // По кругу он достаётся лидеру, и ни одна добыча не пропадает.
     const получили = участники.map((characterId, порядок) => ({
       characterId,
-      experience: def.rewards.experience,
+      experience: Math.round(def.rewards.experience * множитель),
       // Остаток от деления золота — лидеру захода, он первый во входе.
       gold: каждому + (порядок === 0 ? остаток : 0),
       items: добыча.filter((_, i) => i % народу === порядок),
@@ -1120,7 +1188,7 @@ export class DungeonService {
       sessionId: session.id,
       dungeonId: session.dungeonId,
       dungeonNameRu: def.nameRu,
-      experience: def.rewards.experience,
+      experience: Math.round(def.rewards.experience * множитель),
       gold,
       // Именно выданное, а не объявленное в данных: экран захода не имеет
       // права показывать предмет, который не достался никому.
@@ -1136,7 +1204,7 @@ export class DungeonService {
         items: доля.items,
       })),
     };
-    logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${def.rewards.experience}xp, +${gold}g)`);
+    logger.info(`[Dungeon] ${def.nameRu} completed by ${killerId} (+${Math.round(def.rewards.experience * множитель)}xp, +${gold}g)`);
     // Репутация за данж — заметный поступок, а не рядовой бой
     void grantReputation(killerId, 'dungeonClear');
 
@@ -1265,6 +1333,53 @@ export class DungeonService {
   }
 
   /** Убрать монстры сессии из мира и забыть сессию */
+  /**
+   * Когда заход истекает. Ноль, если лимита нет.
+   *
+   * Минуты в данных, миллисекунды здесь. Ноль означает «без срока», а не
+   * «истёк сейчас»: сравнение с нулём иначе закрыло бы заход мгновенно.
+   */
+  private static expiresAtFrom(startedAt: number, timeLimitMinutes: number): number {
+    return timeLimitMinutes > 0 ? startedAt + timeLimitMinutes * 60_000 : 0;
+  }
+
+  /** Сколько секунд осталось заходу. 0 — срок вышел или его не было. */
+  timeLeftSec(session: DungeonSession): number {
+    if (!session.expiresAt) return 0;
+    return Math.max(0, Math.round((session.expiresAt - Date.now()) / 1000));
+  }
+
+  /**
+   * Закрыть заходы, у которых вышел срок. Возвращает число закрытых.
+   *
+   * Заход закрывается как `abandoned`: награды не выдаётся, попытка не
+   * тратится повторно (она уже списана при входе), участники просто
+   * оказываются снаружи. Об этом им сообщается — молча закрывать заход
+   * хуже, чем не закрывать вовсе: игрок не понимает, что произошло.
+   *
+   * Отдельная функция, а не проверка при входе: заход может простаивать,
+   * и без обхода по тику он висел бы в памяти до перезапуска сервера.
+   */
+  async expireOverdueSessions(): Promise<number> {
+    const теперь = Date.now();
+    const просроченные = [...this.sessions.values()].filter(
+      (сессия) => !сессия.completedAt && сессия.expiresAt > 0 && сессия.expiresAt <= теперь
+    );
+    for (const session of просроченные) {
+      session.completedAt = теперь;
+      await this.closeSessionInDb(session.id, 'abandoned');
+      logger.info(
+        `[Dungeon] заход ${session.id} (${session.dungeonId}) закрыт по сроку ` +
+          `(${session.members.size} участников)`
+      );
+      this.disposeSession(session);
+    }
+    if (просроченные.length) {
+      logger.info(`[Dungeon] закрыто по сроку заходов: ${просроченные.length}`);
+    }
+    return просроченные.length;
+  }
+
   private disposeSession(session: DungeonSession): void {
     for (const instanceId of session.monsterIds) {
       this.ai.removeInstance(instanceId);

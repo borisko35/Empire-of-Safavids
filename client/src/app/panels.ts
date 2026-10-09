@@ -68,6 +68,22 @@ function actionButton(label: string, onClick: () => Promise<void>, cls = 'inv-ac
   return b;
 }
 
+/**
+ * Секунды в «M:SS» или «H:MM».
+ *
+ * Отсчёт появляется в панели подземелий и должен читаться с одного взгляда,
+ * поэтому минуты всегда двузначные: «4:07» и «64:07» — это 4 минуты и
+ * 64 минуты, а не «4 минуты 7 секунд» и «6 минут 407 секунд».
+ */
+function форматВремени(секунды: number): string {
+  const всего = Math.max(0, Math.floor(секунды));
+  const ч = Math.floor(всего / 3600);
+  const мин = Math.floor((всего % 3600) / 60);
+  const сек = всего % 60;
+  const минуты = String(мин).padStart(2, '0');
+  return ч > 0 ? `${ч}:${минуты}:${String(сек).padStart(2, '0')}` : `${мин}:${String(сек).padStart(2, '0')}`;
+}
+
 function rowEl(cls = 'inv-item'): HTMLDivElement {
   const row = document.createElement('div');
   row.className = cls;
@@ -110,6 +126,20 @@ export async function loadDungeons(): Promise<void> {
       name.className = 'inv-name';
       name.textContent = `${status.dungeonNameRu} (${t('panels.bosses')}: ${status.killedBossCount}/${status.bossCount})`;
       st.append(name);
+      // Сложность и остаток времени.
+      //
+      // Заход теперь закрывается по timeLimit, и закрывает его тик сервера —
+      // без участия игрока. Если не показать остаток, то закрытие выглядит как
+      // поломка: человека выбрасывает из захода, и он не понимает почему.
+      const детали: string[] = [];
+      if (status.difficulty) детали.push(t('panels.difficulty') + ': ' + t(`panels.diff_${status.difficulty}`));
+      if (status.timeLeftSec !== undefined) детали.push(t('panels.time_left') + ': ' + форматВремени(status.timeLeftSec));
+      if (детали.length) {
+        const подпись = document.createElement('span');
+        подпись.className = 'inv-name';
+        подпись.textContent = детали.join(' · ');
+        st.append(подпись);
+      }
       st.append(actionButton(t('panels.leave'), async () => {
         await api.dungeonLeave(cid());
         toast(t('panels.dungeon_left'), 'info');
@@ -126,11 +156,35 @@ export async function loadDungeons(): Promise<void> {
       const row = rowEl('inv-item');
       const label = document.createElement('span');
       label.className = 'inv-name';
-      label.textContent = `${d.nameRu} · ${t('badges.level')} ${d.minLevel}–${d.maxLevel}`;
+      label.textContent =
+        `${d.nameRu} · ${t('badges.level')} ${d.minLevel}–${d.maxLevel}` +
+        // Срок захода показывается ДО входа, а не только внутри: игрок должен
+        // знать, во сколько он закончит, ещё до того, как начал.
+        (d.timeLimit ? ` · ${t('panels.time_limit')}: ${d.timeLimit} ${t('panels.minutes')}` : '');
       row.append(label);
       if (!status.active) {
+        // Выбор сложности. Раньше поле difficulties стояло в данных и не
+        // участвовало ни в чём — монстры и добыча были одинаковыми на всех
+        // сложностях. Теперь выбор есть и он влияет на заход.
+        let выбрана: string | undefined;
+        const сложности = d.difficulties ?? [];
+        if (сложности.length > 1) {
+          const select = document.createElement('select');
+          select.className = 'inv-action';
+          for (const сложность of сложности) {
+            const opt = document.createElement('option');
+            opt.value = сложность;
+            opt.textContent = t(`panels.diff_${сложность}`);
+            select.append(opt);
+          }
+          select.value = сложности[0];
+          select.addEventListener('change', () => {
+            выбрана = select.value;
+          });
+          row.append(select);
+        }
         row.append(actionButton(t('panels.enter'), async () => {
-          const res = await api.dungeonEnter(d.id, cid());
+          const res = await api.dungeonEnter(d.id, cid(), выбрана ?? сложности[0]);
           toast(`${res.session.dungeonNameRu}: ${t('panels.dungeon_started')}`, 'success');
           await loadDungeons();
         }));

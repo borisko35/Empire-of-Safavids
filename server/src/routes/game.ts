@@ -1324,7 +1324,11 @@ gameRouter.post('/dungeons/:dungeonId/join', secureMiddleware, requireCharacterO
 // POST /api/game/dungeons/:dungeonId/enter — начать сессию данжа { characterId }
 gameRouter.post('/dungeons/:dungeonId/enter', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    const result = await dungeonService.enter(req.body.characterId, req.params.dungeonId);
+    const result = await dungeonService.enter(
+      req.body.characterId,
+      req.params.dungeonId,
+      typeof req.body.difficulty === 'string' ? req.body.difficulty : undefined
+    );
     if (!result.ok) return res.status(400).json({ error: result.code });
 
     const def = DUNGEONS_DATABASE[req.params.dungeonId];
@@ -1336,6 +1340,11 @@ gameRouter.post('/dungeons/:dungeonId/enter', secureMiddleware, requireCharacter
         monsterCount: result.session.monsterIds.size,
         bossCount: result.session.requiredBossIds.size,
         killedBossCount: result.session.killedBossIds.size,
+        // Сложность и остаток: игрок должен видеть, во что он вступил и
+        // сколько у него осталось. Раньше сложность в базу писалась одна и
+        // та же, а остатка не было вовсе.
+        difficulty: result.session.difficulty,
+        timeLeftSec: dungeonService.timeLeftSec(result.session),
         // Сколько попыток осталось. Без этого игрок видит, что кнопка
         // перестала работать, и не понимает почему: «вход запрещён» без
         // числа выглядит как поломка, а «осталось 0 до завтра» — как правило
@@ -1377,6 +1386,10 @@ gameRouter.post('/dungeons/status', secureMiddleware, requireCharacterOwnership(
       bossCount: session.requiredBossIds.size,
       killedBossCount: session.killedBossIds.size,
       startedAt: session.startedAt,
+      // Сколько осталось. Без этого игрок не знает, что заход закроется, и
+      // узнаёт об этом вместе с тем, что оказался снаружи: тик таймера
+      // закрывает сессию без его участия.
+      timeLeftSec: dungeonService.timeLeftSec(session),
     });
   })
 );

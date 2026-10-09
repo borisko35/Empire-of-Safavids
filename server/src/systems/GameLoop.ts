@@ -44,6 +44,12 @@ const AUCTION_SWEEP_EVERY = 300;
 // добрал бы свою долю на следующем проходе.
 const DEBUFF_TICK_EVERY = 2;
 
+// Как часто проверяется срок заходов в подземельях. Раз в 30 тиков: заход
+// может простаивать часами, и точность до секунды тут не нужна — важно, чтобы
+// закрытие не запаздывало на заметный для игрока срок. Само значение срока
+// считается точным (expiresAt), частая проверка лишь ограничивает задержку.
+const DUNGEON_EXPIRY_EVERY = 30;
+
 export class GameLoop {
   private static instance: GameLoop;
 
@@ -202,6 +208,16 @@ export class GameLoop {
       // DEBUFF_TICK_EVERY секунд по всем, кто онлайн.
       if (this.tickCount % DEBUFF_TICK_EVERY === 0) {
         this.tickDebuffs().catch((e) => logger.error('[GameLoop] tickDebuffs rejected:', e));
+      }
+
+      // Срок захода в подземелье. Раньше timeLimit стоял в данных всех семи
+      // данжей и не читался нигде: таймера не было, заход жил бесконечно.
+      // Проверка идёт в СВОЕМ try/catch по той же причине, что у соседей
+      // выше: падение одного прохода не должно отменять остальные.
+      if (this.tickCount % DUNGEON_EXPIRY_EVERY === 0) {
+        DungeonService.getInstance()
+          .expireOverdueSessions()
+          .catch((e) => logger.error('[GameLoop] expireOverdueSessions rejected:', e));
       }
     } catch (error) {
       logger.error('[GameLoop] Tick error:', error);

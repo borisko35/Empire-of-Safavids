@@ -91,6 +91,34 @@ export interface DungeonDefinition {
   mapPath: string;
 }
 
+/**
+ * Сложности подземелий.
+ *
+ * ЧТО ЗДЕСЬ БЫЛО. Поле `difficulties` стояло у всех семи данжей, а читалась
+ * только первая его буква: `DungeonService` писал `difficulties[0]` в базу и
+ * на этом останавливался. Ни масштабирования монстров, ни масштабирования
+ * награды, ни выбора сложности игроком не было. Комментарий в коде признавал
+ * это прямо — «объявлены, но не используются».
+ *
+ * Теперь это работающая шкала. Числа подобраны так, чтобы mythic был
+ * примерно втрое сложнее normal по здоровью и в 2.5 раза больнее по урону:
+ * разница должна ощущаться, иначе выбор сложности не имеет смысла.
+ *
+ * Награда растёт медленнее монстров. Если бы она росла так же, сложный заход
+ * был бы просто выгоднее лёгкого, и выбор шёл бы не о риске, а об очках.
+ */
+export const DIFFICULTY_SCALING = {
+  normal: { hp: 1, damage: 1, reward: 1 },
+  hard: { hp: 1.5, damage: 1.35, reward: 1.5 },
+  heroic: { hp: 2.2, damage: 1.8, reward: 2.2 },
+  mythic: { hp: 3.2, damage: 2.5, reward: 3.2 },
+} as const;
+
+/** Множители сложности; неизвестное имя даёт normal, а не исключение. */
+export function difficultyScaling(difficulty: string): (typeof DIFFICULTY_SCALING)[DungeonDifficulty] {
+  return DIFFICULTY_SCALING[difficulty as DungeonDifficulty] ?? DIFFICULTY_SCALING.normal;
+}
+
 export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
 
   'dungeon_tabriz_catacombs': {

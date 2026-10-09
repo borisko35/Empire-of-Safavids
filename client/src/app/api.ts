@@ -493,12 +493,17 @@ export const api = {
   // isRaid обязателен в типе: панель решает по нему, рисовать ли блок рейда.
 // Пока флага не было в типе, TS отказал на `d.isRaid` — то есть панель не
 // могла отличить рейд от захода даже при живых данных на сервере.
-dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; isRaid?: boolean }[] }>('/api/game/dungeons'),
+// difficulties: список объявленных сложностей — по нему панель рисует выбор.
+// Раньше поле в типе не было, и сложность нельзя было выбрать даже при живых
+// данных на сервере.
+dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; difficulties?: string[]; timeLimit?: number; isRaid?: boolean }[] }>('/api/game/dungeons'),
 
-  dungeonEnter: (dungeonId: string, characterId: string) =>
-    req<{ session: { id: string; dungeonNameRu: string; monsterCount: number; bossCount: number } }>(
+  // Сложность едет только когда выбрана: пустая строка означала бы
+  // «выбрана не та» и молча спускала бы игрока на normal.
+  dungeonEnter: (dungeonId: string, characterId: string, difficulty?: string) =>
+    req<{ session: { id: string; dungeonNameRu: string; monsterCount: number; bossCount: number; difficulty?: string; timeLeftSec?: number } }>(
       `/api/game/dungeons/${dungeonId}/enter`,
-      { method: 'POST', body: JSON.stringify({ characterId }) },
+      { method: 'POST', body: JSON.stringify(difficulty ? { characterId, difficulty } : { characterId }) },
     ),
 
   /**
@@ -605,7 +610,7 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     ),
 
   dungeonStatus: (characterId: string) =>
-    req<{ active: boolean; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number }>(
+    req<{ active: boolean; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number; difficulty?: string; timeLeftSec?: number }>(
       '/api/game/dungeons/status',
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
