@@ -227,10 +227,19 @@ export class PartySystem {
 
     // Лидер уже может быть в партии: createParty бросает исключение, и рейд
     // не создался бы, оставив игрока ни с чем.
+    //
+    // Бросок перехватывается: createParty кидает обычный Error, который
+    // дошёл бы до маршрута как 500 «внутренняя ошибка». Здесь рейд должен
+    // ответить кодом, как отвечает на всё остальное.
     const existing = await this.redis.get(this.playerKey(leaderId));
-    const leaderParty: Party = existing
-      ? (await this.getParty(existing)) ?? (await this.createParty(leaderId))
-      : await this.createParty(leaderId);
+    let leaderParty: Party;
+    try {
+      leaderParty = existing
+        ? (await this.getParty(existing)) ?? (await this.createParty(leaderId))
+        : await this.createParty(leaderId);
+    } catch {
+      return { ok: false, code: 'raid_party_create_failed' };
+    }
 
     const заход = await this.dungeons.enter(leaderId, dungeonId);
     if (!заход.ok) return { ok: false, code: заход.code };

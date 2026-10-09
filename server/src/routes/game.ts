@@ -25,7 +25,7 @@ import { RewardService, linkFor, partnerConfigured, REWARD_GOLD } from '../servi
 import { VoteService } from '../services/VoteService';
 import { CRAFTING_RECIPES } from '../data/crafting';
 import { ITEMS_DATABASE } from '../data/items';
-import { asyncHandler } from '../utils/asyncHandler';
+import { asyncHandler, errorResponse } from '../utils/asyncHandler';
 import { AZENS_CONVERSION_RATES, AZENS_PACKS, PREMIUM_DURATIONS, FIRST_TOPUP_MULTIPLIER, FIRST_TOPUP_MAX_BONUS, EXCHANGE_PAIRS, getExchangePair, shopCurrencyToWallet } from '../utils/economy';
 import { MOUNTS, MountSystem } from '../systems/MountSystem';
 import { BoatSystem, BOATS } from '../systems/BoatSystem';
@@ -1690,10 +1690,30 @@ gameRouter.post('/guilds/:guildId/withdraw-item', secureMiddleware, requireChara
 // ПАРТИИ
 // ============================================================
 
+// ЧТО ЗДЕСЬ БЫЛО СЛОМАНО. createParty бросает обычный Error('Already in a
+// party'), inviteToParty — ещё четыре (партия полна, не лидер, уже в партии,
+// партии нет). asyncHandler передаёт бросок в next, а тот — в общий обработчик,
+// и клиент получал 500 «Внутренняя ошибка» на обычную ошибку игры:
+// «ты уже в партии».
+//
+// Стало 500 не после рейдов — раньше просто было редко: партия создавалась
+// один раз за сессию и человек не повторял попытку. Рейд создаёт партию сам
+// (см. PartySystem.createRaid), и повторное нажатие стало обычным делом.
+//
+// В проекте ради этого есть errorResponse(res, err, 400) — его написали и ни
+// разу не вызвали. Здесь он вызывается.
+//
+// ЧТО НЕ ТРОГАЕМ. Само сообщение Error едет до клиента как error. Оно
+// английское и наигранное, но менять его — значит менять контракт, который
+// читает клиент; правильная подпись здесь не стоит сломанного ответа.
 gameRouter.post('/parties', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    const party = await partySystem.createParty(req.body.characterId, req.body.lootRule);
-    return res.status(201).json({ party });
+    try {
+      const party = await partySystem.createParty(req.body.characterId, req.body.lootRule);
+      return res.status(201).json({ party });
+    } catch (err) {
+      return errorResponse(res, err);
+    }
   })
 );
 
@@ -1703,15 +1723,23 @@ gameRouter.post('/parties/:partyId/invite', secureMiddleware, requireBodyField('
     if (!inviter || inviter.userId !== req.userId) {
       return res.status(403).json({ success: false, error: 'Character does not belong to you' });
     }
-    await partySystem.inviteToParty(req.params.partyId, req.body.inviterId, req.body.targetId);
-    return res.json({ success: true });
+    try {
+      await partySystem.inviteToParty(req.params.partyId, req.body.inviterId, req.body.targetId);
+      return res.json({ success: true });
+    } catch (err) {
+      return errorResponse(res, err);
+    }
   })
 );
 
 gameRouter.post('/parties/:partyId/leave', secureMiddleware, requireCharacterOwnership(),
   asyncHandler(async (req: Request, res: Response) => {
-    await partySystem.leaveParty(req.params.partyId, req.body.characterId);
-    return res.json({ success: true });
+    try {
+      await partySystem.leaveParty(req.params.partyId, req.body.characterId);
+      return res.json({ success: true });
+    } catch (err) {
+      return errorResponse(res, err);
+    }
   })
 );
 
