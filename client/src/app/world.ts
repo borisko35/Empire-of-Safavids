@@ -1798,6 +1798,7 @@ function wireInput(): void {
   // переключает: всё, что нужно догрузить, уже сделано по дороге.
   installPanelCloseButtons();
   wireWorldMapClose();
+  wireLostRetry();
   for (const btn of document.querySelectorAll<HTMLButtonElement>('.panel-toggles button')) {
     btn.addEventListener('click', () => {
       const panel = btn.dataset.panel;
@@ -2233,6 +2234,24 @@ function wireWorldMapClose(): void {
   close.dataset.wired = '1';
   close.addEventListener('click', () => {
     document.getElementById('overlay-map')?.classList.add('hidden');
+  });
+}
+
+/**
+ * Кнопка «Повторить» на оверлее потери связи.
+ *
+ * Перезагрузка страницы, а не повтор запроса: пока нет связи, повтор
+ * ничего не изменит, а после неё boot() честно проверит сохранённый
+ * токен и вернёт игрока в ЕГО аккаунт. Главное - не нажимать «Играть за
+ * 10 секунд»: гостем это заводит новый аккаунт, и прогресс старого
+ * выглядит пропавшим.
+ */
+export function wireLostRetry(): void {
+  const btn = document.getElementById('btn-retry');
+  if (!btn || btn.dataset.wired === '1') return;
+  btn.dataset.wired = '1';
+  btn.addEventListener('click', () => {
+    window.location.reload();
   });
 }
 

@@ -1637,7 +1637,8 @@
     "off": "● Disconnected",
     "on": "● Connected",
     "reconnect": "🔄 Reconnecting…",
-    "connecting": "🔄 Connecting…"
+    "connecting": "🔄 Connecting…",
+    "lost_hint": "No connection to the server. Your account is safe — you will return to it."
   },
   "twofa": {
     "title": "Two-factor protection",

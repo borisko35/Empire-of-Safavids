@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Точка входа игрового клиента — Empire of Safavids
 // ============================================================
 
@@ -6,7 +6,7 @@ import { api, ApiError } from './api';
 import { detectLocale, loadLocale, t } from './i18n';
 import { toast } from './hud';
 import { clearAuth, session, persistAuth, Character } from './state';
-import { enterWorld, showScreen } from './world';
+import { enterWorld, showScreen, wireLostRetry } from './world';
 import { enterAsGuest, initAuthScreen, showAuthError } from './screens/auth';
 import { initCharsScreen } from './screens/chars';
 import { audio } from './audio';
@@ -19,6 +19,26 @@ import { captureReferralFromUrl } from './referral';
 // textures and file-based PNG sprites are used as fallback.
 import { textureManager, spriteManager, assetStorage } from '../assets/index';
 void textureManager; void spriteManager; void assetStorage;
+
+/**
+ * Отозвал ли сервер сессию.
+ *
+ * ЧТО ЗДЕСЬ БЫЛО. Любой отказ запроса считался отказом в сессии, и токен
+ * стирался в catch без разбора - включая обрыв сети, когда сервер не
+ * ответил НИЧЕГО. Сценарий, который это давал: у гостя на секунду пропал
+ * интернет (или сервер перезапустился), клиент выкидывал его на экран
+ * входа, гость нажимал «Играть за 10 секунд» - и получал НОВЫЙ гостевой
+ * аккаунт. Персонаж и весь прогресс выглядели пропавшими, хотя лежали на
+ * сервере целы. Именно это и случилось при съёмке скриншотов: вкладка
+ * возвращалась к выбору персонажа, а следующий вход гостем заводил нового.
+ *
+ * Теперь сессию стирает ТОЛЬКО сервер: 401 (нет/просрочен токен) и 403.
+ * Остальное - обрыв сети, таймаут, 5xx - сессии не касается: это не отказ
+ * в ней, и ждать надо соединения, а не входа заново.
+ */
+function сессияОтозвана(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403);
+}
 
 async function boot(): Promise<void> {
   // Словарь нужен для перевода интерфейса, но его отсутствие не должно
@@ -65,7 +85,14 @@ async function boot(): Promise<void> {
       await api.characters();
       await gotoCharacters();
       return;
-    } catch {
+    } catch (err) {
+      // Сеть недоступна — вход стирать нельзя (см. сессияОтозвана).
+      // Иначе перезагрузка страницы без связи выкидывала бы игрока из
+      // игры, а гостя — в новый аккаунт с пустым списком персонажей.
+      if (!сессияОтозвана(err)) {
+        showConnectionLost();
+        return;
+      }
       clearAuth();
       showScreen('screen-auth');
     }
@@ -184,12 +211,43 @@ async function finishOAuthReturn(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Нет связи: сказать об этом и НЕ выкидывать на вход.
+ *
+ * Отдельная функция, потому что молчание тут вредно, а экран входа -
+ * тем более: гость на нём нажал бы «Играть за 10 секунд» и получил новый
+ * аккаунт, то есть ровно то, от чего мы его отстраховываем. Показываем
+ * оверлей потери связи (тот же, что при обрыве в игре): сессия жива,
+ * токен на месте, вернётся связь - вернётся игрок.
+ */
+function showConnectionLost(): void {
+  const el = document.getElementById('overlay-lost');
+  const reason = document.getElementById('lost-reason');
+  if (!el) {
+    showScreen('screen-auth');
+    return;
+  }
+  if (reason) reason.textContent = t('conn.lost_hint');
+  el.classList.remove('hidden');
+  // Кнопка повтора подключается здесь, а не только при входе в мир:
+  // до входа оверлей тоже показывается, и без кнопки игрок на нём
+  // застревал бы навсегда.
+  wireLostRetry();
+}
+
 /** Переход к экрану персонажей (в т.ч. после reconnect-потери) */
 export async function gotoCharacters(): Promise<void> {
   if (!session.token) return;
   try {
     await api.characters(); // проверка, что сессия жива
-  } catch {
+  } catch (err) {
+    // Обрыв связи не отказ в сессии. Раньше здесь стоял безусловный
+    // clearAuth(), и гость после секундной потери связи получал новый
+    // аккаунт вместо своего - см. сессияОтозвана.
+    if (!сессияОтозвана(err)) {
+      showConnectionLost();
+      return;
+    }
     clearAuth();
     showScreen('screen-auth');
     return;

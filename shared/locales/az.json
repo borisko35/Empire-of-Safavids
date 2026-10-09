@@ -1637,7 +1637,8 @@
     "off": "● Bağlantı kəsildi",
     "on": "● Qoşulub",
     "reconnect": "🔄 Yenidən qoşulur…",
-    "connecting": "🔄 Qoşulur…"
+    "connecting": "🔄 Qoşulur…",
+    "lost_hint": "Serverlə bağlantı yoxdur. Hesabınız qorunur — eyni hesaba qayıdacaqsınız."
   },
   "twofa": {
     "title": "İkili faktörlü qoruma",

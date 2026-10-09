@@ -612,7 +612,14 @@
       </div>
     </div>
     <div class="overlay hidden" id="overlay-lost">
-      <div class="death-card"><p data-i18n="world.connecting"></p><p class="dim" id="lost-reason"></p></div>
+      <div class="death-card"><p data-i18n="world.connecting"></p><p class="dim" id="lost-reason"></p>
+        <!-- Кнопка повтора. Её не было: оверлей показывался на 2.2 с и сам
+             уходил обратно к персонажам, а если связь не вернулась - игрок
+             оставался на пустом оверлее без единого действия. Перезагрузка
+             безопасна: токен живой, и boot() вернёт игрока в ЕГО аккаунт,
+             а не заведёт нового гостя. -->
+        <button type="button" class="btn btn-gold" id="btn-retry" data-i18n="common.retry"></button>
+      </div>
     </div>
 
     <!-- Подсказка управления -->
