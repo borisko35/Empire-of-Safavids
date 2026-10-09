@@ -1723,6 +1723,49 @@ gameRouter.get('/parties/:partyId', secureMiddleware, asyncHandler(async (req: R
 }));
 
 // ============================================================
+// РЕЙДЫ
+// ============================================================
+
+// GET /api/game/raids/:dungeonId — открытые рейды данжа для панели.
+// Отдельный маршрут, а не флаг у списка заходов: в рейд входят партиями, и
+// показывать «вошло 7 из 20» без числа партий бессмысленно — решает одно.
+gameRouter.get('/raids/:dungeonId', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  res.json({ raids: await partySystem.listOpenRaids(req.params.dungeonId) });
+}));
+
+// POST /api/game/raids/:dungeonId/create — открыть сбор { characterId, name }.
+// Рейд живёт в своём подземелье: тот, кто не помечен isRaid, рейдом не станет,
+// и маршрут откажет, а не откроет сбор, в который никто не сможет войти.
+gameRouter.post('/raids/:dungeonId/create', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await partySystem.createRaid(
+      req.body.characterId,
+      typeof req.body.name === 'string' && req.body.name.trim() ? req.body.name.trim() : 'Рейд',
+      req.params.dungeonId
+    );
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    return res.status(201).json({ raid: result.raid });
+  })
+);
+
+// POST /api/game/raids/:raidId/join — вступить партией { characterId }.
+// В заход входит ВСЯ партия целиком: «в рейд можно пойти одному» тут означало
+// бы обычный заход, а рейдом он не был бы.
+gameRouter.post('/raids/:raidId/join', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await partySystem.joinRaid(req.body.characterId, req.params.raidId);
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    res.json({
+      raidId: result.raid.id,
+      sessionId: result.raid.sessionId,
+      joined: result.joined.length,
+      parties: result.raid.parties.length,
+      maxParties: result.raid.maxParties,
+    });
+  })
+);
+
+// ============================================================
 // КВЕСТЫ
 // ============================================================
 

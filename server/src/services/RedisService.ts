@@ -49,6 +49,27 @@ export class RedisService {
     await this.client.del(key);
   }
 
+  // ── Множества ──────────────────────────────────────────────────────
+  // Добавлены ради рейдов: список открытых рейдов это множество, а не список.
+  // Разница не в типе, а в том, что удаление чужого рейда не требует знать,
+  // весь ли массив он занимает: массив пришлось бы перечитывать и переписывать
+  // целиком, и два писателя затирали бы друг друга.
+
+  /** Добавить в множество. Повторное добавление не ошибка. */
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    if (members.length) await this.client.sAdd(key, members);
+  }
+
+  /** Убрать из множества. Отсутствие элемента не ошибка. */
+  async srem(key: string, ...members: string[]): Promise<void> {
+    if (members.length) await this.client.sRem(key, members);
+  }
+
+  /** Состав множества; пустое множество — пустой массив, а не null. */
+  async smembers(key: string): Promise<string[]> {
+    return this.client.sMembers(key);
+  }
+
   async incr(key: string): Promise<number> {
     return this.client.incr(key);
   }

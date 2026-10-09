@@ -926,6 +926,20 @@ export class DungeonService {
     return sessionId ? this.sessions.get(sessionId) : undefined;
   }
 
+  /**
+   * Заход по идентификатору.
+   *
+   * Нужен рейдам: рейд в Redis хранит sessionId, и список открытых рейдов
+   * обязан знать, жива ли сессия. Без этой проверки в списке оставались бы
+   * рейды, чей заход давно закрыт, и кнопка «вступить» вела бы в никуда.
+   *
+   * Отдаём и завершённые: вызывающий сам решает, годятся ли они. Скрывать
+   * completedAt от читателя — значит прятать признак, по которому решают.
+   */
+  getSession(sessionId: string): DungeonSession | undefined {
+    return this.sessions.get(sessionId);
+  }
+
   isMember(characterId: string, session: DungeonSession): boolean {
     return session.members.has(characterId);
   }

@@ -180,18 +180,63 @@ export async function loadDungeons(): Promise<void> {
       }
       // Присоединение к чужому заходу. Список открытых заходов берётся по
       // этому данжу; кнопка появляется только если есть куда идти.
+      //
+      // Подписи здесь — про ЗАХОД, а не про рейд. Раньше стояли raid_open,
+      // join_raid и joined_raid, и игрок видел «Рейд 3/8» над обычным
+      // пяти-восьмиместным заходом в гробницу. Рейд — это вход партиями,
+      // и он живёт ниже отдельным списком.
       if (!status.active) {
         const открытые = await api.dungeonSessions(d.id).catch(() => ({ sessions: [] as never[] }));
         for (const заход of открытые.sessions) {
           const строка = rowEl('inv-item');
           const подпись = document.createElement('span');
           подпись.className = 'inv-name';
-          подпись.textContent = `${t('panels.raid_open')} ${заход.members}/${заход.maxPlayers}`;
+          подпись.textContent = `${t('panels.run_open')} ${заход.members}/${заход.maxPlayers}`;
           строка.append(подпись);
           строка.append(
-            actionButton(t('panels.join_raid'), async () => {
+            actionButton(t('panels.join_run'), async () => {
               await api.dungeonJoin(d.id, заход.sessionId, cid());
-              toast(t('panels.joined_raid'), 'success');
+              toast(t('panels.joined_run'), 'success');
+              await loadDungeons();
+            }),
+          );
+          box.append(строка);
+        }
+      }
+      // РЕЙД. Отдельный список, а не ещё одна строка заходов: в рейд входят
+      // партией, и «вошло 7 из 20» без числа партий игроку ничего не говорит.
+      // Под обычные заходы подписи теперь честные (заход, не рейд), поэтому
+      // слово «рейд» в панели означает ровно рейд.
+      if (d.isRaid && !status.active) {
+        const заголовок = document.createElement('div');
+        заголовок.className = 'inv-name';
+        заголовок.textContent = t('panels.raid_section');
+        box.append(заголовок);
+
+        const открыть = rowEl('inv-item');
+        const сборы = await api.raids(d.id).catch(() => ({ raids: [] as never[] }));
+        открыть.append(
+          actionButton(t('panels.raid_create'), async () => {
+            await api.raidCreate(d.id, cid(), t('panels.raid_default_name'));
+            toast(t('panels.raid_created'), 'success');
+            await loadDungeons();
+          }),
+        );
+        box.append(открыть);
+
+        for (const рейд of сборы.raids) {
+          const строка = rowEl('inv-item');
+          const подпись = document.createElement('span');
+          подпись.className = 'inv-name';
+          // И партии, и люди: решает одно, но игрок думает о людях.
+          подпись.textContent =
+            `${рейд.name} — ${t('panels.raid_parties')} ${рейд.parties}/${рейд.maxParties}` +
+            ` · ${t('panels.raid_members')} ${рейд.members}/${рейд.maxPlayers}`;
+          строка.append(подпись);
+          строка.append(
+            actionButton(t('panels.raid_join'), async () => {
+              const res = await api.raidJoin(рейд.raidId, cid());
+              toast(`${t('panels.raid_joined')} ${res.joined}`, 'success');
               await loadDungeons();
             }),
           );

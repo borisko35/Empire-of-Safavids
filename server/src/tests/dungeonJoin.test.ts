@@ -187,7 +187,7 @@ describe('Групповой заход: чего ещё нет', () => {
     // доступен игроку.
     const клиент = читать('client/src/app/api.ts') + читать('client/src/app/panels.ts');
     must(
-      /dungeonJoin/.test(клиент) && /join_raid/.test(клиент),
+      /dungeonJoin/.test(клиент) && /join_run/.test(клиент),
       'клиент снова не умеет присоединяться: групповой заход недоступен игроку'
     );
   });

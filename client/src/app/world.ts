@@ -1346,11 +1346,11 @@ function wireSocket(): void {
   socket.on('notification', async (n: { characterId: string; type?: string; inviteId?: string }) => {
     if (n.type !== 'dungeon_invite' || !n.inviteId) return;
     if (!me || n.characterId !== me.id) return;
-    toast(`${t('panels.dungeon_invited')}: ${t('panels.join_raid')}`, 'info');
+    toast(`${t('panels.dungeon_invited')}: ${t('panels.join_run')}`, 'info');
     await api
       .dungeonInviteAnswer(me.id, n.inviteId, true)
       .then((r) => {
-        if (r.joined) toast(t('panels.joined_raid'), 'success');
+        if (r.joined) toast(t('panels.joined_run'), 'success');
       })
       .catch(() => {
         toast(t('panels.invite_expired'), 'error');

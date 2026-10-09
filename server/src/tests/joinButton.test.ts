@@ -82,7 +82,7 @@ describe('Кнопка присоединения: клиент умеет ею 
   it('панель берёт список и рисует кнопку', () => {
     must(/api\.dungeonSessions\(d\.id\)/.test(панель), 'панель не берёт список заходов');
     must(/api\.dungeonJoin\(d\.id, заход\.sessionId, cid\(\)\)/.test(панель), 'кнопка не вызывает присоединение');
-    must(/actionButton\(t\('panels\.join_raid'\)/.test(панель), 'кнопки «вступить» нет');
+    must(/actionButton\(t\('panels\.join_run'\)/.test(панель), 'кнопки «вступить» нет');
   });
 
   it('список берётся на каждый данж, а не один раз', () => {
@@ -113,7 +113,7 @@ describe('Кнопка присоединения: клиент умеет ею 
   it('тексты кнопки переведены во всех трёх языках', () => {
     for (const кодЯзыка of ['ru', 'en', 'az']) {
       const словарь = JSON.parse(читать(`shared/locales/${кодЯзыка}.json`));
-      for (const ключ of ['join_raid', 'joined_raid', 'raid_open']) {
+      for (const ключ of ['join_run', 'joined_run', 'run_open']) {
         must(
           typeof словарь.panels?.[ключ] === 'string' && словарь.panels[ключ].length > 0,
           `в ${кодЯзыка}.json нет текста panels.${ключ}`

@@ -490,7 +490,10 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ characterId, itemId, quantity }) },
     ),
 
-  dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string }[] }>('/api/game/dungeons'),
+  // isRaid обязателен в типе: панель решает по нему, рисовать ли блок рейда.
+// Пока флага не было в типе, TS отказал на `d.isRaid` — то есть панель не
+// могла отличить рейд от захода даже при живых данных на сервере.
+dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; isRaid?: boolean }[] }>('/api/game/dungeons'),
 
   dungeonEnter: (dungeonId: string, characterId: string) =>
     req<{ session: { id: string; dungeonNameRu: string; monsterCount: number; bossCount: number } }>(
@@ -575,6 +578,31 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ characterId }),
     }),
+
+  // ── Рейды ──────────────────────────────────────────────────────────
+  // Отдельные вызовы, а не флаги у заходов: в рейд входят партиями, и
+  // показывать рейд как «заход, в который можно войти по одному» значило бы
+  // показать ровно то, чего в рейде нет.
+
+  /** Открытые сборы по рейд-подземелью */
+  raids: (dungeonId: string) =>
+    req<{
+      raids: { raidId: string; name: string; parties: number; maxParties: number; members: number; maxPlayers: number }[];
+    }>(`/api/game/raids/${dungeonId}`),
+
+  /** Открыть сбор. Войдёт вся партия, а не только лидер. */
+  raidCreate: (dungeonId: string, characterId: string, name: string) =>
+    req<{ raid: { id: string; sessionId: string; name: string } }>(
+      `/api/game/raids/${dungeonId}/create`,
+      { method: 'POST', body: JSON.stringify({ characterId, name }) },
+    ),
+
+  /** Вступить в сбор партией. Возвращает error, если хотя бы один не проходит. */
+  raidJoin: (raidId: string, characterId: string) =>
+    req<{ raidId: string; sessionId: string; joined: number; parties: number; maxParties: number }>(
+      `/api/game/raids/${raidId}/join`,
+      { method: 'POST', body: JSON.stringify({ characterId }) },
+    ),
 
   dungeonStatus: (characterId: string) =>
     req<{ active: boolean; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number }>(
