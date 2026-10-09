@@ -179,6 +179,8 @@ export const SOCKET_EVENTS = {
   AUCTION_NEW_LISTING: 'auction:new_listing',
   /** На игрока повесили баунти: знает только он */
   BOUNTY_PLACED: 'bounty:placed',
+  /** Награда за голову выплачена убийце. */
+  BOUNTY_CLAIMED: 'bounty:claimed',
 
   // ── Действия администратора, адресованные игроку ─────────────
   /** Персонаж заглушён: чат и приглашения недоступны до снятия */

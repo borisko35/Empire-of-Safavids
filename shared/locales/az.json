@@ -812,6 +812,10 @@
     "invite": "Dəvət",
     "invite_friend": "Dost",
     "invite_sent": "Dəvət göndərildi",
+    "bounty": "Baş mükafatı:",
+    "bounty_place": "Mükafat",
+    "bounty_placed": "Mükafat qoyuldu",
+    "bounty_failed": "Qızıl çatmıdı və ya hədəf sizsiniz",
     "dungeon_invited": "Sizi oyuna dəvət edirlər",
     "invite_expired": "Dəvət artıq etibarsızdır",
     "death_karma_drop": "Karma {gold} qızıl aldı"
@@ -1323,7 +1327,8 @@
     "disbanded": "Partiya dağıldı"
   },
   "bounty": {
-    "placed": "Sizin üzərinizə mükafat qoyuldu"
+    "placed": "Sizin üzərinizə mükafat qoyuldu",
+    "claimed": "Mükafatı qazandınız"
   },
   "auction_notice": {
     "new_listing": "Yeni hərrac lotu"

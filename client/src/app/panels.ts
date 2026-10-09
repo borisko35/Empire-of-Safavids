@@ -193,18 +193,32 @@ export async function loadDungeons(): Promise<void> {
       // заход рассчитан на 8-20 человек, и набрать его можно было только из
       // тех, с кем уже дружишь. Друзья в списке просто отмечены.
       if (status.active) {
+        // Список игроков региона используется ещё и для награды за голову —
+        // иначе объявить награду было можно только вызовом мёртвого кода.
+        // Кнопка «объявить награду» стоит рядом с приглашением в заход,
+        // потому что список игроков уже прочитан: повторный fetch ради
+        // одной кнопки стоил бы лишнего.
         const друзьяIds = new Set<string>();
         const друзья = await api.friends().catch(() => ({ friends: [] as never[] }));
         for (const друг of друзья.friends) {
           if (друг.status === 'accepted') друзьяIds.add(друг.friendId);
         }
+        // Суммы — золото, которое у нас есть, с резервом: награда
+        // списывается насмерть, и предложить её больше, чем есть у игрока,
+        // значило бы заставить его ругаться с сервером.
+        const золото = session.character?.gold ?? 0;
+        const суммы = [0.01, 0.05, 0.25].filter((к) => Math.floor(золото * к) >= 100).map((к) => Math.floor(золото * к));
         const вРегионе = await api.regionPlayers(cid()).catch(() => ({ players: [] as never[] }));
         for (const игрок of вРегионе.players) {
           const строка = rowEl('inv-item');
           const подпись = document.createElement('span');
           подпись.className = 'inv-name';
           const метка = друзьяIds.has(игрок.id) ? `${t('panels.invite_friend')}: ` : '';
-          подпись.textContent = `${метка}${игрок.name} · ${t('badges.level')} ${игрок.level}`;
+          подпись.textContent = `${метка}${игрок.name} · ${t('badges.level')} ${игрок.level}` +
+            // Награда за голову показывается на цели: охотник должен знать,
+            // что цель под охраной, а тот, за кем охотятся, — что за ним
+            // следят. Без этого объявление было бы невидимым.
+            (игрок.bounty ? ` · ${t('panels.bounty')} ${игрок.bounty}` : '');
           строка.append(подпись);
           строка.append(
             actionButton(t('panels.invite'), async () => {
@@ -212,6 +226,26 @@ export async function loadDungeons(): Promise<void> {
               toast(t('panels.invite_sent'), 'success');
             }),
           );
+          // Объявить награду. Кнопок несколько — по резерву золота, чтобы
+          // сумма не совпадала с запасом насмерть (меньше 100г сервер не
+          // принимает).
+          if (суммы.length) {
+            for (const сумма of суммы) {
+              строка.append(
+                actionButton(`${t('panels.bounty_place')} ${сумма}`, async () => {
+                  try {
+                    await api.bountyPlace(cid(), игрок.id, сумма);
+                    toast(t('panels.bounty_placed'), 'success');
+                    await loadDungeons();
+                  } catch {
+                    // Две причины обе известны: золота не хватило или
+                    // объявляет награду на самого себя.
+                    toast(t('panels.bounty_failed'), 'error');
+                  }
+                }),
+              );
+            }
+          }
           box.append(строка);
         }
       }

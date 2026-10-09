@@ -2332,6 +2332,26 @@ export class GameSocketHandler {
       const zone = PVP_ZONES[killer.region];
       const eventType = zone?.karmaOnKill ? 'pk_kill' : 'pvp_kill';
       await this.karmaSystem.applyKarmaEvent(killer.id, eventType, killer.region).catch(() => {});
+
+      // НАГРАДА ЗА ГОЛОВУ.
+      //
+      // Поставить её было можно только мёртвым кодом: placeBounty не вызывался
+      // ни разу, а получить было нельзя вообще — колонки claimed_at и
+      // claimer_id в таблице bounties не заполнялись никем. Ставка на голову
+      // существовала как обрывок между таблицей и слушателем клиента.
+      //
+      // Выплата идёт в любом случае — и в PvP-зоне, и в безопасной. В
+      // безопасной убийство карается кармой, но награда всё равно полагается:
+      // за опасную работу платят отдельно от того, карает её кто-то или нет.
+      const выплата = await this.karmaSystem.claimBounties(killer.id, dead.id);
+      if (выплата > 0) {
+        // Событие уходит убийце, если он на этом же сервере. Таймаут не
+        // вариант: игрок остался бы без записи, что ему заплатили.
+        this.activePlayers.get(killer.id)?.emit(SOCKET_EVENTS.BOUNTY_CLAIMED, {
+          targetId: dead.id,
+          amount: выплата,
+        });
+      }
     }
 
     logger.info(`Player died: ${dead.name}${killer ? ` (killed by ${killer.name})` : ''}`);

@@ -513,8 +513,10 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
    * было не набрать иначе. Сервер отдаёт characterId: пригласить можно любого
    * игрока региона, а не только друга.
    */
+  // bounty: активная награда за голову игрока. Без него объявить награду
+  // можно было только мёртвым кодом, а увидеть — никак.
   regionPlayers: (characterId: string) =>
-    req<{ players: { id: string; name: string; level: number; class: string }[] }>(
+    req<{ players: { id: string; name: string; level: number; class: string; bounty?: number }[] }>(
       `/api/game/players?characterId=${characterId}`,
     ),
 
@@ -614,6 +616,23 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       '/api/game/dungeons/status',
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
+
+  // ── Награда за голову ────────────────────────────────────────────
+  // Ставить награду можно было только мёртвым кодом: placeBounty не
+  // вызывался ни разу, а получить было нельзя вообще — claimer_id и
+  // claimed_at в таблице не заполнял никто. Между таблицей и слушателем
+  // клиента висел обрывок.
+
+  /** Активная награда за голову персонажа */
+  bountyOn: (characterId: string) =>
+    req<{ characterId: string; amount: number }>(`/api/game/bounty?characterId=${characterId}`),
+
+  /** Поставить награду. Ошибается, если золота не хватило или цель — сам игрок */
+  bountyPlace: (placerId: string, targetId: string, amount: number) =>
+    req<{ ok: true }>('/api/game/bounty', {
+      method: 'POST',
+      body: JSON.stringify({ placerId, targetId, amount }),
+    }),
 
   tradeContracts: (characterId: string) =>    req<{
       contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];

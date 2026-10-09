@@ -1081,6 +1081,15 @@ function wireSocket(): void {
     toast(`${t('bounty.placed')}${сумма}`, 'error');
   });
 
+  // Получение награды. Это обратная сторона той же механики: раньше можно
+  // было поставить награду (если вызвать мёртвый код) и нельзя было получить
+  // — claimer_id и claimed_at в таблице не заполнял никто, и золото за голову
+  // не доставалось никому.
+  socket.on(SOCKET_EVENTS.BOUNTY_CLAIMED, (d: { targetId?: string; amount?: number }) => {
+    const сумма = d?.amount != null ? `${d.amount} ${t('world.gold')}` : '';
+    toast(`${t('bounty.claimed')}${сумма ? t('common.list_sep') + сумма : ''}`, 'success');
+  });
+
   // Молчание персонажа. Причина приходит с сервера, показываем её.
   socket.on(SOCKET_EVENTS.ADMIN_MUTE, (d: { muteUntil?: string; reason?: string }) => {
     toast(`${t('admin.muted')}${d?.reason ? t('common.list_sep') + d.reason : ''}`, 'error');

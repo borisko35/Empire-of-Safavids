@@ -3,6 +3,7 @@
 // ============================================================
 
 import { DatabaseService } from '../services/DatabaseService';
+import { CharacterService } from '../services/CharacterService';
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';
 
@@ -133,6 +134,8 @@ export function karmaDeathDrop(
 export class KarmaSystem {
   private db  = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
+  /** Выплата награды за голову идёт через него же, а не прямым UPDATE. */
+  private characters = new CharacterService();
 
   /**
    * Карма персонажа.
@@ -196,7 +199,36 @@ export class KarmaSystem {
     );
   }
 
-  /** Награда за убийство игрока с наградой */
+  /**
+   * Награда за убийство игрока: активные ставки на жертву.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. Метода не было, а таблица bounties имела колонки
+   * claimed_at и claimer_id — то есть выплата была спроектирована и не
+   * написана. Ставку можно было поставить (код был мёртвым), а получить
+   * было нельзя: деньги уходили в никуда.
+   *
+   * Один UPDATE на все ставки: он же и признак «выдано», поэтому две
+   * одновременные победы не заплатят дважды — обновляет только первая, вторая
+   * получит ноль строк. Читать и потом писать нельзя: две вкладки успевают
+   * прочитать «не выдано» обе.
+   */
+  async claimBounties(killerId: string, targetId: string): Promise<number> {
+    const res = await this.db.query<{ amount: string }>(
+      `UPDATE bounties
+          SET is_active = FALSE, claimed_at = NOW(), claimer_id = $1
+        WHERE target_id = $2 AND is_active = TRUE
+      RETURNING amount`,
+      [killerId, targetId]
+    );
+    const сумма = res.reduce((всего, строка) => всего + Number(строка.amount), 0);
+    if (сумма > 0) {
+      await this.characters.addGoldReward(killerId, сумма);
+      logger.info(`[Karma] награда за голову выплачена: ${killerId} получил ${сумма}g за ${targetId}`);
+    }
+    return сумма;
+  }
+
+  /** Активные ставки на персонажа и их сумма. */
   async getBounty(characterId: string): Promise<number> {
     const row = await this.db.queryOne<{ bounty: number }>(
       'SELECT COALESCE(SUM(amount), 0) as bounty FROM bounties WHERE target_id = $1 AND is_active = TRUE',
@@ -207,17 +239,36 @@ export class KarmaSystem {
 
   async placeBounty(placerId: string, targetId: string, amount: number): Promise<void> {
     if (amount < 100) throw new Error('Minimum bounty is 100 gold');
-    await this.db.transaction(async (client) => {
-      await client.query(
-        'UPDATE characters SET gold = gold - $1 WHERE id = $2 AND gold >= $1',
+    // Ставить награду за голову на самого себя бессмысленно: убить себя,
+    // чтобы получить свои же деньги. Раньше это проходило, потому что код
+    // был мёртвым и не проверялся.
+    if (placerId === targetId) throw new Error('Cannot place a bounty on yourself');
+
+    // СПИСАНИЕ ПРОВЕРЯЕТСЯ ПО ЧИСЛУ ОБНОВЛЁННЫХ СТРОК.
+    //
+    // Прежде стоял UPDATE с условием `gold >= $1`, и результат его игнорился:
+    // у игрока без золота не обновлялась ни одна строка, а вставка в
+    // bounties выполнялась всё равно. Получалась БЕСПЛАТНАЯ НАГРАДА ЗА
+    // ГОЛОВУ — ставка без единой монеты. Транзакция откатывает только при
+    // исключении, а «обновилось ноль строк» исключением не является.
+    const списано = await this.db.transaction(async (client) => {
+      const res = await client.query(
+        'UPDATE characters SET gold = gold - $1 WHERE id = $2 AND gold >= $1 RETURNING id',
         [amount, placerId]
       );
+      // Ноль обновлённых строк — золота не хватило. Именно результат строк,
+      // а не «исключения не было»: транзакция откатывается только при
+      // исключении, а «нечего обновлять» не является исключением.
+      if (res.rows.length === 0) return false;
       await client.query(
         `INSERT INTO bounties (id, placer_id, target_id, amount, is_active, created_at)
          VALUES (gen_random_uuid(), $1, $2, $3, TRUE, NOW())`,
         [placerId, targetId, amount]
       );
+      return true;
     });
+    if (!списано) throw new Error('Not enough gold');
+
     await this.redis.publish('player:bounty_placed', { targetId, amount, placerId });
     logger.info(`Bounty placed: ${amount}g on ${targetId} by ${placerId}`);
   }

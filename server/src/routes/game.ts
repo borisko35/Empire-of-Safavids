@@ -15,6 +15,7 @@ import { getWorldBosses } from '../data/monsters';
 import { CharacterService } from '../services/CharacterService';
 import { PartySystem } from '../systems/PartySystem';
 import { DungeonService } from '../systems/DungeonService';
+import { KarmaSystem } from '../systems/KarmaSystem';
 import { GAME_SERVERS } from '../../../shared/constants';
 import { RedisService } from '../services/RedisService';
 const redis = RedisService.getInstance();
@@ -169,6 +170,7 @@ const guildService = new GuildService();
 const characterService = new CharacterService();
 const partySystem = new PartySystem();
 const dungeonService = DungeonService.getInstance();
+const karmaSystem = new KarmaSystem();
 const tradeService = new TradeService();
 const premiumSystem = new PremiumSystem();
 const paymentService = new PaymentService();
@@ -1192,12 +1194,30 @@ gameRouter.get(
           )
           .catch(() => [])
       : [];
+    // Активная награда за голову каждого игрока списка.
+    //
+    // Зачем в этом ответе: игрок решает, объявить ли награду, глядя на
+    // других. Не видя чужих наград, он не знает, что за кем-то уже охотятся,
+    // и платит второй раз. Одна выборка на весь список — не N по одному.
+    const награды = остальные.length
+      ? await DatabaseService.getInstance()
+          .query<{ target_id: string; bounty: string }>(
+            `SELECT target_id, COALESCE(SUM(amount), 0) as bounty
+               FROM bounties
+              WHERE target_id = ANY($1::uuid[]) AND is_active = TRUE
+              GROUP BY target_id`,
+            [остальные],
+          )
+          .catch(() => [])
+      : [];
+    const наградаИгрока = new Map(награды.map((н) => [н.target_id, Number(н.bounty)]));
     res.json({
       players: строки.map((с) => ({
         id: с.id,
         name: с.name,
         level: Number(с.level),
         class: с.class,
+        bounty: наградаИгрока.get(с.id) ?? 0,
       })),
     });
   }),
@@ -1695,6 +1715,57 @@ gameRouter.post('/guilds/:guildId/withdraw-item', secureMiddleware, requireChara
       }
       if (code === 'NOT_A_MEMBER') return res.status(403).json({ error: 'NOT_A_MEMBER' });
       throw err;
+    }
+  })
+);
+
+// ============================================================
+// НАГРАДА ЗА ГОЛОВУ
+// ============================================================
+
+// GET /api/game/bounty?characterId=... — активная награда за голову.
+// Нужна, чтобы имя игрока с наградой подсвечивалось в мире: цель должна
+// знать, что за ней охотятся, до того как её убьют.
+gameRouter.get(
+  '/bounty',
+  secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = String(req.query.characterId ?? '');
+    if (!id) return res.status(400).json({ error: 'character_id_required' });
+    const amount = await karmaSystem.getBounty(id).catch(() => 0);
+    res.json({ characterId: id, amount });
+  })
+);
+
+// POST /api/game/bounty — поставить награду { characterId, targetId, amount }.
+//
+// ЗОЛОТО СПИСЫВАЕТСЯ НАМЕРТВО. Раньше UPDATE с условием `gold >= amount`
+// выполнялся без проверки результата, и вставка шла всё равно: у игрока без
+// золота появлялась БЕСПЛАТНАЯ награда за голову. Это было написано в
+// placeBounty и никем не поймано, потому что метод был мёртвым.
+gameRouter.post('/bounty', secureMiddleware, requireBodyField('placerId'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const placer = await characterService.getCharacterById(req.body.placerId);
+    if (!placer || placer.userId !== req.userId) {
+      return res.status(403).json({ success: false, error: 'Character does not belong to you' });
+    }
+
+    const target = await characterService.getCharacterById(req.body.targetId).catch(() => null);
+    if (!target) return res.status(404).json({ error: 'target_not_found' });
+    if (target.id === placer.id) return res.status(400).json({ error: 'bounty_self' });
+
+    const amount = Math.floor(Number(req.body.amount));
+    if (!Number.isFinite(amount) || amount < 100) {
+      return res.status(400).json({ error: 'bounty_too_small' });
+    }
+
+    try {
+      await karmaSystem.placeBounty(placer.id, target.id, amount);
+      return res.status(201).json({ ok: true });
+    } catch (err) {
+      // Обе причины честные и обе известны игроку: либо золота не хватило,
+      // либо поставил награду на себя.
+      return res.status(400).json({ error: (err as Error).message === 'Not enough gold' ? 'bounty_no_gold' : 'bounty_self' });
     }
   })
 );

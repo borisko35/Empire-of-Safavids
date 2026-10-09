@@ -812,6 +812,10 @@
     "invite": "Invite",
     "invite_friend": "Friend",
     "invite_sent": "Invitation sent",
+    "bounty": "Bounty:",
+    "bounty_place": "Bounty",
+    "bounty_placed": "Bounty placed",
+    "bounty_failed": "Not enough gold, or the target is you",
     "dungeon_invited": "You are invited to a run",
     "invite_expired": "The invitation has expired",
     "death_karma_drop": "Karma took {gold} gold"
@@ -1323,7 +1327,8 @@
     "disbanded": "The party was disbanded"
   },
   "bounty": {
-    "placed": "A bounty has been placed on you"
+    "placed": "A bounty has been placed on you",
+    "claimed": "You collected the bounty"
   },
   "auction_notice": {
     "new_listing": "New auction listing"
