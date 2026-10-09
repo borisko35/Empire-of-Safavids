@@ -683,6 +683,35 @@ export const КАВКАЗ_ДВОР_Z = 12;
 
 export const КАВКАЗ_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
 
+// ── Багдадская цитадель ─────────────────────────────────────────────
+//
+// Экстерьер рейда. До этого цитадель жила только в интерьере: дверь была
+// записана в интерьер и в данные подземелья, а в мире под ней стоял
+// пустой карман. То есть игрок, подойдя к двери в Месопотамии, не находил
+// ничего.
+//
+// Замер (сетка 2 м, площадь 80×80, функция terrainHeight собрана из
+// terrain.ts без графики): медиана 3.5, в центре 3.5, разброс 0.09 м.
+// Земля тут уже почти идеально ровная — ровнялка скорее фиксирует уровень,
+// чем выравнивает склон. Радиус 60, полудиагональ 29.1 м, запас 3.9 м.
+// Сухо: isWater(200, −392) === false.
+export const BAGHDAD_CITADEL = { x: 200, z: -392, radius: 60, level: 3.5 };
+
+export const BAGHDAD_CITADEL_GEO = {
+  // Портал шире, чем у крепости: в рейд входят двадцать человек, и проём
+  // в 8.6 м превращался бы в очередь на первом же повороте.
+  ворота: { w: 12.4, h: 6.0, t: 1.8 },
+  стена: { w: 30, h: 4.2, t: 1.2 },
+  двор: { w: 26, d: 14 },
+  wallYard: { h: 1.4, t: 0.6 },
+  // Зубцы по краю стены: силуэт должен читаться как крепость издали.
+  зубец: { w: 1.6, h: 1.0 },
+} as const;
+
+export const БАГДАД_ДВОР_Z = 14;
+
+export const БАГДАД_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
+
 
 
 
@@ -951,6 +980,9 @@ export function terrainHeight(x: number, z: number): number {
   // Кавказский форпост. Уровень -2.4 вокруг медианы -2.40, радиус 60: полудиагональ
   // 29.1 м, при 48 запас был -2.7 м.
   h = flatten(h, x, z, CAUCASUS_FORT.x, CAUCASUS_FORT.z, CAUCASUS_FORT.radius, CAUCASUS_FORT.level);
+  // Багдадская цитадель. Уровень 3.5 вокруг медианы 3.50, радиус 60:
+  // полудиагональ 29.1 м, при 48 запас был -2.7 м.
+  h = flatten(h, x, z, BAGHDAD_CITADEL.x, BAGHDAD_CITADEL.z, BAGHDAD_CITADEL.radius, BAGHDAD_CITADEL.level);
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -5335,6 +5367,97 @@ export function buildSettlements(scene: THREE.Scene): void {
     addCollider(CAUCASUS_FORT.x + s * (ворота.w / 2 - ворота.t / 2), CAUCASUS_FORT.z + ворота.t / 2, 1.1);
     addCollider(CAUCASUS_FORT.x + s * (двор.w / 2 + стена.t / 2), CAUCASUS_FORT.z + zДвор / 2, 1.0);
     addCollider(CAUCASUS_FORT.x + s * (ворота.w / 2 + 2.0), CAUCASUS_FORT.z + ворота.t / 2 + 1.0, 0.7);
+  }
+
+  scene.add(g);
+}
+// ── Багдадская цитадель ─────────────────────────────────────────────
+//
+// Экстерьер рейда. ГДЕ: дверь (200, −392), выход (200, −388), на 4 м в +z.
+//
+// ОТЛИЧИЕ ОТ КРЕПОСТИ. Портал шире (12.4 против 8.6) и стена выше: в рейд
+// входят двадцать человек, и в проём в 8.6 м они шли бы друг другу в спину.
+// Зубцы по всей длине стены, а не по бокам двора — цитадель должна читаться
+// как цитадель издали, а не как ворота с забором.
+{
+  const { ворота, стена, двор, зубец } = BAGHDAD_CITADEL_GEO;
+  const zДвор = БАГДАД_ДВОР_Z;
+
+  const g = new THREE.Group();
+  g.position.set(BAGHDAD_CITADEL.x, BAGHDAD_CITADEL.level, BAGHDAD_CITADEL.z);
+
+  // Плита двора.
+  const плита = new THREE.Mesh(new THREE.BoxGeometry(двор.w, 0.3, zДвор), MAT.sand);
+  плита.position.set(0, 0.04 - 0.15, zДвор / 2);
+  плита.receiveShadow = true;
+  g.add(плита);
+
+  // Ворота: два столба и перемычка. Просвет шире крепостного.
+  for (const s of [-1, 1] as const) {
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(ворота.t, ворота.h, ворота.t), MAT.stone);
+    столб.position.set(s * (ворота.w / 2 - ворота.t / 2), ворота.h / 2, ворота.t / 2);
+    столб.castShadow = true;
+    g.add(столб);
+  }
+  const перемычка = new THREE.Mesh(new THREE.BoxGeometry(ворота.w, ворота.t, ворота.t), MAT.sandstone);
+  перемычка.position.set(0, ворота.h + ворота.t / 2, ворота.t / 2);
+  перемычка.castShadow = true;
+  g.add(перемычка);
+
+  // Зубцы над воротами: силуэт ворот читается как ворота, а не как проём.
+  for (let i = 0; i < 5; i++) {
+    const з = new THREE.Mesh(new THREE.BoxGeometry(зубец.w, зубец.h, зубец.w), MAT.sandstone);
+    з.position.set(-4.4 + i * 2.2, ворота.h + ворота.t + зубец.h / 2, ворота.t / 2);
+    g.add(з);
+  }
+
+  // Дверной проём — тёмная заглушка. Именно она кликабельна.
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(ворота.w - ворота.t * 2, 4.4, 0.3), MAT.dark);
+  дверь.position.set(0, 2.2, ворота.t / 2);
+  дверь.userData = { doorBuilding: 'baghdad_citadel', doorAction: 'enter', doorName: t('buildings.baghdad_citadel') };
+  g.add(дверь);
+
+  // Кованые прутья в проёме: тонкие, чтобы проём читался открытым.
+  for (const s of [-1, 1] as const) {
+    for (let i = 0; i < 4; i++) {
+      const bx = s * (1.6 + i * 1.5);
+      const прут = new THREE.Mesh(new THREE.BoxGeometry(0.12, 4.4, 0.12), MAT.dark);
+      прут.position.set(bx, 2.2, ворота.t / 2 + 0.1);
+      g.add(прут);
+    }
+  }
+
+  // Сторожевые посты с факелами по краям ворот — шире, чем у крепости.
+  for (const s of [-1, 1] as const) {
+    const px = s * (ворота.w / 2 + 2.6);
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(0.5, 2.8, 0.5), MAT.stone);
+    столб.position.set(px, 1.4, ворота.t / 2 + 1.0);
+    столб.castShadow = true;
+    g.add(столб);
+    const факел = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.5, 8), MAT.gold);
+    факел.position.set(px, 3.0, ворота.t / 2 + 1.0);
+    g.add(факел);
+  }
+
+  // Стена с зубцами по бокам двора.
+  for (const s of [-1, 1] as const) {
+    const бок = new THREE.Mesh(new THREE.BoxGeometry(стена.t, стена.h, zДвор + стена.t), MAT.sandstoneDark);
+    бок.position.set(s * (двор.w / 2 + стена.t / 2), стена.h / 2, zДвор / 2 - стена.t / 2);
+    бок.castShadow = true;
+    g.add(бок);
+    // Зубцы по всей длине: у крепости их шесть, здесь — двенадцать.
+    for (let i = 0; i < 12; i++) {
+      const з = new THREE.Mesh(new THREE.BoxGeometry(зубец.w, зубец.h, зубец.w), MAT.sandstone);
+      з.position.set(s * (двор.w / 2 + стена.t / 2), стена.h + зубец.h / 2, 0.5 + i * 1.6);
+      g.add(з);
+    }
+  }
+
+  // Коллайдеры: столбы ворот, стены, сторожевые посты.
+  for (const s of [-1, 1] as const) {
+    addCollider(BAGHDAD_CITADEL.x + s * (ворота.w / 2 - ворота.t / 2), BAGHDAD_CITADEL.z + ворота.t / 2, 1.1);
+    addCollider(BAGHDAD_CITADEL.x + s * (двор.w / 2 + стена.t / 2), BAGHDAD_CITADEL.z + zДвор / 2, 1.0);
+    addCollider(BAGHDAD_CITADEL.x + s * (ворота.w / 2 + 2.6), BAGHDAD_CITADEL.z + ворота.t / 2 + 1.0, 0.8);
   }
 
   scene.add(g);
