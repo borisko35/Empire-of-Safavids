@@ -1435,7 +1435,10 @@ async function loadLeaderboard(): Promise<void> {
 
   const types = [
     { id: 'level', label: t('panels.lb_level') },
-    { id: 'pvp', label: 'PvP' },
+    // Три соседних таба переведены, а этот был зашит строкой 'PvP'. Ключ
+    // panels.lb_pvp во всех трёх языках есть — его просто никто не звал,
+    // и в азербайджанской версии таблица оставалась наполовину чужой.
+    { id: 'pvp', label: t('panels.lb_pvp') },
     { id: 'kills', label: t('panels.lb_kills') },
     { id: 'quests', label: t('panels.lb_quests') },
   ];
