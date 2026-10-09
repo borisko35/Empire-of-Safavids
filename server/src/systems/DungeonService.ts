@@ -75,6 +75,15 @@ export interface DungeonSession {
    */
   chests: { id: string; x: number; z: number }[];
   killedBossIds: Set<string>;
+  /**
+   * Убитые боссы по ИДЕНТИФИКАТОРУ ОПРЕДЕЛЕНИЯ (monsterId), не по экземпляру.
+   *
+   * Только этот набор переживает перезапуск сервера. Идентификатор
+   * экземпляра (`killedBossIds`) создаётся заново при каждом спавне, и
+   * сохранённый после перезапуска не совпал бы с новым. Босс из этого
+   * набора при восстановлении не спавнится вовсе — иначе он воскреснет.
+   */
+  killedBossDefs: Set<string>;
   startedAt: number;
   completedAt?: number;
   // Смерти участников ЗА ЭТУ СЕССИЮ. Нужны для достижения «пройти без
@@ -168,7 +177,8 @@ const CHEST_GOLD_SHARE = 0.1;
 /** Доля опыта захода, которую даёт один сундук. */
 const CHEST_EXP_SHARE = 0.15;
 
-export class DungeonService {
+export class DungeonService {
+
   private static instance: DungeonService;
   private sessions = new Map<string, DungeonSession>();
   // Приглашения в заход. Живут 60 секунд и одноразовые.
@@ -248,6 +258,9 @@ export class DungeonService {
       openedChests: new Set(),
       chests: [],
       killedBossIds: new Set(),
+      // Новый заход: убитых боссов ещё нет. Заполняется по мере убийства и
+      // переживает перезапуск — в отличие от killedBossIds.
+      killedBossDefs: new Set(),
       startedAt: Date.now(),
     deaths: new Map(),
     };
@@ -283,6 +296,18 @@ export class DungeonService {
       for (const monster of planned.monsters) {
         const monsterDef = MONSTERS_DATABASE[monster.monsterId];
         if (!monsterDef) continue;
+        // Босс, убитый ДО перезапуска, не воскресает: ни экземпляра, ни
+        // условия захода. Спавн здесь идёт и при первом входе, и при
+        // восстановлении — набор killedBossDefs пуст при первом входе и
+        // содержит убитых при восстановлении, так что одна функция годится
+        // на оба случая.
+        if (
+          room.isBossRoom &&
+          room.bossId === monster.monsterId &&
+          session.killedBossDefs.has(room.bossId)
+        ) {
+          continue;
+        }
         // Раскладку считает dungeonLayout: позиции в данных локальны к своей
         // комнате, и свод всех комнат в одну точку выносил часть монстров за
         // стену зала. Здесь берём уже готовые координаты.
@@ -384,11 +409,38 @@ export class DungeonService {
     if (session.openedChests.has(chestId)) {
       return { ok: false, code: 'already_opened', gold: 0, experience: 0 };
     }
-    session.openedChests.add(chestId);
 
     const def = DUNGEONS_DATABASE[session.dungeonId];
     const золото = chestGold(def.id);
     const опыт = chestExperience(def.id);
+
+    // ПРИЗНАК В БАЗЕ, А НЕ ТОЛЬКО В ПАМЯТИ. Одной проверки в памяти
+    // не хватало: сервер перезапускается на каждой выкатке, а
+    // restoreActiveSessions собирал сессию с пустым openedChests и заново
+    // создавал все сундуки. Вскрытый сундук становился невскрытым, и
+    // золото с опытом платились повторно — сколько угодно раз.
+    //
+    // UPDATE с условием «ещё не вскрыт» отдаёт строку только одному
+    // победителю: две вкладки или два запроса не заплатят дважды. Ровно
+    // тот же приём, что у claimLoot, и по той же причине — SELECT и
+    // последующая запись проигрывают гонку.
+    const занял = await this.db
+      .query<{ id: string }>(
+        `UPDATE dungeon_sessions
+            SET opened_chests = opened_chests || to_jsonb($2::text)
+          WHERE id = $1 AND NOT (opened_chests ? $2)
+        RETURNING id`,
+        [session.id, chestId]
+      )
+      .then((строки) => строки.length > 0)
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] не удалось отметить сундук в базе:', (e as Error).message);
+        // База недоступна — платить нельзя: повторная выплата после
+        // восстановления захода была бы гарантированной. Отказ честнее.
+        return false;
+      });
+    if (!занял) return { ok: false, code: 'already_opened', gold: 0, experience: 0 };
+    session.openedChests.add(chestId);
 
     await this.characters.addGoldReward(characterId, золото).catch(() => {});
     await this.characters.addExperience(characterId, опыт).catch(() => {});
@@ -476,8 +528,11 @@ export class DungeonService {
   async restoreActiveSessions(): Promise<number> {
     const rows = await this.db.query<{
       id: string; dungeon_id: string; leader_id: string; started_at: Date;
+      opened_chests: string[] | null; killed_boss_ids: string[] | null;
     }>(
-      `SELECT s.id, s.dungeon_id, s.leader_id, s.started_at
+      `SELECT s.id, s.dungeon_id, s.leader_id, s.started_at,
+              COALESCE(s.opened_chests, '[]'::jsonb)   AS opened_chests,
+              COALESCE(s.killed_boss_ids, '[]'::jsonb) AS killed_boss_ids
        FROM dungeon_sessions s
        WHERE s.status = 'active'`
     ).catch((e) => {
@@ -516,7 +571,18 @@ export class DungeonService {
         monsterIds: new Set(),
         requiredBossIds: new Set(),
         bossTaken: new Set(),
-        openedChests: new Set(),
+        // Убитые боссы хранятся по ОПРЕДЕЛЕНИЮ (monsterId), а не по
+        // instanceId: идентификатор экземпляра меняется при каждом спавне,
+        // и после перезапуска сохранённые instanceId не совпали бы с новыми.
+        // Тогда восстановленный заход с убитым боссом никогда не завершился
+        // бы: условие «все обязательные боссы убиты» проверяет новые
+        // идентификаторы по старому списку.
+        //
+        // Побочный и нужный эффект: босс из этого списка при восстановлении
+        // не спавнится вообще. Воскресший босс — это второй заход того же
+        // боя и вторая добыча с него.
+        killedBossDefs: new Set(row.killed_boss_ids ?? []),
+        openedChests: new Set(row.opened_chests ?? []),
         chests: [],
         killedBossIds: new Set(),
         startedAt: new Date(row.started_at).getTime(),
@@ -959,12 +1025,42 @@ export class DungeonService {
 
     if (session.requiredBossIds.has(instanceId)) {
       session.killedBossIds.add(instanceId);
+      await this.recordBossKilled(session, instanceId);
 
       if ([...session.requiredBossIds].every(id => session.killedBossIds.has(id))) {
         return this.complete(session, killerId);
       }
     }
     return null;
+  }
+
+  /**
+   * Отметить босса убитым в базе — по идентификатору ОПРЕДЕЛЕНИЯ.
+   *
+   * Зачем в базе. Сервер перезапускается на каждой выкатке, а состав захода
+   * собирается заново из данных. Без этой записи убитый босс воскресал бы и
+   * убивался повторно, а заход, где его уже убили, никогда бы не сошёлся.
+   *
+   * Почему определение, а не экземпляр: instanceId создаётся заново при
+   * каждом спавне, и записанный до перезапуска не совпал бы с новым.
+   *
+   * UPDATE идемпотентен: повторная запись того же босса ничего не меняет,
+   * поэтому повторный вызов безопасен.
+   */
+  private async recordBossKilled(session: DungeonSession, instanceId: string): Promise<void> {
+    const monsterId = this.ai.getContext(instanceId)?.monsterId;
+    if (!monsterId || session.killedBossDefs.has(monsterId)) return;
+    session.killedBossDefs.add(monsterId);
+    await this.db
+      .query(
+        `UPDATE dungeon_sessions
+            SET killed_boss_ids = killed_boss_ids || to_jsonb($2::text)
+          WHERE id = $1`,
+        [session.id, monsterId]
+      )
+      .catch((e: unknown) => {
+        logger.warn('[Dungeon] не удалось отметить босса в базе:', (e as Error).message);
+      });
   }
 
   private async complete(session: DungeonSession, killerId: string): Promise<DungeonCompleteInfo> {
