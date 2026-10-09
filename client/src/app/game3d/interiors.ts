@@ -28,7 +28,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort' | 'baghdad_citadel';
 
 export interface BuildingDef {
   id: string;
@@ -102,6 +102,14 @@ const SPOTS: {
   { id: 'khorasan_caves', kind: 'khorasan_caves', nameKey: 'buildings.khorasan_caves', icon: '🕯', dx: 780, dz: -620, ex: 780, ez: -616 },
   // Крепость Кавказа: ворота, стена и башня бури с джиннами.
   { id: 'caucasus_fort', kind: 'caucasus_fort', nameKey: 'buildings.caucasus_fort', icon: '🛡', dx: -880, dz: 520, ex: -880, ez: 524 },
+  // Багдадская цитадель: рейд на двадцать человек. ПОСЛЕДНЯЯ ЗАПИСЬ, и
+  // это обязательно: слот комнаты считается индексом (POCKET_X + i * ROOM_DX),
+  // а на сервере зашит числом (4968 = 4000 + 22*44). Вставка выше сдвинет
+  // слоты всех, кто ниже, и комнаты разъедутся по координатам.
+  //
+  // Дверь снаружи (200, −392) — рядом со спавном паши в мире (200, −380):
+  // точка не выдумана, босс на ней уже стоит.
+  { id: 'baghdad_citadel', kind: 'baghdad_citadel', nameKey: 'buildings.baghdad_citadel', icon: '🏰', dx: 200, dz: -392, ex: 200, ez: -388 },
 ];
 
 export const POCKET_X = 4000;
@@ -158,8 +166,11 @@ export const FLOOR_Y = 0.4;
 // Правая граница — центр ПОСЛЕДНЕЙ комнаты, не её край. Так было и при
 // караван-сарае, и при крепости: полоса от края комнаты до центра
 // следующей нужна, чтобы промежуток между комнатами тоже был землёй.
-// Последняя комната теперь дворец, слот 11, центр 4484.
-export const POCKET_RECT = { x0: 3960, x1: 4968, z0: 3960, z1: 4040 };
+//
+// ДВАДЦАТЬ ВТОРАЯ КОМНАТА, СЛОТ 22, ЦЕНТР 4968. Граница поднята с 4968
+// до 5012: комната слота 22 занимает 4952..4984, и при прежней границе
+// она вылезала бы за неё на 16 единиц. Сдвиг ровно на шаг комнаты (44).
+export const POCKET_RECT = { x0: 3960, x1: 5012, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -1161,6 +1172,114 @@ function furnishCaucasusFort(g: THREE.Group, cx: number, cz: number): { x: numbe
   }
   return cols;
 }
+
+// ── БАГДАДСКАЯ ЦИТАДЕЛЬ: рейд на двадцать человек ──────────────────
+//
+// Четыре зоны, и каждая читается как часть обороны: ворота, двор,
+// караульная, зал везиря. Рейд отличается от обычного данжа не разме��ом
+// зала (зал тот же, 32×32), а числом ярусов и тем, что финал — не одна
+// комната, а четвёртая, до которой надо дойти.
+//
+// ЗОНЫ СЧИТАЕТ сервер (dungeonLayout.zoneShift): для четырёх комнат
+// +10.5, +3.5, −3.5, −10.5. Обещания ниже совпадают с данными в
+// dungeons.ts, а сундуки нарисованы ТЕМ ЖЕ координатами, что в
+// chestPositions: вскрытие идёт по координатам, а рисуется по ним же,
+// и расхождение означало бы сундук в воздухе.
+function furnishBaghdadCitadel(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+  // ── Зона 1. Ворота (+10.5): девять монстров, два сундука ──
+  // Портал-арка шире ворот крепости: рейд входит двадцатью людьми, и
+  // узкий проход превращался бы в очередь на первом же повороте.
+  for (const side of [-1, 1]) {
+    g.add(box(1.8, 6.2, 1.8, M.stone, cx + side * 5.2, FLOOR_Y + 3.1, cz + 14));
+  }
+  g.add(box(12.4, 1.6, 1.8, M.stone, cx, FLOOR_Y + 6, cz + 14));
+  // Зубцы по краю ворот: силуэт читается как крепость, а не как проём.
+  for (let i = 0; i < 5; i++) {
+    g.add(box(0.9, 0.9, 0.9, M.stone, cx - 4.4 + i * 2.2, FLOOR_Y + 7.2, cz + 14));
+  }
+  for (const side of [-1, 1]) {
+    cols.push({ x: cx + side * 3.4, z: cz + 13.4, r: 1.4 });
+  }
+  // Факелы по сторонам въезда.
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.4;
+    g.add(cyl(0.16, 2.6, 0.16, M.iron, px, FLOOR_Y + 1.3, cz + 11.4, 8));
+    g.add(cyl(0.34, 0.46, 0.34, M.fire, px, FLOOR_Y + 2.8, cz + 11.4, 8));
+    cols.push({ x: px, z: cz + 11.4, r: 0.8 });
+  }
+  // Сундуки ворот: по данным (−8.4, 8.4) и (8.4, 8.4)
+  for (const [px, pz] of [[cx - 8.4, cz + 8.4], [cx + 8.4, cz + 8.4]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  // ── Зона 2. Внутренний двор (+3.5): восемь монстров, три сундука ──
+  // Колоннада по четырём углам двора: двадцать человек должны найти, где
+  // драться, а не слипаться в одной точке у портала.
+  for (const side of [-1, 1]) {
+    for (const dz of [0.4, 7.4]) {
+      g.add(cyl(0.5, 0.7, 3.4, M.stone, cx + side * 10.4, FLOOR_Y + 1.7, cz + dz, 10));
+      cols.push({ x: cx + side * 10.4, z: cz + dz, r: 0.9 });
+    }
+  }
+  // Фонтан в середине двора: точка интереса, вокруг которой бой расходится.
+  g.add(cyl(2.6, 0.6, 0.5, M.stone, cx, FLOOR_Y + 0.25, cz + 3.4, 16));
+  g.add(cyl(0.3, 0.4, 1.4, M.stone, cx, FLOOR_Y + 1.1, cz + 3.4, 8));
+  g.add(cyl(1.2, 1.4, 0.24, M.gold, cx, FLOOR_Y + 1.9, cz + 3.4, 12));
+  cols.push({ x: cx, z: cz + 3.4, r: 2.8 });
+  // Сундуки двора: по данным (−9.4, 1.4), (9.4, 1.4), (0, 6.4)
+  for (const [px, pz] of [[cx - 9.4, cz + 1.4], [cx + 9.4, cz + 1.4], [cx, cz + 6.4]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  // ── Зона 3. Караульная и оружейная (−3.5): двенадцать монстров, три сундука ──
+  // Ряд козлов для оружия вдоль дальней стены: караульная читается как
+  // оружейная, а не как пустой зал с сундуками.
+  for (let i = 0; i < 4; i++) {
+    const px = cx - 9.4 + i * 6.2;
+    g.add(box(3.4, 0.22, 0.5, M.woodDark, px, FLOOR_Y + 0.9, cz - 9.4));
+    for (let k = 0; k < 3; k++) {
+      g.add(box(0.12, 1.5, 0.12, M.iron, px - 1 + k, FLOOR_Y + 1.75, cz - 9.4));
+    }
+  }
+  cols.push({ x: cx, z: cz - 9.4, r: 1.2 });
+  // Стойки с копьями у боковых стен.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      g.add(box(0.12, 2.2, 0.12, M.woodDark, cx + side * 13.4, FLOOR_Y + 1.1, cz - 6.4 + i * 2.2));
+    }
+    cols.push({ x: cx + side * 13.4, z: cz - 4.4, r: 0.9 });
+  }
+  // Сундуки караульной: по данным (−8.4, −1.6), (8.4, −1.6), (0, −6.6)
+  for (const [px, pz] of [[cx - 8.4, cz - 1.6], [cx + 8.4, cz - 1.6], [cx, cz - 6.6]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  // ── Зона 4. Зал великого везиря (−10.5): везирь с почётной стражей ──
+  // Подиум везиря у дальней стены: босс стоит на возвышении, а не в зале
+  // наравне с рядовыми — иначе «зал везиря» и «двор» неразличимы.
+  g.add(box(8.4, 0.6, 4.4, M.stone, cx, FLOOR_Y + 0.3, cz - 15.4));
+  g.add(box(6.4, 2.2, 1.4, M.gold, cx, FLOOR_Y + 1.4, cz - 16.4));
+  // Тронный балдахин на четырёх столбах: силуэт зала читается с порога.
+  for (const side of [-1, 1]) {
+    g.add(cyl(0.22, 0.3, 3.4, M.gold, cx + side * 3.2, FLOOR_Y + 1.7, cz - 13.4));
+    g.add(cyl(0.22, 0.3, 3.4, M.gold, cx + side * 3.2, FLOOR_Y + 1.7, cz - 17.4));
+  }
+  g.add(box(7.6, 0.3, 4.8, M.red, cx, FLOOR_Y + 3.5, cz - 15.4));
+  cols.push({ x: cx, z: cz - 15.4, r: 2.2 });
+  // Ковёр зала: тёмный прямоугольник под боссом, чтобы зона читалась отворотом.
+  g.add(box(11.4, 0.04, 8.4, M.red, cx, FLOOR_Y + 0.05, cz - 12.4));
+  // Сундуки зала: по данным (±6.4, −4.4) и (±6.4, −11.4)
+  for (const [px, pz] of [
+    [cx - 6.4, cz - 4.4], [cx + 6.4, cz - 4.4],
+    [cx - 6.4, cz - 11.4], [cx + 6.4, cz - 11.4],
+  ] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  return cols;
+}
+
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
   const n = Math.hypot(s.lx ?? 0, s.lz ?? 0) || 1;
@@ -1846,6 +1965,7 @@ caravanserai: furnishCaravanserai,
     palace_dungeon: furnishPalaceDungeon,
     khorasan_caves: furnishKhorasanCaves,
     caucasus_fort: furnishCaucasusFort,
+    baghdad_citadel: furnishBaghdadCitadel,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 
