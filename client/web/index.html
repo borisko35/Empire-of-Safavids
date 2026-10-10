@@ -415,5 +415,22 @@
 
   <script type="module" src="/js/main.js"></script>
   <script async src="https://browsermmorpg.com/js/rating_card/rating_card.js"></script>
+
+  <!-- Реклама. Решение владельца: на лендинге, не в игре.
+
+       ПОЧЕМУ ЗДЕСЬ. На этом origin есть платёжки (YooKassa, Xsolla, Epoint)
+       и токен авторизации в localStorage, а страница /game/ работает с ними
+       напрямую. Сторонний скрипт получает в браузере права самой страницы:
+       чтение localStorage, перехват форм оплаты. На лендинге нет ни токена,
+       ни платежей - терять там нечего.
+
+       data-cfasync="false" обязателен: он запрещает Cloudflare Rocket Loader
+       откладывать этот скрипт. Без него загрузчик переставит порядок, и
+       рекламный контейнер может остаться пустым.
+
+       Если рекламу когда-нибудь понадобится перенести в игру, делать это надо
+       отдельным решением и отдельной строкой: цена ошибки там несопоставима. -->
+  <script async="async" data-cfasync="false" src="https://bauval.org/21/afc0d5b6522686f2e3d9ce906ea4e537"></script>
+  <div id="container-afc0d5b6522686f2e3d9ce906ea4e537"></div>
 </body>
 </html>
