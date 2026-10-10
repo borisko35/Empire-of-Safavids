@@ -1663,7 +1663,20 @@ function showLostScreen(reason: string): void {
 }
 
 // ── Ввод: поддержка переназначения клавиш ──────────────────────
-const DEFAULT_BINDS: Record<string, string> = { map: 'KeyM', character: 'KeyF', guild: 'KeyG', quests: 'KeyJ', inventory: 'KeyI' };
+const DEFAULT_BINDS: Record<string, string> = {
+  map: 'KeyM',
+  character: 'KeyF',
+  guild: 'KeyG',
+  quests: 'KeyJ',
+  inventory: 'KeyI',
+  // Рейды. Просил владелец: клавиша P.
+  //
+  // Панель данжей до сих пор открывалась только через меню и разговор со
+  // стражником, хотя это одно из самых частых действий в игре. Пять соседних
+  // действий имели клавишу, и только это - нет: попасть в него значило
+  // вспомнить про стражника или идти в меню.
+  dungeons: 'KeyP',
+};
 function getBind(action: string): string {
   try {
     const saved = JSON.parse(localStorage.getItem('eos_keybinds') ?? '{}');
@@ -1717,7 +1730,9 @@ function wireInput(): void {
       togglePanel('panel-guild');
     } else if (e.code === getBind('quests')) {
       togglePanel('panel-quests-j');
-    } else if (e.code === getBind('inventory')) {
+    } else if (e.code === getBind('dungeons')) {
+      togglePanel('panel-dungeons');
+        } else if (e.code === getBind('inventory')) {
       togglePanel('panel-inventory');
     } else if (e.code === 'KeyR') {
       // Смена боевой стойки по кругу. Конная стрельба пешком пропускается:

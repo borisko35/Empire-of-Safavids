@@ -854,6 +854,7 @@
     "k_char": "character",
     "k_guild": "guild",
     "k_quests": "quests",
+    "k_dungeons": "dungeons",
     "k_debug": "collider debug",
     "k_esc": "menu / close",
     "pwd_bad_fields": "Password fields are filled in incorrectly",
