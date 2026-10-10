@@ -501,7 +501,7 @@ inventory: (characterId: string) =>
 // difficulties: список объявленных сложностей — по нему панель рисует выбор.
 // Раньше поле в типе не было, и сложность нельзя было выбрать даже при живых
 // данных на сервере.
-dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; difficulties?: string[]; timeLimit?: number; isRaid?: boolean }[] }>('/api/game/dungeons'),
+dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; difficulties?: string[]; timeLimit?: number; minPlayers?: number; isRaid?: boolean }[] }>('/api/game/dungeons'),
 
   // Сложность едет только когда выбрана: пустая строка означала бы
   // «выбрана не та» и молча спускала бы игрока на normal.

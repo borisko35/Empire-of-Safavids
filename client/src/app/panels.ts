@@ -160,7 +160,10 @@ export async function loadDungeons(): Promise<void> {
         `${d.nameRu} · ${t('badges.level')} ${d.minLevel}–${d.maxLevel}` +
         // Срок захода показывается ДО входа, а не только внутри: игрок должен
         // знать, во сколько он закончит, ещё до того, как начал.
-        (d.timeLimit ? ` · ${t('panels.time_limit')}: ${d.timeLimit} ${t('panels.minutes')}` : '');
+        (d.timeLimit ? ` · ${t('panels.time_limit')}: ${d.timeLimit} ${t('panels.minutes')}` : '') +
+        // Минимум бойцов — только у рейдов. Простое число здесь было бы обещанием,
+        // которого игра не выполняет: у обычных подземелий minPlayers не проверяется.
+        (d.isRaid && d.minPlayers ? ` · ${t('panels.min_players')}: ${d.minPlayers}` : '');
       row.append(label);
       if (!status.active) {
         // Выбор сложности. Раньше поле difficulties стояло в данных и не

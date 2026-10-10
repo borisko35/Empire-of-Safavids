@@ -157,6 +157,15 @@ export interface DungeonCompleteInfo {
    * «вот эти три на всех».
    */
   shares: { characterId: string; gold: number; experience: number; items: string[] }[];
+  /**
+   * Отказ из-за нехватки бойцов в рейде. Заполняется вместе с нулевой
+   * наградой: заход не засчитан, но и не потерян.
+   */
+  code?: 'raid_under_min_players';
+  /** Сколько бойцов требуется рейдом (minPlayers). */
+  minPlayers?: number;
+  /** Сколько их фактически было в заходе. */
+  have?: number;
 }
 
 /** Приглашение в заход: живёт 60 секунд и одноразовое. */
@@ -1132,6 +1141,37 @@ export class DungeonService {
     session.completedAt = Date.now();
     const def = DUNGEONS_DATABASE[session.dungeonId];
     const множитель = difficultyScaling(session.difficulty).reward;
+
+    // МИНИМУМ БОЙЦОВ ДЛЯ РЕЙДА.
+    //
+    // Поле minPlayers стояло в данных всех шести подземелий и не читалось
+    // нигде. Проверять его у всех нельзя: у караван-сарая заявлено 5, у
+    // гробницы 3, и жёсткий минимум сделал бы одиночную игру невозможной.
+    // Поэтому правило действует ТОЛЬКО у рейдов - там, где заявлено
+    // `isRaid` (Багдадская цитадель: 10 из 20).
+    //
+    // Проверка стоит здесь, а не во входе: рейд и собирают, открывая сбор и
+    // набирая людей. Запретить вход одному значило бы запретить открыть сбор
+    // вообще - то есть сделать рейд недостижимым. Недостижимым он становится
+    // на завершении: штурм меньшим составом не засчитывается.
+    if (def.isRaid && session.members.size < def.minPlayers) {
+      session.completedAt = undefined;
+      return {
+        participants: 0,
+        goldEach: 0,
+        sessionId: session.id,
+        dungeonId: def.id,
+        dungeonNameRu: def.nameRu,
+        experience: 0,
+        gold: 0,
+        items: [],
+        code: 'raid_under_min_players',
+        minPlayers: def.minPlayers,
+        have: session.members.size,
+        shares: [],
+      };
+    }
+
     const gold = Math.round(
       (def.rewards.gold.min + Math.floor(Math.random() * (def.rewards.gold.max - def.rewards.gold.min + 1))) * множитель
     );
