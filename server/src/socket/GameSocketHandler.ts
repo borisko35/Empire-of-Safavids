@@ -37,6 +37,7 @@ import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { SiegeSystem } from '../systems/SiegeSystem';
 import { TerritoryBonuses } from '../systems/TerritoryBonuses';
 import { PartySystem } from '../systems/PartySystem';
+import { ShardLease } from '../systems/ShardLease';
 import { LevelingSystem } from '../systems/LevelingSystem';
 import { ChatModerationService } from '../services/ChatModerationService';
 import { analytics } from '../services/AnalyticsService';
@@ -177,6 +178,8 @@ export class GameSocketHandler {
   private worldEvents = WorldEventSystem.getInstance();
   private dailyTasks = new DailyTaskService();
   private partySystem = new PartySystem();
+  /** Аренда шардов: чей спавн и чей бой. Один экземпляр на процесс. */
+  private аренда = new ShardLease();
   private mounts = new MountSystem();
   private chatModeration = ChatModerationService.getInstance();
 
@@ -930,8 +933,13 @@ export class GameSocketHandler {
       if (character.guildId) {
         socket.join(`guild:${character.guildId}`);
       }
-      // Активировать шард: заселить монстрами, если он ещё пуст
-      GameLoop.getInstance().getSpawnSystem().activateShard(shardId);
+      // Активировать шард: заселить монстрами, если он ещё пуст.
+      //
+      // Аренда теперь параметром: шард активируется только у хозяина. Без
+      // неё два инстанса заселяли бы каждый шард вдвое — двойная толпа, из
+      // которой бьётся только своя. Если шард чужой, вернётся false, и
+      // процесс просто не держит его бой.
+      await GameLoop.getInstance().getSpawnSystem().activateShard(shardId, this.аренда);
       await this.redis.addPlayerToRegion(shardId, character.region, character.id).catch(() => {});
       // Позиция в Redis сразу: иначе стоящий игрок невидим для ИИ,
       // пока клиент не пошлёт первый player:move

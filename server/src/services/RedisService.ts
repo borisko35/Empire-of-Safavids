@@ -78,6 +78,64 @@ export class RedisService {
     await this.client.expire(key, seconds);
   }
 
+  // ── Атомарные «только если я владелец» ───────────────────────────
+  //
+  // ЗАЧЕМ LUA. Снятие аренды шарда — это «удалить, только если во мне».
+  // Через GET и потом DEL это гонка: два упавших инстанса прочитали одно
+  // «я владелец» и оба удалили, после чего третий поднял шард — и шард
+  // успевал пожить у двоих. Lua делает проверку и удаление одной операцией
+  // на сервере Redis, где нет конкурентных выполнений.
+  //
+  // Возвращает число затронутых строк: 1 — снял я, 0 — ключа нет или он чужой.
+  async releaseIfOwner(key: string, owner: string): Promise<boolean> {
+    const снято = (await this.client.eval(
+      `if redis.call('GET', KEYS[1]) == ARGV[1] then
+         return redis.call('DEL', KEYS[1])
+       end
+       return 0`,
+      { keys: [key], arguments: [owner] }
+    )) as number;
+    return снято === 1;
+  }
+
+  /**
+   * Взять ключ, если свободен. true — теперь мой; false — занят другим.
+   *
+   * SET NX через eval: у клиента есть set с флагом NX, но TTL при нём
+   * задаётся отдельно — и «взял, но без срока» значит «аренда до перезапуска
+   * Redis».
+   */
+  async acquireIfFree(key: string, owner: string, ttlSeconds: number): Promise<boolean> {
+    const взял = (await this.client.eval(
+      `if redis.call('EXISTS', KEYS[1]) == 0 then
+         redis.call('SETEX', KEYS[1], ARGV[2], ARGV[1])
+         return 1
+       end
+       return 0`,
+      { keys: [key], arguments: [owner, String(ttlSeconds)] }
+    )) as number;
+    return взял === 1;
+  }
+
+  /**
+   * Продлить, только если во мне. false — ключ чужой или исчез.
+   *
+   * Отдельно от releaseIfOwner, потому что смысл разный: продление НЕ
+   * должно снимать чужой ключ, а должно просто не проходить. Снятие,
+   * наоборот, обязано убирать только своё.
+   */
+  async renewIfOwner(key: string, owner: string, ttlSeconds: number): Promise<boolean> {
+    const продлил = (await this.client.eval(
+      `if redis.call('GET', KEYS[1]) == ARGV[1] then
+         redis.call('SETEX', KEYS[1], ARGV[2], ARGV[1])
+         return 1
+       end
+       return 0`,
+      { keys: [key], arguments: [owner, String(ttlSeconds)] }
+    )) as number;
+    return продлил === 1;
+  }
+
   // Кэш позиций игроков в реальном времени
   async setPlayerPosition(characterId: string, position: object): Promise<void> {
     await this.client.setEx(

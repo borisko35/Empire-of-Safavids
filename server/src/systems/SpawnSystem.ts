@@ -11,6 +11,7 @@ import { AISystem, TargetPlayer } from './AISystem';
 import { WorldTimeSystem, Weather, WEATHER_EFFECTS } from './WorldTimeSystem';
 import { RedisService } from '../services/RedisService';
 import { logger } from '../utils/logger';
+import { ShardLease } from './ShardLease';
 
 export interface SpawnPoint {
   id: string;
@@ -183,10 +184,26 @@ export class SpawnSystem {
   // ── Управление шардами ─────────────────────────────────────
 
   /** Первый игрок вошёл в шард — заселить монстров */
-  activateShard(shardId: string): void {
-    if (this.activeShards.has(shardId)) return;
+  /**
+   * Активировать шард — но только если он НАШ.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. Метод клал shardId в локальный Set безусловно, и при
+   * двух инстансах оба активировали каждый шард. Два процесса спавнили бы
+   * одних и техых монстров: два набора с разными instanceId, объявленных
+   * всем, но бить можно только своего. Снаружи это видно как двойная толпа,
+   * одна из которой невосприимчивы.
+   *
+   * Теперь шард берётся в аренду. Не взял — не активируем: чужой спавн и
+   * чужой бой. Это шаг B масштабирования: бой остался локальным (перенос
+   * контекста в Redis — шаг A), но перестал двоиться.
+   */
+  async activateShard(shardId: string, аренда?: ShardLease): Promise<boolean> {
+    if (this.activeShards.has(shardId)) return true;
+    const моя = аренда ? await аренда.acquire(shardId) : true;
+    if (!моя) return false;
     this.activeShards.add(shardId);
     logger.info(`[Spawn] Shard activated: ${shardId}`);
+    return true;
   }
 
   /** Шард опустел — убрать его монстров из мира */
