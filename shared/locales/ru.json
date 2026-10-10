@@ -788,7 +788,14 @@
     "bounty_failed": "Не хватило золота или цель — вы сами",
     "dungeon_invited": "Вас зовут в заход",
     "invite_expired": "Приглашение больше не действует",
-    "death_karma_drop": "Карма забрала {gold} золота"
+    "death_karma_drop": "Карма забрала {gold} золота",
+    "boarding": "Абордаж",
+    "boarding_pve": "Пиратские суда (безопасно)",
+    "boarding_pvp": "Чужие лодки (PvP)",
+    "boarding_list": "Показать цели",
+    "boarding_found": "Цель",
+    "boarding_empty": "Рядом целей нет",
+    "boarding_no_boat": "Нужна лодка"
   },
   "settings": {
     "title": "⚙ Настройки",

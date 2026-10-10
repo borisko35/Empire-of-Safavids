@@ -788,7 +788,14 @@
     "bounty_failed": "Not enough gold, or the target is you",
     "dungeon_invited": "You are invited to a run",
     "invite_expired": "The invitation has expired",
-    "death_karma_drop": "Karma took {gold} gold"
+    "death_karma_drop": "Karma took {gold} gold",
+    "boarding": "Boarding",
+    "boarding_pve": "Pirate ships (safe)",
+    "boarding_pvp": "Player boats (PvP)",
+    "boarding_list": "Show targets",
+    "boarding_found": "Target",
+    "boarding_empty": "No targets nearby",
+    "boarding_no_boat": "You need a boat"
   },
   "settings": {
     "title": "⚙ Settings",

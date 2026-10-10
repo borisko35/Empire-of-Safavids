@@ -788,7 +788,14 @@
     "bounty_failed": "Qızıl çatmıdı və ya hədəf sizsiniz",
     "dungeon_invited": "Sizi oyuna dəvət edirlər",
     "invite_expired": "Dəvət artıq etibarsızdır",
-    "death_karma_drop": "Karma {gold} qızıl aldı"
+    "death_karma_drop": "Karma {gold} qızıl aldı",
+    "boarding": "Aboard gəlişi",
+    "boarding_pve": "Pirat gəmiləri (təhlükəsiz)",
+    "boarding_pvp": "Başqa oyunçuların qayıqları (PvP)",
+    "boarding_list": "Hədəfləri göstər",
+    "boarding_found": "Hədəf",
+    "boarding_empty": "Yaxınlıqda hədəf yoxdur",
+    "boarding_no_boat": "Qayıq lazımdır"
   },
   "settings": {
     "title": "⚙ Parametrlər",

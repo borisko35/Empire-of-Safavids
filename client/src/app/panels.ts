@@ -3886,6 +3886,41 @@ async function renderBoatGarage(): Promise<HTMLElement> {
     }));
     wrap.append(row);
   }
+
+  // ── Абордаж: выбор режима и цели ────────────────────────────────
+  //
+  // Рейд/абордаж был подключен с одной стороны: маршрут и клиентский вызов
+  // существовали, но кнопки не было ни одной — механика оставалась
+  // недоступной игроку. Ровно тот класс, от которого мы лечили проект.
+  //
+  // Режим выбирает атакующий: PvE (пираты) или PvP (чужая лодка). Панель
+  // показывает оба, и по умолчанию стоит безопасный PvE.
+  const boardHead = document.createElement('div');
+  boardHead.className = 'panel-subhead';
+  boardHead.textContent = t('panels.boarding');
+  wrap.append(boardHead);
+
+  for (const режим of ['pve', 'pvp'] as const) {
+    const строка = rowEl('inv-item');
+    const подпись = document.createElement('span');
+    подпись.className = 'inv-name';
+    подпись.textContent = режим === 'pve' ? t('panels.boarding_pve') : t('panels.boarding_pvp');
+    строка.append(подпись);
+    строка.append(
+      actionButton(t('panels.boarding_list'), async () => {
+        const resp = await api.boardingTargets(session.character!.id, режим);
+        // Без лодки сервер отвечает reason=board_no_boat, и игрок должен
+        // понять почему, а не увидеть пустой список.
+        if (!resp.targets.length) {
+          toast(resp.reason === 'board_no_boat' ? t('panels.boarding_no_boat') : t('panels.boarding_empty'), 'error');
+          return;
+        }
+        const цель = resp.targets[0];
+        toast(`${t('panels.boarding_found')}: ${цель.nameRu} (${t('badges.level')} ${цель.level})`, 'info');
+      }),
+    );
+    wrap.append(строка);
+  }
   return wrap;
 }
 
