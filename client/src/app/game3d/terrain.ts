@@ -697,6 +697,24 @@ export const КАВКАЗ_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
 // Сухо: isWater(200, −392) === false.
 export const BAGHDAD_CITADEL = { x: 200, z: -392, radius: 60, level: 3.5 };
 
+// ── Храм Симурга ───────────────────────────────────────────────────
+//
+// Дверь поставлена НЕ на точке спавна Симурга: тот босс висит в воздухе
+// (y=100, z=1450), и вход на его точке увёл бы игрока в небо. Дверь —
+// земля под гнездом.
+//
+// Замер (сетка 2 м, площадь 90×90, функция terrainHeight собрана из
+// terrain.ts без графики): медиана 2.68, в центре 4.06, РАЗБРОС 7.9 м.
+//
+// В ОТЛИЧИЕ ОТ ЦИТАДЕЛИ, ЗДЕСЬ РОВНЯЛКА НУЖНА. У цитадели разброс был 0.09 м
+// — земля уже была ровной, и ровнялка лишь фиксировала уровень. Здесь 7.9 м
+// перепада: без выравнивания подход к двери шёл бы по склону, а часть
+// площадки уходила бы под землю. Уровень берём медиану (2.68), а не центр
+// (4.06): медиана не зависит от того, где именно встал игрок.
+// Радиус 60, полудиагональ 29.1 м, запас 3.9 м.
+// Сухо: isWater(0, 1412) === false.
+export const SIMURGH_TEMPLE = { x: 0, z: 1412, radius: 60, level: 2.68 };
+
 export const BAGHDAD_CITADEL_GEO = {
   // Портал шире, чем у крепости: в рейд входят двадцать человек, и проём
   // в 8.6 м превращался бы в очередь на первом же повороте.
@@ -711,6 +729,26 @@ export const BAGHDAD_CITADEL_GEO = {
 export const БАГДАД_ДВОР_Z = 14;
 
 export const БАГДАД_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
+
+// ── Храм Симурга ───────────────────────────────────────────────────
+//
+// Экстерьер рейда Хорасана. ГДЕ: дверь (0, 1412), выход (0, 1416), на 4 м в +z.
+//
+// СВЯТИЛИЩЕ, А НЕ КРЕПОСТЬ. Купол над вратами вместо перемычки с зубцами,
+// стены выше и уже цитадельных, перья Симурга по сторонам входа. Портал той же
+// ширины (12.4): в храм входят двадцать человек, и узкий проём сделал бы из
+// входа очередь.
+export const SIMURGH_TEMPLE_GEO = {
+  ворота: { w: 12.4, h: 6.2, t: 1.8 },
+  стена: { w: 24, h: 4.6, t: 1.2 },
+  двор: { w: 20, d: 12 },
+  купол: { r: 3.6, h: 2.2 },
+  перо: { w: 0.7, h: 3.4 },
+} as const;
+
+export const СИМУРГ_ДВОР_Z = 12;
+
+export const СИМУРГ_ЗАГЛУШКА = { w: 6.0, h: 2.6, t: 0.25 };
 
 
 
@@ -983,6 +1021,9 @@ export function terrainHeight(x: number, z: number): number {
   // Багдадская цитадель. Уровень 3.5 вокруг медианы 3.50, радиус 60:
   // полудиагональ 29.1 м, при 48 запас был -2.7 м.
   h = flatten(h, x, z, BAGHDAD_CITADEL.x, BAGHDAD_CITADEL.z, BAGHDAD_CITADEL.radius, BAGHDAD_CITADEL.level);
+  // Храм Симурга. Замер дал разброс 7.9 м — без ровнялки подход шёл бы по склону.
+  h = flatten(h, x, z, SIMURGH_TEMPLE.x, SIMURGH_TEMPLE.z, SIMURGH_TEMPLE.radius, SIMURGH_TEMPLE.level);
+
   // Русла и озёра: русло углубляется до дна (в хребте это даёт ущелье и водопад)
   const w = waterMask(x, z);
   if (w > 0) {
@@ -5462,10 +5503,97 @@ export function buildSettlements(scene: THREE.Scene): void {
 
   scene.add(g);
 }
+
+// ── Храм Симурга ───────────────────────────────────────────────────
+//
+// Экстерьер рейда Хорасана. ГДЕ: дверь (0, 1412), выход (0, 1416), на 4 м в +z.
+//
+// Дверь поставлена НЕ на точке спавна Симурга: тот босс висит в воздухе
+// (y=100, z=1450), и вход на его точке увёл бы игрока в небо.
+//
+// ПЛИТА ДВОРА ЗДЕСЬ ОБЯЗАТЕЛЬНА. Замер дал разброс 7.9 м (медиана 2.68) —
+// земля под храмом неровная, и без плиты подход шёл бы по склону. Ровнялка
+// (SIMURGH_TEMPLE.level) выравнивает её, плита лежит поверх.
+{
+  const { ворота, стена, двор, купол, перо } = SIMURGH_TEMPLE_GEO;
+  const zДвор = СИМУРГ_ДВОР_Z;
+
+  const g = new THREE.Group();
+  g.position.set(SIMURGH_TEMPLE.x, SIMURGH_TEMPLE.level, SIMURGH_TEMPLE.z);
+
+  // Плита двора.
+  const плита = new THREE.Mesh(new THREE.BoxGeometry(двор.w, 0.3, zДвор), MAT.sand);
+  плита.position.set(0, 0.04 - 0.15, zДвор / 2);
+  плита.receiveShadow = true;
+  g.add(плита);
+
+  // Врата: два столба.
+  for (const s of [-1, 1] as const) {
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(ворота.t, ворота.h, ворота.t), MAT.stone);
+    столб.position.set(s * (ворота.w / 2 - ворота.t / 2), ворота.h / 2, ворота.t / 2);
+    столб.castShadow = true;
+    g.add(столб);
+  }
+  // Перемычка.
+  const перемычка = new THREE.Mesh(new THREE.BoxGeometry(ворота.w, ворота.t, ворота.t), MAT.stone);
+  перемычка.position.set(0, ворота.h + ворота.t / 2, ворота.t / 2);
+  перемычка.castShadow = true;
+  g.add(перемычка);
+
+  // КУПОЛ над вратами: три сужающихся кольца. У цитадели на этом месте
+  // зубцы — они читают крепость. Купол читает святилище.
+  for (let i = 0; i < 3; i++) {
+    const к = 1 - i * 0.3;
+    const диск = new THREE.Mesh(
+      new THREE.CylinderGeometry(купол.r * к, купол.r * Math.max(0.2, к * 0.7), купол.h / 3, 14),
+      MAT.stone,
+    );
+    диск.position.set(0, ворота.h + ворота.t + купол.h / 6 + i * (купол.h / 3), ворота.t / 2);
+    диск.castShadow = true;
+    g.add(диск);
+  }
+
+  // Дверной проём — тёмная заглушка. Именно она кликабельна.
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(ворота.w - ворота.t * 2, 4.4, 0.3), MAT.dark);
+  дверь.position.set(0, 2.2, ворота.t / 2);
+  дверь.userData = { doorBuilding: 'simurgh_temple', doorAction: 'enter', doorName: t('buildings.simurgh_temple') };
+  g.add(дверь);
+
+  // ПЕРЬЯ СИМУРГА по сторонам входа: стебель с золотым пером. Метка
+  // святилища, читаемая издали.
+  for (const s of [-1, 1] as const) {
+    const px = s * (ворота.w / 2 + 2.4);
+    const стебель = new THREE.Mesh(new THREE.BoxGeometry(0.2, перо.h, 0.2), MAT.trunk);
+    стебель.position.set(px, перо.h / 2, ворота.t / 2 - 1.6);
+    стебель.castShadow = true;
+    g.add(стебель);
+    const крыло = new THREE.Mesh(new THREE.BoxGeometry(перо.w, 0.9, 0.16), MAT.gold);
+    крыло.position.set(px, перо.h - 0.4, ворота.t / 2 - 1.6);
+    g.add(крыло);
+  }
+
+  // Стены по бокам двора — выше и уже цитадельных.
+  for (const s of [-1, 1] as const) {
+    const бок = new THREE.Mesh(new THREE.BoxGeometry(стена.t, стена.h, zДвор + стена.t), MAT.stone);
+    бок.position.set(s * (двор.w / 2 + стена.t / 2), стена.h / 2, zДвор / 2 - стена.t / 2);
+    бок.castShadow = true;
+    g.add(бок);
+  }
+
+  // Коллайдеры: столбы врат, стены, перья.
+  for (const s of [-1, 1] as const) {
+    addCollider(SIMURGH_TEMPLE.x + s * (ворота.w / 2 - ворота.t / 2), SIMURGH_TEMPLE.z + ворота.t / 2, 1.1);
+    addCollider(SIMURGH_TEMPLE.x + s * (двор.w / 2 + стена.t / 2), SIMURGH_TEMPLE.z + zДвор / 2, 1.0);
+    addCollider(SIMURGH_TEMPLE.x + s * (ворота.w / 2 + 2.4), SIMURGH_TEMPLE.z, 0.8);
+  }
+
+  scene.add(g);
 }
 }
 }
 }
+}
+
 
 
 // ── Акведук деревни ──────────────────────────────────────────────────
