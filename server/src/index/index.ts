@@ -48,6 +48,8 @@ import { requestLogger } from '../middleware/requestLogger';
 import { metricsMiddleware } from '../middleware/metrics';
 import { metrics } from '../metrics';
 import { errorHandler, notFoundHandler, badJsonHandler } from '../middleware/errorHandler';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
 
 const PORT = process.env.PORT || 3000;
 const app = express();
@@ -215,6 +217,32 @@ const io = new SocketIOServer(httpServer, {
   pingInterval: 25000,
 });
 
+// ── Масштабирование: доставка событий между инстансами ──────────
+//
+// ЗАЧЕМ. До этого события между инстансами не ходили ВООБЩЕ: канал Redis
+// публиковался, подписчик был в каждом процессе, а activePlayers — карта
+// ЛОКАЛЬНАЯ. Личное событие (партия, рейд, приглашение) до сокета на
+// другом инстансе не доходило.
+//
+// ЭТО ПЕРВЫЙ ШАГ ИЗ ЧЕТЫРЁХ (§96). Пока боевой контекст в памяти,
+// следующий шаг бессмыслен — игра развалится раньше, чем что-то начнёт
+// выигрывать. Но доставка событий сама по себе нужна: без неё рейд и
+// партия между инстансами мёртвы.
+//
+// ПОЧЕМУ ЗА ФЛАГКОМ. При одном инстансе (сейчас прод — один контейнер)
+// адаптер не даёт ничего, зато добавляет два соединения с Redis и ложку
+// неочевидности в отладку. Поэтому по умолчанию ВЫКЛЮЧЕН.
+const масштабирование = process.env.EOS_SCALE === '1';
+if (масштабирование) {
+  const url = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
+  const подписчик = createClient({ url });
+  const публикатор = createClient({ url });
+  подписчик.on('error', (e) => logger.error('[Scale] подписчик Redis:', e));
+  публикатор.on('error', (e) => logger.error('[Scale] публикатор Redis:', e));
+  await Promise.all([подписчик.connect(), публикатор.connect()]);
+  io.adapter(createAdapter(подписчик, публикатор));
+  logger.info('[Scale] адаптер socket.io подключён: события ходят между инстансами');
+}
 const gameSocketHandler = new GameSocketHandler(io);
 gameSocketHandler.initialize();
 
