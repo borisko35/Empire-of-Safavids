@@ -834,50 +834,129 @@ export class CharacterService {
   // Инвентарь (стеки: персонаж + предмет + уровень заточки)
   // ============================================================
 
-  /** Добавить предметы (лут, награды). Стеки разводятся по уровню заточки. */
+  /**
+   * Добавить предметы (лут, награды), раскладывая по стекам до предела.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. Один INSERT...ON CONFLICT складывал количество без
+   * условия. Поле maxStack есть у 79 предметов (у 34 - 999, у 28 - 1) и не
+   * проверялось нигде: предмет с maxStack 5 доходил до 5000 в одной строке.
+   * Цифры были объявлением, которого в игре не существовало.
+   *
+   * ПОЧЕМУ НЕЛЬЗЯ ПРОСТО УРЕЗАТЬ. 3000 зелий с maxStack 20 - это 150 стеков.
+   * Схема (миграция 007) допускает одну строку на предмет и заточку, так что
+   * остаток было некуда девать: либо терять добычу, либо плодить стеки.
+   * Терять остаток нельзя - это молчаливая пропажа вещей,
+   * поэтому миграция 075 добавила stack_index, и остаток раскладывается.
+   *
+   * Стеки для предмета и заточки берутся по возрастанию quantity: дозаполняем
+   * самые неполные, чтобы не оставлять полупустых рядов в сумке.
+   */
   async addItems(characterId: string, items: { itemId: string; qty: number; enhancement?: number }[]): Promise<void> {
     for (const it of items) {
       const enhancement = Math.max(0, Math.min(20, Math.floor(it.enhancement ?? 0)));
-      await this.db.query(
-        `INSERT INTO character_items (character_id, item_id, quantity, enhancement)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (character_id, item_id, enhancement)
-         DO UPDATE SET quantity = character_items.quantity + EXCLUDED.quantity`,
-        [characterId, it.itemId, Math.max(1, Math.floor(it.qty)), enhancement]
-      );
+      const qty = Math.max(1, Math.floor(it.qty));
+      const def = ITEMS_DATABASE[it.itemId];
+      // Предел стека. Нестекаемый предмет всегда 1 в стеке: stackable: false
+      // у оружия и брони - это отдельное правило, а не дубль maxStack.
+      const limit = def?.stackable === false ? 1 : Math.max(1, Math.floor(def?.maxStack ?? 1));
+
+      let осталось = qty;
+
+      // 1. Дозаполняем существующие неполные стеки.
+      const стеки = await this.db.query<{ id: string; quantity: number }>(
+        `SELECT id, quantity FROM character_items
+          WHERE character_id = $1 AND item_id = $2 AND enhancement = $3 AND quantity < $4
+          ORDER BY quantity DESC`,
+        [characterId, it.itemId, enhancement, limit]
+      ).catch(() => []);
+      for (const стек of стеки) {
+        const свободно = limit - стек.quantity;
+        const положить = Math.min(свободно, осталось);
+        if (положить <= 0) continue;
+        await this.db.query(
+          'UPDATE character_items SET quantity = quantity + $1 WHERE id = $2',
+          [положить, стек.id]
+        ).catch(() => undefined);
+        осталось -= положить;
+      }
+
+      // 2. Остаток - в новые стеки. Номер следующего считается в базе, иначе
+      // два одновременных дозаполнения завели бы второй стек номер 0 и упали
+      // бы на уникальном ключе.
+      while (осталось > 0) {
+        const положить = Math.min(limit, осталось);
+        const ряд = await this.db.queryOne<{ номер: number }>(
+          `SELECT COALESCE(MAX(stack_index), -1) + 1 AS номер
+             FROM character_items
+            WHERE character_id = $1 AND item_id = $2 AND enhancement = $3`,
+          [characterId, it.itemId, enhancement]
+        ).catch(() => null);
+        await this.db.query(
+          `INSERT INTO character_items (character_id, item_id, quantity, enhancement, stack_index)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [characterId, it.itemId, положить, enhancement, ряд?.номер ?? 0]
+        );
+        осталось -= положить;
+      }
+
       // Прогресс гильдейских заданий типа «собрать». void: addItems зовут
       // десять мест, включая выдачу наград, и ожидание не должно
       // становиться частью выдачи.
-      void guildMissionService.onItemGained(characterId, it.itemId, Math.max(1, Math.floor(it.qty)));
+      void guildMissionService.onItemGained(characterId, it.itemId, qty);
     }
   }
 
-  /** Списать предметы (сначала из более заточенных стеков). Бросает ошибку при нехватке. */
+  /**
+   * Списать предметы (сначала из более заточенных стеков). Бросает при нехватке.
+   *
+   * ЧТО ИЗМЕНИЛОСЬ. Прежде бралась ОДНА строка с quantity >= нужного: раз
+   * предмет лежал одной строкой (такой была схема), этого хватало. Теперь
+   * стеков может быть несколько (миграция 075), и прежний запрос отказал бы
+   * при трёх стеках по 20 и списании 50 - имея шестьдесят.
+   *
+   * Поэтому списание идёт по кругу: из каждого непустого стека снимается
+   * сколько в нём есть, пока не наберётся нужное. FOR UPDATE блокирует
+   * строки внутри транзакции: два одновременных списания иначе прочитали бы
+   * одно и то же количество оба.
+   */
   async removeItems(characterId: string, items: { itemId: string; qty: number }[]): Promise<void> {
     await this.db.transaction(async (client) => {
       for (const it of items) {
-        const qty = Math.max(1, Math.floor(it.qty));
-        const res = await client.query(
-          `UPDATE character_items SET quantity = quantity - $1
-           WHERE id = (
-             SELECT id FROM character_items
-             WHERE character_id = $2 AND item_id = $3 AND quantity >= $1
-             ORDER BY enhancement DESC LIMIT 1
-             FOR UPDATE
-           )`,
-          [qty, characterId, it.itemId]
-        );
-        if (res.rowCount === 0) {
-          const have = await client.query(
-            'SELECT COALESCE(SUM(quantity), 0) AS total FROM character_items WHERE character_id = $1 AND item_id = $2',
+        let надо = Math.max(1, Math.floor(it.qty));
+        // Предел итераций - страховка от бесконечного цикла при ошибке
+        // подсчёта: стеков может быть много, но не бесконечно.
+        for (let круг = 0; надо > 0 && круг < 200; круг++) {
+          const ряд = await client.query<{ id: string; quantity: number | string }>(
+            `SELECT id, quantity FROM character_items
+              WHERE character_id = $1 AND item_id = $2 AND quantity > 0
+              ORDER BY enhancement DESC, quantity DESC
+              LIMIT 1
+              FOR UPDATE`,
             [characterId, it.itemId]
           );
-          throw new Error(`Not enough items: ${it.itemId} (need ${qty}, have ${Number(have.rows[0].total)})`);
+          if (!ряд.rows.length) break;
+          const стек = ряд.rows[0];
+          const вСтеке = Number(стек.quantity);
+          const снять = Math.min(надо, вСтеке);
+          await client.query(
+            'UPDATE character_items SET quantity = quantity - $1 WHERE id = $2',
+            [снять, стек.id]
+          ).catch(() => undefined);
+          надо -= снять;
         }
         await client.query(
           'DELETE FROM character_items WHERE character_id = $1 AND item_id = $2 AND quantity <= 0',
           [characterId, it.itemId]
-        );
+        ).catch(() => undefined);
+        if (надо > 0) {
+          const have = await client.query(
+            'SELECT COALESCE(SUM(quantity), 0) AS total FROM character_items WHERE character_id = $1 AND item_id = $2',
+            [characterId, it.itemId]
+          ).catch(() => ({ rows: [{ total: 0 }] }));
+          throw new Error(
+            `Not enough items: ${it.itemId} (need ${Math.max(1, Math.floor(it.qty))}, have ${Number(have.rows[0].total)})`
+          );
+        }
       }
     });
   }
