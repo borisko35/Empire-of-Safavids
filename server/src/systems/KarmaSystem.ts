@@ -228,13 +228,16 @@ export class KarmaSystem {
     return сумма;
   }
 
-  /** Активные ставки на персонажа и их сумма. */
+    /** Активные ставки на персонажа и их сумма. */
   async getBounty(characterId: string): Promise<number> {
-    const row = await this.db.queryOne<{ bounty: number }>(
+    const row = await this.db.queryOne<{ bounty: string }>(
       'SELECT COALESCE(SUM(amount), 0) as bounty FROM bounties WHERE target_id = $1 AND is_active = TRUE',
       [characterId]
     );
-    return row?.bounty ?? 0;
+    // Строка, а не число: Postgres отдаёт bigint строкой, и сумма уезжала в
+    // JSON как "0". Клиентский тип говорит number, и `amount > 0` на строке
+    // работал бы по сравнению строк — то есть молча, но не так, как задумано.
+    return Number(row?.bounty ?? 0);
   }
 
   async placeBounty(placerId: string, targetId: string, amount: number): Promise<void> {
