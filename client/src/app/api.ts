@@ -616,6 +616,14 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
+  // ── Абордаж ──────────────────────────────────────────────────────
+  // Режим выбирает атакующий: 'pve' — пираты, 'pvp' — чужая лодка.
+  // Список целей фильтруется общим фильтром: лодка, вода, своя зона,
+  // дистанция. Без вызова кнопка абордажа рисовалась бы некому.
+  boardingTargets: (characterId: string, mode: 'pve' | 'pvp') =>
+    req<{ targets: { id: string; nameRu: string; mode: string; level: number }[]; reason?: string }>(
+      `/api/game/boarding/targets?characterId=${characterId}&mode=${mode}`,
+    ),
   dungeonStatus: (characterId: string) =>
     req<{ active: boolean; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number; difficulty?: string; timeLeftSec?: number }>(
       '/api/game/dungeons/status',

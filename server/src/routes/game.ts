@@ -17,6 +17,7 @@ import { PartySystem } from '../systems/PartySystem';
 import { DungeonService } from '../systems/DungeonService';
 import { KarmaSystem } from '../systems/KarmaSystem';
 import { GAME_SERVERS } from '../../../shared/constants';
+
 import { RedisService } from '../services/RedisService';
 const redis = RedisService.getInstance();
 import { TradeService } from '../systems/TradeService';
@@ -142,6 +143,10 @@ import { REDIS_CHANNELS } from '../../../shared/constants';
 import { GameLoop } from '../systems/GameLoop';
 import { DatabaseService } from '../services/DatabaseService';
 import type { CharacterClass } from '../types/game.types';
+import { AISystem } from '../systems/AISystem';
+import { boardTargets } from '../systems/BoardingTargets';
+import { BOARD_RANGE } from '../systems/BoardingTypes';
+
 const questService = new QuestService();
 
 /** Квесты с collect-целями могут закрыться после пополнения инвентаря */
@@ -1771,6 +1776,66 @@ gameRouter.post('/bounty', secureMiddleware, requireBodyField('placerId'),
 );
 
 // ============================================================
+// ─────────────────────────────────────
+// АБОРДАЖ
+// ─────────────────────────────────────
+//
+// Режим выбирает АТАКУЮЩИЙ: 'pve' — пираты, 'pvp' — чужая лодка.
+// Фильтр один на оба: лодка, вода, своя зона, дистанция.
+
+const boardingBoats = new BoatSystem();
+const boardingAi = new AISystem();
+
+// GET /api/game/boarding/targets?characterId=...&mode=pve|pvp
+//
+// Список целей. Без него игрок не видит, кого абордажировать,
+// и механика остаётся кнопкой, которую некому нажать.
+gameRouter.get('/boarding/targets', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    // Режим по умолчанию PvE: безопасный выбор. PvP игрок выбирает явно.
+    const mode = req.query.mode === 'pvp' ? 'pvp' : 'pve';
+    const character = await characterService.getCharacterById(characterId).catch(() => null);
+    if (!character) return res.status(404).json({ error: 'character_not_found' });
+
+    // Без лодки абордажировать нечего.
+    const boat = await boardingBoats.getActiveBoat(characterId);
+    if (!boat) return res.json({ targets: [], reason: 'board_no_boat' });
+
+    const вход = {
+      attackerId: characterId,
+      attackerLevel: character.level,
+      attackerRegion: character.region,
+      attackerShard: character.serverId ?? 'isfahan',
+      x: character.position?.x ?? 0,
+      z: character.position?.z ?? 0,
+      mode,
+    };
+
+    // Цели PvP — чужие лодки в той же зоне и шарде.
+    const игроки: { id: string; nameRu: string; level: number; boatId: string; x: number; z: number }[] = [];
+    if (mode === 'pvp') {
+      const вРегионе = await redis.getPlayersInRegion(вход.attackerShard, вход.attackerRegion).catch(() => [] as string[]);
+      for (const id of вРегионе.slice(0, 50) as string[]) {
+        if (id === characterId) continue;
+        const чужой = await characterService.getCharacterById(id).catch(() => null);
+        const чужaiЛодка = await boardingBoats.getActiveBoat(id);
+        if (!чужой || !чужaiЛодка) continue;
+        игроки.push({
+          id,
+          nameRu: чужой.name,
+          level: чужой.level,
+          boatId: чужaiЛодка.boatId,
+          x: чужой.position?.x ?? 0,
+          z: чужой.position?.z ?? 0,
+        });
+      }
+    }
+
+    res.json({ targets: boardTargets(boardingAi, { ...вход, mode }, игроки, BOARD_RANGE) });
+  })
+);
+
 // ПАРТИИ
 // ============================================================
 
