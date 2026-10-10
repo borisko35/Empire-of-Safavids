@@ -44,6 +44,28 @@ import { icon, type IconName } from '../ui/icons';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
+/**
+ * Запомнить шард в cookie. По ней nginx выбирает инстанс.
+ *
+ * ЧЕСТНО ПРО ПОДДЕЛКУ. Cookie ставит клиент, то есть её можно подделать.
+ * Это не дыра: подделка ведёт максимум на чужой инстанс, где игрок увидит
+ * пустой мир, — данные за пределами своего шарда cookie не открывает, доступ
+ * решает сервер. Для маршрутизации этого достаточно.
+ *
+ * Год жизни — 1 год: шард персонажа не меняется, а короткий срок заставил бы
+ * nginx постоянно возвращать игрока на случайный инстанс.
+ */
+export function setShardCookie(serverId: string): void {
+  try {
+    // secure только на https: на http такая cookie браузер отвергнет вовсе.
+    const secure = location.protocol === 'https:' ? '; secure' : '';
+    document.cookie = `eos_shard=${encodeURIComponent(serverId)}; path=/; max-age=31536000; samesite=lax${secure}`;
+  } catch {
+    // Приватный режим и запрещённые cookie: маршрутизация просто не сработает,
+    // игра продолжит ходить на случайный инстанс как раньше.
+  }
+}
+
 const MOVE_SEND_MS = 100;   // частота пакетов движения (лимит анти-чита 30/сек)
 
 /**
@@ -721,6 +743,17 @@ export async function enterWorld(character: Character): Promise<void> {
   } else {
     socket.connect(); // по 'connect' обработчик сам пришлёт auth
   }
+  // Cookie шарда — по нему nginx выбирает инстанс (sticky-routing).
+  //
+  // ЗАЧЕМ ИМЕННО ТУТ. Шард известен только после выбора персонажа, и ставить
+  // cookie раньше нечем: игрок ещё не в мире, и его шард — не факт.
+  //
+  // ПОЧЕМУ БЕЗ ПЕРЕПОДКЛЮЧЕНИЯ. Текущее соединение уже установлено к какому
+  // досталось. Переподключать его силой — значит ронять мир при каждом входе.
+  // Cookie подействует на СЛЕДУЮЩЕМ соединении: входах и переподключениях.
+  // Это честное ограничение, а не недоделка: полное закрепление игрока за
+  // инстансом требует sticky-таблицы на самом балансировщике.
+  if (character.serverId) setShardCookie(character.serverId);
   chatMessage(null, t('world.connecting'), true);
   document.getElementById('chat-log')?.lastElementChild?.setAttribute('data-conn-status', '');
 
