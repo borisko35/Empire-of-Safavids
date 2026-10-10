@@ -580,6 +580,115 @@ export const DUNGEONS_DATABASE: Record<string, DungeonDefinition> = {
     mapPath: 'maps/dungeons/baghdad_citadel.umap',
   },
 
+  // ── ХОРАСАН: ХРАМ СИМУРГА (РЕЙД) ──────────────────────────────────
+  // Второй рейд в игре. Первый - Багдадская цитадель.
+  //
+  // ЧТО ЗДЕСЬ НЕ ВЫДУМАНО. Гарнизон взят у Хорасана: рыси и разбойники
+  // караванов ходят там в мире (SpawnSystem), огненные дивы стоят в тех же
+  // пещерах Хорасана. Новых монстров нет намеренно: выдуманный гарнизон
+  // означал бы, что у региона есть войска, которых на карте нет.
+  //
+  // ФИНАЛ - САМ СИМУРГ. Он мировой босс (90 уровень, 5 000 000 HP), и храм -
+  // это его гнездо, а не второй бой с тем же существом где попало.
+  //
+  // ЧЕТЫРЕ КОМНАТЫ, как у цитадели: финал через одну комнату на 20 человек -
+  // это толпа в коридоре.
+  'dungeon_simurgh_temple': {
+    id: 'dungeon_simurgh_temple',
+    name: 'Temple of the Simurgh',
+    nameRu: 'Храм Симурга',
+    description: 'Гнездо Великого Симурга в восточном Хорасане. Четыре яруса святилища, двадцать охотников и одна птица, которая старше империи.',
+    region: Region.KHORASAN,
+    // Точка входа: центр кармана интерьера, слот 23 (cx = 5012).
+    entryX: 5012,
+    entryZ: 4000,
+    interiorId: 'simurgh_temple',
+    isRaid: true,
+    // 80-90: финал - босс 90-го уровня. Верхняя граница совпадает с ним,
+    // потому что выше 90-го в игре нет.
+    minLevel: 80,
+    maxLevel: 90,
+    minPlayers: 10,
+    maxPlayers: 20,
+    difficulties: ['hard', 'heroic', 'mythic'],
+    // 150 минут, а не 120 как у цитадели: финал с пятью миллионами здоровья
+    // на mythic (hp * 3.2) - это долгий бой.
+    timeLimit: 150,
+    rooms: [
+      {
+        id: 'room_temple_gate',
+        name: 'Temple Gate',
+        nameRu: 'Врата храма',
+        monsters: [
+          { monsterId: 'mob_oasis_lynx', count: 6, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 14 }, { x: 15, y: 0, z: 8 }, { x: -15, y: 0, z: 8 }, { x: 6, y: 0, z: 18 }] },
+          { monsterId: 'mob_caravan_raider', count: 4, positions: [{ x: -6, y: 0, z: 18 }, { x: 12, y: 0, z: 20 }, { x: -12, y: 0, z: 20 }, { x: 0, y: 0, z: 22 }] },
+        ],
+        isBossRoom: false,
+        chestPositions: [{ x: -8.4, z: 8.4 }, { x: 8.4, z: 8.4 }],
+        treasureChests: 2,
+      },
+      {
+        id: 'room_temple_divs',
+        name: 'Hall of Fire Divs',
+        nameRu: 'Зал огненных дивов',
+        monsters: [
+          { monsterId: 'mob_div_fire', count: 8, positions: [{ x: 12, y: 0, z: 5 }, { x: -12, y: 0, z: 5 }, { x: 0, y: 0, z: 12 }, { x: 16, y: 0, z: 10 }, { x: -16, y: 0, z: 10 }, { x: 8, y: 0, z: 16 }, { x: -8, y: 0, z: 16 }, { x: 0, y: 0, z: 20 }] },
+          { monsterId: 'mob_caravan_raider', count: 4, positions: [{ x: 14, y: 0, z: 15 }, { x: -14, y: 0, z: 15 }, { x: 7, y: 0, z: 24 }, { x: -7, y: 0, z: 24 }] },
+        ],
+        isBossRoom: false,
+        chestPositions: [{ x: -9.4, z: 1.4 }, { x: 9.4, z: 1.4 }, { x: 0, z: 6.4 }],
+        treasureChests: 3,
+      },
+      {
+        id: 'room_temple_storm',
+        name: 'Nest of the Storm',
+        nameRu: 'Гнездо бури',
+        monsters: [
+          { monsterId: 'mob_storm_djinn', count: 6, positions: [{ x: 10, y: 0, z: 5 }, { x: -10, y: 0, z: 5 }, { x: 0, y: 0, z: 14 }, { x: 15, y: 0, z: 8 }, { x: -15, y: 0, z: 8 }, { x: 5, y: 0, z: 20 }] },
+          { monsterId: 'mob_div_fire', count: 4, positions: [{ x: 13, y: 0, z: 15 }, { x: -13, y: 0, z: 15 }, { x: 7, y: 0, z: 24 }, { x: -7, y: 0, z: 24 }] },
+        ],
+        isBossRoom: false,
+        chestPositions: [{ x: -8.4, z: -1.6 }, { x: 8.4, z: -1.6 }, { x: 0, z: -6.6 }],
+        treasureChests: 3,
+      },
+      {
+        id: 'room_temple_throne',
+        name: 'Throne of the Simurgh',
+        nameRu: 'Трон Симурга',
+        monsters: [
+          // Финал рейда: сам Симург со стражей из его же гнезда.
+          { monsterId: 'world_boss_simurgh', count: 1, positions: [{ x: 0, y: 0, z: 15 }] },
+          { monsterId: 'mob_storm_djinn', count: 6, positions: [{ x: 12, y: 0, z: 5 }, { x: -12, y: 0, z: 5 }, { x: 8, y: 0, z: 12 }, { x: -8, y: 0, z: 12 }, { x: 14, y: 0, z: 10 }, { x: -14, y: 0, z: 10 }] },
+          { monsterId: 'mob_div_fire', count: 4, positions: [{ x: 5, y: 0, z: 20 }, { x: -5, y: 0, z: 20 }, { x: 9, y: 0, z: 24 }, { x: -9, y: 0, z: 24 }] },
+        ],
+        isBossRoom: true,
+        bossId: 'world_boss_simurgh',
+        chestPositions: [
+          { x: -6.4, z: -4.4 }, { x: 6.4, z: -4.4 },
+          { x: -6.4, z: -11.4 }, { x: 6.4, z: -11.4 },
+        ],
+        treasureChests: 4,
+      },
+    ],
+    rewards: {
+      // Награда выше цитадельной: финал - босс 90-го уровня с пятью
+      // миллионами здоровья. Двадцать человек делят сумму, и заходовая
+      // награда сделала бы двадцатую долю не стоящей входа.
+      experience: 420000,
+      gold: { min: 5000, max: 14000 },
+      guaranteedItems: ['con_exp_scroll', 'con_health_potion_m'],
+      bonusItems: [
+        { itemId: 'mat_dragon_scale', chance: 0.08 },
+        { itemId: 'wpn_ismail_artifact', chance: 0.004 },
+        { itemId: 'acc_silk_road_amulet', chance: 0.05 },
+        { itemId: 'arm_qizilbash_armor', chance: 0.08 },
+      ],
+    },
+    lore: 'Симург строит гнездо раз в тысячу лет и каждый раз на новом дереве. Это дерево - в Хорасане.',
+    mapPath: 'maps/dungeons/simurgh_temple.umap',
+  },
+
+
 }
 
 export function getDungeon(id: string): DungeonDefinition | undefined {

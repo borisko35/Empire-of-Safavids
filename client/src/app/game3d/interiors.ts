@@ -28,7 +28,7 @@ import { buildHumanoid } from './rig';
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
 
-export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort' | 'baghdad_citadel';
+export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort' | 'baghdad_citadel' | 'simurgh_temple';
 
 export interface BuildingDef {
   id: string;
@@ -110,6 +110,13 @@ const SPOTS: {
   // Дверь снаружи (200, −392) — рядом со спавном паши в мире (200, −380):
   // точка не выдумана, босс на ней уже стоит.
   { id: 'baghdad_citadel', kind: 'baghdad_citadel', nameKey: 'buildings.baghdad_citadel', icon: '🏰', dx: 200, dz: -392, ex: 200, ez: -388 },
+  // Храм Симурга: рейд на двадцать человек. ПОСЛЕДНЯЯ ЗАПИСЬ, и это
+  // обязательно: слот комнаты считается индексом, а на сервере зашит числом
+  // (5012 = 4000 + 23*44). Вставка выше сдвинет слоты всех, кто ниже.
+  //
+  // Дверь (0, 1412) — земля под гнездом Симурга: сам босс висит в воздухе на
+  // y=100, и вход на его точке спавна увёл бы игрока в небо.
+  { id: 'simurgh_temple', kind: 'simurgh_temple', nameKey: 'buildings.simurgh_temple', icon: '🕌', dx: 0, dz: 1412, ex: 0, ez: 1416 },
 ];
 
 export const POCKET_X = 4000;
@@ -170,7 +177,7 @@ export const FLOOR_Y = 0.4;
 // ДВАДЦАТЬ ВТОРАЯ КОМНАТА, СЛОТ 22, ЦЕНТР 4968. Граница поднята с 4968
 // до 5012: комната слота 22 занимает 4952..4984, и при прежней границе
 // она вылезала бы за неё на 16 единиц. Сдвиг ровно на шаг комнаты (44).
-export const POCKET_RECT = { x0: 3960, x1: 5012, z0: 3960, z1: 4040 };
+export const POCKET_RECT = { x0: 3960, x1: 5056, z0: 3960, z1: 4040 };
 export const POCKET_GROUND_Y = 0;
 
 /** Уровень земли кармана или null, если точка вне его. */
@@ -1280,6 +1287,119 @@ function furnishBaghdadCitadel(g: THREE.Group, cx: number, cz: number): { x: num
   return cols;
 }
 
+// ── ХРАМ СИМУРГА: рейд на двадцать человек ───────────────────────
+//
+// Четыре зоны, как у цитадели, но святилище читается иначе: врата под аркой,
+// зал огненных дивов с жаровнями, гнездо бури с вихрем, трон Симурга на
+// подиуме. Святилище — не крепость: купол над аркой вместо перемычки, а
+// гнездо-подиум вместо трона.
+//
+// Зоны считает сервер (dungeonLayout.zoneShift): для четырёх комнат
+// +10.5, +3.5, −3.5, −10.5. Сундуки нарисованы ТЕМИ ЖЕ координатами, что в
+// chestPositions: вскрытие идёт по данным, а рисуется по ним же, и
+// расхождение означало бы сундук в воздухе.
+function furnishSimurghTemple(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
+  const cols: { x: number; z: number; r: number }[] = [];
+
+  // ── Зона 1. Врата храма (+10.5) ──
+  // Арка с куполом: у святилища она выше крепостных ворот и без решётки —
+  // в храм входят, а не осаждают.
+  for (const side of [-1, 1]) {
+    g.add(box(1.6, 6.6, 1.6, M.stone, cx + side * 5.6, FLOOR_Y + 3.3, cz + 14));
+    cols.push({ x: cx + side * 5.6, z: cz + 14, r: 1.3 });
+  }
+  g.add(box(12.8, 1.4, 1.6, M.stone, cx, FLOOR_Y + 6.6, cz + 14));
+  // Купол над аркой: три сужающихся кольца.
+  for (let i = 0; i < 3; i++) {
+    const к = 1 - i * 0.28;
+    g.add(cyl(3.4 * к, 3.4 * Math.max(0.15, к * 0.7), 0.9, M.stone, cx, FLOOR_Y + 7.6 + i * 0.9, cz + 14, 12));
+  }
+  // Факелы по сторонам входа — выше, чем у цитадели: храм выше крепости.
+  for (const side of [-1, 1]) {
+    const px = cx + side * 9.6;
+    g.add(cyl(0.18, 2.8, 0.18, M.iron, px, FLOOR_Y + 1.4, cz + 11.4, 8));
+    g.add(cyl(0.36, 0.5, 0.36, M.fire, px, FLOOR_Y + 3.0, cz + 11.4, 8));
+    cols.push({ x: px, z: cz + 11.4, r: 0.8 });
+  }
+  // Сундуки врат: по данным (−8.4, 8.4) и (8.4, 8.4)
+  for (const [px, pz] of [[cx - 8.4, cz + 8.4], [cx + 8.4, cz + 8.4]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+
+  // ── Зона 2. Зал огненных дивов (+3.5) ──
+  // Колонны с чашами огня по кругу: в зале стоят дивы, и огонь здесь уместен.
+  for (const side of [-1, 1]) {
+    for (const dz of [0.4, 7.4]) {
+      g.add(cyl(0.55, 0.7, 3.6, M.stone, cx + side * 10.6, FLOOR_Y + 1.8, cz + dz, 10));
+      g.add(cyl(0.5, 0.24, 0.3, M.fire, cx + side * 10.6, FLOOR_Y + 3.8, cz + dz, 8));
+      cols.push({ x: cx + side * 10.6, z: cz + dz, r: 0.9 });
+    }
+  }
+  // Купель в середине зала: точка, вокруг которой бой расходится.
+  g.add(cyl(2.4, 0.6, 0.5, M.stone, cx, FLOOR_Y + 0.25, cz + 3.4, 16));
+  g.add(cyl(0.28, 0.4, 1.6, M.stone, cx, FLOOR_Y + 1.0, cz + 3.4, 8));
+  cols.push({ x: cx, z: cz + 3.4, r: 2.6 });
+  // Сундуки зала: по данным (−9.4, 1.4), (9.4, 1.4), (0, 6.4)
+  for (const [px, pz] of [[cx - 9.4, cz + 1.4], [cx + 9.4, cz + 1.4], [cx, cz + 6.4]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+
+  // ── Зона 3. Гнездо бури (−3.5) ──
+  // Вихрь: три кольца клиньев на разной высоте. Читается как буря, стоящая
+  // в зале, — а не как набор палок.
+  for (let i = 0; i < 3; i++) {
+    const углы = 5;
+    for (let a = 0; a < углы; a++) {
+      const угол = (a / углы) * Math.PI * 2 + i * 0.7;
+      const r = 1.6 + i * 1.1;
+      g.add(box(1.5, 0.24, 0.24, M.iron,
+        cx + Math.cos(угол) * r, FLOOR_Y + 1.4 + i * 1.5, cz + Math.sin(угол) * r));
+    }
+    cols.push({ x: cx, z: cz, r: 3.4 });
+  }
+  // Стойки с копьями у боковых стен — как в караульной цитадели.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      g.add(box(0.12, 2.2, 0.12, M.woodDark, cx + side * 13.4, FLOOR_Y + 1.1, cz - 6.4 + i * 2.2));
+    }
+    cols.push({ x: cx + side * 13.4, z: cz - 4.4, r: 0.9 });
+  }
+  // Сундуки гнезда: по данным (−8.4, −1.6), (8.4, −1.6), (0, −6.6)
+  for (const [px, pz] of [[cx - 8.4, cz - 1.6], [cx + 8.4, cz - 1.6], [cx, cz - 6.6]] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+
+  // ── Зона 4. Трон Симурга (−10.5) ──
+  // Гнездо-подиум у дальней стены, а не трон: Симург птица, и сидит она в
+  // гнезде. Кольцо из веток плюс чаша.
+  for (let i = 0; i < 8; i++) {
+    const угол = (i / 8) * Math.PI * 2;
+    g.add(box(1.6, 0.5, 1.6, M.woodDark,
+      cx + Math.cos(угол) * 3.6, FLOOR_Y + 0.35, cz - 15.4 + Math.sin(угол) * 3.6));
+  }
+  g.add(cyl(4.0, 0.4, 0.7, M.wood, cx, FLOOR_Y + 0.7, cz - 15.4, 12));
+  // Перья Симурга на подиуме: метка босса, читаемая с порога.
+  for (const side of [-1, 1]) {
+    g.add(box(0.16, 2.2, 0.16, M.gold, cx + side * 2.0, FLOOR_Y + 1.5, cz - 15.4));
+    g.add(box(0.5, 0.7, 0.16, M.gold, cx + side * 2.0, FLOOR_Y + 2.6, cz - 15.4));
+  }
+  cols.push({ x: cx, z: cz - 15.4, r: 4.4 });
+  // Ковёр зала — тёмный прямоугольник под боссом.
+  g.add(box(12.4, 0.04, 9.4, M.red, cx, FLOOR_Y + 0.05, cz - 12.4));
+  // Сундуки трона: по данным (±6.4, −4.4) и (±6.4, −11.4)
+  for (const [px, pz] of [
+    [cx - 6.4, cz - 4.4], [cx + 6.4, cz - 4.4],
+    [cx - 6.4, cz - 11.4], [cx + 6.4, cz - 11.4],
+  ] as [number, number][]) {
+    g.add(box(1.1, 0.8, 0.8, M.wood, px, FLOOR_Y + 0.4, pz));
+    cols.push({ x: px, z: pz, r: 1 });
+  }
+  return cols;
+}
+
 export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
   const doorX = s.dx ?? CITY.x + (s.lx ?? 0), doorZ = s.dz ?? CITY.z + (s.lz ?? 0);
   const n = Math.hypot(s.lx ?? 0, s.lz ?? 0) || 1;
@@ -1966,6 +2086,7 @@ caravanserai: furnishCaravanserai,
     khorasan_caves: furnishKhorasanCaves,
     caucasus_fort: furnishCaucasusFort,
     baghdad_citadel: furnishBaghdadCitadel,
+    simurgh_temple: furnishSimurghTemple,
   }[def.kind] ?? furnishScience;
   for (const c of furn(g, cx, cz)) colliders.push(c);
 
