@@ -13,6 +13,8 @@
 // Страница нужна только для проверки и в сборку игры не входит.
 
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { loadRealPlayerRig, CLASS_WEAPON } from './game3d/realRig';
 
 const КЛАССЫ = ['qizilbash', 'sufi_mystic', 'persian_archer', 'bazaar_merchant', 'court_diplomat'];
@@ -72,6 +74,60 @@ function пересчётМатериалов(риг: THREE.Group): string {
 
 const ряд = document.getElementById('ряд')!;
 const сводка = document.getElementById('сводка')!;
+
+/**
+ * Прямая проверка привязки дорожек анимации к костям.
+ *
+ * ЗАЧЕМ ОТДЕЛЬНО. На проде three.js 18 раз на класс пишет
+ * «No target node found for track: mixamorigLeftEye.position». Утверждать, что
+ * это безобидно, нельзя: предыдущие пять гипотез начинались с «наверное, это
+ * ерунда». Здесь та же проверка, что делает three, - PropertyBinding.findNode -
+ * но на свежезагруженных файлах, чтобы видеть и имена, и цели.
+ *
+ * Ничего не утверждается наперёд: выводится то, что найдено.
+ */
+async function проверитьПривязку(): Promise<string[]> {
+  const строки: string[] = [];
+  const загрузчик = new GLTFLoader();
+  const draco = new DRACOLoader();
+  draco.setDecoderPath('/game/draco/');
+  загрузчик.setDRACOLoader(draco);
+
+  const читать = (путь: string): Promise<any> =>
+    new Promise((готово) => загрузчик.load(`/game/models/${путь}.glb`, готово, undefined, () => готово(null)));
+
+  for (const [модель, клип] of [
+    ['guard-qizilbash', 'standing-idle'],
+    ['sufi-mystic', 'standing-idle'],
+    ['archer-of-persian', 'standing-idle'],
+    ['market-vendor', 'standing-idle'],
+    ['court-diplomat', 'standing-idle'],
+    ['citizen', 'standing-idle'],
+  ]) {
+    const [сцена, лента] = await Promise.all([читать(модель), читать(клип)]);
+    if (!сцена || !лента) { строки.push(`  ${модель}: не загрузилось`); continue; }
+
+    const узлыСцены = new Set<string>();
+    сцена.scene.traverse((o: THREE.Object3D) => { if (o.name) узлыСцены.add(o.name); });
+
+    const всеДорожки = лента.animations[0].tracks as THREE.KeyframeTrack[];
+    const безЦели = new Set<string>();
+    for (const д of всеДорожки) {
+      const разобранное = THREE.PropertyBinding.parseTrackName(д.name);
+      if (!разобранное.nodeName) continue;
+      const цель = THREE.PropertyBinding.findNode(сцена.scene, разобранное.nodeName);
+      if (!цель) безЦели.add(`${разобранное.nodeName}`);
+    }
+
+    строки.push(`  ${модель} + ${клип}: дорожек ${всеДорожки.length}, без цели ${безЦели.size}`);
+    if (безЦели.size) {
+      строки.push(`    ищет: ${[...безЦели].join(', ')}`);
+      строки.push(`    узлы с "eye" в сцене: ${JSON.stringify([...узлыСцены].filter((n) => /eye/i.test(n)))}`);
+      строки.push(`    дорожки с "eye": ${JSON.stringify([...new Set(всеДорожки.map((d) => d.name))].filter((n) => /eye/i.test(n)))}`);
+    }
+  }
+  return строки;
+}
 
 /** Сцена на клетку: камера, свет, эталонная палочка ростом 1.9 м. */
 function сценаДля(ширина: number, высота: number) {
@@ -251,6 +307,10 @@ for (const и of итоги) {
 for (const и of итоги) {
   строки.push(`  ${и.класс.padEnd(16)} ${и.материалы}`);
 }
+
+строки.push('');
+строки.push('ПРИВЯЗКА ДОРОЖЕК');
+строки.push(...(await проверитьПривязку()));
 
 сводка.textContent = строки.join('\n');
 (window as unknown as { __rigCheck: Итог[] }).__rigCheck = итоги;
