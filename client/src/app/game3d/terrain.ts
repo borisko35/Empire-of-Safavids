@@ -1182,7 +1182,13 @@ const MAT = {
   stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.95, map: stoneTexture(4) }),
   sandstone: new THREE.MeshStandardMaterial({ color: 0xd8c298, roughness: 0.9, map: plasterTexture('#c9ab7c', 2) }),
   sandstoneDark: new THREE.MeshStandardMaterial({ color: 0xb09468, roughness: 0.9, map: stoneTexture(6) }),
-  tealDome: new THREE.MeshStandardMaterial({ color: 0x35a0a0, roughness: 0.45, metalness: 0.2, map: mosaicTexture(4) }),
+  // Изразцовая глазурь — НЕ металл. И тут стояло metalness: 0.2,
+// то есть двадцать процентов отражения окрашивались собственным цветом и
+  // считались металлическими. На сфере это даёт цветное пятно, которое
+  // глаз читает как свечение: на рассвете купола будто светятся изнутри.
+  // Физически изразец — диэлектрик с глазурью, то есть metalness 0 и
+  // невысокая шероховатость за глянец.
+  tealDome: new THREE.MeshStandardMaterial({ color: 0x35a0a0, roughness: 0.3, metalness: 0, map: mosaicTexture(4) }),
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7 }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 1, map: woodTexture(1) }),
   foliage: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1 }),
