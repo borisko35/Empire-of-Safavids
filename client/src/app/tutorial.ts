@@ -64,6 +64,22 @@ export async function initTutorial(characterId: string): Promise<void> {
   if (overlayEl) return; // уже показан
   try {
     const data = await api.tutorialProgress(characterId);
+    // Ответ читаем осторожно. Раньше стояло data.progress.completed, и при
+    // любом неожиданном ответе — а ответ приходит по сети и может прийти
+    // чем угодно — игра падала с TypeError, который ничего не говорил о
+    // причине. Смысл try/catch в том, чтобы туториал НЕ ЛОМАЛ игру, а падать
+    // он как раз ломал.
+    //
+    // Проверено живьём: сервер отдаёт корректно
+    // {"progress":{"step":0,"completed":false},...}, а на пустой путь
+    // честный 404. То есть причина, по которой progress оказался
+    // отсутствующим, живьём не воспроизвелась — и именно поэтому код
+    // должен переживать это молча, а не падать.
+    if (!data || !data.progress) {
+      console.warn('[tutorial] response without progress field - tutorial skipped');
+      isTutorialActive = false;
+      return;
+    }
     if (data.progress.completed) return;
     isTutorialActive = true;
     totalSteps = data.totalSteps ?? 0;
