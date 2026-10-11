@@ -1121,6 +1121,61 @@ export function isRoad(x: number, z: number): boolean {
     Math.hypot(x - CITY.x, z - CITY.z) < CITY.radius * 0.8;
 }
 
+/**
+ * Окно на фасаде: рама, утопленное стекло и средник.
+ *
+ * БЫЛО. Плоская пластина 0.7x1.1 цвета 0x2a2a30 (roughness 1), вплотную
+ * к стене. Материал почти чёрный и полностью матовый: он отражает только
+ * рассеянный свет, ничего не обрамлял, стоял НА стене, а не В проёме.
+ * На скриншоте такие окна читались как дыры — тёмные прямоугольники на
+ * светлой штукатурке, и именно они портили фасад сильнее всего остального.
+ *
+ * ТЕПЕРЬ. Стекло сидит в проёме (глубже стены) и ловит небо: низкая
+ * шероховатость, металличность и слабое свечение — настоящее стекло всегда
+ * чуть светится от неба, и это делает его стеклом с одного взгляда.
+ * Рама из светлого камня обрамляет проём, средник делит его на четыре
+ * части. Рама и есть то, что читается как окно.
+ *
+ * Размеры — по старой пластине, чтобы дома не стали крупнее: проём 0.9x1.3,
+ * рама выступает на 0.06 в каждую сторону.
+ */
+function windowPane(
+  cx: number, cy: number, faceZ: number, rotY: number,
+): THREE.Group {
+  const g = new THREE.Group();
+  const W = 0.9, H = 1.3;
+
+  // Рама: четыре бруса вокруг проёма.
+  const t = 0.1;
+  const верх = new THREE.Mesh(new THREE.BoxGeometry(W + t * 2, t, 0.14), MAT.windowFrame);
+  верх.position.y = H / 2 + t / 2;
+  const низ = верх.clone();
+  низ.position.y = -H / 2 - t / 2;
+  const лево = new THREE.Mesh(new THREE.BoxGeometry(t, H, 0.14), MAT.windowFrame);
+  лево.position.x = -W / 2 - t / 2;
+  const право = лево.clone();
+  право.position.x = W / 2 + t / 2;
+  g.add(верх, низ, лево, право);
+
+  // Стекло — УТОПЛЕНО в проём: дальше стены, поэтому читается как проём,
+  // а не как наклеенная плашка.
+  const стекло = new THREE.Mesh(new THREE.BoxGeometry(W, H, 0.06), MAT.glass);
+  стекло.position.z = -0.09;
+  g.add(стекло);
+
+  // Средник: одна перекладина и одна стойка. Без них стекло — просто
+  // прямоугольник, а с ними уже окно.
+  const перекладина = new THREE.Mesh(new THREE.BoxGeometry(W, 0.055, 0.1), MAT.windowFrame);
+  перекладина.position.z = -0.03;
+  const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.055, H, 0.1), MAT.windowFrame);
+  стойка.position.z = -0.03;
+  g.add(перекладина, стойка);
+
+  g.position.set(cx, cy, faceZ);
+  g.rotation.y = rotY;
+  return g;
+}
+
 // ── Материалы (с процедурными текстурами) ────────────────────
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
@@ -1142,6 +1197,16 @@ const MAT = {
   clothTeal: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1 }),
   clothPurple: new THREE.MeshStandardMaterial({ color: 0x7a5fd0, roughness: 1 }),
   dark: new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 1 }),
+  // Стекло окна. Не «почти чёрное», как MAT.dark: настоящее стекло ловит
+  // небо — низкая шероховатость, слабая металличность и небольшое свечение.
+  // Без этого окно читалось как дыра в стене (см. windowPane).
+  glass: new THREE.MeshStandardMaterial({
+    color: 0x2d4a63, roughness: 0.14, metalness: 0.55,
+    emissive: 0x16222e, emissiveIntensity: 0.55,
+  }),
+  // Рама вокруг проёма. Светлый камень: рама и есть то, что глаз читает
+  // как окно, а не просто тёмная плашка.
+  windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85 }),
   water: new THREE.MeshStandardMaterial({
     color: 0x2f6f96, roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.82,
     map: waterTexture(6),
@@ -2392,9 +2457,8 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     hd.scale.y = 0.72;
     hd.position.y = domeY;
     house.add(hd);
-    const window1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.1), MAT.dark);
-    window1.position.set(0, h * 0.55, w * 0.45 + 0.02);
-    house.add(window1);
+    house.add(windowPane(0, h * 0.55, w * 0.45, 0));
+    if (twoStory) house.add(windowPane(0, h * 1.02, w * 0.38, 0));
     // Восточный колорит столицы: бадгиры и балконы на части домов
     if (rng() < 0.45) badgir(house, w * 0.26, -w * 0.2, h, 1.8 + rng() * 1.2);
     if (rng() < 0.4) {
