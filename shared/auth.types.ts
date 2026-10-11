@@ -102,6 +102,9 @@ export type AuthError =
   | 'provider_disabled'
   | 'invalid_state'
   | 'provider_error'
+  // Связь с Xsolla есть, а аккаунта нет: таблицы разошлись. Это поломка
+  // данных, а не «неверный код», и путать их нельзя.
+  | 'identity_orphaned'
   // Второй фактор. Возможны только после верного пароля.
   | 'two_factor_required'
   | 'two_factor_invalid'
@@ -139,4 +142,5 @@ export const AUTH_ERROR_MESSAGES: Record<AuthError, string> = {
   two_factor_no_secret:  'Код временно недоступен. Попробуйте позже',
   two_factor_unavailable:'Второй фактор сейчас недоступен',
   provider_error:      'Не удалось войти через внешний сервис',
+  identity_orphaned:   'Аккаунт, к которому привязан вход, больше не существует. Обратитесь в поддержку',
 };

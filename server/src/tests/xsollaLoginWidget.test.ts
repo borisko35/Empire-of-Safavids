@@ -17,6 +17,23 @@ import { join } from 'node:path';
 const корень = join(__dirname, '..', '..', '..');
 const читать = (p: string): string => readFileSync(join(корень, p), 'utf-8');
 
+/**
+ * Прочитать файл С БЕЗ КОММЕНТАРИЕВ.
+ *
+ * ЗАЧЕМ. Источник-читающие проверки ищут в файле строки вроде
+ * `xsolla.invalid`. Если объяснение комментируемого запрета само упоминает
+ * это слово — проверка падает на собственном пояснении. Это ровно та
+ * ловушка, которую лечили в apiSurface.test.ts. Здесь я попался на ней же:
+ * в шапке AuthService написано «ПОЧЕМУ @oauth.invalid, А НЕ @xsolla.invalid»,
+ * и проверка на отсутствие своего домена падала на этом комментарии.
+ */
+const код = (p: string): string =>
+  читать(p)
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((с) => с.replace(/(^|[^:\\"'`])\/\/.*$/, '$1'))
+    .join('\n');
+
 const МОДУЛЬ = 'client/web/js/xsolla-login.js';
 const ЛЕНДИНГ = 'client/web/index.html';
 
@@ -175,6 +192,82 @@ describe('Xsolla-вход: обмен кода на сервере', () => {
     const текст = читать(МОДУЛЬ);
     must(!/client_secret|secret/i.test(текст),
       'в клиентском коде появился секрет: он доступен кому угодно');
+  });
+
+  // ── Доведение до сессии (§126) ────────────────────────────
+  //
+  // До §126 маршрут отвечал { ok: true } и на этом всё. Токен Xsolla
+  // получен, а игры он не касался: localStorage пуст, и вошедший человек
+  // видел форму почты как будто ничего не случилось. Это и была «наполовину
+  // защита» — только теперь не state, а сам вход.
+  it('обмен доведён до нашей сессии, а не до "ok"', () => {
+    const текст = читать('server/src/routes/xsolla.ts');
+    must(/authService\.loginWithXsolla\(/.test(текст),
+      'маршрут не зовёт loginWithXsolla: обмен заканчивается ничем');
+    // Ответ обязан нести токен игры. Без него клиенту нечего сохранить.
+    must(/token:\s*сессия\.token/.test(текст),
+      'в ответе нет токена игры — клиент сохранит пустоту');
+    must(/userId:\s*сессия\.userId/.test(текст), 'в ответе нет userId');
+    // Провал выдачи сессии — отказ, а не «ок» наполовину.
+    must(/502[\s\S]{0,120}session_failed/.test(текст),
+      'неудачная выдача сессии отвечает как будто всё хорошо');
+  });
+
+  it('AuthService умеет вход по токену Xsolla', () => {
+    const сервис = читать('server/src/services/AuthService.ts');
+    must(/async loginWithXsolla\(/.test(сервис), 'метода loginWithXsolla нет');
+    // Порядок привязки — решение владельца: сначала по провайдеру, потом по
+    // подтверждённой почте.
+    must(/FROM user_identities WHERE provider = \$1 AND provider_id = \$2/.test(сервис),
+      'поиска в user_identities нет');
+    must(/INSERT INTO user_identities/.test(сервис),
+      'привязки в user_identities нет: новый Xsolla был бы каждый раз новым игроком');
+    must(/email_verified/.test(сервис),
+      'непроверённая почта считалась бы настоящей: ею можно занять чужой аккаунт');
+  });
+
+  it('связь живёт в user_identities, а НЕ колонкой в users', () => {
+    // В 032_oauth_identities.sql это решено осознанно, и шапка миграции
+    // объясняет почему: у одного человека несколько входов при одном
+    // user_id, и колонка позволила бы только один Xsolla на аккаунт.
+    const сервис = код('server/src/services/AuthService.ts');
+    const миг = код('database/migrations/077_xsolla_login_link.sql');
+    must(!/WHERE xsolla_id = \$1/.test(сервис),
+      'в AuthService остался поиск по колонке xsolla_id — способ, который проект отверг');
+    must(!/ADD COLUMN IF NOT EXISTS xsolla_id/.test(миг),
+      'миграция всё ещё заводит колонку в users вместо user_identities');
+    must(!/xsolla\.invalid/.test(сервис),
+      'свой домен вместо oauth.invalid: служебная почта провайдера сойдёт за настоящую');
+    must(/xsolla_\$\{профиль\.id\}@oauth\.invalid/.test(сервис),
+      'почта провайдера не по домену проекта');
+  });
+
+  it('профиль спрашивается у Xsolla, а не выдумывается', () => {
+    const сервис = читать('server/src/services/AuthService.ts');
+    must(/login\.xsolla\.com\/api\/users\/me/.test(сервис),
+      'профиль не откуда взять: сервер не спрашивает Xsolla');
+    must(/Authorization: `Bearer /.test(сервис),
+      'токен не передаётся: ответ был бы 401');
+  });
+
+  it('клиент сохраняет сессию в ключи обычного входа', () => {
+    // Свой ключ для Xsolla означал бы вторую ветку входа в игре, и
+    // вошедший по кнопке увидел бы форму почты.
+    const текст = читать(МОДУЛЬ);
+    must(/localStorage\.setItem\('eos_token'/.test(текст),
+      'клиент не пишет eos_token — игра не узнает о входе');
+    must(/localStorage\.removeItem\('eos_guest'/.test(текст),
+      'гостевой признак не снят: выдал бы гостя за вошедшего по Xsolla');
+  });
+
+  it('миграция переиспользует user_identities, ничего не заводит в users', () => {
+    const миг = читать('database/migrations/077_xsolla_login_link.sql');
+    must(!/ADD COLUMN/.test(миг),
+      'миграция снова заводит колонку в users — это и есть решение, от которого 032 отказался');
+    must(/user_identities/.test(миг), 'миграция не упоминает user_identities');
+    // Контроль на будущее: без таблицы вход молча упал бы в рантайме.
+    must(/RAISE EXCEPTION/.test(миг),
+      'миграция не проверяет наличие таблицы: поломка обнаружится в игре, а не здесь');
   });
 });
 

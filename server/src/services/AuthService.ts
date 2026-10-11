@@ -163,6 +163,154 @@ export class AuthService {
     return { ...session, isGuest: true };
   }
 
+  // ============================================================
+  // ВХОД ЧЕРЕЗ XSOLLA
+  // ============================================================
+  /**
+   * Вход по токену Xsolla Login: спрашиваем у Xsolla, кто это, и сажаем
+   * его в свою сессию.
+   *
+   * ПОЧЕМУ ЗДЕСЬ, А НЕ В МАРШРУТЕ. Маршрут (/api/auth/xsolla/exchange)
+   * меняет code на токен Xsolla. Но одного токена мало: игра продолжает
+   * спрашивать почту, потому что про пользователя Xsolla ей ничего не
+   * известно. Этот метод — недостающее звено: он превращает «кто-то из
+   * Xsolla» в «наш игрок с сессией».
+   *
+   * ПОРЯДОК ПРИВЯЗКИ — И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА:
+   *   1. нашли в user_identities по (xsolla, id) — входим, это повторный
+   *      вход. Таблица та же, что у Google и VK (032_oauth_identities.sql):
+   *      колонку в users не заводим намеренно, и причины те же;
+   *   2. не нашли, но есть аккаунт с той же ПОДТВЕРЖДЁННОЙ почтой —
+   *      ПРИВЯЗЫВАЕМ, а не заводим второй. Иначе у игрока было бы два
+   *      аккаунта с разным прогрессом на одно лицо;
+   *   3. не нашли ничего — заводим нового.
+   *
+   * ГОСТЕВОЙ ПРОГРЕСС ПРИ ЭТОМ НЕ ПЕРЕНОСИТСЯ. Гость — отдельный user_id,
+   * и связывать его с Xsolla молча нельзя: гость ничего не подтверждал.
+   * Это ограничение, а не недоделка; чтобы такого не было, гостю стоит
+   * пройти обычную регистрацию по почте заранее.
+   *
+   * ПОЧЕМУ @oauth.invalid, А НЕ @xsolla.invalid. Проект уже опознаёт
+   * служебные адреса провайдеров по этому домену: AccountLinkService,
+   * ПОДДЕЛКИ_ПОЧТЫ в services/payments/xsolla/token.ts, migration 034.
+   * Свой домен означал бы, что Xsolla-аккаунт без почты сойдёт за
+   * настоящий адрес и уйдёт в платёжные письма.
+   */
+  async loginWithXsolla(токенXsolla: string): Promise<AuthResponse> {
+    const профиль = await this.xsollaProfile(токенXsolla);
+    if (!профиль) throw this.authError('invalid_credentials');
+
+    // 1) Этот Xsolla уже привязан — пускаем.
+    const привязка = await this.db.queryOne<{ user_id: string }>(
+      'SELECT user_id FROM user_identities WHERE provider = $1 AND provider_id = $2',
+      ['xsolla', профиль.id]
+    );
+    if (привязка) {
+      const игрок = await this.db.queryOne<{ id: string; username: string }>(
+        'SELECT id, username FROM users WHERE id = $1', [привязка.user_id]
+      );
+      if (игрок) return this.createSession(игрок.id, игрок.username, true);
+      // Привязка есть, а пользователя нет — таблицы разошлись. Входить
+      // некуда, и это поломка данных, а не «неверный код».
+      throw this.authError('identity_orphaned');
+    }
+
+    // 2) Почта настоящая, только если Xsolla её подтвердил. Неподтверждённую
+    //    брать нельзя: ею можно завладеть чужим аккаунтом.
+    if (профиль.email && профиль.emailVerified) {
+      const поMail = await this.db.queryOne<{ id: string; username: string }>(
+        'SELECT id, username FROM users WHERE email = $1', [профиль.email.toLowerCase()]
+      );
+      if (поMail) {
+        // PRIMARY KEY (provider, provider_id) не даст привязать один
+        // Xsolla к двум игрокам: при попытке запрос упадёт. Это честнее,
+        // чем тихо войти в чужой аккаунт.
+        await this.db.query(
+          'INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)',
+          [поMail.id, 'xsolla', профиль.id]
+        );
+        logger.info(`[Auth] Xsolla ${профиль.id} привязан к ${поMail.id}`);
+        return this.createSession(поMail.id, поMail.username, true);
+      }
+    }
+
+    // 3) Новый игрок.
+    const userId = uuidv4();
+    const username = await this.pickFreeUsername(профиль.username || 'xsolla');
+    const email = профиль.email && профиль.emailVerified
+      ? профиль.email.toLowerCase()
+      : `xsolla_${профиль.id}@oauth.invalid`;
+    // Пароля нет: Xsolla-пользователь входит по кнопке, не по паролю.
+    // Но колонка NOT NULL, и код входа по почте не должен меняться —
+    // поэтому хэшируем нечто невосстановимое, как для гостя.
+    const passwordHash = await bcrypt.hash(uuidv4() + uuidv4(), 12);
+
+    await this.db.query(
+      `INSERT INTO users (id, username, email, password_hash, has_password, last_login_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, FALSE, NOW(), NOW(), NOW())`,
+      [userId, username, email, passwordHash]
+    );
+    await this.db.query(
+      'INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)',
+      [userId, 'xsolla', профиль.id]
+    );
+
+    analytics.track('player_login', { username, registration: true, via: 'xsolla' }, userId);
+    logger.info(`[Auth] New user via Xsolla: ${username} (${userId})`);
+
+    return this.createSession(userId, username, true);
+  }
+
+  /**
+   * Спросить у Xsolla, чей это токен.
+   *
+   * Возвращает null на любую беду — не 200, нет id, сеть отвалилась.
+   * null для вызывающего означает «не смогли узнать», и вход должен
+   * прекратиться, а не пройти наполовину.
+   *
+   * email_verified важен: без него почта считается непроверенной, и по
+   * ней никто не привязывается. Непроверённую почту можно занять чужую.
+   */
+  private async xsollaProfile(
+    токен: string
+  ): Promise<{ id: string; email: string | null; emailVerified: boolean; username: string | null } | null> {
+    try {
+      const ответ = await fetch('https://login.xsolla.com/api/users/me', {
+        headers: { Authorization: `Bearer ${токен}` },
+      });
+      if (!ответ.ok) return null;
+      const д = (await ответ.json()) as {
+        id?: string; email?: string; email_verified?: boolean; username?: string;
+      };
+      if (!д.id) return null;
+      return {
+        id: д.id,
+        email: д.email ?? null,
+        emailVerified: д.email_verified === true,
+        username: д.username ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Свободное имя: спрашиваем у БД, а не надеемся на удачу.
+   *
+   * pickGuestUsername() не подходит: он за то же самое берётся, и два
+   * параллельных входа через Xsolla могли бы выбрать одно имя. Здесь
+   * имя из Xsolla, а при занятости добавляется хвост — гарантированно
+   * уникальный, потому что основан на xsolla_id.
+   */
+  private async pickFreeUsername(хотят: string): Promise<string> {
+    const основа = хотят.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) || 'player';
+    const занят = await this.db.queryOne<{ id: string }>(
+      'SELECT id FROM users WHERE username = $1', [основа]
+    );
+    if (!занят) return основа;
+    return `${основа}_${uuidv4().slice(0, 6)}`;
+  }
+
   /**
    * Присвоение гостевого аккаунта: игрок задаёт email и пароль.
    * user_id остаётся прежним, поэтому персонаж, вещи, уровень,

@@ -10,8 +10,13 @@
 // вход, которого не было, и он попал бы в игру без аккаунта.
 import { Router, Request, Response } from 'express';
 import { logger } from '../utils/logger';
+import { AuthService } from '../services/AuthService';
 
 const xsollaExchangeRouter = Router();
+// Отдельный экземпляр — но не вторая база: внутри AuthService синглтоны
+// DatabaseService.getInstance() и RedisService.getInstance(), поэтому это
+// тот же пул, а не новый.
+const authService = new AuthService();
 
 interface XsollaExchangeError {
   error: string;
@@ -67,7 +72,32 @@ xsollaExchangeRouter.post('/exchange', async (req: Request, res: Response) => {
     return res.status(502).json({ error: 'exchange_failed' });
   }
   if (!результат.ok) return res.status(400).json({ error: результат.code });
-  return res.json({ ok: true });
+
+  // НЕДОВЕДЁННАЯ ПОЛОВИНА БЫЛА ЗДЕСЬ. Раньше маршрут отвечал { ok: true } и на
+  // этом всё. Токен Xsolla получен, но игры он не касается: localStorage
+  // пуст, и человек, прошедший вход, оказывался перед формой почты как
+  // будто ничего не произошло. Теперь токен превращается в НАШУ сессию
+  // через AuthService.loginWithXsolla — см. комментарий у него про
+  // порядок привязки.
+  let сессия;
+  try {
+    сессия = await authService.loginWithXsolla(результат.token);
+  } catch (e) {
+    // Не смогли выдать сессию — это не «вход выполнен наполовину».
+    // Отвечаем отказом, иначе клиент сохранил бы пустой токен и повис
+    // бы в состоянии «залогинен, но персонажей нет».
+    logger.error('[Xsolla] выдача сессии не удалась:', (e as Error).message);
+    return res.status(502).json({ error: 'session_failed' });
+  }
+
+  // Поля называются так же, как у обычного входа по почте: клиенту не
+  // нужна отдельная ветка «а если через Xsolla».
+  return res.json({
+    ok: true,
+    token: сессия.token,
+    userId: сессия.userId,
+    username: сессия.username,
+  });
 });
 
 export default xsollaExchangeRouter;

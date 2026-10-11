@@ -126,8 +126,26 @@
         return r.json();
       })
       .then(function (г) {
-        if (г && г.ok) {
-          if (window.console) console.info('[Xsolla] вход выполнен');
+        if (г && г.ok && г.token) {
+          // Те же ключи, что пишет обычный вход по почте (state.ts,
+          // persistAuth). Смысл: /game/ читает eos_token из localStorage
+          // и не различает, откуда он там взялся. Свой ключ для Xsolla
+          // означал бы вторую ветку входа в игре — и лицо, вошедшее по
+          // кнопке, увидело бы форму почты.
+          try {
+            localStorage.setItem('eos_token', г.token);
+            localStorage.setItem('eos_user_id', г.userId || '');
+            localStorage.setItem('eos_username', г.username || '');
+            localStorage.removeItem('eos_guest');
+          } catch (e) {
+            if (window.console) console.warn('[Xsolla] некуда сохранить сессию', e);
+          }
+          if (window.console) console.info('[Xsolla] вход выполнен:', г.username);
+          // Ссылка на игру — основное действие лендинга. Переводим на неё
+          // сразу: иначе человек вошёл и остался стоять на той же странице,
+          // не понимая, что это и есть успех.
+          var игра = document.querySelector('[data-play-link], a[href="/game/"]');
+          if (игра) window.location.href = '/game/';
         } else if (window.console) {
           console.warn('[Xsolla] обмен кода отклонён', г && г.error);
         }
