@@ -281,6 +281,29 @@ const клипыМасштаб = new Map<string, Promise<THREE.AnimationClip | n
  */
 export function подогнать(сцена: THREE.Group, имя: string): THREE.Group {
   const обёртка = new THREE.Group();
+
+  // ГАБАРИТЫ СКЕЛЕТНОЙ МОДЕЛИ. Box3.setFromObject() умеет только одно: взять
+  // geometry.boundingBox, то есть ЛОКАЛЬНЫЕ координаты геометрии. У модели со
+  // скелетом рисует не их, а позу костей, и числа не обязаны совпадать.
+  //
+  // Замер на живой игре показал расхождение примерно в 250 раз: при фигуре,
+  // которая на экране ростом 1,8 м, отдавалось 0,0072 м. Из-за этого подгонка
+  // справедливо отказывалась трогать размер, и модели рисуются правильно —
+  // но предупреждение кричало о несуществующей поломке, а любая правка по
+  // этой цифре растянула бы нормальную фигуру.
+  //
+  // SkinnedMesh.computeBoundingBox() считает именно по текущей позе. Именно
+  // он, а не setFromObject.
+  сцена.traverse((o) => {
+    const узел = o as THREE.Object3D & {
+      isSkinnedMesh?: boolean;
+      computeBoundingBox?: () => void;
+    };
+    if (узел.isSkinnedMesh === true && typeof узел.computeBoundingBox === 'function') {
+      узел.computeBoundingBox();
+    }
+  });
+
   const габариты = new THREE.Box3().setFromObject(сцена);
   const высота = габариты.max.y - габариты.min.y;
   // ЗАМЕР, А НЕ ПРАВКА. Сколько детей у сцены, какие у них масштабы и какая
@@ -298,7 +321,7 @@ export function подогнать(сцена: THREE.Group, имя: string): THR
     if (k < MIN_SCALE || k > MAX_SCALE) {
       console.warn(
         `[rig] ${имя}: не трогаю размер, коэффициент ${k.toFixed(2)} вне диапазона. ` +
-          'Обычно это масштаб корня в файле: three.js его честно учитывает, а Blender - нет',
+          'Поза скелета посчитана верно, значит сама модель странная - проверьте файл',
       );
     } else {
       сцена.scale.setScalar(k);
