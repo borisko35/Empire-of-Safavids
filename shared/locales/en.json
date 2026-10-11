@@ -567,7 +567,8 @@
     "tasks_empty": "No tasks yet — check back later",
     "tasks_title": "Daily Tasks",
     "tower_title": "Endless Tower",
-    "twitter_desc": "News and updates"
+    "twitter_desc": "News and updates",
+    "xsolla_title": "Sign in with Xsolla"
   },
   "common": {
     "loading": "Loading…",

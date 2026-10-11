@@ -431,6 +431,23 @@
        Если рекламу когда-нибудь понадобится перенести в игру, делать это надо
        отдельным решением и отдельной строкой: цена ошибки там несопоставима. -->
   <script async="async" data-cfasync="false" src="https://bauval.org/21/afc0d5b6522686f2e3d9ce906ea4e537"></script>
+  <!-- Виджет входа Xsolla.
+
+       На лендинге, а не в /game/: там лежит токен авторизации и идут
+       платежи. Скрипт платёжного провайдера, но файл всё равно чужой.
+
+       state генерируется случайно и сверяется на возврате — см.
+       js/xsolla-login.js. В документации Xsolla на этом месте стоит
+       строка-заглушка "yourStateHere", и постоянное значение обнуляет
+       CSRF-защиту OAuth-потока. -->
+  <section class="section" id="xsolla-login">
+    <div class="wrap">
+      <h2><span data-i18n="site.xsolla_title"></span></h2>
+      <div id="xl_auth" style="width: 100%; min-height: 400px"></div>
+      <noscript>Для входа через Xsolla нужен JavaScript.</noscript>
+    </div>
+  </section>
+  <script src="/js/xsolla-login.js" defer></script>
   <div id="container-afc0d5b6522686f2e3d9ce906ea4e537"></div>
 </body>
 </html>

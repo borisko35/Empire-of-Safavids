@@ -567,7 +567,8 @@
     "tasks_empty": "Задач пока нет — зайдите позже",
     "tasks_title": "Ежедневные задачи",
     "tower_title": "Бесконечная Башня",
-    "twitter_desc": "Новости и обновления"
+    "twitter_desc": "Новости и обновления",
+    "xsolla_title": "Вход через Xsolla"
   },
   "common": {
     "loading": "Загрузка…",
