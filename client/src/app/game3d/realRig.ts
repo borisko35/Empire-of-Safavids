@@ -378,6 +378,46 @@ const клипыМасштаб = new Map<string, Promise<THREE.AnimationClip | n
  * висела бы над землёй.
  */
 /**
+ * Рост фигуры в ТЕКУЩЕЙ позе, в единицах игрового мира.
+ *
+ * Зачем отдельная функция, когда есть `Box3.setFromObject()`: у модели со
+ * скелетом он берёт `geometry.boundingBox`, то есть позу покоя, и отдаёт
+ * число, не похожее ни на что видимое. Именно этим замером пять гипотез подряд
+ * строили неверный вывод о том, что фигура рисуется неправильно, и трижды
+ * предлагали починить то, что сломано не было.
+ *
+ * Считается так же, как в `подогнать()`: скинед-меш даёт свой `boundingBox`
+ * по текущей позе костей, переносится в мир матрицей узла; остальные меши
+ * (оружие, щит) считаются по геометрии, потому что у них они и есть.
+ */
+export function ростПозы(корень: THREE.Object3D): number {
+  корень.updateMatrixWorld(true);
+  const габариты = new THREE.Box3();
+  const временный = new THREE.Box3();
+  корень.traverse((o) => {
+    const узел = o as THREE.Object3D & {
+      isSkinnedMesh?: boolean;
+      computeBoundingBox?: () => void;
+      boundingBox?: THREE.Box3 | null;
+    };
+    if (узел.isSkinnedMesh === true && typeof узел.computeBoundingBox === 'function') {
+      узел.computeBoundingBox();
+      if (узел.boundingBox) {
+        габариты.union(временный.copy(узел.boundingBox).applyMatrix4(узел.matrixWorld));
+      }
+      return;
+    }
+    const меш = o as THREE.Mesh;
+    if (!меш.isMesh || !меш.geometry) return;
+    if (!меш.geometry.boundingBox) меш.geometry.computeBoundingBox();
+    if (меш.geometry.boundingBox) {
+      габариты.union(временный.copy(меш.geometry.boundingBox).applyMatrix4(меш.matrixWorld));
+    }
+  });
+  return габариты.max.y - габариты.min.y;
+}
+
+/**
  * Доводит материалы импортированной модели до вида мира.
  *
  * ЗАЧЕМ. Модели приходят из конвертации, а не из движка: у них стоят

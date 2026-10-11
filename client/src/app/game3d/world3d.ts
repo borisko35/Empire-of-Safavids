@@ -11,7 +11,7 @@ import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig';
-import { loadRealPlayerRig, CLASS_WEAPON } from './realRig';
+import { loadRealPlayerRig, CLASS_WEAPON, ростПозы } from './realRig';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
@@ -1219,18 +1219,22 @@ private roll = 0;
       прежний.dispose();
       this.scene.add(real.group);
       cur.rig = real;
-      // Второй замер: не «модель пришла», а КАКОГО РАЗМЕРА она встала. Число
-      // после add — уже с учётом всех обёрток, масштабов подгонки и поворота,
-      // то есть ровно то, что видно на экране.
-      {
-        const габарит = new THREE.Box3().setFromObject(real.group);
-        console.info(
-          `[rig] player ${id}: real model applied, ` +
-            `height=${(габарит.max.y - габарит.min.y).toFixed(4)} ` +
-            `groupScale=${real.group.scale.x.toFixed(4)} ` +
-            `sceneChildren=${real.group.children.length}`,
-        );
-      }
+      // Второй замер: не «модель пришла», а КАКОГО РАЗМЕРА она встала.
+      //
+      // Число после add — уже с учётом всех обёрток, масштабов подгонки и
+      // поворота, то есть ровно то, что видно на экране.
+      //
+      // Взято НЕ через Box3.setFromObject(): тот берёт geometry.boundingBox,
+      // то есть позу покоя, и отдаёт число, не похожее ни на что видимое.
+      // Именно этим замером пять гипотез подряд доказывали, что фигура рисуется
+      // неправильно, и трижды предлагали чинить не то. Здесь — настоящий рост
+      // в позе, тем же способом, что и в подгонке.
+      console.info(
+        `[rig] player ${id}: real model applied, ` +
+          `height=${ростПозы(real.group).toFixed(4)} ` +
+          `groupScale=${real.group.scale.x.toFixed(4)} ` +
+          `sceneChildren=${real.group.children.length}`,
+      );
       if (id === this.me?.id) {
         // Вид оружия — по классу (посох мистика — настоящей моделью, остальные
         // процедурные). Ставится до equipWeapon: иначе построится меч.
