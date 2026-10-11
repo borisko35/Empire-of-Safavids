@@ -14,7 +14,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
-  waterTexture, waterfallTexture,
+  waterTexture, waterfallTexture, macroTexture, addMacroLayer,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1912,9 +1912,18 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   const lights: { x: number; z: number; y?: number }[] = []; // фонари (свет — в world3d)
 
   // Площадь (плитка с узором)
+  //
+  // МАКРО-СЛОЙ. Одна детальная текстура на большой площади читается
+  // решёткой: глаз находит период повтора за секунды, и площадь перестаёт
+  // быть площадью. Поверх плитки кладётся низкочастотная пестрота на всю
+  // площадь целиком — её повтор глаз не видит, а рисунок плиты остаётся.
+  const материалПлощади = new THREE.MeshStandardMaterial({
+    color: 0xc8b48a, roughness: 0.95, map: plazaTexture(10),
+  });
+  addMacroLayer(материалПлощади, macroTexture(), 0.34, 1.4);
   const plaza = new THREE.Mesh(
     new THREE.CylinderGeometry(CITY.radius * 0.92, CITY.radius, 0.5, 36),
-    new THREE.MeshStandardMaterial({ color: 0xc8b48a, roughness: 0.95, map: plazaTexture(10) }),
+    материалПлощади,
   );
   plaza.position.y = 0.05;
   plaza.receiveShadow = true;

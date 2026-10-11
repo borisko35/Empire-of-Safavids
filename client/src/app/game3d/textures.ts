@@ -56,6 +56,96 @@ export function setTextureAnisotropy(max: number): void {
   МАКС_АНИЗОТРОПИЯ = Math.max(1, Math.floor(max));
 }
 
+/**
+ * Низкочастотная пестрота: мягкие пятна без мелкой детали.
+ *
+ * ЗАЧЕМ. Одна детальная текстура на большой площади всегда читается
+ * решёткой: глаз очень быстро находит период повтора, и площадь
+ * перестаёт быть площадью. Лечится вторым слоем — макро-вариацией,
+ * растянутой на всю площадь целиком, так что её повтор не виден.
+ *
+ * Текстура ВОЛНИТСЯ по краям: пятна рисуются с заходом за границы, иначе
+ * на стыке появилась бы прямая линия — то есть тот же дефект, только в
+ * другом масштабе.
+ */
+export function macroTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  const пятно = (x: number, y: number, r: number, свет: number) => {
+    // Рисуем девять раз — со сдвигами, чтобы пятно уходило за края и
+    // стыковалось само с собой.
+    for (const [dx, dy] of [
+      [0, 0], [size, 0], [-size, 0], [0, size], [0, -size],
+      [size, size], [-size, size], [size, -size], [-size, -size],
+    ]) {
+      const px = x + dx, py = y + dy;
+      // Пятно считается только если хотя бы касается холста.
+      if (px + r < 0 || px - r > size || py + r < 0 || py - r > size) continue;
+      const g = ctx.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, свет > 0 ? `rgba(255,255,255,${свет})` : `rgba(0,0,0,${-свет})`);
+      g.addColorStop(1, 'rgba(128,128,128,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  // Крупные пятна: свет и тень вразнобой, иначе кадр получится плоским.
+  for (let i = 0; i < 26; i++) {
+    пятно(Math.random() * size, Math.random() * size, 26 + Math.random() * 52, (Math.random() * 0.5 - 0.25));
+  }
+  return toTexture(canvas, 1);
+}
+
+/**
+ * Наложить макро-слой поверх детальной текстуры материала.
+ *
+ * КАК. Стандартный шейдер MeshStandardMaterial умеет ровно одну карту, и
+ * она обязана повторяться. Поэтому слой добавляется патчем: своя
+ * переменная с «сырой» координатой (без repeat детальной карты) и
+ * умножение diffuseColor на маску вокруг единицы.
+ *
+ * ПОЧЕМУ УМНОЖЕНИЕ, А НЕ СМЕШИВАНИЕ. Маска лежит около 1.0 и только
+ * слегка отклоняется: она не перекрашивает плитку, а гасит и подсвечивает
+ * её, поэтому рисунок плиты остаётся, а повтор перестаёт читаться.
+ *
+ * Сила — доля отклонения от единицы: 0.35 означает ±35% яркости.
+ */
+export function addMacroLayer(
+  material: THREE.Material,
+  макро: THREE.Texture,
+  сила = 0.35,
+  повтор = 1.5,
+): void {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uMacroMap = { value: макро };
+    shader.uniforms.uMacroStrength = { value: сила };
+    shader.uniforms.uMacroRepeat = { value: повтор };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vMacroUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroUv = uv;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vMacroUv;
+        uniform sampler2D uMacroMap;
+        uniform float uMacroStrength;
+        uniform float uMacroRepeat;`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          float v = texture2D(uMacroMap, vMacroUv * uMacroRepeat).r;
+          diffuseColor.rgb *= mix(1.0 - uMacroStrength, 1.0 + uMacroStrength, v);
+        }`);
+  };
+  // Ключ нужен, чтобы three не переиспользовала программу от материала
+  // без макро-слоя: иначе патч тихо пропадёт.
+  material.customProgramCacheKey = () => 'macroLayer';
+  material.needsUpdate = true;
+}
+
 export function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
