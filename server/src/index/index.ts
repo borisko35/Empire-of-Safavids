@@ -1,3 +1,4 @@
+import xsollaExchangeRouter from '../routes/xsolla';
 // .env должен загрузиться ДО импортов сервисов: они создают пул БД на этапе импорта
 import 'dotenv/config';
 import path from 'path';
@@ -147,6 +148,10 @@ app.get('/metrics', (_req, res) => {
 
 // ── REST API маршруты ────────────────────────────────────
 app.use('/api/auth', authRouter);
+// Обмен кода Xsolla Login. Отдельный роутер под /api/auth/xsolla — он
+// не общий auth, а один шаг OAuth-потока, и путать его со входом по
+// паролю нельзя: у него другое состояние и другой отказ.
+app.use('/api/auth/xsolla', xsollaExchangeRouter);
 app.use('/api/characters', characterRouter);
 app.use('/api/skills', skillsRouter);
 app.use('/api/world', worldRouter);

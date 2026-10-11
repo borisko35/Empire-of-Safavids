@@ -47,6 +47,93 @@
     }
   }
 
+  /**
+   * Сверить вернувшийся state с сохранённым.
+   *
+   * ВОТ ЭТОГО НЕ ХВАТАЛО. state генерировался и сохранялся, но никто не
+   * проверял его при возврате — а именно в этом и смысл: Xsolla редиректит
+   * на redirect_uri с ?code=...&state=..., и совпадение state доказывает,
+   * что код пришёл с нашего клика, а не по чужой ссылке. Без сверки
+   * случайность значения ничего не защищает.
+   *
+   * Возвращает 'ok' | 'mismatch' | 'absent' | 'expired'.
+   * 'absent' и 'expired' не страшны (страницу перезагрузили / прошёл час) —
+   * код просто не обменивается, вход повторяют. 'mismatch' — сигнал.
+   */
+  function verifyReturnedState(state) {
+    var raw = null;
+    try {
+      raw = localStorage.getItem(STATE_KEY);
+    } catch (e) {
+      return 'absent';
+    }
+    if (!raw) return 'absent';
+    var saved;
+    try {
+      saved = JSON.parse(raw);
+    } catch (e) {
+      return 'absent';
+    }
+    if (!saved || typeof saved.value !== 'string') return 'absent';
+    if (Date.now() - saved.at > STATE_TTL_MS) return "expired";
+    // Сравнение РАВНОЕ, а не через includes: подстроку подставить проще всего.
+    return saved.value === state ? 'ok' : 'mismatch';
+  }
+
+  /**
+   * Разобрать ?code=...&state=... из адреса.
+   *
+   * URLSearchParams, а не регулярка по строке: он правильно раскодирует
+   * проценты и не сломается о '&' внутри значения.
+   */
+  function readCallback() {
+    if (!window.location.search) return null;
+    var params = new URLSearchParams(window.location.search);
+    var code = params.get('code');
+    if (!code) return null;
+    return { code: code, state: params.get('state') || '', error: params.get('error') };
+  }
+
+  function handleReturn() {
+    var назад = readCallback();
+    if (!назад) return;
+    var state = назад.state;
+    var итог = verifyReturnedState(state);
+    // State одноразовый: удаляем сразу, чтобы повторный возврат с тем же
+    // кодом не проехал второй раз.
+    try {
+      localStorage.removeItem(STATE_KEY);
+    } catch (e) {
+      /* приватный режим */
+    }
+    if (итог !== 'ok') {
+      if (window.console) console.warn('[Xsolla] возврат отклонён:', итог);
+      return;
+    }
+    // Код обменивается на стороне сервера: секрет виджета не должен
+    // оказываться в браузере. Здесь только передаём код дальше.
+    var host = document.getElementById('xl_auth');
+    if (host) host.setAttribute('data-xsolla-return', 'code');
+    fetch('/api/auth/xsolla/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: назад.code }),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (г) {
+        if (г && г.ok) {
+          if (window.console) console.info('[Xsolla] вход выполнен');
+        } else if (window.console) {
+          console.warn('[Xsolla] обмен кода отклонён', г && г.error);
+        }
+      })
+      .catch(function (e) {
+        if (window.console) console.warn('[Xsolla] обмен кода не удался', e);
+      });
+  }
+
   function loadSdk() {
     return new Promise(function (resolve, reject) {
       if (window.XsollaLogin && window.XsollaLogin.Widget) {
@@ -106,4 +193,11 @@
     var host = document.getElementById('xl_auth');
     if (host) host.setAttribute('data-xsolla-error', '1');
   });
+
+  // Слушаем возврат с Xsolla (?code=...&state=...).
+  //
+  // ДО ЗАГРУЗКИ SDK, а не после: если редирект уже случился, ждать виджет
+  // незачем — надо с верить state и отдать код. Иначе проверка срабатывала
+  // бы только при следующем входе, то есть никогда.
+  handleReturn();
 })();
