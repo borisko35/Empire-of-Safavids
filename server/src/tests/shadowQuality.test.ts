@@ -29,14 +29,21 @@ const НАСТРОЙКИ = читать('client/src/app/settings.ts');
 
 describe('Качество теней', () => {
   it('кромка тени мягкая, а не ступенькой', () => {
+    // VSM, а не PCFSoft. Про PCFSoft: константа в three осталась, а
+    // реализации нет — рендер тихо берёт PCFShadowMap. Ошибка была моя,
+    // стоила выката и раздела §134.
     должен(
-      /this\.renderer\.shadowMap\.type\s*=\s*THREE\.PCFSoftShadowMap/.test(МИР),
-      'в world3d остался PCFShadowMap: кромка тени ступенькой, как в игре 2003 года',
+      /this\.renderer\.shadowMap\.type\s*=\s*THREE\.VSMShadowMap/.test(МИР),
+      'в world3d не VSMShadowMap: кромка тени ступенькой, как в игре 2003 года',
     );
-    // И не жёсткий режим, и не VSM: VSM даёт протечки света и другую цену.
+    // И не жёсткий режим, и не удалённый тип.
     должен(
       !/shadowMap\.type\s*=\s*THREE\.BasicShadowMap/.test(МИР),
       'основной тип теней стал BasicShadowMap: тени пропадут вовсе',
+    );
+    должен(
+      !/shadowMap\.type\s*=\s*THREE\.PCFSoftShadowMap/.test(МИР),
+      'включён тип, которого рендер не знает: кадр молча откатится на жёсткие тени',
     );
   });
 
@@ -59,16 +66,17 @@ describe('Качество теней', () => {
     );
   });
 
-  it('константа PCFSoftShadowMap существует в подключенной three', () => {
+  it('константа VSMShadowMap реализована в подключенной three', () => {
     // Проверять в вакууме бессмысленно: имя должно быть в той версии,
     // которая стоит у клиента. three ставится клиенту, серверный jest его
     // не видит — читаем клиентскую копию.
     const пакет = JSON.parse(читать('client/node_modules/three/package.json')) as { version?: string };
     должен(/^\d+\.\d+\.\d+$/.test(пакет.version ?? ''), 'версия three не читается');
-    const ядро = читать('client/node_modules/three/build/three.core.js');
+    const рендер = читать('client/node_modules/three/build/three.module.js');
+    // Имя в экспортах — это ещё не реализация (см. §134 про PCFSoft).
     должен(
-      /const PCFSoftShadowMap\s*=\s*\d+;/.test(ядро),
-      `PCFSoftShadowMap не объявлено в three ${пакет.version}: кадр ушёл бы на жёсткие тени`,
+      /SHADOWMAP_TYPE_VSM/.test(рендер),
+      `VSM не реализован в three ${пакет.version}: мягкой кромки не будет`,
     );
   });
 

@@ -458,15 +458,25 @@ private roll = 0;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
-    // МЯГКИЕ ТЕНИ. Было PCFShadowMap - кромка тени получалась ступенькой,
-    // как в игре 2003 года: алиасинг по краю читается глазом сразу и
-    // сильнее всего роняет "реалистичность" кадра.
+    // МЯГКИЕ ТЕНИ. Тут была моя ошибка, и она стоила лишнего выката.
     //
-    // Раньше здесь стоял комментарий «мягкие тени вырезаны из Three.js».
-    // Это было правдой когда-то, а в three 0.186 константа на месте
-    // (const PCFSoftShadowMap = 2). Устаревшая запись стоила проекту
-    // мягких теней - проверено чтением установленной библиотеки.
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Я прочитал в three.core.js строку `const PCFSoftShadowMap = 2`, решил,
+    // что тип жив, и заменил им PCFShadowMap. Константа действительно
+    // осталась — а РЕАЛИЗАЦИИ за ней больше нет. three.module.js прямо
+    // предупреждает при установке типа:
+    //   if (this.type === PCFSoftShadowMap) {
+    //     warn('WebGLShadowMap: PCFSoftShadowMap has been removed.
+    //           Using PCFShadowMap instead.');
+    // То есть игра тихо работала на PCFShadowMap и писала предупреждение в
+    // консоль, а исходный комментарий проекта «мягкие тени вырезаны» был
+    // ПРАВ. Я отменил верное утверждение по более слабой проверке.
+    //
+    // Что осталось на самом деле: VSMShadowMap. Он жив (SHADOWMAP_TYPE_VSM,
+    // отдельные ветки для точечных источников) и единственный даёт мягкую
+    // кромку — через shadow.radius и blurSamples. Проверка, которая стоит
+    // рядом, теперь смотрит не на объявление константы, а на то, ругается ли
+    // three на выбранный тип.
+    this.renderer.shadowMap.type = THREE.VSMShadowMap;
     // ТОНАЛЬНАЯ КРИВАЯ. Без неё рендер отдавал кадр как есть (NoToneMapping
     // — значение по умолчанию), и всё, что ярче единицы, срезалось в чистое
     // белое: солнечные блики на металле, факелы, небо в зените. Белое пятно
@@ -508,6 +518,11 @@ private roll = 0;
     const sc = this.sun.shadow.camera as THREE.OrthographicCamera;
     sc.left = -46; sc.right = 46; sc.top = 46; sc.bottom = -46;
     this.sun.shadow.bias = -0.0004;
+    // Радиус размытия — только для VSM. Именно он даёт мягкую кромку:
+    // PCF берёт жёсткую выборку, а VSM размывает по площади.
+    // Влияет на круглое освещение и на карту теней, но не на главный кадр.
+    this.sun.shadow.radius = 3;
+    this.sun.shadow.blurSamples = 12;
     this.scene.add(this.sun, this.sun.target);
 
     // Мир
@@ -703,8 +718,8 @@ private roll = 0;
     this.renderer.shadowMap.enabled = p.shadows;
     this.sun.castShadow = p.shadows;
     // Тени выключены - самый дешёвый тип. Иначе шейдеры продолжают считать
-    // мягкую выборку вхолостую: свет тень не бросает, а платим за неё.
-    const нужныйТип = p.shadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    // размытие вхолостую: свет тень не бросает, а платим за неё.
+    const нужныйТип = p.shadows ? THREE.VSMShadowMap : THREE.BasicShadowMap;
     if (this.renderer.shadowMap.type !== нужныйТип) this.renderer.shadowMap.type = нужныйТип;
     if (shadowsChanged) {
       this.scene.traverse((obj) => {
