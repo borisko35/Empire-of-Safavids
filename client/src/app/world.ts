@@ -1538,7 +1538,9 @@ function wireSocket(): void {
   socket.on('world:time', (payload: Record<string, unknown>) => {
     setWorldTime(payload);
     const tod = String(payload.timeOfDay ?? '');
-    night = tod === 'night' || tod === 'midnight' ? 1 : tod === 'evening' || tod === 'dawn' ? 0.5 : 0;
+    // 'dusk', НЕ 'evening' — см. shared/stealth.ts: тип TimeOfDay такого
+    // значения не содержит, поэтому закат считался полным днём.
+    night = tod === 'night' || tod === 'midnight' ? 1 : tod === 'dusk' || tod === 'dawn' ? 0.5 : 0;
     const hour = Number(payload.gameHour ?? payload.hour);
     if (Number.isFinite(hour)) world3d?.setClock(hour);
     const weather = String(payload.weather ?? '');

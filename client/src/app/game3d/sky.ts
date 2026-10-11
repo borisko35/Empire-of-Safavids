@@ -223,13 +223,24 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     dome.position.set(center.x, 0, center.z);
     stars.position.set(center.x, 0, center.z);
 
-    // Дуга: восход в 6, зенит в 12, закат в 18 (дневная половина)
-    const dayAngle = ((hour01 - 6) / 12) * Math.PI;
+    // Дуга: восход в 5, зенит в 13, закат в 21 — ровно по фазам сервера.
+    //
+    // ПОЧЕМУ НЕ 6-18, КАК БЫЛО. WorldTimeSystem называет закатом часы
+    // 18:00-21:00 (функция timeOfDayOf), а старая дуга уводила солнце за
+    // горизонт уже в 18:00. В 19:13 на скриншоте подпись говорила «закат»,
+    // а на небе висели луна и звезды: две трети закатa рисовались ночью.
+    //
+    // Теперь дуга накрывает ровно объявленный сервером день:
+    //   восход 5:00 — начало 'dawn',
+    //   зенит  13:00 — середина 'noon' (12-14),
+    //   закат  21:00 — начало 'night'.
+    const dayAngle = ((hour01 - 5) / 16) * Math.PI;
     const e = Math.sin(dayAngle); // высота солнца: >0 днём
     sunDirection.set(Math.cos(dayAngle), e, -0.38).normalize();
 
-    // Луна — та же дуга со сдвигом на 12 часов
-    const mAngle = ((hour01 + 12 - 6) / 12) * Math.PI;
+    // Луна — та же дуга со сдвигом на 12 часов, и тем же делением на 16:
+    // иначе светила разъедутся и в полночь над головой окажется не луна.
+    const mAngle = ((hour01 + 12 - 5) / 16) * Math.PI;
     const mElev = Math.sin(mAngle);
     moonGroup.position.set(
       center.x + Math.cos(mAngle) * CELESTIAL_RADIUS * Math.cos(0.32),

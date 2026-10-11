@@ -362,7 +362,14 @@ export interface SightContext {
  */
 export function nightFactor(timeOfDay: string): number {
   if (timeOfDay === 'night' || timeOfDay === 'midnight') return 1;
-  if (timeOfDay === 'evening' || timeOfDay === 'dawn') return 0.5;
+  // 'dusk', НЕ 'evening'. WorldTimeSystem отдает ровно семь фаз (см. тип
+  // TimeOfDay: dawn, morning, noon, afternoon, dusk, night, midnight), а
+  // 'evening' среди них нет и не было. Из-за этого закат — целых три часа,
+  // 18:00-21:00 — получал factor 0, то есть ПОЛНЫЙ ДЕНЬ: сумерки шли
+  // темными на экране и светлыми для скрытности и света. Проверка нашла
+  // это по скриншоту: в 19:13 подпись говорила «закат», а на небе висели
+  // луна и звезды.
+  if (timeOfDay === 'dusk' || timeOfDay === 'dawn') return 0.5;
   return 0;
 }
 
