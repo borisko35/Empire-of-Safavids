@@ -31,7 +31,43 @@ interface Итог {
   кисть: number;
   ступня: number;
   шея: number;
+  /** Материалы после подгонки: сколько прозрачных, двусторонних, металлов */
+  материалы: string;
   кадр: string;
+}
+
+/**
+ * Считает материалы так, как их увидит three.
+ *
+ * Зачем считать, а не смотреть: прозрачность и двусторонность видны только
+ * тогда, когда модель чем-то перекрыта, и на белом фоне прочитать их
+ * почти невозможно. А обе вещи ломают картину катастрофически и молча.
+ */
+function пересчётМатериалов(риг: THREE.Group): string {
+  let всего = 0;
+  let прозрачных = 0;
+  let двусторонних = 0;
+  let металлов = 0;
+  let безАнизотропии = 0;
+  риг.traverse((o) => {
+    const меш = o as THREE.Mesh;
+    if (!меш.isMesh || !меш.material) return;
+    const список = Array.isArray(меш.material) ? меш.material : [меш.material];
+    for (const mat of список) {
+      const m = mat as THREE.MeshStandardMaterial;
+      if (!m || !m.color) continue;
+      всего++;
+      if (m.transparent) прозрачных++;
+      if (m.side === THREE.DoubleSide) двусторонних++;
+      if (m.metalness > 0) металлов++;
+      if (m.map && !m.map.anisotropy) безАнизотропии++;
+    }
+  });
+  return (
+    `${всего} всего, прозрачных ${прозрачных}, ` +
+    `двусторонних ${двусторонних}, металлов ${металлов}, ` +
+    `текстур без анизотропии ${безАнизотропии}`
+  );
 }
 
 const ряд = document.getElementById('ряд')!;
@@ -166,6 +202,7 @@ async function показать(класс: string): Promise<Итог | null> {
     кисть: кисть?.y ?? NaN,
     ступня: ступня?.y ?? NaN,
     шея: голова && таз ? голова.y - таз.y : NaN,
+    материалы: пересчётМатериалов(риг.group),
     кадр,
   };
 }
@@ -209,6 +246,12 @@ for (const и of итоги) {
     ].join(' '),
   );
 }
+строки.push('');
+строки.push('МАТЕРИАЛЫ');
+for (const и of итоги) {
+  строки.push(`  ${и.класс.padEnd(16)} ${и.материалы}`);
+}
+
 сводка.textContent = строки.join('\n');
 (window as unknown as { __rigCheck: Итог[] }).__rigCheck = итоги;
 document.title = 'Проверка рига готова';
