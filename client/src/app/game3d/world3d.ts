@@ -1203,6 +1203,11 @@ private roll = 0;
         // Модель не пришла: остаёмся на палочках, и отметку сбрасываем, чтобы
         // попытка могла повториться — например, после смены класса.
         if (cur && !real) cur.realModelTried = false;
+        // ЗАМЕР. Молчаливый отказ — половина диагностики: по экрану не видно,
+        // рисуется процедурный силуэт или настоящая модель. Одна строка в
+        // консоль отвечает на вопрос, который иначе приходится решать по
+        // догадкам (см. §139-142).
+        console.info(`[rig] player ${id}: real model NOT applied - procedural silhouette shown`);
         return;
       }
       const прежний = cur.rig;
@@ -1214,6 +1219,18 @@ private roll = 0;
       прежний.dispose();
       this.scene.add(real.group);
       cur.rig = real;
+      // Второй замер: не «модель пришла», а КАКОГО РАЗМЕРА она встала. Число
+      // после add — уже с учётом всех обёрток, масштабов подгонки и поворота,
+      // то есть ровно то, что видно на экране.
+      {
+        const габарит = new THREE.Box3().setFromObject(real.group);
+        console.info(
+          `[rig] player ${id}: real model applied, ` +
+            `height=${(габарит.max.y - габарит.min.y).toFixed(4)} ` +
+            `groupScale=${real.group.scale.x.toFixed(4)} ` +
+            `sceneChildren=${real.group.children.length}`,
+        );
+      }
       if (id === this.me?.id) {
         // Вид оружия — по классу (посох мистика — настоящей моделью, остальные
         // процедурные). Ставится до equipWeapon: иначе построится меч.
