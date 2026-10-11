@@ -102,6 +102,14 @@ export async function attachClassPreview(canvas: HTMLCanvasElement, classId: str
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(ширина, высота, false);
+  // ТА ЖЕ КРИВАЯ, ЧТО В МИРЕ (world3d.ts). Превью персонажа и тот же
+  // персонаж в игре должны выглядеть одним продуктом: без тонмаппинга
+  // здесь блики срезались бы в белое, а в мире — нет, и выбор класса
+  // выглядел бы другой игрой. Экспозиция чуть ниже мировой: сцена малая и
+  // светит только ключом, компенсировать затемнение середины почти не
+  // нужно.
+  renderer.toneMapping = THREE.AgXToneMapping;
+  renderer.toneMappingExposure = 1.05;
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xfff2dd, 0x1a2030, 0.9));
   const ключ = new THREE.DirectionalLight(0xffe9c4, 1.6);

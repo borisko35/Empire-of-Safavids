@@ -458,6 +458,22 @@ private roll = 0;
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // ТОНАЛЬНАЯ КРИВАЯ. Без неё рендер отдавал кадр как есть (NoToneMapping
+    // — значение по умолчанию), и всё, что ярче единицы, срезалось в чистое
+    // белое: солнечные блики на металле, факелы, небо в зените. Белое пятно
+    // вместо градации — самая заметная «нереалистичность» кадра, потому что
+    // ни одна камера так не снимает.
+    //
+    // AgX — та же кривая, что в Blender с 4.0: кино-кривая с плексом
+    // (плечом) в светах. Местами она намеренно уводит насыщенность в белое,
+    // как плёнка, поэтому белый металл на солнце выглядит металлом, а не
+    // лампочкой.
+    //
+    // Экспозиция 1.25 — компенсация: кривая затемняет середину примерно на
+    // столько же. Без компенсации весь мир стал бы серым. Точное число
+    // подбирается глазами; если мир покажется тёмным — здесь один множитель.
+    this.renderer.toneMapping = THREE.AgXToneMapping;
+    this.renderer.toneMappingExposure = 1.25;
     this.renderer.domElement.className = 'gl-canvas';
     container.appendChild(this.renderer.domElement);
 
