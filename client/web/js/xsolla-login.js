@@ -17,7 +17,10 @@
 (function () {
   'use strict';
 
-  var PROJECT_ID = '6a10f634-6de2-4cd2-b8ca-aa48f488d17a';
+  // ID виджета входа. В кабинете Xsolla это «Login ID» — страница Login
+  // проекта, НЕ «Project ID» из настроек платежей. Раньше стояло имя
+  // PROJECT_ID, и из-за него можно было уйти искать секрет не в тот раздел.
+  var XSOLLA_LOGIN_ID = '6a10f634-6de2-4cd2-b8ca-aa48f488d17a';
   var CLIENT_ID = '18679';
   var REDIRECT_URI = 'https://game.eos-gameonline.com/';
   // Ключ в localStorage для state. Срок — час: дольше смысла нет, короче —
@@ -169,7 +172,7 @@
     var state = generateState();
     rememberState(state);
     var xl = new window.XsollaLogin.Widget({
-      projectId: PROJECT_ID,
+      projectId: XSOLLA_LOGIN_ID,
       preferredLocale: preferredLocale(),
       clientId: CLIENT_ID,
       responseType: 'code',
