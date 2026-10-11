@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Проверка рига: кызылбаш</title>
+<style>
+  body { margin: 0; background: #14161b; color: #cfd3da;
+         font: 13px/1.5 ui-monospace, Consolas, monospace; }
+  #ряд { display: flex; gap: 8px; padding: 8px; }
+  .клетка { position: relative; }
+  .клетка canvas { display: block; background: #23262e; }
+  .подпись { position: absolute; top: 4px; left: 6px; color: #e8c37a; }
+  #сводка { padding: 8px 10px; white-space: pre; font-size: 12px; }
+  .плохо { color: #ff8f7a; }
+  .хорошо { color: #8fe0a0; }
+</style>
+</head>
+<body>
+<div id="ряд"></div>
+<div id="сводка">загрузка…</div>
+<script type="module" src="/rigcheck.ts"></script>
+</body>
+</html>
