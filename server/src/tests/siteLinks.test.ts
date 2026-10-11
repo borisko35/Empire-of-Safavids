@@ -68,6 +68,7 @@ describe('Ссылки на игру ведут на существующее и
       'client/web/sitemap.xml',
       'client/web/robots.txt',
       'tools/publish-instructions.md',
+      'tools/gamejolt-instructions.md',
       'tools/itch-reddit-draft.md',
       'tools/deploy-vps.py',
       'tools/deploy.sh',
@@ -95,6 +96,7 @@ describe('Ссылки на игру ведут на существующее и
       'client/web/sitemap.xml',
       'client/web/robots.txt',
       'tools/publish-instructions.md',
+      'tools/gamejolt-instructions.md',
       'tools/itch-reddit-draft.md',
     ];
     let проверено = 0;
@@ -116,8 +118,13 @@ describe('Ссылки на игру ведут на существующее и
         // Площадки, куда игра выходит: каталоги, сообщества, площадка игроков.
         // Список назван по факту из index.html — Discord, соцсети и itch.io
         // стоят там как наши каналы связи, и «чужим» их назвать нельзя.
-        const площадка = /(bmmorpg|browsermmorpg|itch\.io|github\.com|discord\.gg|facebook\.com|twitter\.com|reddit\.com|bauval\.org)/i
+        const площадка = /(bmmorpg|browsermmorpg|itch\.io|gamejolt\.com|github\.com|discord\.gg|facebook\.com|twitter\.com|reddit\.com|bauval\.org)/i
           .test(адрес);
+        // Game Jolt добавлен вместе с tools/gamejolt-instructions.md: это
+        // площадка, куда игра выходит, ровно того же рода, что itch.io.
+        // Без этого новый документ ссылался бы на gamejolt.com — и проверка
+        // потребовала бы «наш или партнёрский» на адрес нашей же
+        // публикации.
         // Схемы разметки (schema.org) и локальные адреса при разработке — не
     // наши ссылки, но и не чужие площадки: их игрок не кликает.
         // sitemaps.org — это xmlns карты сайта, а не ссылка: робот читает его как
