@@ -33,6 +33,7 @@ import { createTownfolk, TownfolkHandle } from './townfolk';
 import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
+import { setTextureAnisotropy } from './textures';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { audio } from '../audio';
 import { session } from '../state';
@@ -482,6 +483,11 @@ private roll = 0;
     // подбирается глазами; если мир покажется тёмным — здесь один множитель.
     this.renderer.toneMapping = THREE.AgXToneMapping;
     this.renderer.toneMappingExposure = 1.25;
+    // Анизотропия по возможностям железа, а не зашитая четвёрка. Землю
+    // видно почти вдоль, и с 4 она превращается в мыльную муть там, куда
+    // игрок смотрит. Ставим ДО buildTerrain: текстуры создаются там и
+    // берут это значение при создании.
+    setTextureAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
     this.renderer.domElement.className = 'gl-canvas';
     container.appendChild(this.renderer.domElement);
 

@@ -37,13 +37,32 @@ export function makeCanvas(size = 256): { canvas: HTMLCanvasElement; ctx: Canvas
   return { canvas, ctx: canvas.getContext('2d')! };
 }
 
+/**
+ * Максимальная анизотропная фильтрация, сколько позволяет железо.
+ *
+ * ЗАЧЕМ. Раньше стояло зашитое 4. Землю игрок видит почти вдоль — под
+ * скользящим углом, и с анизотропией 4 она превращается в мыльную муть:
+ * мир теряет чёткость именно там, куда смотрит. На типичной видеокарте
+ * доступно 16.
+ *
+ * Значение не угадываем, а спрашиваем у рендера: он один знает возможности
+ * устройства. До создания рендера держим 4 — разумный минимум, чтобы
+ * текстуры, созданные раньше, не оказались вовсе без фильтрации.
+ */
+let МАКС_АНИЗОТРОПИЯ = 4;
+
+/** Сообщить Textures возможности рендера. Вызывать после его создания. */
+export function setTextureAnisotropy(max: number): void {
+  МАКС_АНИЗОТРОПИЯ = Math.max(1, Math.floor(max));
+}
+
 export function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = МАКС_АНИЗОТРОПИЯ;
   return tex;
 }
 
