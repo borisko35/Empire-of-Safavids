@@ -457,7 +457,15 @@ private roll = 0;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setSize(container.clientWidth, container.clientHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // МЯГКИЕ ТЕНИ. Было PCFShadowMap - кромка тени получалась ступенькой,
+    // как в игре 2003 года: алиасинг по краю читается глазом сразу и
+    // сильнее всего роняет "реалистичность" кадра.
+    //
+    // Раньше здесь стоял комментарий «мягкие тени вырезаны из Three.js».
+    // Это было правдой когда-то, а в three 0.186 константа на месте
+    // (const PCFSoftShadowMap = 2). Устаревшая запись стоила проекту
+    // мягких теней - проверено чтением установленной библиотеки.
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     // ТОНАЛЬНАЯ КРИВАЯ. Без неё рендер отдавал кадр как есть (NoToneMapping
     // — значение по умолчанию), и всё, что ярче единицы, срезалось в чистое
     // белое: солнечные блики на металле, факелы, небо в зените. Белое пятно
@@ -688,6 +696,10 @@ private roll = 0;
     const shadowsChanged = this.renderer.shadowMap.enabled !== p.shadows;
     this.renderer.shadowMap.enabled = p.shadows;
     this.sun.castShadow = p.shadows;
+    // Тени выключены - самый дешёвый тип. Иначе шейдеры продолжают считать
+    // мягкую выборку вхолостую: свет тень не бросает, а платим за неё.
+    const нужныйТип = p.shadows ? THREE.PCFSoftShadowMap : THREE.BasicShadowMap;
+    if (this.renderer.shadowMap.type !== нужныйТип) this.renderer.shadowMap.type = нужныйТип;
     if (shadowsChanged) {
       this.scene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;

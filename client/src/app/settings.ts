@@ -48,8 +48,12 @@ export interface GraphicsProfile {
 }
 
 // Шесть уровней: каждый следующий заметно дороже, но и заметно красивее.
-// Мягкие тени (PCFSoftShadowMap) вырезаны из Three.js, поэтому разница
-// уровней идёт по разрешению кадра, размеру карты теней и дальности.
+// Мягкие тени (PCFSoftShadowMap) включены во всех уровнях с тенями: кромка
+// перестаёт быть ступенькой. Разница уровней идёт по разрешению кадра,
+// размеру карты теней и дальности.
+// Прежний комментарий здесь утверждал, что мягких теней в Three.js нет.
+// Это было правдой когда-то; в 0.186 константа на месте. Запись стоила
+// проекту мягких теней, поэтому проверка shadowQuality сторожит её возврат.
 const PROFILES: Record<GraphicsLevel, GraphicsProfile> = {
   low:    { pixelScale: 0.6,  shadows: false, shadowMapSize: 512,  fogFar: 240, weather: 0.30 },
   medium: { pixelScale: 0.8,  shadows: true,  shadowMapSize: 1024, fogFar: 340, weather: 0.55 },
