@@ -10,6 +10,7 @@ import { showScreen } from '../world';
 import { toast } from '../hud';
 import { createCharacterWithReferral } from '../referral';
 import { attachClassPreview, stopClassPreviews } from './classPreview';
+import { spriteSource } from '../sprites';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -26,38 +27,33 @@ let selectedClass = 'qizilbash';
 let spritesReady = false;
 
 /**
- * Спрайты классов нужны иконкам выбора — грузим по URL лениво.
+ * Спрайты классов нужны иконкам выбора.
  *
- * ЗДЕСЬ БЫЛО ПРОЗРАЧНОЕ `await import(...)` БЕЗ ОБРАБОТКИ, и это стоило дороже,
- * чем кажется. Путь собран из шаблонной строки, поэтому Vite не разбирает его
- * статически и делает отдельный чанк на каждый спрайт: `char_qizilbash_0-*.js`
- * весит 72 байта и содержит одну строку вида
- * `var e = "/game/assets/char_qizilbash_0-8wMs2jEu.png"; export { e as default }`.
- * Имя чанка — с хешем содержимого, то есть меняется при КАЖДОЙ выкатке.
+ * ЗДЕСЬ БЫЛО `await import(\`../assets/sprites/${base}.png\`)` С ШАБЛОННОЙ СТРОКОЙ,
+ * и это стоило дороже, чем кажется. Vite не разбирает такой путь статически и
+ * собирает отдельный чанк на каждый спрайт. Замерено в сборке до правки:
  *
- * Отсюда сцена, которая случится с каждым, кто не обновил страницу: в кеше
- * старый `index-*.js`, он просит `char_qizilbash_0-СТАРЫЙХЕШ.js`, сервер отдаёт
- * 404, импорт отклоняется. Дальше:
+ *   char_qizilbash_0-B9oXK4an.js   72 байта
+ *   var e = "/game/assets/char_qizilbash_0-8wMs2jEu.png"; export { e as default };
  *
- *   - `refreshList` падал на середине цикла, и список персонажей дорисовывался
- *     частично: часть строк есть, остальных нет, и никто не знает почему;
- *   - `refreshList` зовётся после удаления персонажа внутри `try`, где любой отказ
- *     показывается тостом «удалить не удалось». Персонаж удалён, а игроку
- *     сказали обратное — из-за спрайта, который никто не увидит.
+ * Двадцать шесть таких файлов по 60–80 байт, каждый тянется отдельным запросом
+ * перед тем, как начнёт грузиться сама картинка. И в имя чанка входит хеш
+ * содержимого, то есть после КАЖДОЙ выкатки старые имена дают 404 — ровно тот
+ * случай, который deploy.sh описывает словами «старый index-D24E_uzX.js».
  *
- * Спрайт — украшение. Отказ от него не должен рушить список и врать о том, что
- * случилось с персонажем, поэтому здесь null, а не исключение.
+ * Отказ такого импорта поднимался наружу, а вызывающий код к нему не был готов:
+ * `refreshList` падал в середине цикла и список персонажей дорисовывался наполовину,
+ * а после удаления персонажа игроку показывалось «не удалось удалить» — из-за
+ * картинки, которую никто не увидит.
+ *
+ * Теперь адрес берётся из статической мапы `sprites.ts`: ни отдельного запроса,
+ * ни исключения, ни 404. Адреса всех спрайтов там уже импортированы явно.
+ *
+ * Остаточный случай — сама PNG не нашлась, и это 404 уже на картинке: его ловит
+ * браузер на `<img>`, и на список он не влияет.
  */
-async function spriteUrl(base: string): Promise<string | null> {
-  try {
-    const mod = await import(`../assets/sprites/${base}.png`);
-    return mod.default as string;
-  } catch (e) {
-    // Один раз на спрайт, не на каждый вызов: при 404 на всех иконках выбора
-    // иначе получим двадцать одинаковых строк.
-    console.warn(`[chars] ${base}: ${t('chars.sprite_failed')}`, e);
-    return null;
-  }
+function spriteUrl(base: string): string | undefined {
+  return spriteSource(base);
 }
 
 export async function initCharsScreen(onEnter: (c: Character) => void): Promise<void> {
@@ -252,10 +248,10 @@ async function buildClassPicker(): Promise<void> {
       const img = document.createElement('img');
       img.alt = '';
       canvas.replaceWith(img);
-      void spriteUrl(CLASS_SPRITE[id]).then((url) => {
-        if (!url) return;
-        img.src = url;
-      });
+      // Адрес спрайта теперь берётся из статической мапы и приходит сразу, без
+      // промиса: пиксельная картинка ставится на место канваса синхронно.
+      const адрес = spriteUrl(CLASS_SPRITE[id]);
+      if (адрес) img.src = адрес;
     });
     btn.addEventListener('click', () => {
       selectedClass = id;
