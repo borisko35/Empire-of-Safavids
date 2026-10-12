@@ -21,11 +21,13 @@
 //    Фаза у города своя, иначе все девять дышали бы в один такт.
 
 import * as THREE from 'three';
-import { GLTFLoader, GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { REGION_TOWNS, addCollider, groundHeight } from './terrain';
-import { подогнать, безМёртвыхДорожек } from './realRig';
+// Загрузчики сцены и клипа берутся из realRig, а не пишутся здесь свои.
+// Свои копии стоили тридцать строк и разошлись молча: страховки на синхронный
+// сбой в них не было, а в оригинале после §157 появилась. Одна поломка в двух
+// местах — это и есть повод держать один загрузчик, а не два.
+import { подогнать, безМёртвыхДорожек, загрузитьСцену, загрузитьКлип } from './realRig';
 
 /**
  * Модели жителей, по очереди на каждую фигуру.
@@ -42,7 +44,6 @@ import { подогнать, безМёртвыхДорожек } from './realRi
  */
 const МОДЕЛИ = ['citizen', 'citizen2', 'citizen3'] as const;
 const КЛИП = 'standing-idle';
-const БАЗА = '/game/models/';
 
 /**
  * Радиус коллайдера фигуры.
@@ -120,56 +121,6 @@ export interface TownfolkHandle {
   /** Продвигает анимацию: без вызова mix.update фигуры стоят столбом */
   update(dt: number): void;
   dispose(): void;
-}
-
-function загрузчик(): GLTFLoader | null {
-  try {
-    const draco = new DRACOLoader();
-    draco.setDecoderPath('/game/draco/');
-    const l = new GLTFLoader();
-    l.setDRACOLoader(draco);
-    return l;
-  } catch {
-    return null;
-  }
-}
-
-const сцены = new Map<string, Promise<THREE.Group | null>>();
-const клипы = new Map<string, Promise<THREE.AnimationClip | null>>();
-
-function загрузитьСцену(имя: string): Promise<THREE.Group | null> {
-  const готово = сцены.get(имя);
-  if (готово) return готово;
-  const задача = new Promise<THREE.Group | null>((готово) => {
-    const l = загрузчик();
-    if (!l) { готово(null); return; }
-    l.load(
-      `${БАЗА}${имя}.glb`,
-      (gltf: GLTF) => готово((gltf.scene as THREE.Group) ?? null),
-      undefined,
-      // Нет файла или сети — это не ошибка игры, а повод остаться без жителей
-      () => готово(null),
-    );
-  });
-  сцены.set(имя, задача);
-  return задача;
-}
-
-function загрузитьКлип(имя: string): Promise<THREE.AnimationClip | null> {
-  const готово = клипы.get(имя);
-  if (готово) return готово;
-  const задача = new Promise<THREE.AnimationClip | null>((готово) => {
-    const l = загрузчик();
-    if (!l) { готово(null); return; }
-    l.load(
-      `${БАЗА}${имя}.glb`,
-      (gltf: GLTF) => готово((gltf.animations && gltf.animations[0]) ?? null),
-      undefined,
-      () => готово(null),
-    );
-  });
-  клипы.set(имя, задача);
-  return задача;
 }
 
 /**

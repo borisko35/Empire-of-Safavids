@@ -86,6 +86,34 @@ function ensureЦикл(): void {
  * тёмную карточку.
  */
 export async function attachClassPreview(canvas: HTMLCanvasElement, classId: string): Promise<boolean> {
+  try {
+    return await поставитьПревью(canvas, classId);
+  } catch (e) {
+    // ЗДЕСЬ БЫЛО ПРОСТО `async function` БЕЗ ОБРАБОТКИ, И ЭТО ЛОМАЛО ЗАПАСНОЙ
+    // ПУТЬ. Вызывающий делает так:
+    //
+    //   void attachClassPreview(canvas, id).then((живое) => {
+    //     if (живое) return;
+    //     ...поставить спрайт...
+    //   });
+    //
+    // При исключении `.then` НЕ выполняется вообще — ни живой модели, ни
+    // спрайта. Карточка остаётся пустым тёмным канвасом, ровно то, чего этот
+    // файл опасался в абзаце выше про лимит контекстов.
+    //
+    // Что здесь правда бросает: `new THREE.WebGLRenderer()` — когда контексты
+    // кончились (их лимит около 16, а на экране сразу пять превью плюс игровой).
+    // `loadRealPlayerRig` защищён и возвращает null, а рендерер — нет.
+    //
+    // false означает «живого нет» — ровно то, на что вызывающий уже умеет
+    // реагировать спрайтом.
+    console.warn(`[classPreview] ${classId}: 3D-превью не построилось, ставлю спрайт`, e);
+    return false;
+  }
+}
+
+/** Тело без обработки отказа: его зовёт обёртка выше, которая ловит всё. */
+async function поставитьПревью(canvas: HTMLCanvasElement, classId: string): Promise<boolean> {
   const моё = поколение;
   const rig = await loadRealPlayerRig(classId);
   if (!rig) return false;

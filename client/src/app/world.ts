@@ -1960,8 +1960,28 @@ function wireSettings(): void {
 
   // ── Язык: словарь перезагружается и переподставляет все data-i18n ──
   lang?.addEventListener('change', () => {
-    localStorage.setItem('eos.locale', lang.value);
-    void loadLocale(lang.value).then(paint);
+    // Что было: `void loadLocale(lang.value).then(paint)`. При отказе загрузки
+    // словаря `.then` не выполняется вообще, и не происходит НИЧЕГО: список уже
+    // стоит на новом языке, интерфейс остался на старом, игрок жмёт и не видит
+    // ответа. Хуже того, новый язык уже записан в localStorage — поломка уезжает
+    // в следующую сессию.
+    //
+    // Теперь отказ откатывает и список, и сохранённый язык: выбор игрока
+    // возвращается к тому, что действительно работает.
+    const прежний = detectLocale();
+    const код = lang.value;
+    localStorage.setItem('eos.locale', код);
+    void loadLocale(код)
+      .then(paint)
+      .catch((e) => {
+        // Латиницей, а не по-русски: в этом файле любая кириллица в строке
+        // считается непереведённой и проверяется gameI18n.test.ts. Сообщение
+        // диагностическое, игроку не показывается, но правило общее.
+        console.warn(`[i18n] locale ${код} failed to load, restoring ${прежний}`, e);
+        lang.value = прежний;
+        localStorage.setItem('eos.locale', прежний);
+        paint();
+      });
   });
 
   // ── Прочее ──
