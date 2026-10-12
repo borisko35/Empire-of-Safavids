@@ -176,7 +176,8 @@
     "nick_changed": "Nickname changed to \"{name}\"!",
     "need_azens": "500 AZENS required (you have: {n})",
     "create_failed": "Could not create the character. Try a different name.",
-    "delete_failed": "Could not delete the character"
+    "delete_failed": "Could not delete the character",
+    "sprite_failed": "Sprite did not load, the image will be blank"
   },
   "classes": {
     "qizilbash": "Qizilbash Guardian",

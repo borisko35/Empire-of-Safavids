@@ -25,10 +25,39 @@ const CLASS_SPRITE: Record<string, string> = {
 let selectedClass = 'qizilbash';
 let spritesReady = false;
 
-/** Спрайты классов нужны иконкам выбора — грузим по URL лениво */
-async function spriteUrl(base: string): Promise<string> {
-  const mod = await import(`../assets/sprites/${base}.png`);
-  return mod.default as string;
+/**
+ * Спрайты классов нужны иконкам выбора — грузим по URL лениво.
+ *
+ * ЗДЕСЬ БЫЛО ПРОЗРАЧНОЕ `await import(...)` БЕЗ ОБРАБОТКИ, и это стоило дороже,
+ * чем кажется. Путь собран из шаблонной строки, поэтому Vite не разбирает его
+ * статически и делает отдельный чанк на каждый спрайт: `char_qizilbash_0-*.js`
+ * весит 72 байта и содержит одну строку вида
+ * `var e = "/game/assets/char_qizilbash_0-8wMs2jEu.png"; export { e as default }`.
+ * Имя чанка — с хешем содержимого, то есть меняется при КАЖДОЙ выкатке.
+ *
+ * Отсюда сцена, которая случится с каждым, кто не обновил страницу: в кеше
+ * старый `index-*.js`, он просит `char_qizilbash_0-СТАРЫЙХЕШ.js`, сервер отдаёт
+ * 404, импорт отклоняется. Дальше:
+ *
+ *   - `refreshList` падал на середине цикла, и список персонажей дорисовывался
+ *     частично: часть строк есть, остальных нет, и никто не знает почему;
+ *   - `refreshList` зовётся после удаления персонажа внутри `try`, где любой отказ
+ *     показывается тостом «удалить не удалось». Персонаж удалён, а игроку
+ *     сказали обратное — из-за спрайта, который никто не увидит.
+ *
+ * Спрайт — украшение. Отказ от него не должен рушить список и врать о том, что
+ * случилось с персонажем, поэтому здесь null, а не исключение.
+ */
+async function spriteUrl(base: string): Promise<string | null> {
+  try {
+    const mod = await import(`../assets/sprites/${base}.png`);
+    return mod.default as string;
+  } catch (e) {
+    // Один раз на спрайт, не на каждый вызов: при 404 на всех иконках выбора
+    // иначе получим двадцать одинаковых строк.
+    console.warn(`[chars] ${base}: ${t('chars.sprite_failed')}`, e);
+    return null;
+  }
 }
 
 export async function initCharsScreen(onEnter: (c: Character) => void): Promise<void> {
@@ -139,7 +168,11 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
       const row = document.createElement('div');
       row.className = 'char-row';
       const img = document.createElement('img');
-      img.src = await spriteUrl(CLASS_SPRITE[c.class] ?? 'char_qizilbash_0');
+      const спрайт = await spriteUrl(CLASS_SPRITE[c.class] ?? 'char_qizilbash_0');
+      // Спрайт мог не загрузиться — карточка остаётся в списке, просто без
+      // картинки. Раньше отказ здесь обрывал весь цикл, и список дорисовывался
+      // наполовину.
+      if (спрайт) img.src = спрайт;
       img.alt = '';
       const info = document.createElement('div');
       info.className = 'info';
@@ -220,6 +253,7 @@ async function buildClassPicker(): Promise<void> {
       img.alt = '';
       canvas.replaceWith(img);
       void spriteUrl(CLASS_SPRITE[id]).then((url) => {
+        if (!url) return;
         img.src = url;
       });
     });
