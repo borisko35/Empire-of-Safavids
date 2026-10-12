@@ -176,8 +176,7 @@
     "nick_changed": "Ləqəb \"{name}\" olaraq dəyişdirildi!",
     "need_azens": "500 AZENS lazımdır (sizdə: {n})",
     "create_failed": "Personaj yaradıla bilmədi. Başqa ad yoxlayın.",
-    "delete_failed": "Personaj silinə bilmədi",
-    "sprite_failed": "Sprite yüklənmədi, şəkil boş qalacaq"
+    "delete_failed": "Personaj silinə bilmədi"
   },
   "classes": {
     "qizilbash": "Qızılbaş Qvardiyası",
