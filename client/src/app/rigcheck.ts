@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-import { loadRealPlayerRig, CLASS_WEAPON } from './game3d/realRig';
+import { loadRealPlayerRig, CLASS_WEAPON, подогнать } from './game3d/realRig';
 
 const КЛАССЫ = ['qizilbash', 'sufi_mystic', 'persian_archer', 'bazaar_merchant', 'court_diplomat'];
 const ВЫСОТА_ЭТАЛОНА = 1.9;
@@ -86,6 +86,64 @@ const сводка = document.getElementById('сводка')!;
  *
  * Ничего не утверждается наперёд: выводится то, что найдено.
  */
+/**
+ * Подошва жителя после подгонки: обязана быть в нуле обёртки.
+ *
+ * ПОЧЕМУ ЭТО ВООБЩЕ ПРОВЕРЯЕТСЯ. В логе `подогнать()` есть строка
+ * `низ=...`, и выглядит она как «где подошва». Это не так: строка печатается
+ * ДО сдвига, который подошву и ставит на нуль (сдвиг ниже по функции). Разные
+ * жители дают разный `низ` — у них разный покой скелета, — и по одному этому
+ * числу нельзя ни доказать, ни опровергнуть никого.
+ *
+ * Здесь проверяется то, на что townfolk.ts опирается по-настоящему: после
+ * `подогнать()` подошва обёртки sits at 0. Если это не так, житель висит над
+ * землёй или утоплен в ней, и вся расстановка по рельефу врёт.
+ */
+async function проверитьПодошвуЖителей(): Promise<string[]> {
+  const строки: string[] = [];
+  const загрузчик = new GLTFLoader();
+  const draco = new DRACOLoader();
+  draco.setDecoderPath('/game/draco/');
+  загрузчик.setDRACOLoader(draco);
+
+  const низОбёртки = (корень: THREE.Object3D): number => {
+    корень.updateMatrixWorld(true);
+    const g = new THREE.Box3();
+    const t = new THREE.Box3();
+    корень.traverse((o) => {
+      const узел = o as THREE.Object3D & {
+        isSkinnedMesh?: boolean;
+        computeBoundingBox?: () => void;
+        boundingBox?: THREE.Box3 | null;
+      };
+      if (узел.isSkinnedMesh === true && typeof узел.computeBoundingBox === 'function') {
+        узел.computeBoundingBox();
+        if (узел.boundingBox) g.union(t.copy(узел.boundingBox).applyMatrix4(узел.matrixWorld));
+        return;
+      }
+      const меш = o as THREE.Mesh;
+      if (!меш.isMesh || !меш.geometry) return;
+      if (!меш.geometry.boundingBox) меш.geometry.computeBoundingBox();
+      if (меш.geometry.boundingBox) {
+        g.union(t.copy(меш.geometry.boundingBox).applyMatrix4(меш.matrixWorld));
+      }
+    });
+    return g.min.y;
+  };
+
+  for (const имя of ['citizen', 'citizen2', 'citizen3']) {
+    const gltf: any = await new Promise((ok) =>
+      загрузчик.load(`/game/models/${имя}.glb`, ok, undefined, () => ok(null)),
+    );
+    if (!gltf?.scene) { строки.push(`  ${имя}: не загрузилось`); continue; }
+    const обёртка = подогнать(gltf.scene as THREE.Group, `житель-${имя}`);
+    const низ = низОбёртки(обёртка);
+    const судьба = Math.abs(низ) < 0.05 ? 'норма' : `!! подошва ${низ.toFixed(3)} м`;
+    строки.push(`  ${имя.padEnd(10)} подошва ${низ >= 0 ? '+' : ''}${низ.toFixed(4)} м   ${судьба}`);
+  }
+  return строки;
+}
+
 async function проверитьПривязку(): Promise<string[]> {
   const строки: string[] = [];
   const загрузчик = new GLTFLoader();
@@ -311,6 +369,10 @@ for (const и of итоги) {
 строки.push('');
 строки.push('ПРИВЯЗКА ДОРОЖЕК');
 строки.push(...(await проверитьПривязку()));
+
+строки.push('');
+строки.push('ПОДОШВА ЖИТЕЛЕЙ ПОСЛЕ ПОДГОНКИ');
+строки.push(...(await проверитьПодошвуЖителей()));
 
 сводка.textContent = строки.join('\n');
 (window as unknown as { __rigCheck: Итог[] }).__rigCheck = итоги;
