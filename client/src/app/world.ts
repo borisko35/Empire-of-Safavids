@@ -593,7 +593,7 @@ export async function enterWorld(character: Character): Promise<void> {
   navTimer = setInterval(() => void refreshNavTarget(), 3000);
   void loadRegions();
   void loadQuests();
-  void startVoteReminder();
+  void startVoteReminder(character.id);
 
   world = new World();
   world3d = new World3D();

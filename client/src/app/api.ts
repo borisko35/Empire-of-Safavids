@@ -301,6 +301,24 @@ export const api = {
       `/api/game/reward-link?characterId=${characterId}`),
 
   /**
+   * Можно ли проголосовать на партнёрском сайте.
+   *
+   * Живёт здесь, а не собирает запрос руками в voteReminder: там стоял
+   * голый `fetch('/api/game/vote/status')` без `characterId`, а сервер на
+   * маршруте требует его через `requireCharacterOwnership()` и отвечал 400
+   * «Missing characterId». Замерено на проде: ошибка была одна на сессию,
+   * и запрос ловится перехватом `fetch` — `/api/game/vote/status` со
+   * статусом 400.
+   *
+   * Напоминание о голосовании при этом не просто шло с ошибкой, а не работало
+   * вовсе: `if (!res.ok) return;` глотал 400 молча, и тост про 500 золота
+   * не появлялся никогда. Плюс запрос долбил сервер раз в десять минут
+   * гарантированным отказом.
+   */
+  voteStatus: (characterId: string) =>
+    req<{ canVote?: boolean }>(`/api/game/vote/status?characterId=${characterId}`),
+
+  /**
    * Забрать награду за переход.
    *
    * Ответ 409 с already_claimed - это НЕ ошибка для игрока, а «уже
