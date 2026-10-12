@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { loadRealPlayerRig, CLASS_WEAPON, подогнать } from './game3d/realRig';
+import { сравнитьФильтрНаЖителях } from './rigcheckMix';
 
 const КЛАССЫ = ['qizilbash', 'sufi_mystic', 'persian_archer', 'bazaar_merchant', 'court_diplomat'];
 const ВЫСОТА_ЭТАЛОНА = 1.9;
@@ -373,6 +374,10 @@ for (const и of итоги) {
 строки.push('');
 строки.push('ПОДОШВА ЖИТЕЛЕЙ ПОСЛЕ ПОДГОНКИ');
 строки.push(...(await проверитьПодошвуЖителей()));
+
+строки.push('');
+строки.push('ФИЛЬТР ДОРОЖЕК НА ЖИТЕЛЯХ (A/B)');
+строки.push(...(await сравнитьФильтрНаЖителях()));
 
 сводка.textContent = строки.join('\n');
 (window as unknown as { __rigCheck: Итог[] }).__rigCheck = итоги;
