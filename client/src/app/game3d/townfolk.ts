@@ -25,7 +25,7 @@ import { GLTFLoader, GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { REGION_TOWNS, addCollider, groundHeight } from './terrain';
-import { подогнать } from './realRig';
+import { подогнать, безМёртвыхДорожек } from './realRig';
 
 /**
  * Модели жителей, по очереди на каждую фигуру.
@@ -236,8 +236,15 @@ export function createTownfolk(scene: THREE.Scene): TownfolkHandle {
       }
       // Один смеситель на город: дорожки клипа находят кости по именам внутри
       // группы, поэтому одно действие ведёт всех троих.
+      //
+      // Фильтр дорожек обязателен и здесь: жители играют тот же `standing-idle`,
+      // а костей глаз в `citizen`/`citizen2`/`citizen3` нет (замерено: 165
+      // дорожек, без цели 2). Без фильтра three писал бы шесть строк на каждый
+      // город — то есть в мире шумело бы в шесть раз больше, чем на панели
+      // классов. Корень фильтра — сама группа, ровно то, что ищет миксер.
       const смеситель = new THREE.AnimationMixer(группа);
-      const действие = смеситель.clipAction(клип);
+      const годный = безМёртвыхДорожек(клип, группа, `townfolk-${город.region}`);
+      const действие = смеситель.clipAction(годный);
       действие.reset().setLoop(THREE.LoopRepeat, Infinity).play();
       // Фаза своя у города: иначе все девять дышат в один такт.
       действие.time = порядковый * 0.7;
