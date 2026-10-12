@@ -173,8 +173,14 @@ async function skipCutscene(): Promise<void> {
   closeCutscene();
   if (id && session.character) {
     // Серверу надо знать, что сцена «просмотрена», иначе она всплывёт
-    // снова при повторном событии квеста
-    await api.storyCutsceneSkipped(session.character.id, id).catch(() => {});
+    // снова при повторном событии квеста.
+    //
+    // Отказ больше не молчит: игрок сцену уже закрыл (closeCutscene() выше),
+    // показывать ему ошибку незачем — но если сервер не отметил пропуск, сцена
+    // вернётся позже, и без записи в консоли это выглядит как «игра сама
+    // показывает одно и то же». Требование §153: у молчания есть причина.
+    await api.storyCutsceneSkipped(session.character.id, id)
+      .catch((e) => console.warn('[cutscene] skip not recorded on server', e));
   }
 }
 

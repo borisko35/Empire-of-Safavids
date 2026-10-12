@@ -612,8 +612,16 @@ export async function enterWorld(character: Character): Promise<void> {
       if (btn && el?.classList.contains('hidden')) btn.click();
       else loadPanelContent(panel);
       if (name) toast(`${name} — ${t('panels.npc_greeting')}`, 'info');
-      // Диалог: ветвящаяся беседа, тон/дружба, засчитывает talk-цели квестов
-      if (npcId) void openNpcDialogue(npcId).catch(() => {});
+      // Диалог: ветвящаяся беседа, тон/дружба, засчитывает talk-цели квестов.
+      //
+      // `openNpcDialogue` ловит отказ САМ и показывает игроку тост
+      // `dialogue.talk_failed`, поэтому этот `.catch` срабатывает не на сети,
+      // а только на том, что не попало во внутренний try (поиск панели,
+      // onTutorialAction). Панель к этому моменту уже открыта и приветствие
+      // уже показано, то есть игрок не останется в пустоте. Но раньше здесь
+      // стояло `.catch(() => {})` без причины, а по §153 у молчания она нужна.
+      if (npcId) void openNpcDialogue(npcId)
+        .catch((e) => console.warn('[dialogue] pre-dialogue step failed', e));
     },
     onDoor: (action, buildingId, nameRu, entranceId) => void enterOrExitBuilding(action, buildingId, nameRu, entranceId),
   });
@@ -1772,7 +1780,12 @@ function wireInput(): void {
   quick('btn-quick-pets', 'panel-pets');
   $('btn-exit')?.addEventListener('click', () => {
     document.getElementById('overlay-menu')?.classList.add('hidden');
-    void api.logout().catch(() => {});
+    // Отказ виден в консоли, игроку — нет. Раньше стояло `.catch(() => {})`
+    // без причины: §153 требует рядом с молчанием объяснение, чем молчание
+    // оправдано. Здесь отказ — не фон, а потеря: сервер не отозвал токен,
+    // и сессия может пережить выход. Игроку показывать нечего (он уже
+    // выходит), но оставить это незамеченным — значит не узнать.
+    void api.logout().catch((e) => console.warn('[auth] server logout failed, local session cleared', e));
     leaveWorld();
     void import('./main').then((m) => m.logoutLocal());
   });

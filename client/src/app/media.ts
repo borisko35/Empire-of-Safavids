@@ -219,6 +219,12 @@ function buildRows(files: MediaFile[], box: HTMLElement): HTMLElement[] {
       vid.src = f.url;
       vid.muted = true;
       vid.preload = 'metadata';
+      // QUIET: отказ vid.play() — это не поломка, а обычное поведение
+      // браузера. Safari и Firefox не дают запускать видео без настоящего
+      // жеста (клика), а `mouseenter` жестом для автозапуска не считается.
+      // На этих браузерах отказ приходит на каждое наведение, то есть это
+      // фоновое поведение, а не событие. Логировать его — значит засорять
+      // консоль ровно на тех машинах, где всё работает как задумано.
       vid.addEventListener('mouseenter', () => void vid.play().catch(() => {}));
       vid.addEventListener('mouseleave', () => { vid.pause(); vid.currentTime = 0; });
       thumb.append(vid);
