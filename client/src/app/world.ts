@@ -730,22 +730,43 @@ export async function enterWorld(character: Character): Promise<void> {
   await finishLoading();
   audio.ensureGame();
 
-  // Отладочный хук для e2e-проверок (не влияет на игру)
-  (window as unknown as { __eos: unknown }).__eos = {
-    get monsters() { return [...(world?.monsters.values() ?? [])].map((m) => ({ id: m.instanceId, name: m.nameRu, x: Math.round(m.pos.x), z: Math.round(m.pos.z), hp: m.hp })); },
-    get me() { return me ? { x: Math.round(me.pos.x), z: Math.round(me.pos.z) } : null; },
-    get cam() { return world3d?.getCameraPose() ?? null; },
-    setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
-    attack(): void { world3d?.attackFromCamera(); },
-    setHour(hour: number): void { world3d?.setClock(hour); },
-    get audioMode() { return audio.currentMode; },
-    tp(x: number, z: number): void {
-      if (me && world) {
-        me.pos.x = x; me.pos.z = z;
-        me.target = { ...me.pos };
-      }
-    },
-  };
+  // Отладочный хук для e2e-проверок. В продакшене НЕ создаётся.
+  //
+  // ЧТО БЫЛО. Хук висел на `window` безусловно, с пометкой «не влияет на игру»,
+  // и я приняла её за чистоту (§171). Проверка показала обратное:
+  //
+  //   __eos.tp(-777, 555)  → клиент переместился
+  //   + один шаг клавишей   → сервер принял координату и записал её в базу
+  //   {"x": -777, "z": 555.21}, зона caucasus_pass
+  //
+  // То есть это рабочий телепорт на 800 метров в любую точку карты, и
+  // античит его не видит: нарушение speed_hack он ловит (замерено на спаме
+  // клавиш: «Speed hack: 21.7 u/s»), а скачок координаты — нет, потому что
+  // пакет движения уходит уже с новой точки.
+  //
+  // Крючок убран из продакшена по трём причинам: телепорт ломает игру, доступен
+  // любому в консоли, и автотестов в репозитории, которые на него завязаны, нет
+  // — проверил поиском по `__eos`: только исходники и карта.
+  //
+  // В разработке и на e2e-стенде хук остаётся: `import.meta.env.PROD`
+  // подставляется сборщиком в константу, и мёртвая ветка вырезается целиком.
+  if (!import.meta.env.PROD) {
+    (window as unknown as { __eos: unknown }).__eos = {
+      get monsters() { return [...(world?.monsters.values() ?? [])].map((m) => ({ id: m.instanceId, name: m.nameRu, x: Math.round(m.pos.x), z: Math.round(m.pos.z), hp: m.hp })); },
+      get me() { return me ? { x: Math.round(me.pos.x), z: Math.round(me.pos.z) } : null; },
+      get cam() { return world3d?.getCameraPose() ?? null; },
+      setCam(yaw: number, pitch: number, dist?: number): void { world3d?.setCameraPose(yaw, pitch, dist); },
+      attack(): void { world3d?.attackFromCamera(); },
+      setHour(hour: number): void { world3d?.setClock(hour); },
+      get audioMode() { return audio.currentMode; },
+      tp(x: number, z: number): void {
+        if (me && world) {
+          me.pos.x = x; me.pos.z = z;
+          me.target = { ...me.pos };
+        }
+      },
+    };
+  }
 
   wireSocket();
   wireInput();

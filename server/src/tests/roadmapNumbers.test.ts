@@ -70,8 +70,9 @@ describe('Цифры в карте соответствуют репозитор
     // 306 → 307 при появлении modelLoadersNeverReject.test.ts (§157).
     // 307 → 308 при появлении quietCatch.test.ts (§158).
     // 308 → 309 при появлении deployTunnelSingleMachine.test.ts (§161).
+    // 309 → 310 при появлении debugHookNotInProd.test.ts (§174).
     expect({ файлов: файлы.length, число_в_карте: вКарте === null ? null : Number(вКарте[1]) })
-      .toEqual({ файлов: 309, число_в_карте: 309 });
+      .toEqual({ файлов: 310, число_в_карте: 310 });
   });
 
   it('ключи переводов совпадают во всех трёх языках', () => {
