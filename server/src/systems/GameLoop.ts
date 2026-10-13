@@ -51,6 +51,17 @@ const DEBUFF_TICK_EVERY = 2;
 // считается точным (expiresAt), частая проверка лишь ограничивает задержку.
 const DUNGEON_EXPIRY_EVERY = 30;
 
+/**
+ * Как часто спрашивать, не пора ли платить доход с территорий.
+ *
+ * Минута, а не период: сам период живёт в базе (отметка `last_income_at`)
+ * и переживает перезапуск. Тик по счётчику обнулился бы при выкатке, и
+ * сервер, поднятый за минуту до истечения срока, либо пропустил бы всю
+ * неделю выплат, либо вывалил бы их разом — в зависимости от того, как
+ * счётчик встанет.
+ */
+const TERRITORY_INCOME_EVERY = 60;
+
 export class GameLoop {
   private static instance: GameLoop;
 
@@ -221,6 +232,19 @@ private soldiers = soldiers;
         DungeonService.getInstance()
           .expireOverdueSessions()
           .catch((e) => logger.error('[GameLoop] expireOverdueSessions rejected:', e));
+      }
+
+      // Доход гильдий с захваченных территорий (§184). Раз в минуту
+      // спрашиваем, а начислить успевает только прошедший срок: сам период
+      // живёт в TerritoryBonuses.ДОХОД_ПЕРИОД_МИНУТ и в базе стоит отметка.
+      //
+      // Минута, а не час, потому что отметка лежит в базе и переживает
+      // перезапуск. Тик по счётчику обнулился бы при выкатке, и сервер,
+      // поднятый на минуту доиграл бы только час выплат за неделю простоя.
+      if (this.tickCount % TERRITORY_INCOME_EVERY === 0) {
+        TerritoryBonuses.getInstance()
+          .начислитьДоход()
+          .catch((e) => logger.error('[GameLoop] territory income rejected:', e));
       }
     } catch (error) {
       logger.error('[GameLoop] Tick error:', error);
