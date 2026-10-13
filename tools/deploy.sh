@@ -466,7 +466,50 @@ fi
 #   контейнера нет -> создать (это новая машина);
 #   контейнер есть, но не running -> стартовать (упал, надо поднять);
 #   контейнер running -> НЕ ТРОГАТЬ (работает, вмешиваться незачем).
-if [ "$TUNNEL" -eq 1 ]; then
+# ЗДЕСЬ БЫЛО БЕЗ ПРОВЕРКИ ЦЕЛИ, И ЭТО БЫЛО ПРИЧИНОЙ РАСКОЛА (§161).
+#
+# Блок нужен на НОВОЙ машине: поднять туннель, которого там ещё нет. Но при
+# `EOS_DEPLOY_TARGET=aws` он выполнялся ЗДЕСЬ, то есть поднимал cloudflared на
+# домашней машине — и она вставала в тот же туннель Cloudflare, что и прод.
+#
+# Что из этого получалось. Один адрес обслуживали две машины с двумя разными
+# базами, и Cloudflare делил между ними запросы. Замерено на живом сайте:
+#
+#   • аккаунт, зарегистрированный на проде, через минуту отвечал
+#     401 invalid_credentials — потому что следующий запрос попал на домашнюю
+#     машину, где этого пользователя не существует;
+#   • при попытке войти в мир индикатор показывал ● Disconnected;
+#   • домашняя база к тому моменту была пустой: 2 пользователя, новейшая запись
+#     9 октября.
+#
+# Правило, которое из этого следует: туннель под боевым адресом должен быть
+# ровно на одной машине. Поднимать его здесь при цели aws — значит создавать
+# раскол заново при КАЖДОЙ выкатке.
+#
+# ПОЧЕМУ ОСТАНОВКА ЗДЕСЬ БЕЗОПАСНА. Блок выполняется ПОСЛЕ проверки связи с
+# AWS (шаг 1): если AWS недоступен, выкатка останавливается ещё до сборки.
+# Значит дойти до этой строки при цели aws можно только когда прод уже отвечает
+# по ssh, и отключение домашнего туннеля не оставит сайт без обслуживания.
+if [ "$TUNNEL" -eq 1 ] && [ "$TARGET" = "aws" ]; then
+  say ""
+  say "  cel vykati - aws, znachit tunnel dolzhen byt tolko na prode."
+  LOCAL_CF=$($C ps -aq cloudflared 2>/dev/null | head -1)
+  if [ -n "$LOCAL_CF" ]; then
+    LOCAL_CF_STATE=$(docker inspect -f '{{.State.Status}}' "$LOCAL_CF" 2>/dev/null | tr -d '\r')
+    if [ "$LOCAL_CF_STATE" = "running" ]; then
+      say "  domashny cloudflared ($LOCAL_CF_STATE) sidit pod boevym adresom - ostanavlivayu"
+      $C stop cloudflared >>/tmp/deploy-build.log 2>&1 || true
+      say "  domashny cloudflared ostanovlen"
+    else
+      say "  domashny cloudflared uzhe ne rabotaet ($LOCAL_CF_STATE) - ne trogayu"
+    fi
+  else
+    say "  domashnogo cloudflared net - ne trogayu"
+  fi
+  say "  tunnel proda: proverka dalee idet po udalennoy mashine"
+fi
+
+if [ "$TUNNEL" -eq 1 ] && [ "$TARGET" != "aws" ]; then
   CF_ID=$($C ps -aq cloudflared 2>/dev/null | head -1)
   if [ -z "$CF_ID" ]; then
     say "  cloudflared on this machine is absent: creating it"
