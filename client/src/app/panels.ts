@@ -1374,6 +1374,81 @@ export async function loadTrade(): Promise<void> {
       }));
       box.append(giftRow);
     } catch { /* инвентарь недоступен */ }
+
+    // ── Караваны на дороге: Шёлковый путь (§179) ──
+    //
+    // Рисуется после подарков, а не вместо них: подарки были в панели
+    // раньше, и перестановка ничего не даёт, кроме лишней правки.
+    //
+    // Список не должен ломать панель, если запрос не прошёл: засада —
+    // необязательная часть торговли, и её поломка не должна убирать
+    // контракты. Поэтому весь блок в своей попытке.
+    try {
+      const дорожные = await api.tradeRoad(cid());
+      if (дорожные.caravans?.length) {
+        const блок = document.createElement('div');
+        блок.className = 'trade-road';
+
+        const заголовок = document.createElement('h4');
+        заголовок.textContent = t('panels.trade_road_title');
+        блок.appendChild(заголовок);
+
+        const моёЗолото = session.character?.gold ?? 0;
+        for (const караван of дорожные.caravans) {
+          const строка = document.createElement('div');
+          строка.className = 'trade-road-row';
+
+          const слева = document.createElement('div');
+          слева.className = 'inv-name';
+          const заголовокКаравана = document.createElement('span');
+          заголовокКаравана.textContent =
+            `${t('panels.trade_road_owner')}: ${караван.ownerName} · ${караван.contractNameRu}`;
+          const груз = document.createElement('div');
+          груз.className = 'trade-road-cargo';
+          // Груз назван по-русски из локали, а не предметом: в панели нет
+          // реестра предметов, и id предмета игроку ничего не говорит.
+          груз.textContent = t('panels.trade_road_cargo')
+            .replace('{qty}', String(караван.cargoQty))
+            .replace('{item}', t(`items.${караван.cargoItemId}`));
+          слева.append(заголовокКаравана, груз);
+
+          const кнопка = document.createElement('button');
+          const хватит = моёЗолото >= караван.bounty;
+          кнопка.className = 'soldier-hire';
+          кнопка.textContent = t('panels.trade_road_ambush')
+            .replace('{bounty}', String(караван.bounty));
+          кнопка.disabled = караван.ambushed || !хватит;
+          кнопка.title = караван.ambushed
+            ? t('panels.trade_road_already')
+            : (!хватит ? t('panels.trade_road_no_gold') : '');
+          if (!кнопка.disabled) {
+            кнопка.onclick = async () => {
+              кнопка.disabled = true;
+              try {
+                const r = await api.tradeAmbush(cid(), караван.ownerId);
+                if (!r.success) {
+                  toast(t('panels.trade_road_failed'), 'error');
+                  кнопка.disabled = false;
+                  return;
+                }
+                toast(t('panels.trade_road_started'), 'success');
+                // Панель перечитывается после паузы: засада поднимает конвой
+                // в регионе игрока, и список «на дороге» он же изменит.
+                setTimeout(() => { void loadTrade(); }, 2500);
+              } catch {
+                toast(t('panels.trade_road_failed'), 'error');
+                кнопка.disabled = false;
+              }
+            };
+          }
+          строка.append(слева, кнопка);
+          блок.appendChild(строка);
+        }
+        box.appendChild(блок);
+      }
+    } catch {
+      /* дорога недоступна — торговля работает и без неё */
+    }
   } catch {
     /* панель недоступна */
   }

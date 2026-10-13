@@ -21,6 +21,7 @@ import { GAME_SERVERS } from '../../../shared/constants';
 import { RedisService } from '../services/RedisService';
 const redis = RedisService.getInstance();
 import { TradeService } from '../systems/TradeService';
+import { AmbushService } from '../services/AmbushService';
 // Награда за переход по рекламной ссылке. Ссылка собирается на
 // идентификаторе игрока, золото выдаётся один раз на персонажа.
 import { RewardService, linkFor, partnerConfigured, REWARD_GOLD } from '../services/RewardService';
@@ -177,6 +178,8 @@ const partySystem = new PartySystem();
 const dungeonService = DungeonService.getInstance();
 const karmaSystem = new KarmaSystem();
 const tradeService = new TradeService();
+// Засады на караваны — Шёлковый путь (ROADMAP §179)
+const ambushService = new AmbushService();
 const premiumSystem = new PremiumSystem();
 const paymentService = new PaymentService();
 // Для вебхука Xsolla user_validation: он спрашивает, существует ли игрок.
@@ -1440,6 +1443,35 @@ gameRouter.get('/trade/contracts', secureMiddleware,
       active,
       serverTime: Date.now(),
     });
+  })
+);
+
+// GET /api/game/trade/road — кто сейчас на дороге.
+// Свой караван из списка убран: грабить самого себя бессмысленно, и его
+// же видно в верхней части панели как «свой».
+gameRouter.get('/trade/road', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+    const свой = await characterService.getCharacterById(characterId).catch(() => null);
+    if (!свой || свой.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    return res.json({ caravans: await ambushService.дорога(characterId), serverTime: Date.now() });
+  })
+);
+
+// POST /api/game/trade/ambush — поднять засаду { characterId, ownerId }
+gameRouter.post('/trade/ambush', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const ownerId = String(req.body?.ownerId ?? '');
+    if (!ownerId) return res.status(400).json({ error: 'ownerId is required' });
+    const итог = await ambushService.начать(req.body.characterId, ownerId);
+    // 409, а не 400: запрос разобран верно, помешало состояние — караван уже
+    // в пути или уже засадили. Панель по коду отключает кнопку, а по
+    // сообщению показывает почему.
+    if (!итог.ok) return res.status(409).json({ success: false, error: итог.reason });
+    return res.json({ success: true, gold: итог.gold, convoy: итог.convoy });
   })
 );
 

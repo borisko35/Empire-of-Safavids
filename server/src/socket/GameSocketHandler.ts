@@ -11,6 +11,7 @@ import { LeaderboardService } from '../services/LeaderboardService';
 import { AchievementService } from '../services/AchievementService';
 import { DebuffService } from '../services/DebuffService';
 import { soldiers } from '../services/SoldierService';
+import { ambush } from '../services/AmbushService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
@@ -184,6 +185,8 @@ export class GameSocketHandler {
   private mounts = new MountSystem();
 /** Караул игрока: наёмные солданы бьют вместе с игроком (§178). */
 private soldiers = soldiers;
+/** Засада на караван: добыча собирается при гибели последнего эскорта (§179). */
+private ambush = ambush;
   private chatModeration = ChatModerationService.getInstance();
 
   // Активные игроки: characterId -> сокет
@@ -2090,7 +2093,29 @@ private soldiers = soldiers;
       attackerId: attacker.id, targetId: monsterCtx.instanceId, actionType: action.actionType, skillId: action.skillId, position: action.position,
     });
 
-    if (died) await this.rewardMonsterKill(socket, attacker, monsterCtx);
+    if (died) {
+      await this.rewardMonsterKill(socket, attacker, monsterCtx);
+      // Засада на караван (ROADMAP §179). Монстр с обратной ссылкой в Redis
+      // — эскорт конвоя, и если он был последним, нападавший забирает груз.
+      //
+      // Порядок важен: сначала обычная награда за монстра, и только потом
+      // добыча с каравана. Иначе игрок, убивший последнего эскорта, получил бы
+      // опыт и золото монстра вместо них — и засада перестала бы что-то давать
+      // сверх обычной охоты, то есть перестала бы быть ставкой.
+      const добыча = await this.ambush.эскортУбит(monsterCtx.instanceId, attacker.id).catch((e: unknown) => {
+        logger.error('[Ambush] добыча не собрана:', (e as Error).message);
+        return null;
+      });
+      if (добыча?.items.length) {
+        socket.emit('ambush:won', {
+          items: добыча.items.map((i) => ({
+            itemId: i.itemId,
+            qty: i.qty,
+            nameRu: ITEMS_DATABASE[i.itemId]?.nameRu ?? i.itemId,
+          })),
+        });
+      }
+    }
   }
 
 

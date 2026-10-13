@@ -796,7 +796,15 @@
     "boarding_list": "Hədəfləri göstər",
     "boarding_found": "Hədəf",
     "boarding_empty": "Yaxınlıqda hədəf yoxdur",
-    "boarding_no_boat": "Qayıq lazımdır"
+    "boarding_no_boat": "Qayıq lazımdır",
+    "trade_road_title": "Yolda olan karvanlar",
+    "trade_road_owner": "Sahibi",
+    "trade_road_cargo": "Yük: {qty} × {item}",
+    "trade_road_ambush": "Zərbə endirmə · {bounty}",
+    "trade_road_already": "Bu karvana artıq zərbə edilib",
+    "trade_road_no_gold": "Qızıl kifayət deyil",
+    "trade_road_started": "Zərbə quruldu — konvoy yoldadır",
+    "trade_road_failed": "Zərbə alınmadı"
   },
   "settings": {
     "title": "⚙ Parametrlər",

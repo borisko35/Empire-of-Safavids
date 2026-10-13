@@ -145,9 +145,13 @@ describe('Навыки по площади', () => {
       /if \(добитый\) await this\.rewardMonsterKill\(socket, attacker, цель\);/.test(СОКЕТ),
       'цели площади не получают награду за убийство'
     );
+    // Раньше здесь было `if (died) await this.rewardMonsterKill(...)` — буквально.
+// Засада на караван (§179) добавила в этот же `if` сбор добычи, и строка
+// стала блоком. Проверяем смысл, а не написание: награда главной цели должна
+// по-прежнему выдаваться, форма записи значения не имеет.
     must(
-      /if \(died\) await this\.rewardMonsterKill\(socket, attacker, monsterCtx\);/.test(СОКЕТ),
-      'главная цель перестала получать награду: значит, вынос что-то сломал'
+      /if \(died\)\s*\{[\s\S]{0,200}?await this\.rewardMonsterKill\(socket, attacker, monsterCtx\)/.test(СОКЕТ),
+      'главная цель перестала получать награду: значит, вынос или засада что-то сломал'
     );
     must(
       (СОКЕТ.match(/const def = monsterCtx\.definition;/g) || []).length === 1,

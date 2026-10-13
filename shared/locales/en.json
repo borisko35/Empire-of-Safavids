@@ -796,7 +796,15 @@
     "boarding_list": "Show targets",
     "boarding_found": "Target",
     "boarding_empty": "No targets nearby",
-    "boarding_no_boat": "You need a boat"
+    "boarding_no_boat": "You need a boat",
+    "trade_road_title": "Caravans on the road",
+    "trade_road_owner": "Owner",
+    "trade_road_cargo": "Cargo: {qty} × {item}",
+    "trade_road_ambush": "Ambush · {bounty}",
+    "trade_road_already": "This caravan has already been ambushed",
+    "trade_road_no_gold": "Not enough gold",
+    "trade_road_started": "Ambush raised — the convoy is on the road",
+    "trade_road_failed": "The ambush failed"
   },
   "settings": {
     "title": "⚙ Settings",

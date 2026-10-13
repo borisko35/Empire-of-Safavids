@@ -1223,6 +1223,22 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   // кого можно нанять, — иначе она и сервер разошлись бы, как это уже было
   // с панелью навыков (она отсекала список сама и предлагала купить то,
   // что сервер потом отказывал).
+  // ── Шёлковый путь: засада на караван (§179) ─────────────
+  // Список дороги и подъём засады. Оба ходят по characterId с проверкой
+  // владения на сервере: чужим караваном можно панель набить, если бы
+  // идентификатор брался из тела без сверки.
+  tradeRoad: (characterId: string) =>
+    req<{
+      caravans: { ownerId: string; ownerName: string; contractId: string; contractNameRu: string;
+        originRegion: string; destRegion: string; cargoItemId: string; cargoQty: number;
+        arrivesAt: number; bounty: number; ambushed: boolean }[];
+      serverTime: number;
+    }>(`/api/game/trade/road?characterId=${characterId}`),
+  tradeAmbush: (characterId: string, ownerId: string) =>
+    req<{ success: boolean; gold?: number; error?: string }>('/api/game/trade/ambush', {
+      method: 'POST', body: JSON.stringify({ characterId, ownerId }),
+    }),
+
   soldiers: (characterId: string) =>
     req<{
       tiers: { id: string; cost: number; maxHp: number; damage: number; guardShare: number;

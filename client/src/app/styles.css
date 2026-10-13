@@ -2281,6 +2281,25 @@ body[data-display="windowed"] #screen-world::after {
    очередной рейтинг, а именно он зовёт людей драться за босса. */
 .hall-list { display: flex; flex-direction: column; gap: 4px; }
 
+/* Караваны на дороге — Шёлковый путь (§179).
+   Кнопка засады та же .soldier-hire, что и в вербовке: это одна и та же
+   кнопка с ценой и состоянием, и разные стили для одного смысла разъехались
+   бы при первом же переименовании. */
+.trade-road { margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; }
+.trade-road h4 { margin: 0 0 8px; font-size: 13px; color: var(--cream); }
+.trade-road-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 4px;
+}
+.trade-road-cargo { color: var(--cream-dim); font-size: 11px; margin-top: 2px; }
+
 /* Панель «Вербовка караула» (ROADMAP §178).
    Полоса здоровья солдата шириной в строку, а не константа: караул может
    быть ранен на 4% от полного, и короткая полоса тогда показывала бы

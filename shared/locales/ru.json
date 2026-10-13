@@ -796,7 +796,15 @@
     "boarding_list": "Показать цели",
     "boarding_found": "Цель",
     "boarding_empty": "Рядом целей нет",
-    "boarding_no_boat": "Нужна лодка"
+    "boarding_no_boat": "Нужна лодка",
+    "trade_road_title": "Караваны на дороге",
+    "trade_road_owner": "Хозяин",
+    "trade_road_cargo": "Груз: {qty} × {item}",
+    "trade_road_ambush": "Засада · {bounty}",
+    "trade_road_already": "Этот караван уже засадили",
+    "trade_road_no_gold": "Не хватает золота",
+    "trade_road_started": "Засада поднята — конвой на дороге",
+    "trade_road_failed": "Засада не удалась"
   },
   "settings": {
     "title": "⚙ Настройки",
