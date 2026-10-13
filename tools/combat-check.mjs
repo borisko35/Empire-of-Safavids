@@ -205,14 +205,32 @@ async function main() {
     killed: [],
     movesRejected: [],
     zoneChanged: [],
+    /** Живое положение монстров. Приходит из monster:ai_action. */
+    positions: new Map(),
   };
   let pos = { x: START.x, z: START.z };
   let authed = false;
+  /** Меня убили. После этого пакеты движения и боя сервер не читает. */
+  let меняУбили = false;
 
-  socket.on('monster:spawned', (m) => { seen.spawned.push(m); });
+  socket.on('monster:spawned', (m) => {
+    seen.spawned.push(m);
+    if (m.position) seen.positions.set(m.instanceId, { x: m.position.x, z: m.position.z });
+  });
+  socket.on('monster:ai_action', (a) => {
+    // Живая точка монстра. Без неё стенд гнался за устаревшей позицией спавна
+    // и не мог попасть в досягаемость: волк успевал уйти, а стенд стоял там,
+    // где монстр появился.
+    if (a?.action?.destination) {
+      seen.positions.set(a.instanceId, { x: a.action.destination.x, z: a.action.destination.z });
+    }
+  });
   socket.on('combat:result', (r) => { seen.results.push(r); });
   socket.on('combat:error', (e) => { seen.errors.push(e); });
-  socket.on('combat:hit', (h) => { seen.hits.push(h); });
+  socket.on('combat:hit', (h) => {
+    seen.hits.push(h);
+    if (h.hp <= 0) меняУбили = true;
+  });
   socket.on('monster:killed', (k) => { seen.killed.push(k); });
   socket.on('move:rejected', (m) => { seen.movesRejected.push(m); });
   socket.on('zone:changed', (z) => { seen.zoneChanged.push(z); });
@@ -244,7 +262,7 @@ async function main() {
   // Точка спавна уже под ногами, но монстр появляется не сразу:
   // SpawnSystem держит паузу после смерти и респавн по respawnTime.
   say('ждём', `монстра у точки (${START.x}, ${START.z})`);
-  const target = await waitForMonster(seen, 60000);
+  const target = await waitForMonster(seen, 60000, pos);
   if (!target) {
     say('монстр', 'не появился за 60 секунд');
     report({ seen, before, after: readState(me), target: null, attacks: 0 });
@@ -267,7 +285,7 @@ async function main() {
 
   // ── Шаг: бой ───────────────────────────────────────────────
   say('бой', `удары раз в ${ATTACK_EVERY_MS} мс, до ${ATTACK_LIMIT}`);
-  const attacks = await fight(socket, me, pos, target, seen);
+  const attacks = await fight(socket, me, pos, target, seen, () => !меняУбили);
   await sleep(1500); // дать долететь награде
 
   const after = readState(me);
@@ -275,7 +293,15 @@ async function main() {
   socket.close();
 }
 
-function waitForMonster(seen, timeoutMs) {
+/**
+ * Дождаться ближайшего к `откуда` монстра.
+ *
+ * Точка передаётся параметром, а не берётся из внешней переменной: первый
+ * вариант ссылался на `pos`, объявленный в main(), и падал с ReferenceError
+ * ровно в тот момент, когда монстр наконец появился — то есть на первом же
+ * успешном прогоне. Путь «до первого монстра» не был проверен ни разу.
+ */
+function waitForMonster(seen, timeoutMs, откуда) {
   return new Promise((resolve) => {
     const started = Date.now();
     const timer = setInterval(() => {
@@ -284,7 +310,7 @@ function waitForMonster(seen, timeoutMs) {
         clearInterval(timer);
         // Ближайший к текущей точке: так меньше идти.
         const ближайший = свежие.reduce((a, b) =>
-          dist(a.position, pos) <= dist(b.position, pos) ? a : b
+          dist(a.position, откуда) <= dist(b.position, откуда) ? a : b
         );
         resolve(ближайший);
       } else if (Date.now() - started > timeoutMs) {
@@ -297,23 +323,26 @@ function waitForMonster(seen, timeoutMs) {
 
 async function walkTo(socket, start, target, seen) {
   let текущая = { ...start };
-  const цель = { x: target.position.x, z: target.position.z };
   let прошёл = 0;
   let шагов = 0;
+  let последнийШаг = 0;
   const t0 = Date.now();
 
-  while (Date.now() - t0 < 90000) {
+  while (Date.now() - t0 < 45000) {
+    // Живая точка, а не позиция спавна.
+    const цель = seen.positions.get(target.instanceId) ?? target.position;
     const d = dist(текущая, цель);
     if (d <= STOP_AT) break;
 
-    // Монстр мог подойти сам — пересчитываем цель каждый шаг.
-    const шаг = Math.min(WALK_SPEED * 0.5, d - STOP_AT);
-    if (шаг <= 0) break;
+    // Шаг не меньше сантиметра. Предыдущая версия брала `d - STOP_AT` и при
+    // близкой цели получала шаги в доли миллиметра: 177 пакетов, пройдено
+    // 10 единиц, 90 секунд, и досягаемость так и не набралась.
+    const шаг = Math.max(0.01, Math.min(WALK_SPEED * 0.5, d - STOP_AT));
     const ux = (цель.x - текущая.x) / d;
     const uz = (цель.z - текущая.z) / d;
 
     // Проверка ДО отправки: превышение потолка — это бан, а не отказ.
-    const скорость = шаг / (0.5);
+    const скорость = шаг / 0.5;
     if (скорость > SPEED_CAP) throw new Error(`стенд сам нарушает лимит скорости: ${скорость.toFixed(2)} > ${SPEED_CAP}`);
 
     const след = { x: текущая.x + ux * шаг, z: текущая.z + uz * шаг };
@@ -323,28 +352,43 @@ async function walkTo(socket, start, target, seen) {
     });
     текущая = след;
     прошёл += шаг;
+    последнийШаг = шаг;
     шагов++;
     await sleep(500);
   }
-  return { прошёл, шагов, остаток: dist(текущая, цель) };
+
+  // Много мелких шагов вместо одного большого — верный признак, что мы
+  // застряли на дрожании координат, а не шли к цели.
+  if (шагов > 3 && последнийШаг < 0.05) {
+    say('внимание', `подход шёл микрошагами: ${шагов} пакетов на ${прошёл.toFixed(1)} единиц`);
+  }
+  return { прошёл, шагов, остаток: dist(текущая, seen.positions.get(target.instanceId) ?? target.position) };
 }
 
-async function fight(socket, characterId, startPos, target, seen) {
+async function fight(socket, characterId, startPos, target, seen, жив) {
   let ударов = 0;
   let поза = { ...startPos };
   const t0 = Date.now();
 
-  while (ударов < ATTACK_LIMIT && Date.now() - t0 < 90000) {
-    // Монстр уходит и подходит: цель берём живой, из последнего спавна.
-    const ctx = seen.spawned.filter((m) => m.instanceId === target.instanceId).pop();
-    if (!ctx) break;
+  while (ударов < ATTACK_LIMIT && Date.now() - t0 < 60000) {
+    // Меня убили — пакеты всё равно не читаются, а движение вдобавок
+    // читается как телепорт: сервер вернул меня в город (0,0), а стенд
+    // продолжал слать координаты поля боя. Так меня отключил античит.
+    if (жив() === false) {
+      say('бой', `меня убили на ${ударов}-м ударе, прекращаю пакеты`);
+      break;
+    }
+
+    // Живая точка монстра, а не позиция спавна.
+    const живая = seen.positions.get(target.instanceId);
+    if (!живая) break;
 
     // Добираемся до монстра перед ударом: он ходит сам.
-    const d = dist(поза, ctx.position);
+    const d = dist(поза, живая);
     if (d > REACH * 0.7) {
-      const шаг = Math.min(WALK_SPEED * 0.5, d - REACH * 0.5);
-      const ux = (ctx.position.x - поза.x) / d;
-      const uz = (ctx.position.z - поза.z) / d;
+      const шаг = Math.max(0.01, Math.min(WALK_SPEED * 0.5, d - REACH * 0.5));
+      const ux = (живая.x - поза.x) / d;
+      const uz = (живая.z - поза.z) / d;
       поза = { x: поза.x + ux * шаг, z: поза.z + uz * шаг };
       socket.emit('player:move', {
         position: { x: поза.x, y: 0, z: поза.z },
