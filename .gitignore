@@ -17,6 +17,10 @@ build/
 # кладём: файл лежит рядом с .env, который игнорируется строкой выше.
 deploy/.test-account
 
+# Бэкап автозагрузки Windows, снятой в §162: путь к Docker Desktop.
+# Нужен для отката и не должен попадать в репозиторий.
+deploy/.autostart-backup
+
 # Logs
 logs/
 *.log
