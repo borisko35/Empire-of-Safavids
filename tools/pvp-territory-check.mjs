@@ -92,6 +92,50 @@ function сокет(кто) {
 const A = сокет('первый');
 const B = сокет('второй');
 
+// Оба персонажа должны быть в кавказском регионе ДО входа в мир.
+// socket.region читается из базы один раз при аутентификации, и правка
+// региона в базе посреди сессии на него не действует. Первая версия
+// инструмента ставила регион второму и забывала первого: бонус бы не
+// применился вовсе, и проверка сказала бы «бонуса нет» там, где его нет.
+psql(`UPDATE characters SET region = 'caucasus', zone = 'caucasus_fort' WHERE id = '${me}'`);
+psql(`UPDATE characters SET region = 'caucasus', zone = 'caucasus_fort' WHERE id = '${второйId}'`);
+лог('оба в кавказском регионе — крепость рядом');
+
+/**
+ * Пере-войти персонажем после смены региона.
+ *
+ * Нужно, потому что socket.region читается один раз при auth. Без пере-входа
+ * второй замер шёл бы с кавказским регионом в голове сервера и показал бы тот
+ * же бонус, — то есть проверка «бонус привязан к месту» врала бы.
+ */
+async function переВойти(s, id) {
+  s.close();
+  await sleep(800);
+  const новый = io(URL, { transports: ['websocket', 'polling'], timeout: 20000, autoConnect: false });
+  новый.кто = s.кто;
+  новый.ответы = []; новый.ошибки = []; новый.поМне = [];
+  новый.on('combat:result', (r) => новый.ответы.push(r));
+  новый.on('combat:error', (e) => новый.ошибки.push(e));
+  новый.on('combat:hit', (h) => новый.поМне.push(h));
+  await new Promise((r, j) => {
+    const t = setTimeout(() => j(new Error('пере-вход ' + s.кто + ' не удался')), 20000);
+    новый.on('connect', () => { clearTimeout(t); r(); });
+    новый.on('connect_error', (e) => { clearTimeout(t); j(new Error(e?.message ?? 'ошибка')); });
+    новый.connect();
+  });
+  await new Promise((r, j) => {
+    const t = setTimeout(() => j(new Error('нет auth:success при пере-входе ' + s.кто)), 15000);
+    новый.on('auth:success', () => { clearTimeout(t); r(); });
+    новый.on('auth:error', (e) => { clearTimeout(t); j(new Error(JSON.stringify(e))); });
+    новый.emit('auth', { token, characterId: id });
+  });
+  return новый;
+}
+
+/** Переменные текущих сокетов: после пере-входа меняются. */
+let сокетA = A;
+let сокетB = B;
+
 for (const [s, id] of [[A, me], [B, второйId]]) {
   await new Promise((r, j) => {
     const t = setTimeout(() => j(new Error('сокет ' + s.кто + ' не подключился')), 20000);
@@ -113,38 +157,42 @@ for (const [s, id] of [[A, me], [B, второйId]]) {
  * Возвращает фактический урон из combat:result.
  */
 async function удар(x, z) {
-  A.ответы.length = 0;
-  A.ошибки.length = 0;
-  A.emit('player:move', { position: { x, y: 0, z }, direction: { x: 0, y: 0, z: 1 } });
-  B.emit('player:move', { position: { x: ТОЧКА.x, y: 0, z: ТОЧКА.z + 1.5 }, direction: { x: 0, y: 0, z: -1 } });
+  const атакующий = сокетA;
+  атакующий.ответы.length = 0;
+  атакующий.ошибки.length = 0;
+  атакующий.emit('player:move', { position: { x, y: 0, z }, direction: { x: 0, y: 0, z: 1 } });
+  сокетB.emit('player:move', { position: { x: ТОЧКА.x, y: 0, z: ТОЧКА.z + 1.5 }, direction: { x: 0, y: 0, z: -1 } });
   await sleep(900);
-  A.emit('combat:action', {
+  атакующий.emit('combat:action', {
     characterId: me, actionType: 'attack', targetId: второйId,
     position: { x, y: 0, z }, direction: { x: 0, y: 0, z: 1 }, timestamp: Date.now(),
   });
   await sleep(1800);
-  if (A.ошибки.length) return { урон: 0, ошибка: JSON.stringify(A.ошибки[0]).slice(0, 80) };
-  const r = A.ответы.find((x2) => x2.targetId === второйId);
+  if (атакующий.ошибки.length) return { урон: 0, ошибка: JSON.stringify(атакующий.ошибки[0]).slice(0, 80) };
+  const r = атакующий.ответы.find((x2) => x2.targetId === второйId);
   return { урон: Number(r?.damage ?? 0), ответ: r ?? null };
 }
 
 // ── Замер 1: в своей территории ──
 const сТерриторией = await удар(ТОЧКА.x, ТОЧКА.z);
 лог('');
-лог('--- 1. В СВОЕЙ ТЕРРИТОРИИ ---');
+лог('--- 1. В СВОЕЙ ТЕРРИТОРИИ (Кавказ) ---');
 лог(`  урон: ${сТерриторией.урон}`);
 if (сТерриторией.ошибка) лог(`  ошибка: ${сТерриторией.ошибка}`);
 
 // ── Замер 2: уходим из региона ──
 // Территория остаётся владельцу, но бой идёт не в кавказском регионе —
-// бонус применяться не должен. Место спокойное в Исфахане.
+// бонус применяться не должен. Пере-вход обязателен: socket.region читается
+// при аутентификации, и без него сервер считал бы бой за Кавказом.
 const ВТОРАЯ_ТОЧКА = { x: 505, y: 0, z: 55 };
 psql(`UPDATE characters SET region = 'isfahan', zone = 'isfahan_outskirts' WHERE id = '${me}'`);
 psql(`UPDATE characters SET region = 'isfahan', zone = 'isfahan_outskirts' WHERE id = '${второйId}'`);
-await sleep(600);
+сокетA = await переВойти(сокетA, me);
+сокетB = await переВойти(сокетB, второйId);
+лог('оба перевошли в Исфахан');
 const безТерритории = await удар(ВТОРАЯ_ТОЧКА.x, ВТОРАЯ_ТОЧКА.z);
 лог('');
-лог('--- 2. ВНЕ ТЕРРИТОРИИ (Исфахан, тот же владелец) ---');
+лог('--- 2. ВНЕ ТЕРРИТОРИИ (Исфахан, та же гильдия с крепостью) ---');
 лог(`  урон: ${безТерритории.урон}`);
 if (безТерритории.ошибка) лог(`  ошибка: ${безТерритории.ошибка}`);
 
