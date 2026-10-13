@@ -45,25 +45,73 @@ const ТЕРРИТОРИЯ = 'territory_tabriz_market';
 const КОНТРАКТ = 'trade_tabriz_isfahan_silk';
 
 async function убрать() {
-  psql(`DELETE FROM guild_territories WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
+  // Строку территории НЕ удаляем, а возвращаем в исходное состояние.
+  //
+  // ЧТО ТУТ СЛОМАЛОСЬ. Первая версия проверки писала
+  //   DELETE FROM guild_territories WHERE territory_id = 'territory_tabriz_market'
+  // и запускалась несколько раз. Строка исчезла из базы по-настоящему, и
+  // налог перестал считаться не из-за кода, а из-за того, что облагать стало
+  // нечего. Проверка писала «не взялся» — ровно то же, что при настоящей
+  // поломке. Строку пришлось восстанавливать вручную.
+  //
+  // Поэтому здесь нет ни одного DELETE по guild_territories: строка легитимна,
+  // в ней прочность крепости, и она не принадлежит проверке.
+  psql(`UPDATE guild_territories SET guild_id = NULL, captured_at = NULL WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
   psql(`DELETE FROM guild_members WHERE guild_id IN (SELECT id FROM guilds WHERE name = 'Пробный налоговый дворик')`);
   psql(`DELETE FROM guilds WHERE name = 'Пробный налоговый дворик'`);
   psql(`UPDATE trade_caravans SET status = 'cancelled', completed_at = NOW() WHERE owner_id = '${me}' AND status = 'transit'`);
   psql(`DELETE FROM character_soldiers WHERE character_id = '${me}'`);
-  лог('за собой убрал: гильдию, захват, караван, караул');
+  if (уровеньБыл) {
+    psql(`UPDATE characters SET guild_id = NULL, region = 'isfahan', level = ${уровеньБыл} WHERE id = '${me}'`);
+  }
+  лог('за собой убрал: гильдию, захват, караван, караул, уровень и регион вернул');
 }
+
+// Объявлено до уборки: уборка вызывается и на старте, и в конце, и должна знать
+// прежний уровень обоих прогонов.
+let уровеньБыл = 0;
 
 // ── Уборка перед стартом: прошлый прогон мог остаться ──
 убрать();
 
+/**
+ * Строка территории должна существовать ДО проверки.
+ *
+ * Если её нет, облагать нечего и проверка молча сообщила бы «не взялся» —
+ * так же, как при настоящей поломке. Поэтому отсутствие строки останавливает
+ * проверку, а не делает её бесполезной: молчаливый «не получилось» хуже отказа.
+ */
+if (Number(psql(`SELECT COUNT(*) FROM guild_territories WHERE territory_id = '${ТЕРРИТОРИЯ}'`)) !== 1) {
+  лог(`СТРОКИ ТЕРРИТОРИИ НЕТ. Это не поломка налога: облагать нечего.`);
+  лог(`Восстановить: INSERT INTO guild_territories (territory_id, defense_hp)`);
+  лог(`  VALUES ('${ТЕРРИТОРИЯ}', 5000);   -- defense_hp из данных: defensePoints`);
+  process.exit(2);
+}
+лог(`строка территории на месте: ${ТЕРРИТОРИЯ}`);
+
 // ── Гильдия и захват Тебриза ──
 psql(`INSERT INTO guilds (name, leader_id, gold) VALUES ('Пробный налоговый дворик', '${me}', 0)`);
 const гильдия = psql(`SELECT id FROM guilds WHERE name = 'Пробный налоговый дворик'`);
-psql(`INSERT INTO guild_members (guild_id, character_id, rank) VALUES ('${гильдия}', '${me}', 'leader')`);
-psql(`UPDATE characters SET guild_id = '${гильдия}', region = 'tabriz', gold = 5000 WHERE id = '${me}'`);
+// Персонаж намеренно НЕ состоит в гильдии-владельце. Первая версия проверки
+// сделала его лидером этой гильдии — и налог не взялся, потому что своя
+// гильдия своего каравана не облагается. Проверка была права, а тест врал:
+// чтобы увидеть налог, сдавать груз должен чужой.
+psql(`UPDATE characters SET guild_id = NULL WHERE id = '${me}'`);
+// Контракт Тебриза требует 5 уровня, а тестовый персонаж первый. Поднимаем на
+// время проверки и возвращаем обратно в уборке: иначе проверка налога
+// отказывала бы не из-за налога, а из-за уровня, и сказала бы о налоге
+// ровно то же самое, что и настоящая поломка.
+уровеньБыл = Number(psql(`SELECT level FROM characters WHERE id = '${me}'`));
+psql(`UPDATE characters SET region = 'tabriz', gold = 5000, level = 20 WHERE id = '${me}'`);
 psql(`UPDATE guild_territories SET guild_id = '${гильдия}', captured_at = NOW() WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
 лог(`гильдия ${гильдия} держит «${ТЕРРИТОРИЯ}», налог 5%`);
-лог(`персонаж в регионе tabriz, золото 5000`);
+лог(`персонаж ВНЕ гильдии, регион tabriz, золото 5000, уровень ${уровеньБыл} → 20 (вернётся)`);
+
+// Кэш владельцев территорий живёт 30 секунд (TerritoryBonuses.СРОК_КЭША_МС),
+// а база меняется в обход сервера. Без паузы сервер до конца проверки видел бы
+// territories без владельца и решил бы, что налог брать некому.
+лог('жду 35 секунд, пока сервер перечитает владельцев территорий');
+await sleep(35000);
 
 // ── Принять контракт из Тебриза ──
 const контракты = await (await fetch(`${URL}/api/game/trade/contracts?characterId=${me}`, { headers: заголовки })).json();
