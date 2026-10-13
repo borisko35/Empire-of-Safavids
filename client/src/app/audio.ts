@@ -31,6 +31,25 @@ function readPct(key: string, fallback: number): number {
   return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) / 100 : fallback / 100;
 }
 
+/**
+ * Диагностические глобалы — только в разработке.
+ *
+ * ЗАЧЕМ. Звук нельзя понять на слух из сообщения об ошибке: «пропал» и «заглушён
+ * раскатом» звучат одинаково, а лечатся противоположно. Поэтому движок
+ * вывешивает режим и реальные уровни шин на `window`, и по цифрам видно сразу.
+ *
+ * ПОЧЕМУ ТОЛЬКО В РАЗРАБОТКЕ. В боевой сборке состояние внутренностей движка не
+ * нужно никому, кроме того, кто ломает звук, — а ломают его с прода. Диагностика
+ * была нужна ровно в том же смысле, в каком §174 закрыли `window.__eos`: в
+ * боевой сборке не должно быть ничего, что показывает устройство игры из
+ * консоли. Там, где это опасно, закрыто; здесь безобидно, но закрыто по той же
+ * причине и тем же способом.
+ */
+function пометить(имя: string, значение: unknown): void {
+  if (import.meta.env.PROD) return;
+  (window as unknown as Record<string, unknown>)[имя] = значение;
+}
+
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -95,7 +114,7 @@ class AudioEngine {
     this.mode = 'auth';
     this.mood = 'explore';
     this.step = 0;
-    (window as unknown as Record<string, unknown>).__eosAudio = 'auth';
+    пометить('__eosAudio', 'auth');
     this.setAmbienceEnabled(false);
   }
 
@@ -148,13 +167,13 @@ class AudioEngine {
 
     // Диагностика: реальные уровни шин. Нужен, чтобы отличать «звук пропал»
     // от «звук заглушён раскатом» — по цифрам это видно сразу.
-    (window as unknown as Record<string, unknown>).__eosAudioBuses = (): Record<string, number> => ({
+    пометить('__eosAudioBuses', (): Record<string, number> => ({
       master: this.master?.gain.value ?? -1,
       music: this.musicGain?.gain.value ?? -1,
       sfx: this.sfxGain?.gain.value ?? -1,
       ambience: this.ambienceGain?.gain.value ?? -1,
       thunder: this.thunderGain?.gain.value ?? -1,
-    });
+    }));
   }
 
   /**
@@ -166,7 +185,7 @@ class AudioEngine {
     this.mode = 'loading';
     this.mood = 'explore';
     this.step = 0;
-    (window as unknown as Record<string, unknown>).__eosAudio = 'loading';
+    пометить('__eosAudio', 'loading');
     this.setAmbienceEnabled(false);
   }
 
@@ -176,7 +195,7 @@ class AudioEngine {
     this.mode = 'game';
     this.mood = 'explore';
     this.step = 0;
-    (window as unknown as Record<string, unknown>).__eosAudio = 'game';
+    пометить('__eosAudio', 'game');
     this.setAmbienceEnabled(true);
   }
 

@@ -53,11 +53,42 @@ export class ShardLease {
     return `shard:lease:${shardId}`;
   }
 
-  /** Взять шард. true — теперь мой. */
+  /**
+   * Взять шард. true — теперь мой.
+   *
+   * СВОЯ АРЕНДА СЧИТАЕТСЯ УСПЕХОМ. Занятый ключ проверяется на владельца, и
+   * если он наш — продлевается, а не отвергается.
+   *
+   * ЧТО ЗДЕСЬ БЫЛО. `acquireIfFree` смотрит только на существование ключа, и
+   * потому ключ, занятый нами же на прошлой активации, выглядел как «занято
+   * другим». Дальше это складывалось в поломку, замкнутую сама на себя:
+   *
+   *   17:44:45  [Spawn] Shard activated: isfahan
+   *   17:53:17  [Spawn] Shard deactivated: isfahan   ← ушёл последний игрок
+   *   18:00:27  Player authenticated: EosProbe        ← шард НЕ активирован
+   *
+   * Деактивация снимает шард с локального учёта, но аренда остаётся в Redis,
+   * а сердцебиение её продлевает — срок не истекает никогда. Следующая
+   * активация видела занятый ключ, отвергалась и не логировалась, и монстры в
+   * мире не появлялись вовсе: ни одного `monster:spawned`, пустая полоса до
+   * самой стены города, уровень 1, бой недоступен. Выглядит как «в игре нет
+   * монстров», и выглядит одинаково при каждом следующем входе, пока сервер
+   * не перезапустят.
+   *
+   * Теперь своя аренда продлевается и возвращает true: владелец один,
+   * конкурента нет.
+   */
   async acquire(shardId: string): Promise<boolean> {
     const взял = await this.redis.acquireIfFree(this.key(shardId), this.instanceId, SHARD_LEASE_TTL_SEC);
-    if (взял) logger.info(`[Shard] шард ${shardId} взят инстансом ${this.instanceId}`);
-    return взял;
+    if (взял) {
+      logger.info(`[Shard] шард ${shardId} взят инстансом ${this.instanceId}`);
+      return true;
+    }
+    const статус = await this.status(shardId);
+    if (!статус.mine) return false;
+    await this.renew(shardId);
+    logger.info(`[Shard] шард ${shardId} уже был наш (${this.instanceId}), продлили`);
+    return true;
   }
 
   /**

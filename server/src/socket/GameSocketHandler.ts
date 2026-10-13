@@ -2892,7 +2892,7 @@ export class GameSocketHandler {
     // Шард опустел — выгрузить его монстров
     const online = await this.redis.getShardOnline(shardId).catch(() => 1);
     if (online === 0) {
-      GameLoop.getInstance().getSpawnSystem().deactivateShard(shardId);
+      GameLoop.getInstance().getSpawnSystem().deactivateShard(shardId, this.аренда);
     }
 
     // Вышедший игрок пропадает из поля зрения монстров навсегда
