@@ -1,16 +1,30 @@
 // Проверка pvp_damus бонуса территории вживую (§185).
 //
 // ЧТО ПРОВЕРЯЕТ. Гильдия, держущая Кавказскую крепость, бьёт в PvP сильнее,
-// В КАВКАЗСКОМ РЕГИОНЕ. Проверяются две стороны:
-//   • с территорией и в её регионе — урон выше базового;
-//   • с территорией, но в ДРУГОМ регионе — урон тот же базовый.
+// В КАВКАЗСКОМ РЕГИОНЕ. Две стороны:
+//   1. с территорией и в её регионе — урон выше базового;
+//   2. с территорией, но в ДРУГОМ регионе — урон базовый.
 //
-// ПОЧЕМУ ВТОРАЯ СТОРОНА ОБЯЗАТЕЛЬНА. Одна первая половина проверяла бы только
-// «бонус есть». Вторая проверяет, что он привязан к месту: без неё можно
-// подключить бонус глобально, и проверка бы это пропустила.
+// ПОЧЕМУ ВТОРАЯ СТОРОНА ОБЯЗАТЕЛЬНА. Только первая проверила бы «бонус есть».
+// Вторая проверяет, что он привязан к месту: без неё можно подключить бонус
+// глобально, и проверка бы это пропустила.
 //
-// Точка боя — кавказский перевал у крепости. Монстров там нет, и бой двух
-// персонажей никого не тревожит.
+// ── ПЯТЬ ЛОВУШЕК, НА КОТОРЫЕ ЭТОТ ИНСТРУМЕНТ НАСТУПАЛ ───────────────
+// 1. socket.region читается из базы один раз при аутентификации. Регион надо
+//    ставить ДО входа, а правкой посреди сессии.
+// 2. Тот же токен вторым сокетом даёт «Invalid session»: сервер держит на
+//    токен одну сессию. Токен берётся заново перед каждым соединением.
+// 3. Прыжок на 360 метров античит считает телепортом («Speed hack: 920.6 u/s»)
+//    и банит аккаунт на пятом нарушении за сутки. Старт ставится у точки боя
+//    ДО входа — при входе античит сбрасывает позицию, и это не телепорт.
+// 4. Защитник должен стоять у ТОЧКИ ТЕКУЩЕГО ЗАМЕРА, а не кавказской всегда:
+//    во втором замере иначе его разносит на 700 единиц.
+// 5. Молчаливый ноль выглядит как «бонуса нет». Нет ответа по цели — печатается
+//    всё, что пришло.
+//
+// Строку территории НЕ удаляем, а снимаем владельца: удаление строки —
+// это поломка игровых данных, а потом «не взялся» тем же текстом, что и при
+// настоящей поломке (§181).
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -20,34 +34,48 @@ const { io } = require('socket.io-client');
 
 const URL = process.env.EOS_GAME_URL ?? 'https://game.eos-gameonline.com';
 const ИМЯ_ВТОРОГО = 'EosDummy';
-// Кавказ: зона caucasus_fort (z 500..700), x около 200 — рядом с крепостью.
+const ТЕРРИТОРИЯ = 'territory_caucasus_fortress';
+// Кавказ: зона caucasus_fort (z 500..700), у крепости.
 const ТОЧКА = { x: 200, y: 0, z: 500 };
+// Спокойное место в Исфахане — вне территории.
+const ВТОРАЯ = { x: 505, y: 0, z: 55 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const d = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const лог = (...a) => console.log(...a);
 
 const psql = (sql) => execFileSync('docker', [
   'exec', 'empire-of-safavids-postgres-1', 'psql', '-U', 'safavid_user',
   '-d', 'empire_of_safavids', '-t', '-A', '-c', sql,
-], { encoding: 'utf8' }).trim();
+], { encoding: 'utf-8' }).trim();
 
-const raw = readFileSync('D:/My Projects/Empire of Sefevids/deploy/.test-account', 'utf8');
-const вход = await fetch(`${URL}/api/auth/login`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    email: raw.match(/почта\s*:\s*(\S+)/)?.[1],
-    password: raw.match(/пароль\s*:\s*(\S+)/)?.[1],
-  }),
+const raw = readFileSync('D:/My Projects/Empire of Sefevids/deploy/.test-account', 'utf-8');
+const ПОЧТА = raw.match(/почта\s*:\s*(\S+)/)?.[1] ?? '';
+const ПАРОЛЬ = raw.match(/пароль\s*:\s*(\S+)/)?.[1] ?? '';
+
+/** Токен заново: на один токен сервер держит одну сессию. */
+async function войти() {
+  const р = await fetch(`${URL}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: ПОЧТА, password: ПАРОЛЬ }),
+  });
+  const джей = await р.json().catch(() => null);
+  if (!джей?.data?.token) {
+    лог('ВХОД НЕ УДАЛСЯ: ' + р.status + ' ' + JSON.stringify(джей).slice(0, 160));
+    process.exit(1);
+  }
+  return джей.data.token;
+}
+
+let token = await войти();
+const заголовки = () => ({
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${token}`,
 });
-const token = (await вход.json()).data.token;
-const заголовки = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
-const список = await (await fetch(`${URL}/api/characters`, { headers: заголовки })).json();
+
+const список = await (await fetch(`${URL}/api/characters`, { headers: заголовки() })).json();
 const первый = список.characters.find((c) => c.name === 'EosProbe');
 if (!первый) { лог('нет EosProbe'); process.exit(1); }
 const me = первый.id;
-
-const ТЕРРИТОРИЯ = 'territory_caucasus_fortress';
 
 function убратьВторого() {
   psql(`DELETE FROM character_items WHERE character_id IN (SELECT id FROM characters WHERE name = '${ИМЯ_ВТОРОГО}')`);
@@ -55,31 +83,48 @@ function убратьВторого() {
   psql(`DELETE FROM characters WHERE name = '${ИМЯ_ВТОРОГО}'`);
 }
 
-// ── Подготовка: чистка до старта ──
-убратьВторого();
-// Строку территории НЕ удаляем, а только снимаем владельца. Та же болезнь,
-// что в §181: инструмент удалял строку и ломал данные.
-psql(`UPDATE guild_territories SET guild_id = NULL, captured_at = NULL WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
-psql(`DELETE FROM guild_members WHERE guild_id IN (SELECT id FROM guilds WHERE name = 'Пробная крепость')`);
-psql(`DELETE FROM guilds WHERE name = 'Пробная крепость'`);
+function убратьГильдию() {
+  psql(`UPDATE guild_territories SET guild_id = NULL, captured_at = NULL WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
+  psql(`DELETE FROM guild_members WHERE guild_id IN (SELECT id FROM guilds WHERE name = 'Пробная крепость')`);
+  psql(`DELETE FROM guilds WHERE name = 'Пробная крепость'`);
+  psql(`UPDATE characters SET guild_id = NULL WHERE id = '${me}'`);
+}
 
+function поставитьВТочку(точка) {
+  // Строки считаем ЗАРАНЕЕ: вложенные одинарные кавычки внутри шаблонной
+  // строки ломают её. Было `zone = 'caucasus_fort,` — psql отвечал
+  // «syntax error at or near {», и инструмент падал до всякого замера.
+  const регион = точка === ТОЧКА ? 'caucasus' : 'isfahan';
+  const зона = точка === ТОЧКА ? 'caucasus_fort' : 'isfahan_outskirts';
+  const q = (т) => `'{"x":${т.x},"y":0,"z":${т.z}}'::jsonb`;
+  const дляПервого = `UPDATE characters SET region = '${регион}', zone = '${зона}', position = ${q(точка)} WHERE id = '${me}'`;
+  const дляВторого = `UPDATE characters SET region = '${регион}', zone = '${зона}', position = ${q({ x: точка.x, z: точка.z + 1.5 })} WHERE name = '${ИМЯ_ВТОРОГО}'`;
+  psql(дляПервого);
+  psql(дляВторого);
+}
+
+// ── Подготовка ────────────────────────────────────────────
+убратьВторого();
+убратьГильдию();
 psql(`INSERT INTO characters (user_id, name, class, level, experience, stats, hp, max_hp,
          mana, max_mana, stamina, max_stamina, position, region, gold, zone, server_id, base_max_hp)
        VALUES ((SELECT user_id FROM characters WHERE id='${me}'), '${ИМЯ_ВТОРОГО}', 'qizilbash', 30, 0,
                '{"agility":14,"charisma":9,"strength":22,"endurance":20,"intelligence":6}',
                900, 900, 80, 160, 200, 200,
-               '{"x":${ТОЧКА.x},"y":0,"z":${ТОЧКА.z + 1.5}}', 'caucasus', 0, 'caucasus_fort', 'isfahan', 900)`);
+               '{"x":0,"y":0,"z":0}'::jsonb, 'isfahan', 0, 'isfahan_center', 'isfahan', 900)`);
 const второйId = psql(`SELECT id FROM characters WHERE name = '${ИМЯ_ВТОРОГО}'`);
 if (!второйId) { лог('второй персонаж не создался'); process.exit(1); }
 
-// ── Гильдия и захват крепости ──
 psql(`INSERT INTO guilds (name, leader_id, gold) VALUES ('Пробная крепость', '${me}', 0)`);
 const гильдия = psql(`SELECT id FROM guilds WHERE name = 'Пробная крепость'`);
 psql(`UPDATE characters SET guild_id = '${гильдия}' WHERE id = '${me}'`);
 psql(`UPDATE guild_territories SET guild_id = '${гильдия}', captured_at = NOW() WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
-лог(`гильдия держит «${ТЕРРИТОРИЯ}», бонус pvp_damus 5%`);
+лог(`гильдия держит «${ТЕРРИТОРИЯ}» — pvp_damage 5%`);
+// Кэш владельцев в сервере живёт 30 секунд, а база меняется в обход сервера.
+лог('жду 35 секунд, пока сервер перечитает владельцев территорий');
+await sleep(35000);
 
-// ── Два сокета в кавказском регионе ──
+// ── Сокеты ────────────────────────────────────────────────
 function сокет(кто) {
   const s = io(URL, { transports: ['websocket', 'polling'], timeout: 20000, autoConnect: false });
   s.кто = кто;
@@ -89,128 +134,117 @@ function сокет(кто) {
   s.on('combat:hit', (h) => s.поМне.push(h));
   return s;
 }
-const A = сокет('первый');
-const B = сокет('второй');
 
-// Оба персонажа должны быть в кавказском регионе ДО входа в мир.
-// socket.region читается из базы один раз при аутентификации, и правка
-// региона в базе посреди сессии на него не действует. Первая версия
-// инструмента ставила регион второму и забывала первого: бонус бы не
-// применился вовсе, и проверка сказала бы «бонуса нет» там, где его нет.
-psql(`UPDATE characters SET region = 'caucasus', zone = 'caucasus_fort' WHERE id = '${me}'`);
-psql(`UPDATE characters SET region = 'caucasus', zone = 'caucasus_fort' WHERE id = '${второйId}'`);
-лог('оба в кавказском регионе — крепость рядом');
-
-/**
- * Пере-войти персонажем после смены региона.
- *
- * Нужно, потому что socket.region читается один раз при auth. Без пере-входа
- * второй замер шёл бы с кавказским регионом в голове сервера и показал бы тот
- * же бонус, — то есть проверка «бонус привязан к месту» врала бы.
- */
-async function переВойти(s, id) {
-  s.close();
-  await sleep(800);
-  const новый = io(URL, { transports: ['websocket', 'polling'], timeout: 20000, autoConnect: false });
-  новый.кто = s.кто;
-  новый.ответы = []; новый.ошибки = []; новый.поМне = [];
-  новый.on('combat:result', (r) => новый.ответы.push(r));
-  новый.on('combat:error', (e) => новый.ошибки.push(e));
-  новый.on('combat:hit', (h) => новый.поМне.push(h));
+async function войтиПерсонажем(id, кто) {
+  const s = сокет(кто);
+  token = await войти();
   await new Promise((r, j) => {
-    const t = setTimeout(() => j(new Error('пере-вход ' + s.кто + ' не удался')), 20000);
-    новый.on('connect', () => { clearTimeout(t); r(); });
-    новый.on('connect_error', (e) => { clearTimeout(t); j(new Error(e?.message ?? 'ошибка')); });
-    новый.connect();
-  });
-  await new Promise((r, j) => {
-    const t = setTimeout(() => j(new Error('нет auth:success при пере-входе ' + s.кто)), 15000);
-    новый.on('auth:success', () => { clearTimeout(t); r(); });
-    новый.on('auth:error', (e) => { clearTimeout(t); j(new Error(JSON.stringify(e))); });
-    новый.emit('auth', { token, characterId: id });
-  });
-  return новый;
-}
-
-/** Переменные текущих сокетов: после пере-входа меняются. */
-let сокетA = A;
-let сокетB = B;
-
-for (const [s, id] of [[A, me], [B, второйId]]) {
-  await new Promise((r, j) => {
-    const t = setTimeout(() => j(new Error('сокет ' + s.кто + ' не подключился')), 20000);
+    const t = setTimeout(() => j(new Error('сокет ' + кто + ' не подключился')), 20000);
     s.on('connect', () => { clearTimeout(t); r(); });
     s.on('connect_error', (e) => { clearTimeout(t); j(new Error(e?.message ?? 'ошибка')); });
     s.connect();
   });
   await new Promise((r, j) => {
-    const t = setTimeout(() => j(new Error('нет auth у ' + s.кто)), 15000);
+    const t = setTimeout(() => j(new Error('нет auth:success у ' + кто)), 15000);
     s.on('auth:success', () => { clearTimeout(t); r(); });
     s.on('auth:error', (e) => { clearTimeout(t); j(new Error(JSON.stringify(e))); });
     s.emit('auth', { token, characterId: id });
   });
-  лог(`${s.кто}: в мире`);
+  return s;
 }
 
 /**
- * Один удар по второму персонажу из точки firstPos.
- * Возвращает фактический урон из combat:result.
+ * Серия ударов из точки. Защитник встаёт в 1.5 единицах от атакующего.
+ *
+ * ПОЧЕМУ СЕРИЯ, А НЕ ОДИН УДАР. Первая версия мерила один удар и получила
+ * в своей территории 10 с isBlocked: true, а вне её 22 с isBlocked: false —
+ * то есть замерила РАЗНУЮ ЗАЩИТУ, а не бонус. Щит держит 45% урона, и
+ * 10 против 22 выглядит как «территория ослабляет», хотя это просто блок.
+ *
+ * Берём только неблокированные удары, помеченные isBlocked: false. Щит в
+ * этой игре поднимается действием, а не сам по себе, так что среди пяти
+ * ударов неблокированные найдутся. Ни одного — значит защита что-то держит
+ * постоянно, и об этом надо сказать, а не тихо сравнить 10 с 22.
+ *
+ * Пауза 1.3 с между ударами: откат обычной атаки считает сервер, и
+ * учащённая серия получала бы combat:error attack_too_fast.
  */
-async function удар(x, z) {
-  const атакующий = сокетA;
-  атакующий.ответы.length = 0;
-  атакующий.ошибки.length = 0;
-  атакующий.emit('player:move', { position: { x, y: 0, z }, direction: { x: 0, y: 0, z: 1 } });
-  сокетB.emit('player:move', { position: { x: ТОЧКА.x, y: 0, z: ТОЧКА.z + 1.5 }, direction: { x: 0, y: 0, z: -1 } });
+async function серия(a, b, точка, попыток = 5) {
+  b.emit('player:move', { position: { x: точка.x, y: 0, z: точка.z + 1.5 }, direction: { x: 0, y: 0, z: -1 } });
   await sleep(900);
-  атакующий.emit('combat:action', {
-    characterId: me, actionType: 'attack', targetId: второйId,
-    position: { x, y: 0, z }, direction: { x: 0, y: 0, z: 1 }, timestamp: Date.now(),
-  });
-  await sleep(1800);
-  if (атакующий.ошибки.length) return { урон: 0, ошибка: JSON.stringify(атакующий.ошибки[0]).slice(0, 80) };
-  const r = атакующий.ответы.find((x2) => x2.targetId === второйId);
-  return { урон: Number(r?.damage ?? 0), ответ: r ?? null };
+  const все = [];
+  for (let i = 0; i < попыток; i++) {
+    a.ответы.length = 0;
+    a.ошибки.length = 0;
+    a.emit('player:move', { position: { x: точка.x, y: 0, z: точка.z }, direction: { x: 0, y: 0, z: 1 } });
+    a.emit('combat:action', {
+      characterId: me, actionType: 'attack', targetId: второйId,
+      position: { x: точка.x, y: 0, z: точка.z }, direction: { x: 0, y: 0, z: 1 },
+      timestamp: Date.now(),
+    });
+    await sleep(1300);
+    const r = a.ответы.find((x) => x.targetId === второйId);
+    if (r) все.push(r);
+    if (a.ошибки.length) {
+      лог('    ошибка удара: ' + JSON.stringify(a.ошибки[0]).slice(0, 140));
+      break;
+    }
+    if (r && r.isBlocked === false && r.isDodged === false) break;
+  }
+  if (!все.length) {
+    лог('    ответов по цели нет. Пришло всего: ' + a.ответы.length);
+    for (const x of a.ответы) лог('      ' + JSON.stringify(x).slice(0, 240));
+  }
+  return все;
 }
-
-// ── Замер 1: в своей территории ──
-const сТерриторией = await удар(ТОЧКА.x, ТОЧКА.z);
+/** Печать всех ударов серии — чтобы было видно, какие отброшены как блок. */
+function печатьУдары(ответы) {
+  const чистые = ответы.filter((r) => r.isBlocked === false && r.isDodged === false);
+  лог('  ударов: ' + ответы.length + ', из них неблокированных: ' + чистые.length);
+  for (const r of ответы) {
+    лог('    урон ' + r.damage + (r.isBlocked ? ' (щит)' : '') + (r.isCritical ? ' (крит)' : '') + (r.isDodged ? ' (уклон)' : ''));
+  }
+}
+// ── Замер 1: в своей территории ───────────────────────────
+поставитьВТочку(ТОЧКА);
+const A = await войтиПерсонажем(me, 'первый');
+const B = await войтиПерсонажем(второйId, 'второй');
+лог('оба в мире в кавказском регионе');
+const сБонусом = await серия(A, B, ТОЧКА);
 лог('');
 лог('--- 1. В СВОЕЙ ТЕРРИТОРИИ (Кавказ) ---');
-лог(`  урон: ${сТерриторией.урон}`);
-if (сТерриторией.ошибка) лог(`  ошибка: ${сТерриторией.ошибка}`);
+печатьУдары(сБонусом);
 
-// ── Замер 2: уходим из региона ──
-// Территория остаётся владельцу, но бой идёт не в кавказском регионе —
-// бонус применяться не должен. Пере-вход обязателен: socket.region читается
-// при аутентификации, и без него сервер считал бы бой за Кавказом.
-const ВТОРАЯ_ТОЧКА = { x: 505, y: 0, z: 55 };
-psql(`UPDATE characters SET region = 'isfahan', zone = 'isfahan_outskirts' WHERE id = '${me}'`);
-psql(`UPDATE characters SET region = 'isfahan', zone = 'isfahan_outskirts' WHERE id = '${второйId}'`);
-сокетA = await переВойти(сокетA, me);
-сокетB = await переВойти(сокетB, второйId);
-лог('оба перевошли в Исфахан');
-const безТерритории = await удар(ВТОРАЯ_ТОЧКА.x, ВТОРАЯ_ТОЧКА.z);
+// ── Замер 2: вне территории ──────────────────────────────
+A.close(); B.close();
+поставитьВТочку(ВТОРАЯ);
+const A2 = await войтиПерсонажем(me, 'первый');
+const B2 = await войтиПерсонажем(второйId, 'второй');
+лог('оба перевошли в Исфахан — вне территории');
+const безБонуса = await серия(A2, B2, ВТОРАЯ);
 лог('');
 лог('--- 2. ВНЕ ТЕРРИТОРИИ (Исфахан, та же гильдия с крепостью) ---');
-лог(`  урон: ${безТерритории.урон}`);
-if (безТерритории.ошибка) лог(`  ошибка: ${безТерритории.ошибка}`);
+печатьУдары(безБонуса);
 
-// ── Уборка ──
-A.close(); B.close();
+A2.close(); B2.close();
 убратьВторого();
-psql(`UPDATE guild_territories SET guild_id = NULL, captured_at = NULL WHERE territory_id = '${ТЕРРИТОРИЯ}'`);
-psql(`DELETE FROM guild_members WHERE guild_id IN (SELECT id FROM guilds WHERE name = 'Пробная крепость')`);
-psql(`DELETE FROM guilds WHERE name = 'Пробная крепость'`);
-psql(`UPDATE characters SET guild_id = NULL WHERE id = '${me}'`);
-лог('убрал за собой: гильдию, захват, второго персонажа');
+убратьГильдию();
+поставитьВТочку(ТОЧКА);
+psql(`UPDATE characters SET region = 'isfahan', zone = 'isfahan_center',
+        position = '{"x":300,"y":0,"z":299}'::jsonb WHERE id = '${me}'`);
+лог('убрал за собой: гильдию, захват, второго персонажа, позиции');
 
 лог('');
 лог('--- ВЕРДИКТ ---');
-const базовый = безТерритории.урон;
-const сБонусом = сТерриторией.урон;
-const выше = базовый > 0 && сБонусом > базовый;
-лог(`  ${сБонусом > 0 ? 'ДА' : 'НЕТ'}  удар в своей территории прошёл (${сБонусом})`);
+// Берём только неблокированные удары: сравнение заблокированного с
+// неблокированным — это сравнение щита, а не бонуса.
+const чистые = (ответы) => ответы.filter((r) => r.isBlocked === false && r.isDodged === false);
+const базовыйВсе = чистые(безБонуса);
+const сТерриториейВсе = чистые(сБонусом);
+const базовый = базовыйВсе[0]?.damage ?? 0;
+const сТерриторией = сТерриториейВсе[0]?.damage ?? 0;
+лог(`неблокированных: в своей территории ${сТерриториейВсе.length}, вне ${базовыйВсе.length}`);
+лог(`  ${сТерриторией > 0 ? 'ДА' : 'НЕТ'}  удар в своей территории прошёл (${сТерриторией})`);
 лог(`  ${базовый > 0 ? 'ДА' : 'НЕТ'}  урон вне территории есть (${базовый})`);
-лог(`  ${выше ? 'ДА' : 'НЕТ'}  бонус добавил урона: ${базовый} → ${сБонусом} (${сБонусом - базовый > 0 ? '+' : ''}${сБонусом - базовый})`);
-process.exit(сБонусом > 0 && базовый > 0 && выше ? 0 : 1);
+лог(`  ${сТерриторией > базовый ? 'ДА' : 'НЕТ'}  бонус добавил урона: ${базовый} → ${сТерриторией} (${сТерриторией - базовый > 0 ? '+' : ''}${сТерриторией - базовый})`);
+process.exit(сТерриторией > 0 && базовый > 0 && сТерриторией > базовый ? 0 : 1);
