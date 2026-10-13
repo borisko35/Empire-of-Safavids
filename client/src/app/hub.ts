@@ -92,6 +92,10 @@ const GROUPS: HubGroup[] = [
       { id: 'panel-poetry', titleKey: 'hub.poetry', icon: 'scroll' },
       { id: 'panel-chronicles', titleKey: 'hub.chronicles', icon: 'star8' },
       { id: 'panel-story', titleKey: 'hub.story', icon: 'crown' },
+      // Вербовка караула: солдаты бьют вместе с игроком и забирают часть
+      // удара на себя. Отдельная панель, а не строчка в партии: в партию
+      // зовут живых игроков, а здесь — наёмных.
+      { id: 'panel-soldiers', titleKey: 'hub.soldiers', icon: 'flag' },
     ],
   },
   {

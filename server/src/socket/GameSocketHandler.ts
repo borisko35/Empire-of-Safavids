@@ -10,6 +10,7 @@ import { GuildService } from '../services/GuildService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { AchievementService } from '../services/AchievementService';
 import { DebuffService } from '../services/DebuffService';
+import { soldiers } from '../services/SoldierService';
 import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
@@ -181,6 +182,8 @@ export class GameSocketHandler {
   /** Аренда шардов: чей спавн и чей бой. Один экземпляр на процесс. */
   private аренда = new ShardLease();
   private mounts = new MountSystem();
+/** Караул игрока: наёмные солданы бьют вместе с игроком (§178). */
+private soldiers = soldiers;
   private chatModeration = ChatModerationService.getInstance();
 
   // Активные игроки: characterId -> сокет
@@ -2035,11 +2038,52 @@ export class GameSocketHandler {
       region: socket.region ?? 'unknown',
     }));
 
+    // КАРАУЛ. Каждый нанятый солдат бьёт вместе с игроком, и его урон идёт в
+    // ту же цель тем же заходом.
+    //
+    // Почему после проверки досягаемости, а не вместе с уроном игрока: солдат
+    // стоит там, где стоит хозяин, и отдельной проверки досягаемости у него
+    // нет. Если бы караул бил раньше, игрок мог бы бить через полкарты и
+    // «приводить» солдат с собой — ровно та дыра, ради которой досягаемость
+    // и считается по серверным позициям.
+    //
+    // Отказ здесь не глотаем: если караул не сработал, игрок заплатил золото за
+    // пустоту, и молчание выглядело бы как «караул есть, но не помогает».
+    let уронКараула = 0;
+    try {
+      const вклад = await this.soldiers.ударить(attacker.id, (_tier, damage) => {
+        const добит = ai.takeDamage(monsterCtx.instanceId, damage, attacker.id);
+        return добит ? 0 : monsterCtx.currentHp;
+      });
+      уронКараула = вклад.reduce((sum, s) => sum + s.damage, 0);
+      if (вклад.length) {
+        // Отдельным событием, а не полем в combat:result: клиент рисует урон
+        // по идентификатору цели, и солдатские удары без отдельного пакета
+        // просто не appeared бы на экране — а именно их игрок и ждёт, когда
+        // платит за караул.
+        socket.emit('combat:soldiers', {
+          targetId: monsterCtx.instanceId,
+          hits: вклад.map((s) => ({ id: s.id, tier: s.tier, damage: s.damage, killed: s.killed })),
+          total: уронКараула,
+        });
+      }
+    } catch (e) {
+      logger.error('[Soldiers] урон караула не начислен:', (e as Error).message);
+    }
+
+    // Караул мог убить цель последним ударом — тогда награда за смерть идёт
+    // ему же, один раз, и игроку, как всегда.
+    if (уронКараула > 0) {
+      const добитКараулом = ai.getContext(monsterCtx.instanceId)?.state === 'dead';
+      if (добитКараулом) await this.rewardMonsterKill(socket, attacker, monsterCtx);
+    }
+
     socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
       attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result,
       targetHp: Math.max(0, monsterCtx.currentHp),
       targetMaxHp: monsterCtx.maxHp,
       comboFinisher: comboMult > 1,
+      soldiersDamage: уронКараула,
     });
 
     socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {

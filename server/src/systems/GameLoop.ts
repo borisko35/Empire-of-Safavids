@@ -24,6 +24,7 @@ import { CharacterService } from '../services/CharacterService';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { AuctionService } from '../services/AuctionService';
 import { DebuffService } from '../services/DebuffService';
+import { soldiers } from '../services/SoldierService';
 import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
@@ -58,6 +59,8 @@ export class GameLoop {
   private worldTime = new WorldTimeSystem();
   private characters = new CharacterService();
   private debuffService = new DebuffService();
+/** Караул игрока: наёмные солдаты забирают часть удара на себя (§178). */
+private soldiers = soldiers;
   private redis = RedisService.getInstance();
   private defenseStates = DefenseStates.getInstance();
   private equipment = EquipmentCache.getInstance();
@@ -332,6 +335,24 @@ export class GameLoop {
       const isDodged = defenseMult === 0;
       damage = Math.max(isDodged ? 0 : 1, Math.floor(damage * defenseMult));
 
+      // КАРАУЛ ПРИНИМАЕТ УРОН. Часть удара уходит наёмным солдатам вместо
+      // игрока: ровно та доля, которую караул обещал в панели вербовки.
+      //
+      // После уклонения и блока, а не до них: игрок, уклонившийся или
+      // закрывшийся щитом, не должен терять здоровье солдат — иначе «уклонение»
+      // и «блок» платили бы караулу вместо того, чтобы спасать самого игрока.
+      let absorbedBySoldiers = 0;
+      if (!isDodged && damage > 0) {
+        absorbedBySoldiers = await this.soldiers
+          .принятьУрон(target.id, damage)
+          .then((r) => r.поглощено)
+          .catch((e: Error) => {
+            logger.error('[GameLoop] караул не принял урон:', e.message);
+            return 0;
+          });
+        damage -= absorbedBySoldiers;
+      }
+
       const applied = await this.characters.applyDamage(target.id, damage).catch(() => null);
       if (!applied) continue;
 
@@ -413,6 +434,10 @@ export class GameLoop {
         instanceId: atk.instanceId,
         skillId: atk.skillId ?? null,
         damage,
+        // Сколько удара забрал караул. Клиенту это нужно, чтобы показать,
+        // что удар был, а игрок не потерял столько здоровья: без этого
+        // число на экране не сходится с тем, что караул обещал в панели.
+        absorbedBySoldiers,
         hp: applied.hp,
         maxHp: applied.maxHp,
         isDodged,

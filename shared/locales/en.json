@@ -1257,7 +1257,8 @@
     "settings": "Settings",
     "notifications": "Notifications",
     "hall_of_fame": "Hall of Fame",
-    "mail": "Mail"
+    "mail": "Mail",
+    "soldiers": "Retainers"
   },
   "notifications": {
     "achievement_unlocked": "Achievement unlocked",
@@ -1677,5 +1678,30 @@
     "document_done": "You already have the dossiers — there is nothing left to take",
     "strike": "{name} is hitting you",
     "strike_karma": "Karma: −{karma}"
+  },
+  "soldiers": {
+    "title": "Recruitment",
+    "loading": "Loading…",
+    "no_character": "No character selected",
+    "summary": "Retainers {hired} of {limit} · {gold} gold",
+    "stats": "Health {hp} · hit {dmg} · takes {guard}% of blows",
+    "hire": "Hire",
+    "dismiss": "Dismiss",
+    "need_level": "Level {level} required",
+    "limit_reached": "Retainers full",
+    "no_gold": "Not enough gold",
+    "hired_toast": "Retainer hired",
+    "hire_failed": "Could not hire",
+    "dismiss_failed": "Could not dismiss",
+    "tier": {
+      "levy": "Levy",
+      "veteran": "Veteran",
+      "elite": "Guard"
+    },
+    "desc": {
+      "levy": "No armour, plenty of numbers. Cheap and many, but he is weak.",
+      "veteran": "Walked the caravan and kept his trade. Costly, but he takes the blow.",
+      "elite": "A personal guard. Hits harder than his master and costs like a roof."
+    }
   }
 }

@@ -1257,7 +1257,8 @@
     "settings": "Tənzimləmələr",
     "notifications": "Bildirişlər",
     "hall_of_fame": "Şöhrət salonu",
-    "mail": "Məktub"
+    "mail": "Məktub",
+    "soldiers": "Qvardiya"
   },
   "notifications": {
     "achievement_unlocked": "Nailiyyət alındı",
@@ -1677,5 +1678,30 @@
     "document_done": "Dönələr artıq səndədir — ikinci dəfə götürməyə bir şey yoxdur",
     "strike": "{name} səni vurur",
     "strike_karma": "Karma: −{karma}"
+  },
+  "soldiers": {
+    "title": "Əsgər toplamaq",
+    "loading": "Yüklənir…",
+    "no_character": "Personaj seçilməyib",
+    "summary": "Qvardiyada {hired}/{limit} · {gold} qızıl",
+    "stats": "Sağlamlıq {hp} · zərbə {dmg} · zərbənin {guard}% götürür",
+    "hire": "Əsgər götür",
+    "dismiss": "Dağıt",
+    "need_level": "{level} səviyyə lazımdır",
+    "limit_reached": "Qvardiya doludur",
+    "no_gold": "Qızıl kifayət deyil",
+    "hired_toast": "Əsgər götürüldü",
+    "hire_failed": "Əsgər götürülmədi",
+    "dismiss_failed": "Əsgər dağıtılmadı",
+    "tier": {
+      "levy": "Əsgər",
+      "veteran": "Veteran",
+      "elite": "Qvardiyа"
+    },
+    "desc": {
+      "levy": "Zirh yoxdur, say çoxdur. Ucuzdur, amma zəifdir.",
+      "veteran": "Karvanı keçdi, işini bilir. Bahalıdır, amma zərbəni özünə götürür.",
+      "elite": "Şahın şəxsi qvardiyası. Sahibindən güclü vurur, qiyməti damdan aşıqdır."
+    }
   }
 }

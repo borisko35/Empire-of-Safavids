@@ -1520,7 +1520,7 @@ export async function loadMounts(): Promise<void> {
 
 
 async function loadLeaderboard(): Promise<void> {
-  const box = $('panel-leaderboard');
+  const box = $('lb-content');
   if (!box) return;
   box.innerHTML = '';
 
@@ -1727,7 +1727,7 @@ async function copyText(text: string): Promise<boolean> {
 // ── Друзья ────────────────────────────────────────────────
 
 async function loadFriends(): Promise<void> {
-  const box = $('panel-friends');
+  const box = $('friends-list');
   if (!box) return;
   box.innerHTML = '';
   try {
@@ -1826,7 +1826,7 @@ async function loadFriends(): Promise<void> {
 // ── Шахматы Шаха ──────────────────────────────────────────
 
 async function loadChess(): Promise<void> {
-  const box = $('panel-chess');
+  const box = $('chess-content');
   if (!box) return;
   box.innerHTML = '';
 
@@ -1940,7 +1940,7 @@ function renderChessBoard(container: HTMLElement, game: { gameId: string; board:
 // ── Стихи Хафиза ──────────────────────────────────────────
 
 async function loadPoetry(): Promise<void> {
-  const box = $('panel-poetry');
+  const box = $('poetry-content');
   if (!box) return;
   box.innerHTML = '';
 
@@ -2185,7 +2185,7 @@ export async function loadStory(): Promise<void> {
 // ── Хроники Сефевидов ─────────────────────────────────────
 
 async function loadChronicles(): Promise<void> {
-  const box = $('panel-chronicles');
+  const box = $('chronicles-content');
   if (!box) return;
   box.innerHTML = '';
 
@@ -2305,7 +2305,7 @@ function regionName(region: string): string {
 // ── Достижения ─────────────────────────────────────────────
 
 async function loadAchievements(): Promise<void> {
-  const box = $('panel-achievements');
+  const box = $('ach-content');
   if (!box) return;
   box.innerHTML = '';
   try {
@@ -2398,7 +2398,7 @@ async function loadTasks(): Promise<void> {
 // ── Питомцы ────────────────────────────────────────────────
 
 async function loadPets(): Promise<void> {
-  const box = $('panel-pets');
+  const box = $('pets-list');
   if (!box) return;
   box.innerHTML = '';
   try {
@@ -2536,7 +2536,7 @@ async function loadPets(): Promise<void> {
  * после успешной выдачи, поэтому повторным нажатием награду не получить.
  */
 async function loadMail(): Promise<void> {
-  const box = $('panel-mail');
+  const box = $('mail-list');
   if (!box) return;
   box.innerHTML = `<div class="lb-empty">${t('mail.empty')}</div>`;
   try {
@@ -2617,8 +2617,156 @@ async function loadMail(): Promise<void> {
   }
 }
 
+// ── Караул: вербовка солдат ───────────────────────────────
+//
+// Панель рисует две вещи: кого можно нанять и кто уже в карауле.
+//
+// ЧЕГО ПАНЕЛЬ НЕ РЕШАЕТ. Доступность по уровню и по деньгам считает сервер,
+// и панель берёт готовый ответ из данных. Панель, которая решает сама, уже
+// расходилась с сервером у навыков: она отсекала список и предлагала купить
+// то, что сервер потом отказывал. Здесь единственное исключение — кнопка
+// не показывается при полном карауле, и это ровно то, что проверяет сервер.
+//
+// ПОЧЕМУ ЗДОРОВЬЕ НАРИСОВАНО ПОЛОСКОЙ, А НЕ ЧИСЛОМ. Солдат лечится сам, и
+// через минуту число изменится. Полоса показывает «сейчас ранен» и
+// «почти здоров», и число рядом остаётся точным.
+async function loadSoldiers(): Promise<void> {
+  const box = $('soldiers-content');
+  if (!box) return;
+  box.innerHTML = `<div class="lb-empty">${t('soldiers.loading')}</div>`;
+  const characterId = cid();
+  if (!characterId) {
+    box.innerHTML = `<div class="lb-empty">${t('soldiers.no_character')}</div>`;
+    return;
+  }
+  try {
+    const data = await api.soldiers(characterId);
+
+    const шапка = document.createElement('div');
+    шапка.className = 'soldiers-head';
+    шапка.textContent = t('soldiers.summary')
+      .replace('{hired}', String(data.hired))
+      .replace('{limit}', String(data.limit))
+      .replace('{gold}', String(data.gold));
+    box.appendChild(шапка);
+
+    // Кто уже нанят.
+    if (data.soldiers.length) {
+      const своих = document.createElement('div');
+      своих.className = 'soldiers-own';
+      for (const s of data.soldiers) {
+        const def = data.tiers.find((d) => d.id === s.tier);
+        if (!def) continue;
+        const row = document.createElement('div');
+        row.className = 'soldier-row';
+
+        const имя = document.createElement('span');
+        имя.className = 'soldier-name';
+        имя.textContent = t(`soldiers.tier.${s.tier}`);
+
+        const полоса = document.createElement('span');
+        полоса.className = 'soldier-hp';
+        const заливка = document.createElement('i');
+        заливка.style.width = `${Math.round((s.hp / s.max_hp) * 100)}%`;
+        полоса.appendChild(заливка);
+
+        const числа = document.createElement('span');
+        числа.className = 'soldier-hp-num';
+        числа.textContent = `${s.hp}/${s.max_hp}`;
+
+        const кнопка = document.createElement('button');
+        кнопка.className = 'soldier-dismiss';
+        кнопка.textContent = t('soldiers.dismiss');
+        кнопка.onclick = async () => {
+          кнопка.disabled = true;
+          try {
+            await api.soldierDismiss(characterId, s.id);
+            await loadSoldiers();
+            refreshBars();
+          } catch (e) {
+            toast(t('soldiers.dismiss_failed'), 'error');
+            кнопка.disabled = false;
+          }
+        };
+
+        row.append(имя, полоса, числа, кнопка);
+        своих.appendChild(row);
+      }
+      box.appendChild(своих);
+    }
+
+    // Кого можно нанять.
+    const список = document.createElement('div');
+    список.className = 'soldiers-shop';
+    const уровень = session.character?.level ?? 1;
+    for (const def of data.tiers) {
+      const card = document.createElement('div');
+      card.className = 'soldier-card';
+
+      const заголовок = document.createElement('div');
+      заголовок.className = 'soldier-card-head';
+      const имя = document.createElement('strong');
+      имя.textContent = t(`soldiers.tier.${def.id}`);
+      const цена = document.createElement('span');
+      цена.className = 'soldier-cost';
+      цена.textContent = `${def.cost}`;
+      заголовок.append(имя, цена);
+      card.appendChild(заголовок);
+
+      const описание = document.createElement('div');
+      описание.className = 'soldier-desc';
+      описание.textContent = t(`soldiers.desc.${def.id}`);
+      card.appendChild(описание);
+
+      const числа = document.createElement('div');
+      числа.className = 'soldier-stats';
+      числа.textContent = t('soldiers.stats')
+        .replace('{hp}', String(def.maxHp))
+        .replace('{dmg}', String(def.damage))
+        .replace('{guard}', String(Math.round(def.guardShare * 100)));
+      card.appendChild(числа);
+
+      const кнопка = document.createElement('button');
+      кнопка.className = 'soldier-hire';
+      // Причина отказа пишется на кнопке, а не тостом после нажатия:
+      // игрок видит, что доля закрыта, ещё до того, как попробовал.
+      const закрытУровнем = уровень < def.minLevel;
+      const закрытЛимитом = data.hired >= data.limit;
+      const закрытЗолотом = data.gold < def.cost;
+      кнопка.disabled = закрытУровнем || закрытЛимитом || закрытЗолотом;
+      кнопка.textContent = закрытУровнем
+        ? t('soldiers.need_level').replace('{level}', String(def.minLevel))
+        : закрытЛимитом
+          ? t('soldiers.limit_reached')
+          : закрытЗолотом
+            ? t('soldiers.no_gold')
+            : t('soldiers.hire');
+      if (!кнопка.disabled) {
+        кнопка.onclick = async () => {
+          кнопка.disabled = true;
+          try {
+            const r = await api.soldierHire(characterId, def.id);
+            if (!r.success) toast(t('soldiers.hire_failed'), 'error');
+            else toast(t('soldiers.hired_toast'), 'success');
+            await loadSoldiers();
+            refreshBars();
+          } catch (e) {
+            toast(t('soldiers.hire_failed'), 'error');
+            кнопка.disabled = false;
+          }
+        };
+      }
+      card.appendChild(кнопка);
+      список.appendChild(card);
+    }
+    box.appendChild(список);
+  } catch (err) {
+    box.innerHTML = `<div class="lb-empty">${(err as Error).message}</div>`;
+  }
+}
+
 async function loadHallOfFame(): Promise<void> {
-  const box = $('panel-hall-of-fame');
+  const box = $('hall-of-fame-list');
   if (!box) return;
   box.innerHTML = '<div class="lb-empty">' + t('hall.empty') + '</div>';
   try {
@@ -2917,7 +3065,7 @@ async function loadHouse(): Promise<void> {
 // ── PvP Арена ──────────────────────────────────────────────
 
 async function loadPvP(): Promise<void> {
-  const box = $('panel-pvp');
+  const box = $('pvp-content');
   if (!box) return;
   box.innerHTML = '';
   try {
@@ -3025,7 +3173,7 @@ const towerRunStartedAt = new Map<number, number>();
 const MIN_FLOOR_SECONDS = 10;
 
 async function loadTower(): Promise<void> {
-  const box = $('panel-tower');
+  const box = $('tower-content');
   if (!box) return;
   box.innerHTML = '';
   try {
@@ -3161,7 +3309,7 @@ function rankOf(faction: FactionInfo, value: number): { label: string; next: num
 }
 
 async function loadReputation(): Promise<void> {
-  const box = $('panel-reputation');
+  const box = $('rep-content');
   if (!box) return;
   box.innerHTML = '';
   const characterId = cid();
@@ -4051,6 +4199,7 @@ const LOADERS: Record<string, () => Promise<void>> = {
   // Зал славы. Панели не было: история побед над боссами писалась в базу,
   // и смотреть на неё было некому
   'panel-hall-of-fame': loadHallOfFame,
+  'panel-soldiers': loadSoldiers,
   // Почтовый ящик. Панели не было: награды, не поместившиеся в сумку,
   // просто пропадали
   'panel-mail': loadMail,

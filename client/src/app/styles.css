@@ -2280,6 +2280,76 @@ body[data-display="windowed"] #screen-world::after {
    Первая тройка подсвечена золотом: без этого список выглядит как
    очередной рейтинг, а именно он зовёт людей драться за босса. */
 .hall-list { display: flex; flex-direction: column; gap: 4px; }
+
+/* Панель «Вербовка караула» (ROADMAP §178).
+   Полоса здоровья солдата шириной в строку, а не константа: караул может
+   быть ранен на 4% от полного, и короткая полоса тогда показывала бы
+   «всё хорошо» там, где человек идёт в бой с одним ударом в запасе. */
+.soldiers-head {
+  color: var(--cream-dim);
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.soldiers-own { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.soldier-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) minmax(60px, 2fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+}
+.soldier-name { white-space: nowrap; }
+.soldier-hp {
+  position: relative;
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.soldier-hp i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #7a2f2f, #b4453c);
+  border-radius: 4px;
+}
+.soldier-hp-num { color: var(--cream-dim); font-variant-numeric: tabular-nums; }
+.soldier-dismiss, .soldier-hire {
+  font: inherit;
+  font-size: 12px;
+  color: var(--cream);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.soldier-dismiss:hover:not(:disabled), .soldier-hire:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+.soldier-dismiss:disabled, .soldier-hire:disabled { opacity: 0.45; cursor: not-allowed; }
+.soldiers-shop { display: flex; flex-direction: column; gap: 8px; }
+.soldier-card {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.soldier-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.soldier-cost { color: #d9b45c; font-variant-numeric: tabular-nums; }
+.soldier-desc { color: var(--cream-dim); font-size: 11px; margin: 4px 0 6px; line-height: 1.35; }
+.soldier-stats { color: var(--cream-dim); font-size: 11px; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
 .hall-row {
   display: grid;
   grid-template-columns: 34px 1fr auto;

@@ -25,6 +25,7 @@ import { adminRouter } from '../routes/admin';
 import { friendsRouter } from '../routes/friends';
 import { leaderboardRouter } from '../routes/leaderboard';
 import { hallOfFameRouter } from '../routes/hallOfFame';
+import { soldiersRouter } from '../routes/soldiers';
 import { tutorialRouter } from '../routes/tutorial';
 import minigamesRouter from '../routes/minigames';
 import poetryRouter from '../routes/poetry';
@@ -160,6 +161,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/hall-of-fame', hallOfFameRouter);
+// Караул: вербовка солдат в казармах (ROADMAP §178)
+app.use('/api/soldiers', soldiersRouter);
 app.use('/api/tutorial', tutorialRouter);
 app.use('/api/chess', minigamesRouter);
 app.use('/api/poetry', poetryRouter);

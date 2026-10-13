@@ -1218,6 +1218,27 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       kills: number; guildId: string | null; guildName: string | null; lastKill: string }[] }>(
       `/api/hall-of-fame/bosses?limit=${limit}`),
 
+  // ── Караул (вербовка солдат) ─────────────────────────────
+  // Цена и доступность каждой доли приходят с сервера: панель не решает,
+  // кого можно нанять, — иначе она и сервер разошлись бы, как это уже было
+  // с панелью навыков (она отсекала список сама и предлагала купить то,
+  // что сервер потом отказывал).
+  soldiers: (characterId: string) =>
+    req<{
+      tiers: { id: string; cost: number; maxHp: number; damage: number; guardShare: number;
+        minLevel: number; names: Record<string, string>; description: Record<string, string> }[];
+      limit: number; hired: number; gold: number;
+      soldiers: { id: string; tier: string; hp: number; max_hp: number }[];
+    }>(`/api/soldiers?characterId=${characterId}`),
+  soldierHire: (characterId: string, tier: string) =>
+    req<{ success: boolean; gold?: number; reason?: string }>('/api/soldiers/hire', {
+      method: 'POST', body: JSON.stringify({ characterId, tier }),
+    }),
+  soldierDismiss: (characterId: string, id: string) =>
+    req<{ success: boolean }>('/api/soldiers/dismiss', {
+      method: 'POST', body: JSON.stringify({ characterId, id }),
+    }),
+
   // ── Почтовый ящик ──────────────────────────────────────
   // Таблица mailbox была пуста: награды выдавались напрямую, и если
   // предмет не помещался в сумку, он просто пропадал
