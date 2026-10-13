@@ -1,4 +1,4 @@
-// Бонусы владельцу территории — Empire of Safavids
+﻿// Бонусы владельцу территории — Empire of Safavids
 // ============================================================
 // ЧТО БЫЛО. TerritoryDefinition.bonuses объявлены в data/guilds.ts у всех
 // четырёх территорий: trade_tax, gold_income, exp_bonus, craft_speed,
@@ -56,7 +56,7 @@ export type TerritoryBonusType =
  * достройкой Шёлкого пути — караван, прибывший в регион с такой территорией,
  * платит налог её владельцу.
  */
-export const WIRED_TERRITORY_BONUSES: readonly TerritoryBonusType[] = ['exp_bonus', 'trade_tax', 'gold_income'];
+export const WIRED_TERRITORY_BONUSES: readonly TerritoryBonusType[] = ['exp_bonus', 'trade_tax', 'gold_income', 'pvp_damage'];
 
 /**
  * Раз в сколько минут гильдия получает доход с территории.
@@ -83,11 +83,19 @@ const ИЗВЕСТНЫЕ: readonly string[] = [
 ];
 
 /** Бонуса нет: множитель равен единице. */
-export const НЕЙТРАЛЬНО: TerritoryBonus = { exp: 1 };
+export const НЕЙТРАЛЬНО: TerritoryBonus = { exp: 1, pvp: 1 };
 
 export interface TerritoryBonus {
   /** Множитель опыта. 1 - без бонуса, больше 1 - выгоднее. */
   exp: number;
+  /**
+   * Множитель урона в PvP. 1 - без бонуса.
+   *
+   * §185. Считается по региону, в котором дерётся владелец, а не глобально:
+   * крепость Кавказа защищает кавказский перевал, а не весь мир. Это тот же
+   * принцип, по которому базар Тебриза не даёт опыта в Исфахане.
+   */
+  pvp: number;
 }
 
 export class TerritoryBonusError extends Error {
@@ -224,7 +232,13 @@ export class TerritoryBonuses {
       (т) => т.region === region && владельцы.get(т.id) === герой.guild_id,
     );
     if (мои.length === 0) return НЕЙТРАЛЬНО;
-    return { exp: territoryBonuses(мои, 'exp_bonus') };
+    return {
+      exp: territoryBonuses(мои, 'exp_bonus'),
+      // §185: pvp_damage считаем той же функцией. Плоский вид 0.05 даёт
+      // множитель 1.05, как и у доли, — в этом и смысл бонусВида: она
+      // превращает и то и другое в «во сколько раз выгоднее».
+      pvp: territoryBonuses(мои, 'pvp_damage'),
+    };
   }
 
   /** Бонус по региону для начисления опыта. */
@@ -232,7 +246,10 @@ export class TerritoryBonuses {
     const владельцы = await this.владельцы();
     const вРегионе = TERRITORIES.filter((т) => т.region === region && владельцы.get(т.id));
     if (вРегионе.length === 0) return НЕЙТРАЛЬНО;
-    return { exp: territoryBonuses(вРегионе, 'exp_bonus') };
+    return {
+      exp: territoryBonuses(вРегионе, 'exp_bonus'),
+      pvp: territoryBonuses(вРегионе, 'pvp_damage'),
+    };
   }
 
   /** id -> guild_id, с кэшем на СРОК_КЭША_МС. */
@@ -398,3 +415,4 @@ export function неподключённыеВиды(): string[] {
 export function видИзвестен(вид: string): boolean {
   return ИЗВЕСТНЫЕ.includes(вид);
 }
+

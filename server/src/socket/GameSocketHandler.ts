@@ -187,6 +187,8 @@ export class GameSocketHandler {
 private soldiers = soldiers;
 /** Засада на караван: добыча собирается при гибели последнего эскорта (§179). */
 private ambush = ambush;
+/** Бонусы территорий в бою: +5% урона в PvP за Кавказскую крепость (§185). */
+private territory = TerritoryBonuses.getInstance();
   private chatModeration = ChatModerationService.getInstance();
 
   // Активные игроки: characterId -> сокет
@@ -1765,7 +1767,23 @@ private ambush = ambush;
     // уменьшается. Множитель защиты входит в ту же цепочку, что и блок,
     // иначе корона и щит считались бы вопреки друг другу.
     const takenMult = await this.buffs.getDamageTakenMultiplier(target.id);
-    result.damage = Math.floor(result.damage * defenseMult * dmgBuff * takenMult);
+
+    // ТЕРРИТОРИЯ АТАКУЮЩЕГО (§185). Кавказская крепость даёт +5% урона в PvP
+    // своему владельцу — но в кавказском регионе, а не во всём мире. Тот же
+    // принцип, по которому базар Тебриза не даёт опыта в Исфахане.
+    //
+    // Множитель в ту же цепочку, что и кебаб с баффами: он не стат и не
+    // броня, а «во сколько раз сильнее удар», и отдельная ветка для него
+    // разошлась бы с остальными.
+    //
+    // Принимаем 1, если бонус не посчитался: территория не должна ронять бой.
+    const terr = await this.territory
+      .бонусыИгрока(attacker.id, socket.region ?? attacker.region ?? '')
+      .catch(() => null);
+
+    result.damage = Math.floor(
+      result.damage * defenseMult * dmgBuff * takenMult * (terr?.pvp ?? 1),
+    );
 
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
