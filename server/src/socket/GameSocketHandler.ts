@@ -1777,13 +1777,31 @@ private territory = TerritoryBonuses.getInstance();
     // разошлась бы с остальными.
     //
     // Принимаем 1, если бонус не посчитался: территория не должна ронять бой.
-    const terr = await this.territory
-      .бонусыИгрока(attacker.id, socket.region ?? attacker.region ?? '')
+    // Регион боя берём один раз: он же нужен и атакующему, и защитнику,
+    // и два чтения socket.region разошлись бы при смене региона посреди боя.
+    const регионБоя = socket.region ?? attacker.region ?? '';
+    const terrАтакующий = await this.territory
+      .бонусыИгрока(target.id, регионБоя)
+      .catch(() => null);
+
+    // ТЕРРИТОРИЯ ЗАЩИТНИКА (§186). Обратная сторона §185: тот, кто дерётся
+    // на своей земле, получает −20% входящего урона. Бой у крепости
+    // перестаёт быть симметричным — и это ровно то, зачего крепость берут.
+    //
+    // Считается по региону ЦЕЛИ, а не атакующего: защищает та земля, на
+    // которой стоишь, а не та, с которой бьёшь.
+    const terrЗащитник = await this.territory
+      .бонусыИгрока(attacker.id, регионБоя)
       .catch(() => null);
 
     result.damage = Math.floor(
-      result.damage * defenseMult * dmgBuff * takenMult * (terr?.pvp ?? 1),
+      result.damage * defenseMult * dmgBuff * takenMult * (terrАтакующий?.pvp ?? 1),
     );
+
+    // Защитный множитель — ПОСЛЕ округления урона атаки: иначе округление
+    // съедало бы часть защиты. 23 × 0.8 = 18.4, и округление вниз до 18
+    // честнее, чем 23 → 18 → «защита −5».
+    result.damage = Math.floor(result.damage * (terrЗащитник?.def ?? 1));
 
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
