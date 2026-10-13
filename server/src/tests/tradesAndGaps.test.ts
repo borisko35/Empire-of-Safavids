@@ -45,7 +45,14 @@ describe('Контракты считаются', () => {
     // Если бы счётчик рос, а выплата упала, контракт был бы засчитан без
     // денег.
     const код = читать('server/src/systems/TradeService.ts');
-    const выплата = код.indexOf('addGoldReward(characterId, def.rewardGold)');
+    // §181: выплата идёт уже за вычетом налога, поэтому ищется переменная
+    // золотоИгроку, а не константа def.rewardGold. Ищется по смыслу — «где в
+    // коде золото уходит персонажу», а не по написанному имени: переименование
+    // переменной не должно ронять проверку порядка.
+    const выплата = Math.max(
+      код.indexOf('addGoldReward(characterId, золотоИгроку)'),
+      код.indexOf('addGoldReward(characterId, def.rewardGold)'),
+    );
     const счётчик = код.indexOf('increment(characterId, { tradesCompleted: 1 })');
     expect({
       выплата_есть: выплата > 0,

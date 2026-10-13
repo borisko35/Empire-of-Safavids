@@ -15,6 +15,7 @@ import { grantReputation } from './ReputationGrants';
 // Счётчик выполненных контрактов для достижения. Общая таблица
 // leaderboard - там же убийства, парирования, стихи, шахматы, крафт.
 import { LeaderboardService } from '../services/LeaderboardService';
+import { TerritoryBonuses } from './TerritoryBonuses';
 import { logger } from '../utils/logger';
 
 export interface TradeContractDef {
@@ -215,7 +216,7 @@ export class TradeService {
 
   async deliver(
     characterId: string
-  ): Promise<{ ok: true; gold: number; exp: number; silver: number; syrian: number; contract: TradeContractDef } | { ok: false; code: string }> {
+  ): Promise<{ ok: true; gold: number; exp: number; silver: number; syrian: number; contract: TradeContractDef; налог: number } | { ok: false; code: string }> {
     const active = await this.getActive(characterId);
     if (!active) return { ok: false, code: 'contract_none_active' };
 
@@ -233,7 +234,49 @@ export class TradeService {
     // Груз должен быть в сумке: сдаём его вместе с наградой
     await this.characters.removeItems(characterId, [{ itemId: def.cargoItemId, qty: def.cargoQty }]).catch(() => {});
 
-    await this.characters.addGoldReward(characterId, def.rewardGold).catch(() => {});
+    // НАЛОГ С КАРАВАНА (§181). Территория в регионе ОТПРАВЛЕНИЯ берёт пошлину
+    // с чужих караванов: базар берёт своё за то, что через него выкупили груз.
+    //
+    // ПОЧЕМУ ОТПРАВЛЕНИЕ, А НЕ НАЗНАЧЕНИЕ. Проверено расчётом по данным: налог
+    // объявлен у территорий Тебриза и Персидского залива, а прибывают караваны
+    // в Исфахан, Шираз, Кавказ, Месопотамию и Хорасан. Пересечения нет ни с
+    // одним - по назначению налог не сработал бы НИКОГДА, и смысл владения
+    // территорией не появился бы вовсе. Отправление пересекается: «Большой
+    // Базар Тебриза» это как раз город, из которого караван уходит.
+    //
+    // Платится здесь, на доставке, а не при приёме контракта: пошлина за
+    // доставленный груз. Караван, который потом ограбили, пошлины не платит —
+    // и это правильно, потому что платить было бы не с чего.
+    //
+    // Отказ здесь не глотаем: налог, который не посчитался, тихо сделал бы
+    // владение территорией бесполезным — ровно тот класс поломки, что
+    // прятался в молчании в §176.
+    let налог = 0;
+    try {
+      const сбор = await TerritoryBonuses.getInstance()
+        .налогКаравана(characterId, def.fromRegion)
+        .catch((e: unknown) => {
+          logger.error('[Trade] налог не посчитан:', (e as Error).message);
+          return null;
+        });
+      if (сбор) {
+        налог = Math.floor(def.rewardGold * сбор.rate);
+        if (налог > 0) {
+          await this.db.query(
+            `UPDATE guilds SET gold = gold + $2, updated_at = NOW() WHERE id = $1`,
+            [сбор.guildId, налог],
+          ).catch((e) => logger.warn('[Trade] налог не зачислен гильдии:', (e as Error).message));
+          logger.info(
+            `[Trade] ${characterId} заплатил налог ${налог} за «${сбор.territoryNameRu}» гильдии ${сбор.guildId}`,
+          );
+        }
+      }
+    } catch (e) {
+      logger.error('[Trade] налог с каравана не взят:', (e as Error).message);
+    }
+    const золотоИгроку = def.rewardGold - налог;
+
+    await this.characters.addGoldReward(characterId, золотоИгроку).catch(() => {});
     await this.characters.addExperience(characterId, def.rewardExp).catch(() => {});
     const silver = def.rewardSilver ?? 0;
     const syrian = def.rewardSyrian ?? 0;
@@ -260,7 +303,9 @@ export class TradeService {
     await new LeaderboardService().increment(characterId, { tradesCompleted: 1 })
       .catch(err => logger.error('[Trade] счётчик контрактов не вырос:', (err as Error).message));
 
-    return { ok: true, gold: def.rewardGold, exp: def.rewardExp, silver, syrian, contract: def };
+    // Золото в ответе — фактически выплаченное, без налога: панель показывает
+    // игроку то, что пришло в сумку, а не то, что было до пошлины.
+    return { ok: true, gold: золотоИгроку, exp: def.rewardExp, silver, syrian, contract: def, налог };
   }
 
   /** Отказаться от контракта: груз возвращается (караван развернулся) */
