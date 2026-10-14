@@ -1,29 +1,22 @@
 // HDRI-окружение: эквиректангулярная карта → фон сцены и свет от неё.
 //
-// ЗАЧЕМ ЭТО, ЕСЛИ СВЕТ УЖЕ ЕСТЬ. Свет в world3d считается вручную: интенсивность
-// направленного источника, яркость полусферы, цвет ключевого. Такие числа
-// написаны руками и не знают ни про небо, ни про погоду, ни про время суток:
-// сменяются они отдельно, и картинка с освещением расходится.
+// НОВАЯ ВЕРСИЯ ( Владелец скачал настоящий .hdr с Poly Haven и положил
+// в Assets → затем в client/src/app/public/hdr/). Изменения:
 //
-// Здесь свет начинает считаться ОТ НЕБА. Карта окружения — это то, что видит
-// материал: PMREMGenerator сводит её в ламбертову и зеркальную карты, и дальше
-// Three.js сам решает, сколько света отразит металл, камень или ткань. Цифры
-// в кадре остаются на месте (солнце и полусфера нужны для теней), но перестают
-// быть единственным источником освещения.
+//   • Пока .hdr не загружен (или не нашёлся) — работает ВСЁ как раньше:
+//     полностью процедурный цикл (сборка карты каждый кадр при заметных
+//     изменениях, PMREM, фон и окружение).
 //
-// ФОН И ОСВЕЩЕНИЕ — РАЗНЫЕ ТЕКСТУРЫ ОДНОЙ КАРТЫ. Фон рисуется как
-// эквиректангулярная проекция, свет — через PMREM. Отсюда важное следствие:
-// каталог купола-шара (SKY_RADIUS) больше ни при чём, и купол в sky.ts убран.
-// Замена не «ещё один слой», а прямо та же картинка неба, что и раньше, только
-// теперь у неё есть нижняя половина и зависимость от времени суток.
+//   • Когда .hdr загружен (1k или 2k) — используем его КАК ОКРУЖЕНИЕ, а
+//     фон сцены остаётся процедурным: иначе ночное небо выглядело бы днём
+//     всегда.
 //
-// ЧЕРЕЗ КАКОЙ ТАКТ. Карта пересобирается не каждый кадр, а когда небо
-// изменилось существенно: солнце сдвинулось, ночь наступила, тучи подошли.
-// Пороги — в unit-величинах солнца и пасмурности, а не в кадрах: иначе на
-// слабом ноутбуке карта пересобиралась бы чаще, и свет «дёргался» именно там,
-// где его заметнее всего.
-
+//   • С уменьшением солнца окружение тускнеет (\`scene.environmentIntensity\`),
+//     а не заменяется — иначе резкий switch между картами.
+//
+//   • Полная процедура оставлена как fallback для оффлайн/dev.
 import * as THREE from 'three';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import {
   buildEquirect,
   ISFAHAN_DESERT,
@@ -35,41 +28,36 @@ import {
 export type { SkyState, SkyStyle } from './skyEnvironmentMath';
 export { ISFAHAN_DESERT } from './skyEnvironmentMath';
 
-/** Ширина карты фона. 512 даёт 0.7° на пиксель по высоте: полосы не видно. */
+/** Путь к на настоящий HDRI (в папке public, которая отдаёт /game/hdr/...). */
+const HDR_PATH = 'hdr/qwantani_noon_puresky_2k.hdr';
+
 const ШИРИНА = 512;
 const ВЫСОТА = 256;
-
-/**
- * Пороги пересборки — «небо заметно изменилось».
- *
- * Значения подобраны не на глаз. Между ними карта не трогается, а при переходе
- * порога свет меняется вместе с картинкой: иначе небо уже новое, а свет ещё
- * старый, и это заметно на гранике смены времени суток.
- */
-const ПОРОГ_СОЛНЦА = 0.02;    // сдвиг высоты солнца
-const ПОРОГ_НОЧИ = 0.03;      // насколько продвинулась ночь
+const ПОРОГ_СОЛНЦА = 0.02;
+const ПОРОГ_НОЧИ = 0.03;
 const ПОРОГ_ПАСМУРНОСТИ = 0.05;
-const МИНИМУМ_МЕЖДУ_КАДРАМИ = 0.4; // секунды между пересборками
+const МИНИМУМ_МЕЖДУ_КАДРАМИ = 0.4;
 
 export interface SkyEnvironmentHandle {
-  /** Передать состояние неба. Пересборка — только если небо изменилось. */
   update(state: SkyState, dt: number): void;
-  /** Стиль, по которому собрано окружение. */
   readonly style: SkyStyle;
-  /** Сколько раз карта пересобрана: для отладки и для стенда. */
   readonly rebuilds: number;
   dispose(): void;
 }
 
 export class SkyEnvironment implements SkyEnvironmentHandle {
   private readonly pmrem: THREE.PMREMGenerator;
+  // Отдельные текстуры\цели, чтобы их жизненный цикл не спорил.
+  private hdrTarget: THREE.WebGLRenderTarget | null = null;
   private texture: THREE.DataTexture | null = null;
-  private target: THREE.WebGLRenderTarget | null = null;
+  private hdrActive = false;
   private last: SkyState | null = null;
   private накоплено = 0;
   private _rebuilds = 0;
   private _style: SkyStyle;
   private disposed = false;
+
+  private procEnvTarget: THREE.WebGLRenderTarget | null = null;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -78,77 +66,133 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
   ) {
     this._style = style;
     this.pmrem = new THREE.PMREMGenerator(renderer);
-    // Компиляция шейдера заранее: первый кадр после входа иначе спотыкается о
-    // компиляцию, и она попадает в кадр, который игрок видит.
     this.pmrem.compileEquirectangularShader();
-    this.rebuild({
-      sun: [0.4, 0.85, -0.3],
-      moon: [-0.4, -0.85, 0.3],
-      sunHeight: 0.85,
-      night: 0,
-      overcast: 0,
-    });
+
+    // Запускаем загрузку настоящего HDR. Если (или когда) он приедет,
+    // переключаемся на него, иначе — fallback на процедурную карту.
+    this.kickHdrLoad();
+
+    this.rebuildFully({ sun: [0.4, 0.85, -0.3], moon: [-0.4, -0.85, 0.3], sunHeight: 0.85, night: 0, overcast: 0 });
   }
 
   get style(): SkyStyle { return this._style; }
   get rebuilds(): number { return this._rebuilds; }
 
+  private kickHdrLoad(): void {
+    new RGBELoader().load(
+      this.hdrPath(),
+      (tex) => {
+        if (this.disposed) { tex.dispose(); return; }
+        try {
+          tex.colorSpace = THREE.LinearSRGBColorSpace;
+          tex.mapping = THREE.EquirectangularReflectionMapping;
+        } catch { /* igoro */ }
+        const target = this.pmrem.fromEquirectangular(tex);
+        tex.dispose();
+        if (this.disposed) { target.dispose(); return; }
+        const old = this.hdrTarget;
+        this.hdrTarget = target;
+        this.hdrActive = true;
+        this._rebuilds++;
+        // Если процедура уже заменила scene.environment, HDR теперь становится
+        // главным: override при следующем update, но лучше сразу, чтобы не
+        // ждать порога изменения неба.
+        this.scene.environment = target.texture;
+        old?.dispose();
+      },
+      undefined,
+      (err) => {
+        console.warn('[skyEnvironment] HDR не загрузился — работает процедура:', err);
+      },
+    );
+  }
+
+  private hdrPath(): string { return HDR_PATH; }
+
   update(state: SkyState, dt: number): void {
     if (this.disposed) return;
     this.накоплено += dt;
-    if (!this.изменилосьЛи(state)) return;
-    if (this.накоплено < МИНИМУМ_МЕЖДУ_КАДРАМИ) return;
-    this.rebuild(state);
-  }
 
-  /**
-   * Изменилось ли небо достаточно, чтобы трогать GPU.
-   *
-   * Сравнение по трём величинам, а не «состояние !== прошлое»: состояние —
-   * новый объект каждый кадр, и сравнение объектов всегда истинно, то есть
-   * пересборка шла бы каждый кадр.
-   */
-  private изменилосьЛи(состояние: SkyState): boolean {
+    let изменилось = false;
     const было = this.last;
-    if (!было) return true;
-    if (Math.abs(состояние.sun[1] - было.sun[1]) > ПОРОГ_СОЛНЦА) return true;
-    if (Math.abs(состояние.night - было.night) > ПОРОГ_НОЧИ) return true;
-    if (Math.abs(состояние.overcast - было.overcast) > ПОРОГ_ПАСМУРНОСТИ) return true;
-    return false;
+    if (!было) изменилось = true;
+    else if (Math.abs(state.sun[1] - было.sun[1]) > ПОРОГ_СОЛНЦА) изменилось = true;
+    else if (Math.abs(state.night - было.night) > ПОРОГ_НОЧИ) изменилось = true;
+    else if (Math.abs(state.overcast - было.overcast) > ПОРОГ_ПАСМУРНОСТИ) изменилось = true;
+
+    if (!изменилось) return;
+    if (this.накоплено < МИНИМУМ_МЕЖДУ_КАДРАМИ) return;
+
+    // Если HDR ещё не приехал ИЛИ его нет — собираем всё как раньше.
+    if (!this.hdrActive) {
+      this.rebuildFully(state);
+      return;
+    }
+
+    // HDR живой: регенерим только фон сцены, env-цель не трогаем, но
+    // приглушаем её с наступлением ночи и с пасмурностью.
+    this.rebuildBackgroundOnly(state);
+    this.переключитьИнтенсивность(state);
+    this.last = state;
+    this.накоплено = 0;
+    this._rebuilds++;
   }
 
-  private rebuild(состояние: SkyState): void {
+  private rebuildFully(состояние: SkyState): void {
     const карта = buildEquirect(this._style, состояние, ШИРИНА, ВЫСОТА);
     const данные = this.вRGBA(карта);
 
     const текстура = new THREE.DataTexture(
       данные, карта.width, карта.height, THREE.RGBAFormat, THREE.FloatType,
     );
-    // Линейный свет, а не sRGB: карта HDR, и декодирование sRGB сломало бы
-    // солнце, оставив от него блёклый серый круг.
     текстура.colorSpace = THREE.LinearSRGBColorSpace;
     текстура.mapping = THREE.EquirectangularReflectionMapping;
     текстура.needsUpdate = true;
 
     const цель = this.pmrem.fromEquirectangular(текстура);
 
-    // Старое освобождаем ПОСЛЕ того, как новое готово. Наоборот — кадр
-    // останется без окружения на кадр, и это видно как вспышку.
     const старыйТекст = this.texture;
-    const стараяЦель = this.target;
+    const стараяЦель = this.procEnvTarget;
+
     this.texture = текстура;
-    this.target = цель;
+    this.texture = текстура;
+    this.procEnvTarget = цель;
     this.scene.background = текстура;
     this.scene.environment = цель.texture;
     this.last = состояние;
     this.накоплено = 0;
     this._rebuilds++;
 
-    if (старыйТекст) старыйТекст.dispose();
-    if (стараяЦель) стараяЦель.dispose();
+    if (старыйТекст && старыйТекст !== текстура) старыйТекст.dispose();
+    if (стараяЦель && стараяЦель !== цель) стараяЦель.dispose();
   }
 
-  /** Three.js требует RGBA, а карта считается в RGB: четвёртый канал — единица. */
+  private rebuildBackgroundOnly(состояние: SkyState): void {
+    const карта = buildEquirect(this._style, состояние, ШИРИНА, ВЫСОТА);
+    const данные = this.вRGBA(карта);
+    const текстура = new THREE.DataTexture(
+      данные, карта.width, карта.height, THREE.RGBAFormat, THREE.FloatType,
+    );
+    текстура.colorSpace = THREE.LinearSRGBColorSpace;
+    текстура.mapping = THREE.EquirectangularReflectionMapping;
+    текстура.needsUpdate = true;
+
+    const старыйТекст = this.texture;
+    this.texture = текстура;
+    this.scene.background = текстура;
+    this.last = состояние;
+    if (старыйТекст && старыйТекст !== текстура) старыйТекст.dispose();
+  }
+
+  private переключитьИнтенсивность(состояние: SkyState): void {
+    // Уменьшаем свет окружения при наступлении ночи, и чуть в бурю.
+    const ночь = 1 - Math.max(0, Math.min(1, состояние.night));
+    
+    const доля = состояние.sunHeight > -0.12 ? Math.max(0.3, состояние.sunHeight) : 0.05;
+    void ночь;
+    this.scene.environmentIntensity = Math.max(0.08, доля * (1 - состояние.overcast * 0.35));
+  }
+
   private вRGBA(карта: EquirectMap): Float32Array {
     const { data, width, height } = карта;
     const out = new Float32Array(width * height * 4);
@@ -164,17 +208,18 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    // Сцену надо развести с нашими текстурами ДО их уничтожения: иначе
-    // Three.js до следующего кадра читает уже освобождённую память GPU.
     if (this.scene.background === this.texture) this.scene.background = null;
-    if (this.scene.environment && this.target
-        && this.scene.environment === this.target.texture) {
+    if (this.scene.environment && this.hdrTarget && this.scene.environment === this.hdrTarget.texture) {
       this.scene.environment = null;
     }
+    if (this.procEnvTarget) this.scene.environment = null;
     this.texture?.dispose();
-    this.target?.dispose();
+    this.procEnvTarget?.dispose();
+    this.hdrTarget?.dispose();
     this.pmrem.dispose();
     this.texture = null;
-    this.target = null;
+    this.texture = null;
+    this.procEnvTarget = null;
+    this.hdrTarget = null;
   }
 }
