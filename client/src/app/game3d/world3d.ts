@@ -11,6 +11,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js';
 import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
@@ -150,9 +151,10 @@ export class World3D {
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
-  /** Композитор для SSAO. Без него тени плоские, нет контактных теней. */
+  /** Композитор для SSAO + SSR. Без них сцена выглядит плоской. */
   private composer!: EffectComposer;
   private ssaoPass!: SSAOPass;
+  private ssrPass!: SSRPass;
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
@@ -532,6 +534,21 @@ private roll = 0;
     this.ssaoPass.minDistance = 0.005;
     this.ssaoPass.maxDistance = 0.15;
     this.composer.addPass(this.ssaoPass);
+    // SSR: screen-space reflections для воды, мокрого камня, металла, стекла.
+    this.ssrPass = new SSRPass({
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: this.camera,
+      width: container.clientWidth,
+      height: container.clientHeight,
+      selects: null,
+      isBouncing: false,
+      groundReflector: null,
+    });
+    this.ssrPass.opacity = 0.85;
+    this.ssrPass.maxDistance = 100;
+    this.ssrPass.thickness = 0.5;
+    this.composer.addPass(this.ssrPass);
     this.composer.addPass(new OutputPass());
 
     // Свет
@@ -769,6 +786,8 @@ private roll = 0;
 
     // SSAO: контактные тени. Включаем/выключаем через enabled у пасса.
     if (this.ssaoPass) this.ssaoPass.enabled = p.ssao;
+    // SSR: screen-space reflections. Включаем/выключаем через enabled у пасса.
+    if (this.ssrPass) this.ssrPass.enabled = p.ssr;
 
     // Дальность прорисовки. Туманом ведает погода и хранит своё «домашнее»
     // значение far — меняем его же, иначе смена погоды всё откатит.
@@ -876,9 +895,10 @@ private roll = 0;
     this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    // SSAO требует обновления размера при изменении окна
+    // SSAO + SSR требуют обновления размера при изменении окна
     this.composer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.ssaoPass.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.ssrPass.setSize(this.container.clientWidth, this.container.clientHeight);
   };
 
   private onMouseDown = (e: MouseEvent) => {
