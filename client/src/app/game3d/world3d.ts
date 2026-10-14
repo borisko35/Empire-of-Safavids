@@ -151,6 +151,8 @@ export class World3D {
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
   private flames: THREE.Mesh[] = [];
   private sky!: SkyHandle;
+  /** Текущая погода (для env-интенсивности). */
+  private currentWeather: WeatherKind = 'clear';
   /**
    * HDRI-окружение: карта неба, из которой считается свет.
    *
@@ -1180,6 +1182,7 @@ private roll = 0;
   /** Погода от сервера (world:time): дождь, гроза, песчаная буря. */
   setWeather(w: string): void {
     this.weather?.setWeather(w);
+    this.currentWeather = (w || 'clear') as WeatherKind;
     // Тучи тоже должны знать о погоде: раньше небо вообще не получало
     // код погоды, поэтому в дождь и бурю облака оставались белыми
     this.sky?.setWeather((w || 'clear') as WeatherKind);
@@ -1816,6 +1819,7 @@ if (isMe && moving) {
       sunHeight: sunDir.y,
       night,
       overcast: this.sky.overcast,
+      weather: this.currentWeather,
     };
     this.env.update(состояниеНеба, dt);
 

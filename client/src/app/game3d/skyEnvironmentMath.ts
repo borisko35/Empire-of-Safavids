@@ -1,3 +1,5 @@
+import type { WeatherKind } from './weather';
+
 // Окружение по HDRI: математика без three.
 //
 // ЗАЧЕМ ОТДЕЛЬНО ОТ РЕНДЕРИНГА. Проверять числа нужно числами: читаемость
@@ -92,6 +94,9 @@ export interface SkyState {
   readonly night: number;
   /** 0 — ясно, 1 — плотная облачность. */
   readonly overcast: number;
+  /** Текущая погода (rain/storm/snow/fog/...). Необязательно: старые вызовы
+   *  могут его не передавать, и всё работает как раньше. */
+  readonly weather?: WeatherKind;
 }
 
 export interface EquirectMap {

@@ -27,6 +27,7 @@ import {
   type SkyState,
   type SkyStyle,
 } from './skyEnvironmentMath';
+import type { WeatherKind } from './weather';
 
 export type { SkyState, SkyStyle } from './skyEnvironmentMath';
 export { ISFAHAN_DESERT } from './skyEnvironmentMath';
@@ -218,11 +219,30 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     if (старыйТекст && старыйТекст !== текстура) старыйТекст.dispose();
   }
 
+  private множительПоПогоде(p?: WeatherKind): number {
+    // Отражательная способность окружения с дождь/грозой должна быть заметно
+    // ниже, иначе HDR-небо продолжает светить так, будто на улице солнце.
+    switch (p) {
+      case 'storm': return 0.42;
+      case 'rain': return 0.55;
+      case 'fog': return 0.35;
+      case 'sandstorm': return 0.62;
+      case 'snow': return 1.08;
+      case 'cloudy': return 0.82;
+      case 'wind': return 0.88;
+      default: return 1.0;
+    }
+  }
+
   private переключитьИнтенсивность(состояние: SkyState, в: Variant | string): void {
-    // Приглушаем рассеянный свет с наступлением ночи и в бурю.
-    const доляСолнца = состояние.sunHeight > -0.12 ? Math.max(0.3, состояние.sunHeight) : 0.05;
-    const intensity = Math.max(0.06, доляСолнца * (1 - состояние.overcast * 0.4) * (в === 'night' ? 0.5 : 1));
-    this.scene.environmentIntensity = intensity;
+    // Приглушаем рассеянный свет с наступлением ночи — круто падаем при
+    // глубокой ночи, чтобы звёзд/луна-блик оставались мягче.
+    const базовая = состояние.sunHeight > -0.12
+      ? Math.max(0.3, состояние.sunHeight) * 0.5
+      : 0.15 + (состояние.sunHeight + 1) * 0.05;
+    const инт = Math.max(0.02, базовая * (1 - состояние.overcast * 0.4)
+      * (в === 'night' ? 0.5 : 1) * this.множительПоПогоде(состояние.weather));
+    this.scene.environmentIntensity = инт;
   }
 
   private вRGBA(карта: EquirectMap): Float32Array {
