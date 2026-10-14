@@ -810,7 +810,9 @@
     "boarding_won": "Заход удался",
     "boarding_lost": "Заход отбит",
     "boarding_loot": "трофеи",
-    "boarding_gold": "— золото:"
+    "boarding_gold": "— золото:",
+    "craft_needs": "Нужно:",
+    "craft_short": "не хватает"
   },
   "settings": {
     "title": "⚙ Настройки",

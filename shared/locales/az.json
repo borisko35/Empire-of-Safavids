@@ -810,7 +810,9 @@
     "boarding_won": "Döyüşdü",
     "boarding_lost": "Döyüşmə dəf edildi",
     "boarding_loot": "qənim",
-    "boarding_gold": "— qızıl:"
+    "boarding_gold": "— qızıl:",
+    "craft_needs": "Lazımdır:",
+    "craft_short": "çatışmır"
   },
   "settings": {
     "title": "⚙ Parametrlər",

@@ -2,6 +2,8 @@
 // Система крафтинга — Empire of Safavids
 // ============================================================
 
+import { ITEMS_DATABASE } from './items';
+
 export type CraftingCategory =
   | 'blacksmithing'   // Кузнечное дело
   | 'tailoring'       // Ткачество
@@ -28,6 +30,35 @@ export interface CraftingRecipe {
   experienceGain: number;
   successRate: number;    // 0–1
   description: string;
+}
+
+/**
+ * Рецепт в том виде, в каком его видит игрок: с названиями предметов.
+ *
+ * Отдельная функция, а не подстановка в маршруте, потому что состав рецепта
+ * читают и панель, и будущие места, а проверить «у каждого рецепта есть имя»
+ * можно только вызвав её.
+ */
+export interface RecipeForClient extends CraftingRecipe {
+  /** Название результата. */
+  resultNameRu: string;
+  ingredients: (CraftingIngredient & { nameRu: string })[];
+}
+
+/** Имя предмета; идентификатор — только если предмета нет в каталоге. */
+function имяПредмета(itemId: string): string {
+  return ITEMS_DATABASE[itemId]?.nameRu ?? itemId;
+}
+
+/** Все рецепты с названиями предметов — для маршрута и панели. */
+export function recipesForClient(
+  recipes: Record<string, CraftingRecipe> = CRAFTING_RECIPES,
+): RecipeForClient[] {
+  return Object.values(recipes).map((r) => ({
+    ...r,
+    resultNameRu: имяПредмета(r.resultItemId),
+    ingredients: r.ingredients.map((i) => ({ ...i, nameRu: имяПредмета(i.itemId) })),
+  }));
 }
 
 export const CRAFTING_RECIPES: Record<string, CraftingRecipe> = {

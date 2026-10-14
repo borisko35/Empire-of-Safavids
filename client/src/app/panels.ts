@@ -861,11 +861,27 @@ export async function loadCraft(): Promise<void> {
       box.append(st);
     }
 
+    // Сколько чего у игрока. Без этого состав рецепта — список названий, а не
+    // ответ на вопрос «чего не хватает». Перо Симурга падает с мирового босса
+    // и описано в самом предмете как материал для легендарного крафта, а на
+    // экране связи с рецептом не было: вторая строка рецепта вообще не
+    // рисовалась (живой замер, §195).
+    //
+    // Инвентарь берётся здесь, а не из панели сумки: та живёт в своём экране и
+    // общего состояния не держит. Запрос один и только при открытии панели.
+    const свои = new Map<string, number>();
+    const { items: инвентарь } = await api
+      .inventory(cid())
+      .catch(() => ({ items: [] as { itemId: string; quantity: number }[] }));
+    for (const it of инвентарь) свои.set(it.itemId, (свои.get(it.itemId) ?? 0) + it.quantity);
+
     for (const r of recipes) {
       const row = rowEl('inv-item');
       const label = document.createElement('span');
       label.className = 'inv-name';
-      label.textContent = `${r.nameRu} → ${r.resultItemId} ×${r.resultQuantity}`;
+      // Название результата, а не его идентификатор: «wpn_shah_blade» игроку
+      // ничего не говорит.
+      label.textContent = `${r.nameRu} → ${r.resultNameRu} ×${r.resultQuantity}`;
       const meta = document.createElement('span');
       meta.className = 'inv-qty';
       meta.textContent = `${t('badges.level')} ${r.requiredLevel} · ${Math.round(r.successRate * 100)}%`;
@@ -882,6 +898,25 @@ export async function loadCraft(): Promise<void> {
         }));
       }
       box.append(row);
+
+      // Состав одной строкой под рецептом: «есть/нужно» по каждому материалу.
+      const need = document.createElement('div');
+      need.className = 'inv-item';
+      const needLabel = document.createElement('span');
+      needLabel.className = 'inv-name';
+      needLabel.textContent = `${t('panels.craft_needs')}`;
+      need.append(needLabel);
+      for (const i of r.ingredients) {
+        const chip = document.createElement('span');
+        chip.className = 'inv-qty';
+        const own = свои.get(i.itemId) ?? 0;
+        chip.textContent = `${i.nameRu} ${own}/${i.quantity}`;
+        // Не хватает — слово, а не только число: «3/5» читается и так, но при
+        // беглом взгляде по панели без него легко пропустить.
+        if (own < i.quantity) chip.textContent += ` · ${t('panels.craft_short')}`;
+        need.append(chip);
+      }
+      box.append(need);
     }
     if (!box.children.length) emptyBox(box);
   } catch {

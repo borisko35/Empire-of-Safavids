@@ -26,7 +26,7 @@ import { AmbushService } from '../services/AmbushService';
 // идентификаторе игрока, золото выдаётся один раз на персонажа.
 import { RewardService, linkFor, partnerConfigured, REWARD_GOLD } from '../services/RewardService';
 import { VoteService } from '../services/VoteService';
-import { CRAFTING_RECIPES } from '../data/crafting';
+import { CRAFTING_RECIPES, recipesForClient } from '../data/crafting';
 import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler, errorResponse } from '../utils/asyncHandler';
 import { AZENS_CONVERSION_RATES, AZENS_PACKS, PREMIUM_DURATIONS, FIRST_TOPUP_MULTIPLIER, FIRST_TOPUP_MAX_BONUS, EXCHANGE_PAIRS, getExchangePair, shopCurrencyToWallet } from '../utils/economy';
@@ -1584,10 +1584,16 @@ gameRouter.post('/trade/cancel', secureMiddleware, requireCharacterOwnership(),
 
 gameRouter.get('/crafting/recipes', secureMiddleware, (req: Request, res: Response) => {
   const { category } = req.query;
-  const recipes = category
+  // С названиями предметов: без них игрок видит в панели идентификаторы
+  // (`wpn_shah_blade`, `mat_dragon_scale`) вместо названий, а перо Симурга
+  // — материал, заявленный в описании предмета, — не связан ни с одним
+  // рецептом на экране (живой замер, §195).
+  const рецепты = category
     ? craftingService.getRecipesByCategory(category as never)
     : Object.values(CRAFTING_RECIPES);
-  return res.json({ recipes });
+  return res.json({ recipes: recipesForClient(Object.fromEntries(
+    рецепты.map((r) => [r.id, r]),
+  )) });
 });
 
 gameRouter.post('/crafting/start', secureMiddleware, requireCharacterOwnership(),

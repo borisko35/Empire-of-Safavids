@@ -13,6 +13,7 @@ import { LeaderboardService } from './LeaderboardService';
 import { GuildService } from './GuildService';
 import { logger } from '../utils/logger';
 import { CRAFTING_RECIPES, CraftingCategory, canCraft } from '../data/crafting';
+import { ITEMS_DATABASE } from '../data/items';
 // Территория (§189): Дворцовый квартал Исфахана ускоряет крафт под собой.
 // Отдельная система от навыка гильдии, потому что это разные источники:
 // золото за уровень против земли, отобранной осадой.
@@ -132,7 +133,11 @@ export class CraftingService {
 
     const { canCraft: possible, missing } = canCraft(recipeId, inventory);
     if (!possible) {
-      throw new Error(`Missing materials: ${missing.map(m => `${m.itemId} (need ${m.required}, have ${m.have})`).join(', ')}`);
+      // Названия, а не идентификаторы: игрок видел «Missing materials:
+      // mat_dragon_scale (need 5, have 3)» — и не понимал, чего именно не
+      // хватает (живой замер, §195). canCraft уже отдаёт разобранный список,
+      // оставалось подставить название вместо ключа.
+      throw new Error(`Missing materials: ${missing.map(m => `${ITEMS_DATABASE[m.itemId]?.nameRu ?? m.itemId} (need ${m.required}, have ${m.have})`).join(', ')}`);
     }
 
     // МНОЖИТЕЛЬ ВРЕМЕНИ КРАФТА — ЕДИНСТВЕННОЕ МЕСТО, ГДЕ СХОДЯТСЯ НАВЫК И
@@ -218,7 +223,7 @@ export class CraftingService {
           [ing.quantity, characterId, ing.itemId]
         );
         if (res.rowCount === 0) {
-          throw new Error(`Missing materials: ${ing.itemId} (need ${ing.quantity})`);
+          throw new Error(`Missing materials: ${ITEMS_DATABASE[ing.itemId]?.nameRu ?? ing.itemId} (need ${ing.quantity})`);
         }
         // Удалить опустевшие стеки
         await client.query(

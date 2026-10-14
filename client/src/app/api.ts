@@ -844,7 +844,10 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     req<{ levels: Record<string, number> }>(`/api/game/crafting/skills?characterId=${characterId}`),
 
   craftingRecipes: () =>
-    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; quantity: number }[] }[] }>(
+    // resultNameRu и nameRu у ингредиентов присылает сервер (§195). Без них
+    // панель печатала идентификаторы: игрок видел «wpn_shah_blade» и
+    // «mat_dragon_scale» вместо названий.
+    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultNameRu: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; nameRu: string; quantity: number }[] }[] }>(
       '/api/game/crafting/recipes',
     ),
 

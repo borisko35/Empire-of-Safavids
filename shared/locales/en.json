@@ -810,7 +810,9 @@
     "boarding_won": "Boarded",
     "boarding_lost": "Repelled",
     "boarding_loot": "spoils",
-    "boarding_gold": "— gold:"
+    "boarding_gold": "— gold:",
+    "craft_needs": "Needs:",
+    "craft_short": "missing"
   },
   "settings": {
     "title": "⚙ Settings",
