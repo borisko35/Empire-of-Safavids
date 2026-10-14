@@ -37,6 +37,28 @@ import { CharacterClass, type Character, type CombatAction } from '../types/game
 const корень = join(__dirname, '..', '..', '..');
 const читать = (p: string): string => readFileSync(join(корень, p), 'utf-8');
 
+/**
+ * Тело метода по имени, до закрывающей скобки.
+ *
+ * Срез фиксированной длины не годится: метод длиннее среза проверяет воздух
+ * и остаётся зелёным.
+ */
+function телоМетода(источник: string, имя: string): string {
+  const начало = источник.indexOf(' ' + имя + '(');
+  if (начало < 0) return '';
+  const открывающая = источник.indexOf('{', начало);
+  if (открывающая < 0) return '';
+  let глубина = 0;
+  for (let i = открывающая; i < источник.length; i++) {
+    if (источник[i] === '{') глубина++;
+    else if (источник[i] === '}') {
+      глубина--;
+      if (глубина === 0) return источник.slice(начало, i + 1);
+    }
+  }
+  return '';
+}
+
 function must(условие: unknown, причина: string): asserts условие {
   if (!условие) throw new Error(причина);
 }
@@ -229,10 +251,21 @@ describe('Анти-чит: законный удар не должен бани�
       (сокет.match(/getBaseDamageForAnticheat\(attacker, action, weapon, comboMult, damageScale\)/g) || [])
         .length;
     must(новых === 2, `вызовов новой базы ${новых}, ожидалось 2: PvP и PvE`);
-    must(
-      !/getBaseDamageFor\(attacker\)/.test(сокет),
-      'база без оружия и без навыка осталась в бою: крит снова объявляется подделкой'
-    );
+
+    // §191. Проверка «в файле сокета нет getBaseDamageFor(attacker)» была
+    // верна, пока вызовов было ровно два — и оба в бою. Абордаж добавил третий,
+    // и он в бою НЕ УЧАСТВУЕТ: это заход с исходом, а не удар, который
+    // античит сверяет с базой. Шапка самого BoardingFight предписывает именно
+    // getBaseDamageFor. Поэтому сторож смотрит в два БОЕВЫХ метода по имени
+    // и не претендует на остальной файл.
+    for (const имя of ['combatPlayerVsPlayer', 'combatPlayerVsMonster']) {
+      const тело = телоМетода(сокет, имя);
+      must(тело.length > 0, `метода ${имя} нет`);
+      must(
+        !/getBaseDamageFor\(attacker\)/.test(тело),
+        `в ${имя} осталась база без оружия и без навыка: крит снова объявляется подделкой`
+      );
+    }
   });
 
   it('функция базы больше не висит без дела', () => {

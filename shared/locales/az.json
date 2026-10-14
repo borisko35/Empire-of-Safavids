@@ -804,7 +804,13 @@
     "trade_road_already": "Bu karvana artıq zərbə edilib",
     "trade_road_no_gold": "Qızıl kifayət deyil",
     "trade_road_started": "Zərbə quruldu — konvoy yoldadır",
-    "trade_road_failed": "Zərbə alınmadı"
+    "trade_road_failed": "Zərbə alınmadı",
+    "boarding_go": "Döyüşmə",
+    "boarding_refused": "Döyüşmə alındı",
+    "boarding_won": "Döyüşdü",
+    "boarding_lost": "Döyüşmə dəf edildi",
+    "boarding_loot": "qənim",
+    "boarding_gold": "— qızıl:"
   },
   "settings": {
     "title": "⚙ Parametrlər",

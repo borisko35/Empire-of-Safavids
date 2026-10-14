@@ -28,6 +28,11 @@ import { MountSystem } from '../systems/MountSystem';
 // клиента, а потолок античита был один на всех. Потолок, выведенный из
 // приведённой клиенту величины, — единственная защита от бана за честную езду.
 import { BoatSystem, скоростьЛодки, потолокЛодки } from '../systems/BoatSystem';
+// Абордаж (§191). Ядро и правила — из готовых модулей; здесь только вход и
+// применение исхода. Своих правил боя и добычи здесь нет и быть не должно.
+import { boardSelfRejected, type BoardMode, type BoardTarget, type BoardErrorCode } from '../systems/Boarding';
+import { resolveBoardFight, boardLoot, pvpCargoLoss } from '../systems/BoardingFight';
+import { найтиЦелиАбордажа } from '../systems/BoardingSearch';
 import { MOUNT_ANTICHEAT_CAP_FLOOR } from '../systems/AntiCheatSystem';
 import { pvpArena } from '../systems/PvpArenaService';
 import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
@@ -391,6 +396,13 @@ private territory = TerritoryBonuses.getInstance();
       // Смена боевой стойки
       socket.on(SOCKET_EVENTS.COMBAT_STANCE, async (data: { stance?: string }) => {
         await this.handleStanceChange(socket, data);
+      });
+
+      // Абордаж: начать заход. Отдельное событие, а не ещё один combat:action —
+      // заход считается целиком и приходит одним ответом, как и задумано в
+      // BoardingFight («подошёл, выбрал исход, получен»).
+      socket.on(SOCKET_EVENTS.BOARDING_START, async (data: { targetId?: string; mode?: string }) => {
+        await this.handleBoardingStart(socket, data);
       });
 
       // Включение активного навыка профессии (Зикр, Тадж)
@@ -1742,6 +1754,245 @@ private territory = TerritoryBonuses.getInstance();
     } catch (error) {
       logger.error('Combat action error:', error);
     }
+  }
+
+
+  // ── Абордаж (§191) ─────────────────────────────────────────────────────
+  //
+  // ЗАЧЕМ ЭТОТ МЕТОД. Механика абордажа была написана целиком — типы, ядро,
+  // фильтр целей, бой и добыча, — и покрыта тестами. Но начать заход было
+  // нечем: resolveBoardFight, boardLoot и pvpCargoLoss вызывались только из
+  // своих тестов. Маршрут отдавал список целей, и на этом всё заканчивалось:
+  // игрок видел кнопку, которой нечего было нажать.
+  //
+  // ГЛАВНОЕ ПРАВИЛО. Цель ищется ПОИСКОМ, а не берётся из пакета. Клиент
+  // присылает только идентификатор и режим; уровень, позиция, регион и
+  // годность цели вычисляются здесь же. Если бы сервер доверял присланным
+  // полям, игрок отправлял бы { level: 1, x: 0, z: 0 } и абордажил рейд
+  // без боя — правило, написанное в BoardingTargets, было бы пустым текстом.
+  private async handleBoardingStart(
+    socket: AuthenticatedSocket,
+    data: { targetId?: string; mode?: string },
+  ): Promise<void> {
+    const characterId = socket.characterId;
+    if (!characterId) return;
+    // Режим по умолчанию PvE — тот же безопасный выбор, что и в маршруте:
+    // PvP игрок выбирает явно.
+    const mode: BoardMode = data.mode === 'pvp' ? 'pvp' : 'pve';
+    const отказ = (code: BoardErrorCode) => {
+      socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+        ok: false, attackerWon: false, gold: 0, items: [], code,
+      });
+    };
+
+    try {
+      const attacker = await this.characterService.getCharacterById(characterId);
+      if (!attacker) return отказ('board_target_not_found');
+
+      const поиск = await найтиЦелиАбордажа(
+        {
+          boats: this.boats,
+          redis: RedisService.getInstance(),
+          characters: this.characterService,
+          ai: GameLoop.getInstance().getSpawnSystem().getAI(),
+        },
+        attacker,
+        mode,
+      );
+      if (!поиск.ok) return отказ(поиск.code ?? 'board_target_not_found');
+
+      const цель = поиск.targets.find((т) => т.id === data.targetId);
+      if (!цель) return отказ('board_target_not_found');
+      if (boardSelfRejected(цель, characterId)) return отказ('board_self');
+
+      if (mode === 'pve') await this.абордажМонстра(socket, attacker, цель);
+      else await this.абордажИгрока(socket, attacker, цель);
+    } catch (e: unknown) {
+      // Отказ захода не должен ронять соединение: игрок на воде, и молчание
+      // в ответ выглядело бы как зависшая игра.
+      logger.error('[Boarding] заход не состоялся:', (e as Error).message);
+      отказ('board_target_not_found');
+    }
+  }
+
+  /**
+   * Силы сторон из тех же формул, что и обычный бой.
+   *
+   * Ни одной своей: удар из CombatService.getBaseDamageFor, защита из
+   * getDefenseFor. Своя копия разошлась бы при первой правке баланса, и
+   * «кто сильнее» означало бы разное в бою у берега и на палубе.
+   */
+  private силыАбордажа(attacker: Character, цель: Character, targetHp: number) {
+    return {
+      attack: this.combatService.getBaseDamageFor(attacker),
+      defense: this.combatService.getDefenseFor(цель),
+      hp: attacker.hp,
+      targetAttack: this.combatService.getBaseDamageFor(цель),
+      targetHp,
+      level: attacker.level,
+      targetLevel: цель.level,
+    };
+  }
+
+  /**
+   * Абордаж монстра.
+   *
+   * Исход считается симметрично по кругам, а НАНОСИТСЯ одним ударом через
+   * тот же ai.takeDamage, что и обычный бой. Так состояние монстра, агро и
+   * смерть работают ровно как в бою на суше, а заход получает свою только
+   * длительность.
+   *
+   * И САМОЕ ВАЖНОЕ: награду здесь не считает ничто. Победа идёт через
+   * rewardMonsterKill — обычный путь убийства, где уже есть опыт, репутация,
+   * достижения, навыки гильдии и бонус территории. Второй расчёт награды
+   * разошёлся бы с первым: сегодня они совпали бы, а завтра один получил бы
+   * правку баланса, другой нет.
+   */
+  private async абордажМонстра(
+    socket: AuthenticatedSocket,
+    attacker: Character,
+    цель: BoardTarget,
+  ): Promise<void> {
+    const ai = GameLoop.getInstance().getSpawnSystem().getAI();
+    const ctx = ai.getContext(цель.id);
+    if (!ctx || ctx.state === 'dead') {
+      socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+        ok: false, attackerWon: false, gold: 0, items: [], code: 'board_target_not_found',
+      });
+      return;
+    }
+
+    const исход = resolveBoardFight(this.силыАбордажа(attacker, this.monsterAsCharacter(ctx), ctx.currentHp));
+
+    // Ответный урон — настоящий, а не декоративный: игрок, проигравший на
+    // палубе, должен это пережить так же, как на берегу.
+    const уронПоАтакующему = Math.max(0, attacker.hp - исход.hpLeft);
+    if (уронПоАтакующему > 0) {
+      const покалечен = await this.characterService.applyDamage(attacker.id, уронПоАтакующему);
+      if (покалечен.died) await this.handlePlayerDeath(attacker);
+    }
+
+    // Урон цели — разница между тем, что было, и тем, что осталось. Нанесён
+    // он через обычный путь, поэтому смерть монстра и его награда считаются
+    // ровно как в бою на суше.
+    const уронПоЦели = Math.max(0, ctx.currentHp - исход.targetHpLeft);
+    if (исход.won) {
+      const добит = ai.takeDamage(цель.id, уронПоЦели, attacker.id);
+      if (добит) await this.rewardMonsterKill(socket, attacker, ctx);
+    } else if (уронПоЦели > 0) {
+      ai.takeDamage(цель.id, уронПоЦели, attacker.id);
+    }
+
+    socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+      ok: true,
+      attackerWon: исход.won,
+      // Золота и трофеев здесь нет: награда PvE приходит из rewardMonsterKill
+      // и приходит отдельными пакетами опыта и добычи, как у обычного убийства.
+      gold: 0,
+      items: [],
+      targetNameRu: цель.nameRu,
+      hpLeft: исход.hpLeft,
+      targetHpLeft: исход.targetHpLeft,
+    });
+  }
+
+  /**
+   * Абордаж чужой лодки.
+   *
+   * Решение владельца (§191): победитель забирает груз цели, проигравший
+   * теряет треть своего. Треть никуда не переходит — она уходит за борт, и
+   * поэтому её нельзя отдавать никому: «кому-то из живых» означало бы
+   * предмет, у которого нет ни держателя, ни записи об источнике.
+   *
+   * В отличие от PvE, своего пути убийства у игрока здесь нет, поэтому
+   * добыча считается через boardLoot — единственный расчёт награды абордажа.
+   */
+  private async абордажИгрока(
+    socket: AuthenticatedSocket,
+    attacker: Character,
+    цель: BoardTarget,
+  ): Promise<void> {
+    const жертва = await this.characterService.getCharacterById(цель.id).catch(() => null);
+    if (!жертва) {
+      socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+        ok: false, attackerWon: false, gold: 0, items: [], code: 'board_target_not_found',
+      });
+      return;
+    }
+
+    const исход = resolveBoardFight(this.силыАбордажа(attacker, жертва, жертва.hp));
+
+    const грузЖертвы = (await this.characterService.getInventory(цель.id).catch(() => []))
+      .filter((з) => з.quantity > 0);
+    const добыча = boardLoot(исход, {
+      mode: 'pvp',
+      baseGold: Math.max(0, Number(жертва.gold ?? 0)),
+      targetItems: грузЖертвы.map((з) => з.itemId),
+      attackerItems: [],
+    });
+
+    if (исход.won) {
+      // Золото жертвы уходит атакующему вместе с множителем PvP из boardReward.
+      if (добыча.gold > 0) {
+        await this.characterService.addGoldReward(attacker.id, добыча.gold).catch(() => 0);
+        await this.characterService.spendGold(цель.id, добыча.gold).catch(() => undefined);
+      }
+      // Груз переносится поштучно с указанием количества: список идентификаторов
+      // без количеств списал бы у жертвы всё, что нашлось, и выдал бы атакующему
+      // по одному предмету на каждый стек.
+      for (const з of грузЖертвы) {
+        const взято = Math.max(1, Math.floor(з.quantity));
+        await this.characterService.removeItems(цель.id, [{ itemId: з.itemId, qty: взято }])
+          .catch(() => undefined);
+        await this.characterService.addItems(attacker.id, [{ itemId: з.itemId, qty: взято }])
+          .catch(() => undefined);
+      }
+    } else {
+      // Проигравший теряет треть СВОЕГО груза. Считаем по идентификаторам,
+      // как делает pvpCargoLoss, и добираем количества из инвентаря.
+      const свой = (await this.characterService.getInventory(attacker.id).catch(() => []))
+        .filter((з) => з.quantity > 0);
+      const потеряно = pvpCargoLoss(свой.map((з) => з.itemId));
+      if (потеряно.length > 0) {
+        await this.characterService.removeItems(
+          attacker.id,
+          потеряно.map((ид) => {
+            const стек = свой.find((з) => з.itemId === ид);
+            return { itemId: ид, qty: Math.max(1, Math.floor(стек?.quantity ?? 1)) };
+          }),
+        ).catch(() => undefined);
+      }
+    }
+
+    // Урон атакующему — тот же настоящий applyDamage, что и в PvE.
+    const уронПоАтакующему = Math.max(0, attacker.hp - исход.hpLeft);
+    let hpLeft = attacker.hp;
+    if (уронПоАтакующему > 0) {
+      const покалечен = await this.characterService.applyDamage(attacker.id, уронПоАтакующему);
+      hpLeft = покалечен.hp;
+      if (покалечен.died) await this.handlePlayerDeath(attacker);
+    }
+
+    const сокетЖертвы = this.activePlayers.get(цель.id);
+    сокетЖертвы?.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+      ok: true,
+      attackerWon: !исход.won,       // у жертвы «победил» тот, кто абордажировал
+      gold: 0,
+      items: [],
+      targetNameRu: attacker.name,
+      boardedBy: attacker.name,
+      hpLeft: исход.hpLeft,
+    });
+
+    socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
+      ok: true,
+      attackerWon: исход.won,
+      gold: добыча.gold,
+      items: исход.won ? добыча.items : [],
+      targetNameRu: цель.nameRu,
+      hpLeft,
+      targetHpLeft: исход.targetHpLeft,
+    });
   }
 
   /** PvP: расчёт урона/лечения с записью HP в БД, смерть и карма */

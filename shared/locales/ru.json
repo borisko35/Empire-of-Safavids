@@ -804,7 +804,13 @@
     "trade_road_already": "Этот караван уже засадили",
     "trade_road_no_gold": "Не хватает золота",
     "trade_road_started": "Засада поднята — конвой на дороге",
-    "trade_road_failed": "Засада не удалась"
+    "trade_road_failed": "Засада не удалась",
+    "boarding_go": "Абордаж",
+    "boarding_refused": "Абордаж не удался",
+    "boarding_won": "Заход удался",
+    "boarding_lost": "Заход отбит",
+    "boarding_loot": "трофеи",
+    "boarding_gold": "— золото:"
   },
   "settings": {
     "title": "⚙ Настройки",

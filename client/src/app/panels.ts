@@ -10,6 +10,8 @@ import { t } from './i18n';
 import { session, Character } from './state';
 import { toast, refreshBars, loadInventory, renderUnreadBadge, setDailyTasksOpen } from './hud';
 import { onTutorialAction } from './tutorial';
+// Начало захода абордажа (§191): сокет живёт в net, панель зовёт его оттуда.
+import { начатьАбордаж } from './world';
 import { onSearching as onPvpSearching, onPvpHide } from './pvp';
 import { loadMediaPanel } from './media';
 // Панель гильдии вынесена в отдельный файл: в panels.ts она занимала сорок
@@ -4146,6 +4148,13 @@ async function renderBoatGarage(): Promise<HTMLElement> {
         }
         const цель = resp.targets[0];
         toast(`${t('panels.boarding_found')}: ${цель.nameRu} (${t('badges.level')} ${цель.level})`, 'info');
+        // §191. Кнопка «Список» только показывала тост: нажать было нечего.
+        // Теперь заход можно начать — и он уходит в сокет, а не в REST.
+        строка.append(
+          actionButton(t('panels.boarding_go'), async () => {
+            начатьАбордаж(цель.id, режим);
+          }),
+        );
       }),
     );
     wrap.append(строка);

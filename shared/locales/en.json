@@ -804,7 +804,13 @@
     "trade_road_already": "This caravan has already been ambushed",
     "trade_road_no_gold": "Not enough gold",
     "trade_road_started": "Ambush raised — the convoy is on the road",
-    "trade_road_failed": "The ambush failed"
+    "trade_road_failed": "The ambush failed",
+    "boarding_go": "Board",
+    "boarding_refused": "Boarding failed",
+    "boarding_won": "Boarded",
+    "boarding_lost": "Repelled",
+    "boarding_loot": "spoils",
+    "boarding_gold": "— gold:"
   },
   "settings": {
     "title": "⚙ Settings",
