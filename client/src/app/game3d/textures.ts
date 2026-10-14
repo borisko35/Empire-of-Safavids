@@ -437,6 +437,70 @@ export function woodRoughnessTexture(repeat = 2): THREE.CanvasTexture {
   return toTexture(out, repeat);
 }
 
+/** Нормальная карта для воды: волны Герстнера/синусоиды для деталей поверхности */
+export function waterNormalTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 512;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  // Генерируем heightmap волн: наложение нескольких синусоид
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      // Наложение нескольких волн разной частоты и амплитуды
+      let h = 0;
+      h += Math.sin(u * 8 * Math.PI + v * 4 * Math.PI) * 0.4;
+      h += Math.sin(u * 16 * Math.PI - v * 8 * Math.PI) * 0.25;
+      h += Math.sin(u * 32 * Math.PI + v * 2 * Math.PI) * 0.15;
+      h += Math.sin(u * 64 * Math.PI - v * 16 * Math.PI) * 0.1;
+      // Рипплы
+      h += Math.sin(u * 128 * Math.PI) * 0.05;
+      h += Math.sin(v * 128 * Math.PI) * 0.05;
+      const val = Math.floor((h + 1) * 0.5 * 255);
+      const i = (y * size + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = val;
+      data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const normalCanvas = heightToNormal(ctx.getImageData(0, 0, size, size).data, size, 1.2);
+  return toTexture(normalCanvas, repeat);
+}
+
+/** Пена на гребнях волн: белая пена в гребнях волн */
+export function waterFoamTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 512;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, size, size);
+  // Пена появляется на гребнях волн (высокие значения heightmap)
+  const img = ctx.createImageData(size, size);
+  const data = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size;
+      // Те же волны, что и в normal map
+      let h = 0;
+      h += Math.sin(u * 8 * Math.PI + v * 4 * Math.PI) * 0.4;
+      h += Math.sin(u * 16 * Math.PI - v * 8 * Math.PI) * 0.25;
+      h += Math.sin(u * 32 * Math.PI + v * 2 * Math.PI) * 0.15;
+      h += Math.sin(u * 64 * Math.PI - v * 16 * Math.PI) * 0.1;
+      h += Math.sin(u * 128 * Math.PI) * 0.05;
+      h += Math.sin(v * 128 * Math.PI) * 0.05;
+      // Пена только на самых высоких гребнях (h > 0.6)
+      const foam = Math.max(0, (h - 0.6) / 0.4);
+      const val = Math.floor(foam * foam * 255); // foam^2 для резкости
+      const i = (y * size + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = val;
+      data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(_canvas as unknown as HTMLCanvasElement, repeat);
+}
+
 /** Нормальная карта для дерева: борозды между досками, волокна */
 export function woodNormalTexture(repeat = 2): THREE.CanvasTexture {
   const size = 128;

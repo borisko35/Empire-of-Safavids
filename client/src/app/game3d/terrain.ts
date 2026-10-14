@@ -14,10 +14,11 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
-  waterTexture, waterfallTexture, macroTexture, addMacroLayer,
+  waterfallTexture, macroTexture, addMacroLayer,
   stoneNormalTexture, woodNormalTexture,
   stoneRoughnessTexture, woodRoughnessTexture,
   stoneDisplacementTexture,
+  waterNormalTexture, waterFoamTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1181,6 +1182,152 @@ function windowPane(
 }
 
 // ── Материалы (с процедурными текстурами) ────────────────────
+// ── Water shader sources (extracted for TS parsing) ──────────────
+const waterVertexShader = `
+  uniform float uTime;
+  uniform float uWaveScale;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying float vFoamFactor;
+  vec3 gerstnerWave(vec2 uv, float time, float scale, float amplitude, float wavelength, vec2 direction, float steepness) {
+    float k = 2.0 * 3.14159 / wavelength;
+    float c = sqrt(9.81 / k);
+    float f = k * (direction.x * uv.x + direction.y * uv.y) - c * time;
+    float a = steepness / k;
+    float x = direction.x * (amplitude * sin(f));
+    float z = direction.y * (amplitude * sin(f));
+    float y = amplitude * cos(f);
+    return vec3(x, y, z) * scale;
+  }
+  void main() {
+    vUv = uv;
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    vec3 offset = vec3(0.0);
+    offset += gerstnerWave(uv, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45);
+    offset += gerstnerWave(uv, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35);
+    offset += gerstnerWave(uv, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
+    offset += gerstnerWave(uv, uTime * 2.5, 0.3, 0.025, 0.6, vec2(1.0, 0.0), 0.1);
+    vec3 displacedPos = vWorldPos + vec3(offset.x, offset.y, offset.z);
+    float eps = 0.01;
+    vec2 uvX = uv + vec2(0.01, 0.0);
+    vec2 uvY = uv + vec2(0.0, 0.01);
+    vec3 offsetX = gerstnerWave(uvX, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45) +
+                   gerstnerWave(uvX, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35) +
+                   gerstnerWave(uvX, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
+    vec3 offsetY = gerstnerWave(uvY, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45) +
+                   gerstnerWave(uvY, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35) +
+                   gerstnerWave(uvY, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
+    vec3 normal = normalize(cross(
+      vec3(eps, offsetX.y - offset.y, 0.0),
+      vec3(0.0, offsetY.y - offset.y, eps)
+    ));
+    vNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vViewDir = normalize(cameraPosition - displacedPos);
+    float foam = smoothstep(0.15, 0.35, offset.y * 2.5);
+    vFoamFactor = foam;
+    gl_Position = projectionMatrix * viewMatrix * vec4(displacedPos, 1.0);
+  }
+`;
+
+const waterFragmentShader = `
+  uniform vec3 uCameraPos;
+  uniform vec3 uSunDir;
+  uniform vec3 uSunColor;
+  uniform vec3 uFogColor;
+  uniform float uFogNear;
+  uniform float uFogFar;
+  uniform sampler2D uNormalMap;
+  uniform sampler2D uFoamMap;
+  uniform vec3 uWaterColorDeep;
+  uniform vec3 uWaterColorShallow;
+  uniform vec3 uFoamColor;
+  uniform float uRefractionRatio;
+  uniform float uFresnelPower;
+  uniform float uWaveScale;
+  uniform float uFoamThreshold;
+  uniform float uFoamOpacity;
+  uniform float uCausticsScale;
+  uniform float uCausticsSpeed;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  varying vec3 vViewDir;
+  varying float vFoamFactor;
+  float caustics(vec2 uv, float time) {
+    float c = 0.0;
+    c += sin(uv.x * 20.0 + time * 2.0) * 0.5;
+    c += sin(uv.y * 15.0 - time * 1.5) * 0.3;
+    c += sin((uv.x + uv.y) * 10.0 + time) * 0.2;
+    return smoothstep(0.6, 1.0, c) * 0.3;
+  }
+  void main() {
+    float depth = max(0.0, uWaterLevel - vWorldPos.y);
+    float depthFactor = smoothstep(0.0, 8.0, depth);
+    vec3 waterColor = mix(uWaterColorShallow, uWaterColorDeep, depthFactor);
+    vec3 normalMap = texture2D(uNormalMap, vUv * 8.0 + vec2(uTime * 0.02, uTime * 0.01)).rgb;
+    vec3 mappedNormal = normalize(vNormal + (normalMap - 0.5) * 0.5);
+    vec3 viewDir = normalize(vViewDir);
+    float fresnel = pow(1.0 - max(dot(viewDir, mappedNormal), 0.0), uFresnelPower);
+    vec3 reflection = mix(vec3(0.4, 0.6, 0.9), uSunColor, 0.5) * fresnel * 0.4;
+    float refr = uRefractionRatio;
+    float foam = texture2D(uFoamMap, vUv * 6.0 + vec2(uTime * 0.01, uTime * 0.015)).r;
+    foam = smoothstep(uFoamThreshold, 1.0, foam) * vFoamFactor;
+    float caustic = caustics(vUv * uCausticsScale + vec2(uTime * uCausticsSpeed), uTime);
+    vec3 color = waterColor;
+    color += reflection;
+    color += uFoamColor * foam * uFoamOpacity;
+    color += vec3(caustic) * 0.15;
+    float fogFactor = smoothstep(uFogNear, uFogFar, length(uCameraPos - vWorldPos));
+    color = mix(color, uFogColor, fogFactor * 0.5);
+    float alpha = mix(0.85, 0.65, depthFactor) * (1.0 - foam * 0.3);
+    gl_FragColor = vec4(color, alpha);
+  }
+  float caustics(vec2 uv, float time) {
+    float c = 0.0;
+    c += sin(uv.x * 20.0 + time * 2.0) * 0.5;
+    c += sin(uv.y * 15.0 - time * 1.5) * 0.3;
+    c += sin((uv.x + uv.y) * 10.0 + time) * 0.2;
+    return smoothstep(0.6, 1.0, c) * 0.3;
+  }
+`;
+
+// ── Кастомный water shader: волны Герстнера, нормали, пена, преломление, отражения, каустики
+export const waterMaterial = (() => {
+  const uniforms = {
+    uTime: { value: 0 },
+    uWaterLevel: { value: LAKE.level },
+    uCameraPos: { value: new THREE.Vector3() },
+    uSunDir: { value: new THREE.Vector3(0.4, 0.85, -0.3).normalize() },
+    uSunColor: { value: new THREE.Color(0xffe8c0) },
+    uFogColor: { value: new THREE.Color(0xb9c4c9) },
+    uFogNear: { value: 60 },
+    uFogFar: { value: 420 },
+    uNormalMap: { value: waterNormalTexture(6) },
+    uFoamMap: { value: waterFoamTexture(6) },
+    uWaterColorDeep: { value: new THREE.Color(0x1a4a6e) },
+    uWaterColorShallow: { value: new THREE.Color(0x3a8fc8) },
+    uFoamColor: { value: new THREE.Color(0xffffff) },
+    uRefractionRatio: { value: 1.0 / 1.33 },
+    uFresnelPower: { value: 3.5 },
+    uWaveScale: { value: 0.8 },
+    uFoamThreshold: { value: 0.65 },
+    uFoamOpacity: { value: 0.75 },
+    uCausticsScale: { value: 4.0 },
+    uCausticsSpeed: { value: 0.5 },
+  };
+  return new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: waterVertexShader,
+    fragmentShader: waterFragmentShader,
+    transparent: true,
+    side: THREE.DoubleSide,
+  });
+})();
+
+
+// ── Материалы (с процедурными текстурами) ────────────────────
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
   stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4), displacementMap: stoneDisplacementTexture(4), displacementScale: 0.15, displacementBias: -0.07 }),
@@ -1217,10 +1364,7 @@ const MAT = {
   // Рама вокруг проёма. Светлый камень: рама и есть то, что глаз читает
   // как окно, а не просто тёмная плашка.
   windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85 }),
-  water: new THREE.MeshStandardMaterial({
-    color: 0x2f6f96, roughness: 0.12, metalness: 0.5, transparent: true, opacity: 0.82,
-    map: waterTexture(6),
-  }),
+  water: waterMaterial,
   waterfall: new THREE.MeshBasicMaterial({
     color: 0xdff0f8, transparent: true, opacity: 0.75, side: THREE.DoubleSide, map: waterfallTexture(2),
   }),

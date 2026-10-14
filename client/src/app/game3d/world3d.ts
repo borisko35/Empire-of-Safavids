@@ -31,6 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
+import { waterMaterial } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
@@ -1868,6 +1869,9 @@ if (isMe && moving) {
     // Тучи гасят свет: в грозу мир не должен светиться как в полдень.
     const sunDir = this.sky.sunDirection;
 
+    const useMoon = sunDir.y < 0.05;
+    const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
+
     // HDRI-окружение пересобирается само, когда небо изменилось достаточно.
     // Состояние собирается здесь — рядом с расчётом света, потому что оба
     // читают одно и то же: направление на солнце, глубину ночи и пасмурность.
@@ -1881,8 +1885,13 @@ if (isMe && moving) {
     };
     this.env.update(состояниеНеба, dt);
 
-    const useMoon = sunDir.y < 0.05;
-    const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
+    // Вода: единое время для всех водных поверхностей (озеро, море, река).
+    if (waterMaterial) {
+      waterMaterial.uniforms.uTime.value += dt;
+      waterMaterial.uniforms.uCameraPos.value.copy(this.camera.position);
+      waterMaterial.uniforms.uSunDir.value.copy(lightDir).normalize();
+      waterMaterial.uniforms.uSunColor.value.copy(this.sun.color);
+    }
     const dim = 1 - this.sky.overcast * 0.45;
     this.sun.intensity = (useMoon ? 0.32 : 0.25 + dayI * 1.35) * dim;
     this.hemi.intensity = (0.28 + dayI * 0.55) * (1 - this.sky.overcast * 0.3);
