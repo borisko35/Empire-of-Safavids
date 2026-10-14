@@ -7,6 +7,10 @@
 // эффекты и плавающий урон. Сетевые данные читает из entities.World.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
@@ -146,6 +150,9 @@ export class World3D {
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
+  /** Композитор для SSAO. Без него тени плоские, нет контактных теней. */
+  private composer!: EffectComposer;
+  private ssaoPass!: SSAOPass;
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
@@ -517,6 +524,16 @@ private roll = 0;
 
     this.camera = new THREE.PerspectiveCamera(62, container.clientWidth / container.clientHeight, 0.1, 1600);
 
+    // SSAO: контактные тени и глубина. Без него сцена выглядит плоской.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.ssaoPass = new SSAOPass(this.scene, this.camera, container.clientWidth, container.clientHeight);
+    this.ssaoPass.kernelRadius = 8;
+    this.ssaoPass.minDistance = 0.005;
+    this.ssaoPass.maxDistance = 0.15;
+    this.composer.addPass(this.ssaoPass);
+    this.composer.addPass(new OutputPass());
+
     // Свет
     this.hemi = new THREE.HemisphereLight(0xbfd6e4, 0x6b5a42, 0.75);
     this.scene.add(this.hemi);
@@ -750,6 +767,9 @@ private roll = 0;
       this.sun.shadow.map = null;
     }
 
+    // SSAO: контактные тени. Включаем/выключаем через enabled у пасса.
+    if (this.ssaoPass) this.ssaoPass.enabled = p.ssao;
+
     // Дальность прорисовки. Туманом ведает погода и хранит своё «домашнее»
     // значение far — меняем его же, иначе смена погоды всё откатит.
     const fog = this.scene.fog as THREE.Fog | null;
@@ -856,6 +876,9 @@ private roll = 0;
     this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    // SSAO требует обновления размера при изменении окна
+    this.composer.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.ssaoPass.setSize(this.container.clientWidth, this.container.clientHeight);
   };
 
   private onMouseDown = (e: MouseEvent) => {
@@ -1867,7 +1890,7 @@ if (isMe && moving) {
     }
 
     if (this.attackCd > 0) this.attackCd -= dt;
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 
   private attackAnim = false;
@@ -1906,6 +1929,8 @@ if (isMe && moving) {
     // Миксеры анимации коров — двухуровневые ссылки на загруженные клипы;
     // без stop() анимации продолжают крутиться для снятых сцены моделей.
     for (const mx of this.cowMixers ?? []) mx.stopAllAction();
+    // SSAO: освобождаем рендер-таргеты композитора
+    this.composer?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fxLayer?.remove();

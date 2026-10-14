@@ -45,6 +45,8 @@ export interface GraphicsProfile {
   fogFar: number;
   /** Доля частиц погоды, 0..1 */
   weather: number;
+  /** Screen-space ambient occlusion: контактные тени и глубина */
+  ssao: boolean;
 }
 
 // Шесть уровней: каждый следующий заметно дороже, но и заметно красивее.
@@ -55,12 +57,12 @@ export interface GraphicsProfile {
 // Это было правдой когда-то; в 0.186 константа на месте. Запись стоила
 // проекту мягких теней, поэтому проверка shadowQuality сторожит её возврат.
 const PROFILES: Record<GraphicsLevel, GraphicsProfile> = {
-  low:    { pixelScale: 0.6,  shadows: false, shadowMapSize: 512,  fogFar: 240, weather: 0.30 },
-  medium: { pixelScale: 0.8,  shadows: true,  shadowMapSize: 1024, fogFar: 340, weather: 0.55 },
-  good:   { pixelScale: 1.0,  shadows: true,  shadowMapSize: 1024, fogFar: 440, weather: 0.75 },
-  high:   { pixelScale: 1.2,  shadows: true,  shadowMapSize: 2048, fogFar: 560, weather: 1.00 },
-  epic:   { pixelScale: 1.45, shadows: true,  shadowMapSize: 2048, fogFar: 700, weather: 1.00 },
-  ultra:  { pixelScale: 1.75, shadows: true,  shadowMapSize: 4096, fogFar: 850, weather: 1.00 },
+  low:    { pixelScale: 0.6,  shadows: false, shadowMapSize: 512,  fogFar: 240, weather: 0.30, ssao: false },
+  medium: { pixelScale: 0.8,  shadows: true,  shadowMapSize: 1024, fogFar: 340, weather: 0.55, ssao: false },
+  good:   { pixelScale: 1.0,  shadows: true,  shadowMapSize: 1024, fogFar: 440, weather: 0.75, ssao: true },
+  high:   { pixelScale: 1.2,  shadows: true,  shadowMapSize: 2048, fogFar: 560, weather: 1.00, ssao: true },
+  epic:   { pixelScale: 1.45, shadows: true,  shadowMapSize: 2048, fogFar: 700, weather: 1.00, ssao: true },
+  ultra:  { pixelScale: 1.75, shadows: true,  shadowMapSize: 4096, fogFar: 850, weather: 1.00, ssao: true },
 };
 
 const KEY = 'eos_settings_v1';
