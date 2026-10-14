@@ -7,8 +7,14 @@ function must(c, m) { if (!c) { console.log('ПРОВАЛ ЯКОРЯ: ' + m); pr
 
 const имя = process.argv[2];
 if (!имя) {
-  console.log('Передайте имя пользователя itch.io, например:');
-  console.log('  node tools/build-publish-instructions.js vasheyazy');
+  // ПРИМЕР ИМЕНИ УБРАН СОЗНАТЕЛЬНО. Раньше здесь стоял выдуманный аккаунт
+  // («vasheyazy»), и он был не просто неверным: он выглядел как настоящий, и
+  // я сам принял его за сигнал о вашем аккаунте вместо того, чтобы спросить.
+  // Площадка не выдумывает имён — их знает владелец.
+  console.log('Передайте имя пользователя itch.io — оно есть в адресе профиля');
+  console.log('(например, https<имя>.itch.io), и сборщик подставит настоящий адрес');
+  console.log('витрины:');
+  console.log('  node tools/build-publish-instructions.js <ваше_имя>');
   process.exit(1);
 }
 if (!/^[a-zA-Z0-9_-]{2,30}$/.test(имя)) {
@@ -243,5 +249,5 @@ const обратно = fs.readFileSync(путь, 'utf8');
 must(обратно.includes(витрина), 'adres vitriny ne zapisan');
 must(/itch-bundle\.zip/.test(обратно), 'shag s arkhivom propal');
 must(/images|assets\/screenshots/.test(обратно), 'shag s kartinkami propal');
-console.log('instrukciya: ' + путь.replace(R, ''));
-console.log('adres vitriny: ' + витрина);
+console.log('инструкция: ' + путь.replace(R, ''));
+console.log('адрес витрины: ' + витрина);

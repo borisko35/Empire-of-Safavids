@@ -178,7 +178,7 @@ for (const имя of проси) {
   const вАрхиве = имя.split('/').pop();
   const точное = [...наДиске].find(f => f.split('/').pop() === вАрхиве);
   if (!точное) {
-    console.log('  NET  net fayla s TOCHNYM registrom: ' + вАрхиве);
+    console.log('  NET  файла с ТОЧНЫМ регистром: ' + вАрхиве);
     плохо++;
   }
 }
