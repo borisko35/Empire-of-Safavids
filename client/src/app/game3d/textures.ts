@@ -222,6 +222,27 @@ export function plasterTexture(base: string, repeat = 2): THREE.CanvasTexture {
   return toTexture(canvas, repeat);
 }
 
+/** Нормальная карта для каменной кладки: выступающие камни, углублённые швы */
+export function stoneNormalTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  // heightmap: камни светлее (выше), швы темнее (ниже)
+  ctx.fillStyle = '#404040';
+  const bh = 22, bw = 46;
+  for (let row = 0; row * bh < size; row++) {
+    const off = row % 2 ? bw / 2 : 0;
+    for (let col = -1; col * bw < size + bw; col++) {
+      const x = col * bw + off, y = row * bh;
+      const shade = 180 + Math.floor(Math.random() * 40);
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3);
+    }
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 2.5);
+  return toTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
+
 /** Каменная кладка стен */
 export function stoneTexture(repeat = 6): THREE.CanvasTexture {
   const size = 256;
@@ -300,6 +321,64 @@ export function plazaTexture(repeat = 14): THREE.CanvasTexture {
   }
   speckle(ctx, size, 600);
   return toTexture(canvas, repeat);
+}
+
+/**
+ * Генерация нормальной карты из heightmap через Sobel-оператор.
+ * heightmap — серое изображение (0..255), где яркость = высота.
+ * Возвращает RGB-нормальную карту для использования в material.normalMap.
+ */
+function heightToNormal(heightData: Uint8ClampedArray, size: number, strength = 2.0): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const xm = (x - 1 + size) % size, xp = (x + 1) % size;
+      const ym = (y - 1 + size) % size, yp = (y + 1) % size;
+      const hL = heightData[y * size + xm], hR = heightData[y * size + xp];
+      const hD = heightData[ym * size + x], hU = heightData[yp * size + x];
+      const dx = (hL - hR) / 255 * strength;
+      const dy = (hD - hU) / 255 * strength;
+      const len = Math.sqrt(dx * dx + dy * dy + 1);
+      const i = (y * size + x) * 4;
+      d[i] = Math.floor(((dx / len) * 0.5 + 0.5) * 255);
+      d[i + 1] = Math.floor(((dy / len) * 0.5 + 0.5) * 255);
+      d[i + 2] = Math.floor((1 / len) * 255);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+/** Нормальная карта для дерева: борозды между досками, волокна */
+export function woodNormalTexture(repeat = 2): THREE.CanvasTexture {
+  const size = 128;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  const plank = size / 4;
+  for (let i = 0; i < 4; i++) {
+    const shade = 140 + Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(0, i * plank + 1, size, plank - 2);
+    // волокна — тонкие тёмные линии на heightmap
+    ctx.strokeStyle = 'rgba(60,60,60,0.5)';
+    for (let g = 0; g < 5; g++) {
+      ctx.beginPath();
+      const y = i * plank + 3 + Math.random() * (plank - 6);
+      ctx.moveTo(0, y);
+      for (let x = 0; x <= size; x += 16) ctx.lineTo(x, y + Math.sin(x * 0.12 + i) * 1.6);
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.8);
+  return toTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
 
 /** Деревянные доски */
