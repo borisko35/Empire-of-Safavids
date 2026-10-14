@@ -1781,7 +1781,7 @@ private territory = TerritoryBonuses.getInstance();
     // и два чтения socket.region разошлись бы при смене региона посреди боя.
     const регионБоя = socket.region ?? attacker.region ?? '';
     const terrАтакующий = await this.territory
-      .бонусыИгрока(target.id, регионБоя)
+      .бонусыИгрока(attacker.id, регионБоя)
       .catch(() => null);
 
     // ТЕРРИТОРИЯ ЗАЩИТНИКА (§186). Обратная сторона §185: тот, кто дерётся
@@ -1791,7 +1791,7 @@ private territory = TerritoryBonuses.getInstance();
     // Считается по региону ЦЕЛИ, а не атакующего: защищает та земля, на
     // которой стоишь, а не та, с которой бьёшь.
     const terrЗащитник = await this.territory
-      .бонусыИгрока(attacker.id, регионБоя)
+      .бонусыИгрока(target.id, регионБоя)
       .catch(() => null);
 
     result.damage = Math.floor(
