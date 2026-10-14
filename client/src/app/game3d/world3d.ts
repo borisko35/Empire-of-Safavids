@@ -12,6 +12,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { t } from '../i18n';
 import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
@@ -151,10 +152,11 @@ export class World3D {
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
-  /** Композитор для SSAO + SSR. Без них сцена выглядит плоской. */
+  /** Композитор для SSAO + SSR + Bloom. Без них сцена выглядит плоской. */
   private composer!: EffectComposer;
   private ssaoPass!: SSAOPass;
   private ssrPass!: SSRPass;
+  private bloomPass!: UnrealBloomPass;
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
@@ -549,6 +551,16 @@ private roll = 0;
     this.ssrPass.maxDistance = 100;
     this.ssrPass.thickness = 0.5;
     this.composer.addPass(this.ssrPass);
+    // Bloom: свечение ярких источников (факелы, окна, магия, солнце).
+    // Порог = 0.85: только пиксели ярче 0.85 (после тонального отображения) светятся.
+    // Сила = 0.6, радиус = 0.6, порог = 0.85.
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      0.6, // strength
+      0.6, // radius
+      0.85 // threshold
+    );
+    this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
 
     // Свет
@@ -788,6 +800,8 @@ private roll = 0;
     if (this.ssaoPass) this.ssaoPass.enabled = p.ssao;
     // SSR: screen-space reflections. Включаем/выключаем через enabled у пасса.
     if (this.ssrPass) this.ssrPass.enabled = p.ssr;
+    // Bloom: свечение ярких источников.
+    if (this.bloomPass) this.bloomPass.enabled = p.bloom;
 
     // Дальность прорисовки. Туманом ведает погода и хранит своё «домашнее»
     // значение far — меняем его же, иначе смена погоды всё откатит.
@@ -895,10 +909,11 @@ private roll = 0;
     this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
-    // SSAO + SSR требуют обновления размера при изменении окна
+    // SSAO + SSR + Bloom требуют обновления размера при изменении окна
     this.composer.setSize(this.container.clientWidth, this.container.clientHeight);
     this.ssaoPass.setSize(this.container.clientWidth, this.container.clientHeight);
     this.ssrPass.setSize(this.container.clientWidth, this.container.clientHeight);
+    this.bloomPass.setSize(this.container.clientWidth, this.container.clientHeight);
   };
 
   private onMouseDown = (e: MouseEvent) => {

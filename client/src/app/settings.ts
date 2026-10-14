@@ -49,6 +49,8 @@ export interface GraphicsProfile {
   ssao: boolean;
   /** Screen-space reflections: отражения в воде, мокром камне, металле, стекле */
   ssr: boolean;
+  /** Bloom: свечение ярких источников (факелы, окна, магия, солнце) */
+  bloom: boolean;
 }
 
 // Шесть уровней: каждый следующий заметно дороже, но и заметно красивее.
@@ -59,12 +61,12 @@ export interface GraphicsProfile {
 // Это было правдой когда-то; в 0.186 константа на месте. Запись стоила
 // проекту мягких теней, поэтому проверка shadowQuality сторожит её возврат.
 const PROFILES: Record<GraphicsLevel, GraphicsProfile> = {
-  low:    { pixelScale: 0.6,  shadows: false, shadowMapSize: 512,  fogFar: 240, weather: 0.30, ssao: false, ssr: false },
-  medium: { pixelScale: 0.8,  shadows: true,  shadowMapSize: 1024, fogFar: 340, weather: 0.55, ssao: false, ssr: false },
-  good:   { pixelScale: 1.0,  shadows: true,  shadowMapSize: 1024, fogFar: 440, weather: 0.75, ssao: true,  ssr: false },
-  high:   { pixelScale: 1.2,  shadows: true,  shadowMapSize: 2048, fogFar: 560, weather: 1.00, ssao: true,  ssr: true },
-  epic:   { pixelScale: 1.45, shadows: true,  shadowMapSize: 2048, fogFar: 700, weather: 1.00, ssao: true,  ssr: true },
-  ultra:  { pixelScale: 1.75, shadows: true,  shadowMapSize: 4096, fogFar: 850, weather: 1.00, ssao: true,  ssr: true },
+  low:    { pixelScale: 0.6,  shadows: false, shadowMapSize: 512,  fogFar: 240, weather: 0.30, ssao: false, ssr: false, bloom: false },
+  medium: { pixelScale: 0.8,  shadows: true,  shadowMapSize: 1024, fogFar: 340, weather: 0.55, ssao: false, ssr: false, bloom: false },
+  good:   { pixelScale: 1.0,  shadows: true,  shadowMapSize: 1024, fogFar: 440, weather: 0.75, ssao: true,  ssr: false, bloom: false },
+  high:   { pixelScale: 1.2,  shadows: true,  shadowMapSize: 2048, fogFar: 560, weather: 1.00, ssao: true,  ssr: true,  bloom: true },
+  epic:   { pixelScale: 1.45, shadows: true,  shadowMapSize: 2048, fogFar: 700, weather: 1.00, ssao: true,  ssr: true,  bloom: true },
+  ultra:  { pixelScale: 1.75, shadows: true,  shadowMapSize: 4096, fogFar: 850, weather: 1.00, ssao: true,  ssr: true,  bloom: true },
 };
 
 const KEY = 'eos_settings_v1';
