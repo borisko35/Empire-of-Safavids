@@ -26,6 +26,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
+import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
 import { createCivilians, CiviliansHandle } from './civilians';
@@ -150,6 +151,14 @@ export class World3D {
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
   private flames: THREE.Mesh[] = [];
   private sky!: SkyHandle;
+  /**
+   * HDRI-окружение: карта неба, из которой считается свет.
+   *
+   * Живёт рядом со sky, а не внутри него, потому что небо отвечает за картинку
+   * (солнце, луна, звёзды, облака, цвет тумана), а окружение — за освещение.
+   * Смешали бы — и правка неба тащила бы за собой пересборку карты на GPU.
+   */
+  private env!: SkyEnvironment;
   private fauna!: FaunaHandle;
   private npcs!: NpcsHandle;
   private civilians!: CiviliansHandle;
@@ -630,6 +639,9 @@ private roll = 0;
 
     // Небо, фауна и NPC города
     this.sky = createSky(this.scene);
+    // Порядок важен: PMREMGenerator берёт рендерер, и карта собирается сразу,
+    // чтобы первый кадр не показал мир без освещения.
+    this.env = new SkyEnvironment(this.scene, this.renderer);
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
     this.civilians = createCivilians(this.scene);
@@ -744,6 +756,10 @@ private roll = 0;
     // Небо — сфера радиусом SKY_RADIUS вокруг игрока. Дальняя плоскость
     // камеры всегда должна быть больше неё, иначе часть неба отсекается
     // и на том месте видно чёрный купол (background у сцены пустой).
+    // Дальняя плоскость держится ради звёзд и светил (они на SKY_RADIUS), а
+    // не ради неба: небо теперь фон сцены, фон не геометрия и плоскостью не
+    // отсекается. Если бы купол вернулся, требование «дальше SKY_RADIUS»
+    // пришлось бы вернуть вместе с ним.
     this.camera.far = Math.max(SKY_RADIUS * 1.15, fogFar + 750);
     this.camera.updateProjectionMatrix();
     this.weather?.setQuality(fogFar, p.weather);
@@ -1790,6 +1806,19 @@ if (isMe && moving) {
     // Солнце/луна по дуге: источник света следует за светилом.
     // Тучи гасят свет: в грозу мир не должен светиться как в полдень.
     const sunDir = this.sky.sunDirection;
+
+    // HDRI-окружение пересобирается само, когда небо изменилось достаточно.
+    // Состояние собирается здесь — рядом с расчётом света, потому что оба
+    // читают одно и то же: направление на солнце, глубину ночи и пасмурность.
+    const состояниеНеба: SkyState = {
+      sun: [sunDir.x, sunDir.y, sunDir.z],
+      moon: [-sunDir.x, -sunDir.y, -sunDir.z],
+      sunHeight: sunDir.y,
+      night,
+      overcast: this.sky.overcast,
+    };
+    this.env.update(состояниеНеба, dt);
+
     const useMoon = sunDir.y < 0.05;
     const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
     const dim = 1 - this.sky.overcast * 0.45;
@@ -1854,6 +1883,9 @@ if (isMe && moving) {
     for (const [, b] of this.rigs) b.rig.dispose();
     this.rigs.clear();
     this.sky?.dispose();
+    // Окружение — после неба и до рендерера: его dispose() обращается к
+    // генератору PMREM, а тот живёт на рендерере.
+    this.env?.dispose();
     this.fauna?.dispose();
     this.npcs?.dispose();
     this.civilians?.dispose();

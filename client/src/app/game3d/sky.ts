@@ -65,34 +65,14 @@ function makePuffCloud(mat: THREE.Material): THREE.Group {
 }
 
 export function createSky(scene: THREE.Scene): SkyHandle {
-  // ── Купол с вертикальным градиентом ──
-  const uniforms = {
-    topColor: { value: DAY.top.clone() },
-    bottomColor: { value: DAY.horizon.clone() },
-  };
-  const domeMat = new THREE.ShaderMaterial({
-    uniforms,
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    vertexShader: /* glsl */`
-      varying vec3 vPos;
-      void main() {
-        vPos = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */`
-      uniform vec3 topColor;
-      uniform vec3 bottomColor;
-      varying vec3 vPos;
-      void main() {
-        float h = normalize(vPos).y;
-        float t = smoothstep(-0.02, 0.42, h);
-        gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
-      }`,
-  });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 32, 18), domeMat);
-  scene.add(dome);
+  // КУПОЛА БОЛЬШЕ НЕТ. Его рисовала сфера радиусом SKY_RADIUS с градиентом из
+  // двух цветов; теперь небо — эквиректангулярная HDR-карта, поднятая в фон
+  // сцены (см. skyEnvironment.ts). Купол был непрозрачным и перекрывал бы фон
+  // целиком, так что оставить оба — значит держать в кадре небо, которого не
+  // видно.
+  //
+  // Палитры ниже остались: их по-прежнему читает туман, и туман должен
+  // совпадать с горизонтом, а не быть отдельным цветом.
 
   // ── Солнце с ореолом ──
   const sun = new THREE.Mesh(
@@ -219,8 +199,8 @@ export function createSky(scene: THREE.Scene): SkyHandle {
 
   function update(dt: number, now: number, dayFraction: number, center: { x: number; z: number }): void {
     const hour01 = dayFraction * 24; // 0–23
-    // Купол, звёзды и светила следуют за игроком
-    dome.position.set(center.x, 0, center.z);
+    // Звёзды и светила следуют за игроком. Небо теперь фон сцены, и ему
+    // положение не нужно: фон бесконечен и не привязан к камере.
     stars.position.set(center.x, 0, center.z);
 
     // Дуга: восход в 5, зенит в 13, закат в 21 — ровно по фазам сервера.
@@ -283,8 +263,6 @@ export function createSky(scene: THREE.Scene): SkyHandle {
       };
     }
 
-    uniforms.topColor.value.copy(pal.top);
-    uniforms.bottomColor.value.copy(pal.horizon);
     horizonColor.copy(pal.horizon);
 
     // Погода догоняет небо плавно: смена за минуту не должна «щёлкать»
@@ -315,7 +293,6 @@ export function createSky(scene: THREE.Scene): SkyHandle {
   }
 
   function dispose(): void {
-    dome.geometry.dispose(); domeMat.dispose();
     sun.geometry.dispose(); (sun.material as THREE.Material).dispose();
     moon.geometry.dispose(); (moon.material as THREE.Material).dispose();
     starGeo.dispose(); starMat.dispose();
