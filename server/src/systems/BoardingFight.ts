@@ -89,7 +89,7 @@ export interface BoardLootInput {
  * что унесло.
  */
 export function boardLoot(исход: BoardFightResult, что: BoardLootInput): BoardOutcome {
-  const gold = исход.won ? boardReward(что.baseGold, что.mode) : 0;
+  const gold = исход.won ? boardReward(что.baseGold) : 0;
   const items = исход.won ? [...что.targetItems] : [];
   return {
     ok: true,

@@ -5,8 +5,8 @@
 // двух местах: откуда берутся цели и чем грозит PvP. Проверка это сторожит:
 // новая ошибка или новая возможность обязана появиться в обоих режимах, иначе
 // один из них тихо станет беднее.
-import type { BoardMode, BoardTarget, BoardSession, BoardErrorCode } from './BoardingTypes';
-import { BOARD_RANGE, BOARD_PVP_REWARD_MULT } from './BoardingTypes';
+import type { BoardTarget, BoardSession, BoardErrorCode } from './BoardingTypes';
+import { BOARD_RANGE } from './BoardingTypes';
 
 export * from './BoardingTypes';
 
@@ -49,14 +49,19 @@ export function boardAlive(session: BoardSession, now = Date.now()): boolean {
 }
 
 /**
- * Награда по режиму. Единственное место, где режимы считаются по-разному.
+ * Золото награды. Правило ОДНО на оба режима.
  *
- * База умножается на BOARD_PVP_REWARD_MULT для PvP. Всё остальное (порог
- * уровня, дистанция, срок, ошибки) общее.
+ * Раньше здесь был множитель ×2.5 для PvP, и это было единственное намеренное
+ * различие режимов. Он был мёртвым: применялся к золоту жертвы, а взять больше
+ * кошелька нельзя (§193). Владелец решил — золото целиком, без множителя
+ * (§194).
+ *
+ * Что осталось: приведение к целому и ноль вместо отрицательного. Правила
+ * режимов теперь совпадают и по золоту; различие осталось в источнике ( PvE —
+ * награда монстра, PvP — кошелёк цели) и в том, что уходит побеждённому.
  */
-export function boardReward(baseGold: number, mode: BoardMode): number {
-  const v = mode === 'pvp' ? baseGold * BOARD_PVP_REWARD_MULT : baseGold;
-  return Math.max(0, Math.floor(v));
+export function boardReward(baseGold: number): number {
+  return Math.max(0, Math.floor(baseGold));
 }
 
 /**
