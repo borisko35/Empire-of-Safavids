@@ -25,11 +25,44 @@ export class AnalyticsService {
   private db = DatabaseService.getInstance();
   private buffer: { event: AnalyticsEvent; userId?: string; characterId?: string; properties: Record<string, unknown>; timestamp: Date }[] = [];
 
-  constructor() {
-    setInterval(() => this.flush(), 5000);
+  /** Таймер сброса. null — не запущен. Раньше он не хранился вовсе. */
+  private таймер: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Таймер сброса запускается ПЕРВЫМ СОБЫТИЕМ, а не в конструкторе.
+   *
+   * Экземпляр создаётся на уровне модуля (см. конец файла), а конструктор с
+   * setInterval означал побочный эффект в ИМПОРТЕ: любой тест, задевающий
+   * аналитику через цепочку импортов, получал вечный таймер, и Jest не
+   * завершался — «did not exit one second after the test run».
+   *
+   * Пока событий не было, не происходит ничего, а значит не ходит и flush зря
+   * каждые пять секунд по пустому буферу.
+   */
+  private запуститьТаймер(): void {
+    if (this.таймер) return;
+    this.таймер = setInterval(() => this.flush(), 5000);
+    // unref: таймер не должен ДЕРЖАТЬ процесс живым. Раньше он был обычным и
+    // ничто не могло его снять — handle выбрасывался вместе с вызовом.
+    this.таймер.unref?.();
+  }
+
+  /**
+   * Остановить сброс. Для тестов и для аккуратного завершения.
+   *
+   * Без этого метода остановить таймер было невозможно в принципе:
+   * setInterval возвращает handle, который вызывавший его конструктор не
+   * сохранял. Ничто во всём проекте не могло вызвать clearInterval.
+   */
+  stop(): void {
+    if (this.таймер) {
+      clearInterval(this.таймер);
+      this.таймер = null;
+    }
   }
 
   track(event: AnalyticsEvent, properties: Record<string, unknown> = {}, userId?: string, characterId?: string): void {
+    this.запуститьТаймер();
     this.buffer.push({ event, userId, characterId, properties, timestamp: new Date() });
   }
 

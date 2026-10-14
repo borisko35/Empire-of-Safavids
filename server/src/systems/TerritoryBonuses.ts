@@ -19,7 +19,14 @@
 //   pvp_damage   - урон в PvP считается в KappaSystem, у него своя шкала.
 //                  Подключён в §185.
 //   defense_bonus- подключён в §186.
-//   sea_speed    - скорость в лодках считается в BoatService.
+// И ПОСЛЕДНИЙ ВИД (sea_speed, §190).
+//
+//   sea_speed   - скорость лодок действительно своя шкала, и это ничего не
+//                 запрещает: у лодки есть swimSpeed из справочника, и он
+//                 умножается на множитель территории. В отличие от защиты
+//                 и крафта, sea_speed СУММИРУЕТСЯ, а не вычитается: +20%
+//                 скорости это 1.20, и общая territoryBonuses здесь права.
+//                 Своя функция ему не нужна и была бы лишней.
 //
 // И ОДНА ПРИЧИНА, КОТОРУЮ ПРИШЛОСЬ ПЕРЕБИТЬ (craft_speed, §189).
 //
@@ -70,7 +77,7 @@ export type TerritoryBonusType =
  * достройкой Шёлкого пути — караван, прибывший в регион с такой территорией,
  * платит налог её владельцу.
  */
-export const WIRED_TERRITORY_BONUSES: readonly TerritoryBonusType[] = ['exp_bonus', 'trade_tax', 'gold_income', 'pvp_damage', 'defense_bonus', 'craft_speed'];
+export const WIRED_TERRITORY_BONUSES: readonly TerritoryBonusType[] = ['exp_bonus', 'trade_tax', 'gold_income', 'pvp_damage', 'defense_bonus', 'craft_speed', 'sea_speed'];
 
 /**
  * Раз в сколько минут гильдия получает доход с территории.
@@ -97,7 +104,7 @@ const ИЗВЕСТНЫЕ: readonly string[] = [
 ];
 
 /** Бонуса нет: множитель равен единице. */
-export const НЕЙТРАЛЬНО: TerritoryBonus = { exp: 1, pvp: 1, def: 1, craft: 1 };
+export const НЕЙТРАЛЬНО: TerritoryBonus = { exp: 1, pvp: 1, def: 1, craft: 1, sea: 1 };
 
 export interface TerritoryBonus {
   /** Множитель опыта. 1 - без бонуса, больше 1 - выгоднее. */
@@ -132,6 +139,18 @@ export interface TerritoryBonus {
    * Отдельная функция, а не общий знак: см. комментарий у крафтовыйМножитель.
    */
   craft: number;
+  /**
+   * Множитель скорости лодки. 1 — без бонуса, больше 1 — быстрее.
+   * §190: Порт Персидского Залива, +20% владельцу в Заливе.
+   *
+   * Единственное поле из трёх, которое СУММИРУЕТСЯ, а не вычитается, и
+   * единственное, которому достаётся общая territoryBonuses. Причина в
+   * природе величины: защита и крафт уменьшают время, а скорость лодки
+   * увеличивают. Один универсальный знак означал бы, что одна из половин
+   * врёт, а выбор стороны — решение по существу, и его лучше видеть в
+   * сигнатуре, а не угадывать по имени поля.
+   */
+  sea: number;
 }
 
 export class TerritoryBonusError extends Error {
@@ -327,6 +346,8 @@ export class TerritoryBonuses {
       def: защитныйМножитель(мои, 'defense_bonus'),
       // §189: третий срез из единицы — время крафта под своей землёй.
       craft: крафтовыйМножитель(мои, 'craft_speed'),
+      // §190: скорость лодки — единственное, что СУММИРУЕТСЯ, а не срезается.
+      sea: territoryBonuses(мои, 'sea_speed'),
     };
   }
 
@@ -342,6 +363,8 @@ export class TerritoryBonuses {
       def: защитныйМножитель(вРегионе, 'defense_bonus'),
       // §189: третий срез из единицы — время крафта под своей землёй.
       craft: крафтовыйМножитель(вРегионе, 'craft_speed'),
+      // §190: скорость лодки — единственное, что СУММИРУЕТСЯ, а не срезается.
+      sea: territoryBonuses(вРегионе, 'sea_speed'),
     };
   }
 

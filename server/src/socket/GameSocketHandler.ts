@@ -23,6 +23,11 @@ import { PvPService } from '../services/PvPService';
 import { FACTION_NAMES_RU } from '../services/ReputationService';
 import { grantReputation } from '../systems/ReputationGrants';
 import { MountSystem } from '../systems/MountSystem';
+// Лодки (§190): скорость в воде с бонусом территории и потолок античита.
+// Раньше обработчик о лодках не знал вовсе: скорость целиком приходила из
+// клиента, а потолок античита был один на всех. Потолок, выведенный из
+// приведённой клиенту величины, — единственная защита от бана за честную езду.
+import { BoatSystem, скоростьЛодки, потолокЛодки } from '../systems/BoatSystem';
 import { MOUNT_ANTICHEAT_CAP_FLOOR } from '../systems/AntiCheatSystem';
 import { pvpArena } from '../systems/PvpArenaService';
 import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
@@ -183,6 +188,7 @@ export class GameSocketHandler {
   /** Аренда шардов: чей спавн и чей бой. Один экземпляр на процесс. */
   private аренда = new ShardLease();
   private mounts = new MountSystem();
+  private boats = new BoatSystem();
 /** Караул игрока: наёмные солданы бьют вместе с игроком (§178). */
 private soldiers = soldiers;
 /** Засада на караван: добыча собирается при гибели последнего эскорта (§179). */
@@ -239,6 +245,19 @@ private territory = TerritoryBonuses.getInstance();
   // античит спрашивает скорость на каждом пакете движения (десятки в
   // секунду), а ходить в базу так часто нельзя
   private mountSpeeds = new Map<string, { mountId: string; speed: number }>();
+
+  /**
+   * Эффективная скорость лодки (§190) — уже с множителем территории.
+   *
+   * Хранится ИТОГ, а не лодка и не доля: итог — ровно то число, которое уходит
+   * клиенту и по которому строится потолок античита. Держать сырьё означало бы
+   * пересобирать его в двух местах и получить две правды об одном числе.
+   *
+   * `в` — когда посчитано. Срок ограничен намеренно: поводов обнулить кэш много
+   * (сход на берег, смена региона, потеря порта другой гильдией), и надёжнее
+   * ограничить возраст записи, чем перечислить все поводы.
+   */
+  private boatSpeeds = new Map<string, { boatId: string; speed: number; в: number }>();
   // Откуда отсчитывать путь для опыта скакуна: characterId -> позиция
   private mountExpAt = new Map<string, { x: number; z: number }>();
   // Игроки, вошедшие в игру внутри здания: им прощается первый пакет
@@ -1078,8 +1097,19 @@ private territory = TerritoryBonuses.getInstance();
     // читаем один раз, не дожидаясь: первый пакет всё равно медленный.
     if (!this.mountSpeeds.has(characterId)) void this.refreshMountSpeed(characterId);
     const mountSpeed = this.mountSpeeds.get(characterId)?.speed ?? 0;
+
+    // ЛОДКА (§190). Потолок берётся из той же величины, что ушла клиенту, и не
+    // ниже неё. Стоял бы здесь только базовый предел — разогнанная бонусом
+    // порта лодка ехала бы быстрее разрешённого, и игрок получал бы speed_hack
+    // за собственную территорию: пять нарушений за сутки, и это бан.
+    //
+    // Потолок при этом НЕ растёт без нужды: потолокЛодки берёт максимум из
+    // базового и фактического, так что лодка, и без бонуса не превышающая базу,
+    // ничего к пределу не прибавляет.
+    const базовыйПотолок = MOUNT_ANTICHEAT_CAP_FLOOR + mountSpeed;
     const moveCheck = this.antiCheat.validateMovement(
-      characterId, data.position, Date.now(), MOUNT_ANTICHEAT_CAP_FLOOR + mountSpeed
+      characterId, data.position, Date.now(),
+      потолокЛодки(this.boatSpeedFor(characterId), базовыйПотолок),
     );
     if (!moveCheck.valid) {
       // Амнистия переходов у дверей и внутри комнат: легальный вход/выход
@@ -1195,6 +1225,54 @@ private territory = TerritoryBonuses.getInstance();
    * секунду нельзя. Обновляется раз в 5 секунд (в том же блоке, что и запись
    * позиции) и при первом движении после входа.
    */
+  /**
+   * Сколько живёт запись о скорости лодки.
+   *
+   * Пять секунд — сознательный компромисс. Раз в пять секунд на движущегося
+   * игрока это одна строка в базу, против десятков в секунду без срока, и при
+   * этом бонус протухает быстрее, чем игрок успевает пересечь регион.
+   */
+  private static readonly СРОК_СКОРОСТИ_ЛОДКИ_МС = 5_000;
+
+  /**
+   * Эффективная скорость лодки по кэшу, без похода в базу.
+   *
+   * Запись протухла — обновляем в фоне, а на этот пакет берём прошлую. Пакетом
+   * движения ждать базу нельзя: игрок идёт, и задержка видна как рывок назад.
+   */
+  private boatSpeedFor(characterId: string): number {
+    const запись = this.boatSpeeds.get(characterId);
+    if (!запись) {
+      void this.refreshBoatSpeed(characterId);
+      return 0;
+    }
+    if (Date.now() - запись.в > GameSocketHandler.СРОК_СКОРОСТИ_ЛОДКИ_МС) {
+      void this.refreshBoatSpeed(characterId);
+    }
+    return запись.speed;
+  }
+
+  /**
+   * Пересчитать скорость лодки: взять лодку и регион, умножить на бонус.
+   *
+   * Отказ базы — обычная скорость, а не прошлая и не ноль. Ноль сделал бы
+   * игрока неподвижным на воде, прошлая оставила бы его ехать на чужом бонусе
+   * после смены региона. Обычная скорость предсказуема в обе стороны.
+   */
+  private async refreshBoatSpeed(characterId: string): Promise<void> {
+    try {
+      const { лодка, регион } = await this.boats.лодкаИРегион(characterId);
+      const бонус = await this.territory.бонусыИгрока(characterId, регион);
+      this.boatSpeeds.set(characterId, {
+        boatId: лодка?.id ?? '',
+        speed: скоростьЛодки(лодка, бонус.sea),
+        в: Date.now(),
+      });
+    } catch {
+      this.boatSpeeds.set(characterId, { boatId: '', speed: 0, в: Date.now() });
+    }
+  }
+
   private async refreshMountSpeed(characterId: string): Promise<void> {
     try {
       const active = await this.mounts.getActiveMount(characterId);
@@ -2974,6 +3052,7 @@ private territory = TerritoryBonuses.getInstance();
     // Кэши скакуна: иначе после выхода и возврата игрок поехал бы со
     // старой скоростью, пока не обновится
     this.mountSpeeds.delete(socket.characterId);
+    this.boatSpeeds.delete(socket.characterId);
     this.mountExpAt.delete(socket.characterId);
     // Отсрочка первого пакета — на одну сессию. Без удаления игрок,
     // вошедший в здании, получил бы её снова при следующем входе

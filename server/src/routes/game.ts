@@ -31,7 +31,7 @@ import { ITEMS_DATABASE } from '../data/items';
 import { asyncHandler, errorResponse } from '../utils/asyncHandler';
 import { AZENS_CONVERSION_RATES, AZENS_PACKS, PREMIUM_DURATIONS, FIRST_TOPUP_MULTIPLIER, FIRST_TOPUP_MAX_BONUS, EXCHANGE_PAIRS, getExchangePair, shopCurrencyToWallet } from '../utils/economy';
 import { MOUNTS, MountSystem } from '../systems/MountSystem';
-import { BoatSystem, BOATS } from '../systems/BoatSystem';
+import { BoatSystem, BOATS, скоростьЛодки } from '../systems/BoatSystem';
 import { FishingSystem, FISH_TABLE } from '../systems/FishingSystem';
 import { PetService } from '../services/PetService';
 import { HousingService, HOUSE_TYPES, DECORATIONS } from '../services/HousingService';
@@ -147,6 +147,7 @@ import type { CharacterClass } from '../types/game.types';
 import { AISystem } from '../systems/AISystem';
 import { boardTargets } from '../systems/BoardingTargets';
 import { BOARD_RANGE } from '../systems/BoardingTypes';
+import { TerritoryBonuses, НЕЙТРАЛЬНО } from '../systems/TerritoryBonuses';
 
 const questService = new QuestService();
 
@@ -189,6 +190,7 @@ const notificationService = new NotificationService();
 const mailService = MailService.getInstance();
 const mountSystem = new MountSystem();
 const boatSystem = new BoatSystem();
+const territoryBonuses = TerritoryBonuses.getInstance();
 const fishing = FishingSystem.getInstance();
 const petService = new PetService();
 const housingService = new HousingService();
@@ -2131,9 +2133,17 @@ gameRouter.get('/fishing/state', secureMiddleware,
       return res.status(403).json({ error: 'Character does not belong to you' });
     }
     const boatRow = await boatSystem.getActiveBoat(characterId);
+    // §190. Клиенту уходит ЭФФЕКТИВНАЯ скорость, а не справочная: именно по
+    // этой цифре world3d двигает лодку, и ровно из той же величины
+    // GameSocketHandler строит потолок античита. Отдать здесь базовую — значит
+    // бонус существовал бы в проверке, но не в игре.
+    const бонус = await territoryBonuses
+      .бонусыИгрока(characterId, mine.region ?? '')
+      .catch(() => НЕЙТРАЛЬНО);
+    const лодка = boatRow ? BOATS[boatRow.boatId] ?? null : null;
     return res.json({
       cast: fishing.getActiveCast(characterId),
-      boat: boatRow ? BOATS[boatRow.boatId] ?? null : null,
+      boat: лодка ? { ...лодка, swimSpeed: скоростьЛодки(лодка, бонус.sea) } : null,
       boatFatigue: boatRow?.fatigue ?? 0,
       fish: FISH_TABLE,
       serverTime: Date.now(),
