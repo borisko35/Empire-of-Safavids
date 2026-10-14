@@ -1193,7 +1193,7 @@ const MAT = {
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7 }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 1, map: woodTexture(1) }),
   foliage: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1 }),
-  foliageDark: new THREE.MeshStandardMaterial({ color: 0x2f4a28, roughness: 1 }),
+  foliageDark: new THREE.MeshStandardMaterial({ color: 0x3d5a32, roughness: 1 }),
   foliageLight: new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1 }),
   brush: new THREE.MeshStandardMaterial({ color: 0x6a6a3c, roughness: 1 }),
   trunk: new THREE.MeshStandardMaterial({ color: 0x5a4630, roughness: 1 }),
