@@ -838,7 +838,7 @@ function wireSocket(): void {
   // не произошло.
   socket.on('boarding:result', (r: {
     ok?: boolean;
-    attackerWon?: boolean;
+    youWon?: boolean;
     gold?: number;
     items?: string[];
     code?: string;
@@ -849,10 +849,12 @@ function wireSocket(): void {
       toast(t('panels.boarding_refused'), 'error');
       return;
     }
-    // У жертвы «победил» тот, кто абордажировал, поэтому её победа — это
-    // проигрыш атакующего. Читаем именно attackerWon, а не выводим по вкусу.
+    // Поле означает «победил тот, кому отправлено»: у атакующего это его
+    // победа, у жертвы — её. Одно поле, одно значение, обе стороны читают
+    // одинаково; прежние attackerWon приходилось переворачивать на сервере,
+    // и расхождение жило только в комментариях.
     const имя = r.targetNameRu ?? '';
-    if (r.attackerWon) {
+    if (r.youWon) {
       const добыча = (r.items?.length ?? 0) > 0
         ? ` ${t('panels.boarding_loot')}: ${r.items!.join(', ')}`
         : '';

@@ -31,7 +31,7 @@ import { BoatSystem, скоростьЛодки, потолокЛодки } from
 // Абордаж (§191). Ядро и правила — из готовых модулей; здесь только вход и
 // применение исхода. Своих правил боя и добычи здесь нет и быть не должно.
 import { boardSelfRejected, type BoardMode, type BoardTarget, type BoardErrorCode } from '../systems/Boarding';
-import { resolveBoardFight, boardLoot, pvpCargoLoss } from '../systems/BoardingFight';
+import { resolveBoardFight, boardLoot, pvpCargoLoss, boardGoldTake } from '../systems/BoardingFight';
 import { найтиЦелиАбордажа } from '../systems/BoardingSearch';
 import { MOUNT_ANTICHEAT_CAP_FLOOR } from '../systems/AntiCheatSystem';
 import { pvpArena } from '../systems/PvpArenaService';
@@ -1781,7 +1781,7 @@ private territory = TerritoryBonuses.getInstance();
     const mode: BoardMode = data.mode === 'pvp' ? 'pvp' : 'pve';
     const отказ = (code: BoardErrorCode) => {
       socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
-        ok: false, attackerWon: false, gold: 0, items: [], code,
+        ok: false, youWon: false, gold: 0, items: [], code,
       });
     };
 
@@ -1857,7 +1857,7 @@ private territory = TerritoryBonuses.getInstance();
     const ctx = ai.getContext(цель.id);
     if (!ctx || ctx.state === 'dead') {
       socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
-        ok: false, attackerWon: false, gold: 0, items: [], code: 'board_target_not_found',
+        ok: false, youWon: false, gold: 0, items: [], code: 'board_target_not_found',
       });
       return;
     }
@@ -1885,7 +1885,7 @@ private territory = TerritoryBonuses.getInstance();
 
     socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
       ok: true,
-      attackerWon: исход.won,
+      youWon: исход.won,
       // Золота и трофеев здесь нет: награда PvE приходит из rewardMonsterKill
       // и приходит отдельными пакетами опыта и добычи, как у обычного убийства.
       gold: 0,
@@ -1915,7 +1915,7 @@ private territory = TerritoryBonuses.getInstance();
     const жертва = await this.characterService.getCharacterById(цель.id).catch(() => null);
     if (!жертва) {
       socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
-        ok: false, attackerWon: false, gold: 0, items: [], code: 'board_target_not_found',
+        ok: false, youWon: false, gold: 0, items: [], code: 'board_target_not_found',
       });
       return;
     }
@@ -1924,7 +1924,7 @@ private territory = TerritoryBonuses.getInstance();
 
     const грузЖертвы = (await this.characterService.getInventory(цель.id).catch(() => []))
       .filter((з) => з.quantity > 0);
-    const добыча = boardLoot(исход, {
+    let добыча = boardLoot(исход, {
       mode: 'pvp',
       baseGold: Math.max(0, Number(жертва.gold ?? 0)),
       targetItems: грузЖертвы.map((з) => з.itemId),
@@ -1932,10 +1932,27 @@ private territory = TerritoryBonuses.getInstance();
     });
 
     if (исход.won) {
-      // Золото жертвы уходит атакующему вместе с множителем PvP из boardReward.
+      // Золото: сначала снять, потом выдать, и выдать ровно столько, сколько
+      // снято.
+      //
+      // ЧТО БЫЛО, И ЧТО ВЫШЛО ЖИВЫМ ЗАМЕРОМ (§193). Атакующему начислялось
+      // добыча.gold — золото жертвы, умноженное на 2.5, — и только потом у
+      // жертвы пытались это списать. У жертвы столько не было, списание падало
+      // и ошибка глоталась, а начисление уже прошло. Замер: жертва 500 → 500,
+      // атакующий +1250. Золото появлялось из воздуха.
+      //
+      // ТЕПЕРЬ. Сколько можно взять ограничено кошельком жертвы, и начисление
+      // идёт только после списания. Из чужого кошелька нельзя взять больше,
+      // чем в нём есть: никакой множитель этого не меняет.
       if (добыча.gold > 0) {
-        await this.characterService.addGoldReward(attacker.id, добыча.gold).catch(() => 0);
-        await this.characterService.spendGold(цель.id, добыча.gold).catch(() => undefined);
+        const забрать = boardGoldTake(добыча.gold, Number(жертва.gold ?? 0));
+        if (забрать > 0) {
+          await this.characterService.spendGold(цель.id, забрать).catch(() => undefined);
+          await this.characterService.addGoldReward(attacker.id, забрать).catch(() => 0);
+        }
+        // Клиенту уходит ровно то, что перешло. Иначе интерфейс напишет
+        // «+1250», а в кошельке прибавится 500.
+        добыча.gold = забрать;
       }
       // Груз переносится поштучно с указанием количества: список идентификаторов
       // без количеств списал бы у жертвы всё, что нашлось, и выдал бы атакующему
@@ -1948,19 +1965,15 @@ private territory = TerritoryBonuses.getInstance();
           .catch(() => undefined);
       }
     } else {
-      // Проигравший теряет треть СВОЕГО груза. Считаем по идентификаторам,
-      // как делает pvpCargoLoss, и добираем количества из инвентаря.
+      // Проигравший теряет треть СВОЕГО груза — по количеству. Раньше здесь
+      // стояло «снять найденный стек целиком», и pvpCargoLoss отдавал список
+      // идентификаторов, а не количеств: «треть» означала «всё». Замер (§193):
+      // при грузе 9 из 9 ушло 9, а не 3.
       const свой = (await this.characterService.getInventory(attacker.id).catch(() => []))
         .filter((з) => з.quantity > 0);
-      const потеряно = pvpCargoLoss(свой.map((з) => з.itemId));
+      const потеряно = pvpCargoLoss(свой.map((з) => ({ itemId: з.itemId, quantity: з.quantity })));
       if (потеряно.length > 0) {
-        await this.characterService.removeItems(
-          attacker.id,
-          потеряно.map((ид) => {
-            const стек = свой.find((з) => з.itemId === ид);
-            return { itemId: ид, qty: Math.max(1, Math.floor(стек?.quantity ?? 1)) };
-          }),
-        ).catch(() => undefined);
+        await this.characterService.removeItems(attacker.id, потеряно).catch(() => undefined);
       }
     }
 
@@ -1976,7 +1989,11 @@ private territory = TerritoryBonuses.getInstance();
     const сокетЖертвы = this.activePlayers.get(цель.id);
     сокетЖертвы?.emit(SOCKET_EVENTS.BOARDING_RESULT, {
       ok: true,
-      attackerWon: !исход.won,       // у жертвы «победил» тот, кто абордажировал
+      // Поле означает «победил тот, кому отправлено», и у жертвы это ровно
+      // обратное атакующему. Раньше поле называлось attackerWon и жертве
+      // отдавалось !исход.won — одно имя, два значения, и обе стороны держали
+      // это на комментариях. Теперь имя совпадает со значением.
+      youWon: !исход.won,
       gold: 0,
       items: [],
       targetNameRu: attacker.name,
@@ -1986,7 +2003,7 @@ private territory = TerritoryBonuses.getInstance();
 
     socket.emit(SOCKET_EVENTS.BOARDING_RESULT, {
       ok: true,
-      attackerWon: исход.won,
+      youWon: исход.won,
       gold: добыча.gold,
       items: исход.won ? добыча.items : [],
       targetNameRu: цель.nameRu,
