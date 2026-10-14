@@ -17,6 +17,7 @@ import {
   waterTexture, waterfallTexture, macroTexture, addMacroLayer,
   stoneNormalTexture, woodNormalTexture,
   stoneRoughnessTexture, woodRoughnessTexture,
+  stoneDisplacementTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1182,9 +1183,9 @@ function windowPane(
 // ── Материалы (с процедурными текстурами) ────────────────────
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
-  stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4) }),
+  stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4), displacementMap: stoneDisplacementTexture(4), displacementScale: 0.15, displacementBias: -0.07 }),
   sandstone: new THREE.MeshStandardMaterial({ color: 0xd8c298, roughness: 0.9, map: plasterTexture('#c9ab7c', 2) }),
-  sandstoneDark: new THREE.MeshStandardMaterial({ color: 0xb09468, roughness: 0.7, map: stoneTexture(6), normalMap: stoneNormalTexture(6), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(6) }),
+  sandstoneDark: new THREE.MeshStandardMaterial({ color: 0xb09468, roughness: 0.7, map: stoneTexture(6), normalMap: stoneNormalTexture(6), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(6), displacementMap: stoneDisplacementTexture(6), displacementScale: 0.12, displacementBias: -0.05 }),
   // Изразцовая глазурь — НЕ металл. И тут стояло metalness: 0.2,
 // то есть двадцать процентов отражения окрашивались собственным цветом и
   // считались металлическими. На сфере это даёт цветное пятно, которое

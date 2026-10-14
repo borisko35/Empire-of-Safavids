@@ -222,6 +222,26 @@ export function plasterTexture(base: string, repeat = 2): THREE.CanvasTexture {
   return toTexture(canvas, repeat);
 }
 
+/** Высота/смещение для камня: heightmap для displacement mapping (POM/vertex displacement) */
+export function stoneDisplacementTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  // heightmap: камни светлее (выше), швы темнее (ниже)
+  ctx.fillStyle = '#404040';
+  ctx.fillRect(0, 0, size, size);
+  const bh = 22, bw = 46;
+  for (let row = 0; row * bh < size; row++) {
+    const off = row % 2 ? bw / 2 : 0;
+    for (let col = -1; col * bw < size + bw; col++) {
+      const x = col * bw + off, y = row * bh;
+      const shade = 180 + Math.floor(Math.random() * 40);
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3);
+    }
+  }
+  return toTexture(_canvas as unknown as HTMLCanvasElement, repeat);
+}
+
 /** Шершавость для камня: верхние грани полированные, швы и боковины шершавые */
 export function stoneRoughnessTexture(repeat = 6): THREE.CanvasTexture {
   const size = 256;
