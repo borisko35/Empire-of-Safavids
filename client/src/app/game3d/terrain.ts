@@ -3077,16 +3077,28 @@ export function buildSettlements(scene: THREE.Scene): void {
     hay.castShadow = true;
     g.add(hay);
     addCollider(VILLAGE.x + 8, VILLAGE.z + 7, 1.7);
-    // Поля: вспаханные делянки с изгородью
+    // Поля: вспаханные делянки с бороздами и изгородью
     const fieldCols = [
-      new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1 }),
-      new THREE.MeshStandardMaterial({ color: 0x6e563a, roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: 0x4a5e32, roughness: 1 }),
+      new THREE.MeshStandardMaterial({ color: 0x5e4a30, roughness: 1 }),
     ];
     [[-14, 10, 0], [-14, 17, 1], [-6, 14, 0]].forEach(([fx, fz, fi], idx) => {
-      const field = new THREE.Mesh(new THREE.BoxGeometry(7, 0.15, 5), fieldCols[(idx + fi) % 2]);
-      field.position.set(fx, 0.08, fz);
+      // Основная делянка
+      const field = new THREE.Mesh(new THREE.BoxGeometry(7, 0.25, 5), fieldCols[(idx + fi) % 2]);
+      field.position.set(fx, 0.12, fz);
       field.receiveShadow = true;
       g.add(field);
+      // Борозды: тонкие гребни для объёма
+      for (let rz = -1.5; rz <= 1.5; rz += 1.0) {
+        const ridge = new THREE.Mesh(
+          new THREE.BoxGeometry(6.8, 0.12, 0.3),
+          new THREE.MeshStandardMaterial({ color: 0x3d4a2a, roughness: 1 }),
+        );
+        ridge.position.set(fx, 0.28, fz + rz);
+        ridge.receiveShadow = true;
+        g.add(ridge);
+      }
+      // Изгородь
       for (let px = -3; px <= 3; px += 2) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.9, 0.12), MAT.trunk);
         post.position.set(fx + px, 0.45, fz - 2.6);
@@ -5741,6 +5753,15 @@ function placeDecor(
       if (!m.isMesh) return;
       m.castShadow = true;
       m.receiveShadow = true;
+      // GLB-модели часто приезжают с alphaMode BLEND — three.js ставит
+      // material.transparent = true, и задние грани смешиваются с передними:
+      // сквозь стену видно небо. Для декора это всегда ошибка конвертера —
+      // принудительно ставим DoubleSide и убираем прозрачность.
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (mat) {
+        mat.transparent = false;
+        mat.side = THREE.DoubleSide;
+      }
     });
     scene.add(вещь);
   });
@@ -5885,6 +5906,14 @@ export function buildChurchRuin(scene: THREE.Scene): void {
       if (!m.isMesh) return;
       m.castShadow = true;
       m.receiveShadow = true;
+      // Прозрачность и дыры: модель приехала с alphaMode BLEND, из-за
+      // чего задние грани смешиваются с передними и сквозь стену видно
+      // небо. Принубительно ставим DoubleSide и убираем прозрачность.
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (mat) {
+        mat.transparent = false;
+        mat.side = THREE.DoubleSide;
+      }
     });
     scene.add(вещь);
   });
@@ -6348,6 +6377,13 @@ export function buildDesertTower(scene: THREE.Scene): void {
       if (!m.isMesh) return;
       m.castShadow = true;
       m.receiveShadow = true;
+      // Чёрная грань на фасаде: в модели инвертированные нормали на одной
+      // из сторон. DoubleSide рисует обе стороны полигона — грань становится
+      // видимой с любой стороны.
+      const mat = m.material as THREE.MeshStandardMaterial;
+      if (mat && !mat.transparent) {
+        mat.side = THREE.DoubleSide;
+      }
     });
     scene.add(башня);
   });
