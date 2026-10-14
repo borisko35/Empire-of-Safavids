@@ -118,6 +118,17 @@ export class CombatService {
     return character.stats.endurance * 1.5;
   }
 
+  /**
+   * Защита персонажа для внешних механик (абордаж).
+   *
+   * Публичный доступ к ТОЙ ЖЕ формуле, а не её копия. Копия разошлась бы при
+   * первой же правке баланса: бой считал бы по одной, палуба по другой, и
+   * «кто сильнее» означал бы разное в двух местах.
+   */
+  getDefenseFor(character: Character): number {
+    return this.getDefense(character);
+  }
+
   getClassSkills(characterClass: CharacterClass): SkillDefinition[] {
     return CLASS_SKILLS[characterClass];
   }

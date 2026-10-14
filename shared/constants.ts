@@ -158,6 +158,16 @@ export const SOCKET_EVENTS = {
   COMBAT_STANCE: 'combat:stance',
   /** Включение активного навыка профессии: Зикр, Тадж */
   SKILL_ACTIVATE: 'skill:activate',
+  /**
+   * Абордаж: начать заход и его исход (§191).
+   *
+   * Заход, а не раунд боя: исход считается целиком и приходит одним ответом,
+   * как и задумано в BoardingFight («подошёл, выбрал исход, получил»). События
+   * названы по действию, а не по результату, чтобы клиент не ждал отдельного
+   * «конец боя», которого не будет.
+   */
+  BOARDING_START: 'boarding:start',
+  BOARDING_RESULT: 'boarding:result',
 
   // Chat
   CHAT_MESSAGE: 'chat:message',

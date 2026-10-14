@@ -145,8 +145,10 @@ import { GameLoop } from '../systems/GameLoop';
 import { DatabaseService } from '../services/DatabaseService';
 import type { CharacterClass } from '../types/game.types';
 import { AISystem } from '../systems/AISystem';
-import { boardTargets } from '../systems/BoardingTargets';
-import { BOARD_RANGE } from '../systems/BoardingTypes';
+// Поиск целей абордажа: общий с сокетом, который начинает заход (§191).
+// Маршрут больше не зовёт boardTargets сам: иначе список для показа и список
+// для боя были бы двумя правдами об одном списке.
+import { найтиЦелиАбордажа } from '../systems/BoardingSearch';
 import { TerritoryBonuses, НЕЙТРАЛЬНО } from '../systems/TerritoryBonuses';
 
 const questService = new QuestService();
@@ -1832,41 +1834,15 @@ gameRouter.get('/boarding/targets', secureMiddleware, requireCharacterOwnership(
     const character = await characterService.getCharacterById(characterId).catch(() => null);
     if (!character) return res.status(404).json({ error: 'character_not_found' });
 
-    // Без лодки абордажировать нечего.
-    const boat = await boardingBoats.getActiveBoat(characterId);
-    if (!boat) return res.json({ targets: [], reason: 'board_no_boat' });
-
-    const вход = {
-      attackerId: characterId,
-      attackerLevel: character.level,
-      attackerRegion: character.region,
-      attackerShard: character.serverId ?? 'isfahan',
-      x: character.position?.x ?? 0,
-      z: character.position?.z ?? 0,
+    // Поиск целей — общий с сокетом, который начинает заход (§191). Маршрут
+    // показывает, сокет решает, и разойтись они не могут: логика одна.
+    const поиск = await найтиЦелиАбордажа(
+      { boats: boardingBoats, redis, characters: characterService, ai: boardingAi },
+      character,
       mode,
-    };
-
-    // Цели PvP — чужие лодки в той же зоне и шарде.
-    const игроки: { id: string; nameRu: string; level: number; boatId: string; x: number; z: number }[] = [];
-    if (mode === 'pvp') {
-      const вРегионе = await redis.getPlayersInRegion(вход.attackerShard, вход.attackerRegion).catch(() => [] as string[]);
-      for (const id of вРегионе.slice(0, 50) as string[]) {
-        if (id === characterId) continue;
-        const чужой = await characterService.getCharacterById(id).catch(() => null);
-        const чужaiЛодка = await boardingBoats.getActiveBoat(id);
-        if (!чужой || !чужaiЛодка) continue;
-        игроки.push({
-          id,
-          nameRu: чужой.name,
-          level: чужой.level,
-          boatId: чужaiЛодка.boatId,
-          x: чужой.position?.x ?? 0,
-          z: чужой.position?.z ?? 0,
-        });
-      }
-    }
-
-    res.json({ targets: boardTargets(boardingAi, { ...вход, mode }, игроки, BOARD_RANGE) });
+    );
+    if (!поиск.ok) return res.json({ targets: [], reason: поиск.code });
+    res.json({ targets: поиск.targets });
   })
 );
 
