@@ -828,6 +828,40 @@ export function начатьАбордаж(targetId: string, mode: 'pve' | 'pvp'
 }
 
 function wireSocket(): void {
+  // ── Абордаж (§191) ───────────────────────────────────────────────────
+  //
+  // Исход захода приходит ОДНИМ событием: заход считается целиком, а не
+  // раундами. Отдельного «конца боя» не будет, и ждать его не нужно.
+  //
+  // Код причины читается так же, как в combat:error. Молчание при отказе —
+  // худший вариант: игрок на воде нажал «абордаж» и не понял, почему ничего
+  // не произошло.
+  socket.on('boarding:result', (r: {
+    ok?: boolean;
+    attackerWon?: boolean;
+    gold?: number;
+    items?: string[];
+    code?: string;
+    targetNameRu?: string;
+    boardedBy?: string;
+  }) => {
+    if (!r?.ok) {
+      toast(t('panels.boarding_refused'), 'error');
+      return;
+    }
+    // У жертвы «победил» тот, кто абордажировал, поэтому её победа — это
+    // проигрыш атакующего. Читаем именно attackerWon, а не выводим по вкусу.
+    const имя = r.targetNameRu ?? '';
+    if (r.attackerWon) {
+      const добыча = (r.items?.length ?? 0) > 0
+        ? ` ${t('panels.boarding_loot')}: ${r.items!.join(', ')}`
+        : '';
+      toast(`${t('panels.boarding_won')}: ${имя} ${t('panels.boarding_gold')} ${r.gold ?? 0}${добыча}`, 'info');
+    } else {
+      toast(`${t('panels.boarding_lost')}: ${r.boardedBy ?? имя}`, 'error');
+    }
+  });
+
 
 
   socket.off();
@@ -1397,40 +1431,6 @@ function wireSocket(): void {
   });
 
   socket.on('combat:error', (данные: { code?: string; message?: string }) => {
-
-  // ── Абордаж (§191) ───────────────────────────────────────────────────
-  //
-  // Исход захода приходит ОДНИМ событием: заход считается целиком, а не
-  // раундами. Отдельного «конца боя» не будет, и ждать его не нужно.
-  //
-  // Код причины читается так же, как в combat:error. Молчание при отказе —
-  // худший вариант: игрок на воде нажал «абордаж» и не понял, почему ничего
-  // не произошло.
-  socket.on('boarding:result', (r: {
-    ok?: boolean;
-    attackerWon?: boolean;
-    gold?: number;
-    items?: string[];
-    code?: string;
-    targetNameRu?: string;
-    boardedBy?: string;
-  }) => {
-    if (!r?.ok) {
-      toast(t('panels.boarding_refused'), 'error');
-      return;
-    }
-    // У жертвы «победил» тот, кто абордажировал, поэтому её победа — это
-    // проигрыш атакующего. Читаем именно attackerWon, а не выводим по вкусу.
-    const имя = r.targetNameRu ?? '';
-    if (r.attackerWon) {
-      const добыча = (r.items?.length ?? 0) > 0
-        ? ` ${t('panels.boarding_loot')}: ${r.items!.join(', ')}`
-        : '';
-      toast(`${t('panels.boarding_won')}: ${имя} ${t('panels.boarding_gold')} ${r.gold ?? 0}${добыча}`, 'info');
-    } else {
-      toast(`${t('panels.boarding_lost')}: ${r.boardedBy ?? имя}`, 'error');
-    }
-  });
     // Сервер шлёт КОД причины, а не текст, и делает это в 21 месте из 23.
     // Раньше клиент читал поле message, которого там нет: получался undefined,
     // и на экране появлялась пустая плашка на 4.2 секунды. Молчали одиннадцать

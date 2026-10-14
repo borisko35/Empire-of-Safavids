@@ -10,6 +10,7 @@
 //   2. PvE не получает вторую награду поверх обычного пути убийства;
 //   3. оба режима доходят до ответа — симметрия, за которую стоит держаться.
 import { readFileSync } from 'node:fs';
+import * as ts from 'typescript';
 import { join } from 'node:path';
 import { stripComments } from './helpers/stripCode';
 import { resolveBoardFight, boardLoot, pvpCargoLoss } from '../systems/BoardingFight';
@@ -19,6 +20,38 @@ import type { BoardTarget } from '../systems/BoardingTypes';
 const корень = join(__dirname, '..', '..', '..');
 const читать = (p: string): string => readFileSync(join(корень, p), 'utf-8');
 const код = (p: string): string => stripComments(читать(p));
+
+/**
+ * Подписки socket.on, лежащие внутри тела другой подписки.
+ *
+ * Спросить у ПАРСЕРА, а не у глаз: вид подписки ничего не говорит о её форме.
+ * Отступ врёт в обе стороны — подписка в цикле стоит глубже, а вложенная может
+ * стоять на том же отступе, что и внешняя. Подсчёт скобок тоже врёт: он ломается
+ * о скобки внутри строк и шаблонных подстановок.
+ */
+function вложенныхПодписок(код: string): string[] {
+  const файл = ts.createSourceFile('world.ts', код, ts.ScriptTarget.Latest, true);
+  const плохие: string[] = [];
+  const обход = (узел: ts.Node, внутри: boolean): void => {
+    let здесь = внутри;
+    if (
+      ts.isCallExpression(узел)
+      && ts.isPropertyAccessExpression(узел.expression)
+      && узел.expression.name.text === 'on'
+      && ts.isIdentifier(узел.expression.expression)
+      && узел.expression.expression.text === 'socket'
+    ) {
+      if (здесь) {
+        const первый = узел.arguments[0];
+        плохие.push(первый && ts.isStringLiteralLike(первый) ? первый.text : '(без литерала)');
+      }
+      здесь = true;
+    }
+    ts.forEachChild(узел, (дитя) => обход(дитя, здесь));
+  };
+  обход(файл, false);
+  return плохие;
+}
 
 function must(условие: unknown, причина: string): asserts условие {
   if (!условие) throw new Error(причина);
@@ -69,6 +102,24 @@ describe('Абордаж: заход можно начать (§191)', () => {
     // В пакете читаются ТОЛЬКО идентификатор и режим.
     must(!/data\.(level|x|z|region)\b/.test(СОКЕТ),
       'обработчик читает уровень, позицию или регион из пакета: клиент может солгать');
+  });
+
+  it('подписка лежит на верхнем уровне, а не внутри другой подписки', () => {
+    // §191, вторая редакция. Обработчик boarding:result был вставлен сразу
+    // после строки `socket.on('combat:error', …)`, то есть ВНУТРИ её тела.
+    // Компилятор доволен, бандл собран, строка события в нём есть — и подписка
+    // не создаётся никогда, потому что не наступает ошибка боя.
+    //
+    // Проверка общая для всех событий, а не только абордажа: подписка внутри
+    // подписки — всегда ошибка, и всегда молчаливая.
+    const строки = читать('client/src/app/world.ts').split('\n');
+    const начало = строки.findIndex((l) => l.startsWith('function wireSocket'));
+    must(начало >= 0, 'wireSocket не найден на клиенте');
+
+    must(вложенныхПодписок(читать('client/src/app/world.ts')).length === 0,
+      'подписка socket.on лежит внутри тела другой подписки: она не создастся, '
+      + 'пока внешняя не сработает. Компилятор такое пропускает, бандл собирается, '
+      + 'и строка события в нём есть — а подписки нет.');
   });
 
   it('PvE не получает вторую награду поверх обычного пути убийства', () => {
