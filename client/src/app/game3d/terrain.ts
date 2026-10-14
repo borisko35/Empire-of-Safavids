@@ -16,6 +16,7 @@ import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterTexture, waterfallTexture, macroTexture, addMacroLayer,
   stoneNormalTexture, woodNormalTexture,
+  stoneRoughnessTexture, woodRoughnessTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1181,9 +1182,9 @@ function windowPane(
 // ── Материалы (с процедурными текстурами) ────────────────────
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
-  stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.95, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2) }),
+  stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4) }),
   sandstone: new THREE.MeshStandardMaterial({ color: 0xd8c298, roughness: 0.9, map: plasterTexture('#c9ab7c', 2) }),
-  sandstoneDark: new THREE.MeshStandardMaterial({ color: 0xb09468, roughness: 0.9, map: stoneTexture(6) }),
+  sandstoneDark: new THREE.MeshStandardMaterial({ color: 0xb09468, roughness: 0.7, map: stoneTexture(6), normalMap: stoneNormalTexture(6), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(6) }),
   // Изразцовая глазурь — НЕ металл. И тут стояло metalness: 0.2,
 // то есть двадцать процентов отражения окрашивались собственным цветом и
   // считались металлическими. На сфере это даёт цветное пятно, которое
@@ -1192,7 +1193,7 @@ const MAT = {
   // невысокая шероховатость за глянец.
   tealDome: new THREE.MeshStandardMaterial({ color: 0x35a0a0, roughness: 0.3, metalness: 0, map: mosaicTexture(4) }),
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7 }),
-  wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 1, map: woodTexture(1), normalMap: woodNormalTexture(1), normalScale: new THREE.Vector2(0.8, 0.8) }),
+  wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.6, map: woodTexture(1), normalMap: woodNormalTexture(1), normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: woodRoughnessTexture(1) }),
   foliage: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1 }),
   foliageDark: new THREE.MeshStandardMaterial({ color: 0x3d5a32, roughness: 1 }),
   foliageLight: new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1 }),

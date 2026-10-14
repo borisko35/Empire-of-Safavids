@@ -222,6 +222,30 @@ export function plasterTexture(base: string, repeat = 2): THREE.CanvasTexture {
   return toTexture(canvas, repeat);
 }
 
+/** Шершавость для камня: верхние грани полированные, швы и боковины шершавые */
+export function stoneRoughnessTexture(repeat = 6): THREE.CanvasTexture {
+  const size = 256;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  const bh = 22, bw = 46;
+  for (let row = 0; row * bh < size; row++) {
+    const off = row % 2 ? bw / 2 : 0;
+    for (let col = -1; col * bw < size + bw; col++) {
+      const x = col * bw + off, y = row * bh;
+      // верх грани — полированный (светлый = низкая шершавость)
+      ctx.fillStyle = `rgb(${200 + Math.floor(Math.random() * 40)},${200 + Math.floor(Math.random() * 40)},${200 + Math.floor(Math.random() * 40)})`;
+      ctx.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3);
+      // швы — шершавые (тёмный = высокая шершавость)
+      ctx.fillStyle = 'rgba(60,60,60,0.8)';
+      ctx.fillRect(x + 1.5, y + bh - 3, bw - 3, 2); // нижний шов
+      ctx.fillStyle = 'rgba(60,60,60,0.8)';
+      ctx.fillRect(x + 1.5, y + 1.5, 2, bh - 3); // левый шов
+    }
+  }
+  return toTexture(_canvas as unknown as HTMLCanvasElement, repeat);
+}
+
 /** Нормальная карта для каменной кладки: выступающие камни, углублённые швы */
 export function stoneNormalTexture(repeat = 6): THREE.CanvasTexture {
   const size = 256;
@@ -353,6 +377,44 @@ function heightToNormal(heightData: Uint8ClampedArray, size: number, strength = 
   }
   ctx.putImageData(img, 0, 0);
   return canvas;
+}
+
+/** Шершавость для дерева: по волокнам — гладче, поперек — шерше */
+export function woodRoughnessTexture(repeat = 2): THREE.CanvasTexture {
+  const size = 128;
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  const plank = size / 4;
+  for (let i = 0; i < 4; i++) {
+    const base = 140 + Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgb(${base},${base},${base})`;
+    ctx.fillRect(0, i * plank + 1, size, plank - 2);
+    // волокна — тёмнее = шерше поперек, светлее = гладче вдоль
+    ctx.strokeStyle = 'rgba(40,40,40,0.6)';
+    for (let g = 0; g < 5; g++) {
+      ctx.beginPath();
+      const y = i * plank + 3 + Math.random() * (plank - 6);
+      ctx.moveTo(0, y);
+      for (let x = 0; x <= size; x += 16) ctx.lineTo(x, y + Math.sin(x * 0.12 + i) * 1.6);
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    }
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  // инвертируем: в roughnessMap яркость = шершавость. Волокна = тёмнее = гладче
+  const data = img.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const val = data[i];
+    // инвертируем: волокна (тёмные) -> низкая шершавость
+    data[i] = data[i + 1] = data[i + 2] = 255 - Math.floor((255 - val) * 0.6);
+    data[i + 3] = 255;
+  }
+  const out = document.createElement('canvas');
+  out.width = size;
+  out.height = size;
+  out.getContext('2d')!.putImageData(img, 0, 0);
+  return toTexture(out, repeat);
 }
 
 /** Нормальная карта для дерева: борозды между досками, волокна */
