@@ -60,6 +60,8 @@ describe('Ссылки на игру ведут на существующее и
     //
     // Теперь проверяем то, что игрок видит или что исполняется при выкладке:
     // страницы сайта, скрипты выкладки и тексты публикации.
+    // ВСЕГДА В РЕПОЗИТОРИИ. Проверяются все без исключения: отсутствие любого
+    // из них означает, что список разошёлся с диском.
     const ОТДАЁТСЯ = [
       'client/web/index.html',
       'client/web/forum.html',
@@ -67,18 +69,34 @@ describe('Ссылки на игру ведут на существующее и
       'client/web/trailer.html',
       'client/web/sitemap.xml',
       'client/web/robots.txt',
-      'tools/publish-instructions.md',
       'tools/gamejolt-instructions.md',
       'tools/itch-reddit-draft.md',
+      'tools/build-publish-instructions.js',
       'tools/deploy-vps.py',
       'tools/deploy.sh',
       'tools/deploy-preflight.sh',
       'tools/build-trailer.sh',
     ];
+    // ГЕНЕРИРУЕТСЯ ПОД ИМЯ ВЛАДЕЛЬЦА, В РЕПОЗИТОРИИ ЕГО НЕТ (это решение
+    // .gitignore, а не случайность). Проверяются, когда файл есть, и не
+    // роняют набор, когда его нет: в CI свежего клона такого файла не будет,
+    // и требование существования валило бы проверку целиком.
+    //
+    // Раньше файл стоял в списке «обязательных», и набор падал на чистом
+    // клоне. Текст инструкции при этом проверяется по своему генератору,
+    // который в репозитории всегда.
+    const ЕСЛИ_ЕСТЬ = [
+      'tools/publish-instructions.md',
+    ];
     const виновники: string[] = [];
     for (const файл of ОТДАЁТСЯ) {
       const путь = join(корень, файл);
       must(existsSync(путь), `файл ${файл} исчез: список отдаваемого разошёлся с диском`);
+      if (readFileSync(путь, 'utf-8').includes('45.32.220.58')) виновники.push(файл);
+    }
+    for (const файл of ЕСЛИ_ЕСТЬ) {
+      const путь = join(корень, файл);
+      if (!existsSync(путь)) continue;
       if (readFileSync(путь, 'utf-8').includes('45.32.220.58')) виновники.push(файл);
     }
     must(
