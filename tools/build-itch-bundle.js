@@ -155,10 +155,10 @@ async function проверить(папка, подпись) {
 // Пределы площадки проверяются ДО запросов: если связка не влезает,
 // незачем поднимать сервер и стучаться по адресам, которых не будет.
 const пред = проверитьПределы(папка);
-console.log('  predely itch.io: ' + пред.список.length + ' failov, '
-  + (пред.всего / 1048576).toFixed(1) + ' MB raspakovannogo');
+  console.log('  пределы itch.io: ' + пред.список.length + ' файлов, '
+  + (пред.всего / 1048576).toFixed(1) + ' МБ распакованного');
 for (const нарушение of пред.нарушения) {
-  console.log('  NET  predel: ' + нарушение);
+  console.log('  NET  предел: ' + нарушение);
   плохо++;
 }
   const html = fs.readFileSync(path.join(папка, 'index.html'), 'utf8');
