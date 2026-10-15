@@ -82,7 +82,7 @@ describe('Цифры в карте соответствуют репозитор
     // 317 → 318 при появлении skyEnvironment.test.ts (§204).
 // 318 → 319 при deployBrowserCheck (§208), 319 → 320 при dataTextureColorSpace (§209), 320 → 321 при waterWavesInMetres (§210), 321 → 322 при deferredGBuffer (§211).
     expect({ файлов: файлы.length, число_в_карте: вКарте === null ? null : Number(вКарте[1]) })
-      .toEqual({ файлов: 322, число_в_карте: 322 });
+      .toEqual({ файлов: 323, число_в_карте: 323 });
   });
 
   it('ключи переводов совпадают во всех трёх языках', () => {
