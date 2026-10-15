@@ -1,0 +1,283 @@
+import * as THREE from 'three';
+
+/**
+ * G-buffer: что forward-проход выбрасывает, а экранному освещению нужно.
+ *
+ * ЧТО ЗДЕСЬ ОТЛОЖЕНО, А ЧТО НЕТ - И ПОЧЕМУ ТАК.
+ *
+ * Настоящий отложенный рендер - это когда геометрия рисует в буфер одни
+ * albedo/normal/depth, а освещение считает полноэкранный шейдер. Здесь так и
+ * сделано для экранных эффектов: нормали (с учётом карт нормалей!), глубина,
+ * шероховатость и металличность пишутся в MRT и уходят в AO и отражения.
+ *
+ * А освещение остаётся three'овским forward. И это не недоделка, а решение,
+ * и вот почему. Тени в игре — VSM (world3d.ts, THREE.VSMShadowMap), и в коде
+ * уже есть комментарий, что VSM-тени на воде и металле ведут себя скверно и
+ * дают чёрные пятна. Чтобы перенести их в свой шейдер, пришлось бы заново
+ * написать выборку VSM-карты со всеми её блэд-хаками, плюс GGX, плюс IBL по
+ * PMREM-карте неба, плюс полуфакельное освещение. Это около пятисот строк GLSL,
+ * результат которых нельзя увидеть глазом и нечем проверить, кроме как «не чёрно
+ * ли». Три раза такого уже хватает.
+ *
+ * Поэтому: геометрия и свет — как были, проверены и работают. Отложенными
+ * стали атрибуты, которые forward-проход иначе выбрасывает, и по которым
+ * экранные эффекты считались вслепую (SSAOPass рендерил сцену ВТОРОЙ раз
+ * подменным материалом, чтобы получить те же нормали - теперь берёт настоящие).
+ *
+ * ЧЕТЫРЕ ВЛОЖЕНИЯ, А НЕ ТРИ. Канал 0 занимает three: он пишет туда освещённый
+ * цвет, и это в точности то, что раньше отдавал RenderPass. Каналы 1..3 пишем
+ * мы. Отказываться от канала 0 нельзя: при GLSL3 three не объявляет выход сам
+ * (WebGLProgram.js, строка 819), а канал 0 всё равно создаётся движком.
+ */
+
+export const G_ALBEDO_ROUGH = 1;
+export const G_NORMAL_METAL = 2;
+export const G_EMISSIVE_MASK = 3;
+
+/** Сколько плиток сэмплирует AO на пиксель. Больше - мягче и дороже. */
+export const AO_SAMPLES = 12;
+
+export class GBuffer {
+  readonly target: THREE.WebGLRenderTarget;
+  /** Глубина нужна AO: без неё соседей не найти. */
+  readonly depthTexture: THREE.DepthTexture;
+  /** Карта AO прошлого кадра: применяется в геометрии, считается в конце. */
+  readonly aoTarget: THREE.WebGLRenderTarget;
+
+  private width: number;
+  private height: number;
+
+  constructor(width: number, height: number) {
+    this.width = Math.max(1, width);
+    this.height = Math.max(1, height);
+
+    this.depthTexture = new THREE.DepthTexture(this.width, this.height);
+    // UnsignedIntType, а не Float: он работает везде, а точности хватает с
+    // запасом - AO нужен знак «ближе/дальше», а не абсолютная глубина.
+    this.depthTexture.type = THREE.UnsignedIntType;
+    this.depthTexture.minFilter = THREE.NearestFilter;
+    this.depthTexture.magFilter = THREE.NearestFilter;
+
+    this.target = new THREE.WebGLRenderTarget(this.width, this.height, {
+      count: 4,
+      type: THREE.HalfFloatType,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: true,
+      depthTexture: this.depthTexture,
+      // Без этого каналы пишутся с альфой, а альфа нужна нам как данные.
+      stencilBuffer: false,
+    });
+    // Ближние октавы AO читаются в полноэкранном шейдере, где нелинейная
+    // фильтрация даёт ореол на краях. Линейная - честная, а размытие AO
+    // делается отдельным проходом с нормальным блендингом.
+    for (const текстура of this.target.textures) {
+      текстура.generateMipmaps = false;
+    }
+
+    this.aoTarget = new THREE.WebGLRenderTarget(this.width, this.height, {
+      type: THREE.HalfFloatType,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+      stencilBuffer: false,
+    });
+  }
+
+  /** Равномерное разрешение: полноразмерный AO стоит дороже, чем он заметен. */
+  static aoSize(width: number, height: number, делитель = 2): { w: number; h: number } {
+    return { w: Math.max(1, Math.floor(width / делитель)), h: Math.max(1, Math.floor(height / делитель)) };
+  }
+
+  setSize(width: number, height: number): void {
+    const w = Math.max(1, Math.floor(width));
+    const h = Math.max(1, Math.floor(height));
+    if (w === this.width && h === this.height) return;
+    this.width = w;
+    this.height = h;
+    this.target.setSize(w, h);
+    const { w: aw, h: ah } = GBuffer.aoSize(w, h);
+    this.aoTarget.setSize(aw, ah);
+    this.depthTexture.image.width = w;
+    this.depthTexture.image.height = h;
+    this.depthTexture.needsUpdate = true;
+  }
+
+  get size(): { width: number; height: number } {
+    return { width: this.width, height: this.height };
+  }
+
+  /** Текстура канала по номеру вложения. */
+  channel(индекс: number): THREE.Texture {
+    return this.target.textures[индекс];
+  }
+
+  /** Текстура AO, которую надо вставить в материалы при сборке сцены. */
+  get aoTexture(): THREE.Texture {
+    return this.aoTarget.texture;
+  }
+
+  dispose(): void {
+    this.target.dispose();
+    this.aoTarget.dispose();
+    this.depthTexture.dispose();
+  }
+}
+
+// ── Патч материалов ──────────────────────────────────────────────────
+
+const УЖЕ_ПРОШИТЫ = new WeakSet<THREE.Material>();
+
+/** Сколько шейдеров реально прошито при компиляции. См. patchMaterial. */
+let прошитоПриКомпиляции = 0;
+
+export function сколькоПрошито(): number {
+  return прошитоПриКомпиляции;
+}
+
+/**
+ * Объявления каналов. Ставятся в начало тела фрагментного шейдера.
+ * Канал 0 объявляет three сам (pc_fragColor) - мы занимаем 1, 2 и 3.
+ */
+const ОБЪЯВЛЕНИЯ = `
+layout(location = 1) out vec4 gAlbedoRough;
+layout(location = 2) out vec4 gNormalMetal;
+layout(location = 3) out vec4 gEmissiveMask;
+`;
+
+/**
+ * Запись каналов. Вставляется перед <opaque_fragment>: к этому месту уже
+ * посчитаны diffuseColor (карта цвета), normal (карты нормалей), roughnessFactor,
+ * metalnessFactor и totalEmissiveRadiance.
+ *
+ * Нормаль кладётся в пространстве взгляда: three считает normal именно так, и
+ * AO смотрит в пространстве взгляда - иначе пришлось бы пересчитывать её в
+ * каждой точке.
+ */
+const ЗАПИСЬ = `
+  gAlbedoRough = vec4(diffuseColor.rgb, roughnessFactor);
+  gNormalMetal = vec4(normalize(normal) * 0.5 + 0.5, metalnessFactor);
+  gEmissiveMask = vec4(totalEmissiveRadiance, 1.0);
+#include <opaque_fragment>
+`;
+
+/**
+ * Подключает AO из карты прошлого кадра.
+ *
+ * Замена ровно <aomap_fragment>: в three этот кусок умножает
+ * reflectedLight.indirectDiffuse на затемнение, и стоит он ПОСЛЕ
+ * lights_fragment_end - то есть ровно там, где AO и должен действовать.
+ * Затенение от прямого солнца и от фонарей AO не трогает, и это правильно:
+ * тень от забора прячет от солнца, но не от неба.
+ */
+const ЗАПИСЬ_AO = `
+  #include <aomap_fragment>
+  float eosAo = texture2D(uEosAoMap, gl_FragCoord.xy * uEosAoInvRes).r;
+  reflectedLight.indirectDiffuse *= eosAo;
+  reflectedLight.indirectSpecular *= mix(1.0, eosAo, 0.6);
+`;
+
+const АО_ОБЪЯВЛЕНИЯ = `
+uniform sampler2D uEosAoMap;
+uniform vec2 uEosAoInvRes;
+`;
+
+/** Есть ли в шейдере всё, от чего патч зависит. */
+function подходит(фрагмент: string): boolean {
+  return фрагмент.includes('#include <opaque_fragment>')
+    && фрагмент.includes('#include <aomap_fragment>');
+}
+
+/**
+ * Прошивает материал: он начинает писать каналы G-buffer и брать AO из карты.
+ *
+ * Кто не подходит - не прошивается и не считается отложенным: пропуск лучше,
+ * чем шить наугад. Такие материалы перечислены в отчёте, и их видно.
+ */
+export function patchMaterial(
+  material: THREE.Material,
+  aoTexture: THREE.Texture,
+  aoInverseResolution: THREE.Vector2,
+): boolean {
+  if (УЖЕ_ПРОШИТЫ.has(material)) return true;
+
+  const расширяемый = material as THREE.Material & {
+    onBeforeCompile?: (shader: THREE.WebGLProgramParametersWithUniforms, renderer: unknown) => void;
+    customProgramCacheKey?: () => string;
+  };
+  if (typeof расширяемый.onBeforeCompile !== 'function' && !('isShaderMaterial' in material)) {
+    return false;
+  }
+
+  const ссылки: Record<string, { value: unknown }> = {};
+
+  расширяемый.onBeforeCompile = (shader) => {
+    if (!подходит(shader.fragmentShader)) return;
+    // Счётчик растёт в момент настоящей компиляции, а не при обходе сцены:
+    // обход говорит «материал отдан», а здесь - «шейдер реально прошит».
+    // Разница видна в отчёте и ловит материалы без нужных include'ов.
+    прошитоПриКомпиляции++;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\n${ОБЪЯВЛЕНИЯ}\n${АО_ОБЪЯВЛЕНИЯ}`)
+      .replace('#include <aomap_fragment>', ЗАПИСЬ_AO.trim())
+      .replace('#include <opaque_fragment>', ЗАПИСЬ);
+    shader.uniforms.uEosAoMap = { value: aoTexture };
+    shader.uniforms.uEosAoInvRes = { value: aoInverseResolution };
+    // Ссылки на uniform'ы: при смене размера окна инверс разрешения надо
+    // обновить во всех материалах, а до uniform'ов готовой программы нельзя
+    // добраться снаружи. Без этой ссылки окно после ресайза читало бы AO
+    // не по тем координатам.
+    ссылки.uEosAoMap = shader.uniforms.uEosAoMap as { value: unknown };
+    ссылки.uEosAoInvRes = shader.uniforms.uEosAoInvRes as { value: unknown };
+  };
+
+  (material as THREE.Material & { userData: Record<string, unknown> }).userData.eosAoUniforms = ссылки;
+
+  // Ключ обязан отличаться от пустого: иначе three переиспользует программу
+  // от материала БЕЗ патча, и каналы G-buffer останутся не заполнены - молча,
+  // без единой ошибки. Это ровно тот класс поломки, который мы уже ловили.
+  расширяемый.customProgramCacheKey = () => 'eos-gbuffer-ao';
+
+  УЖЕ_ПРОШИТЫ.add(material);
+  material.needsUpdate = true;
+  return true;
+}
+
+export interface PatchReport {
+  /** Сколько уникальных материалов нашли. */
+  всего: number;
+  /** Сколько прошито. */
+  прошито: number;
+  /** Имена тех, что остались forward-only. */
+  мимо: string[];
+}
+
+/**
+ * Прошивает всю сцену. Вызывается один раз после того, как мир построен:
+ * позже появятся новые меши, и они снова окажутся без каналов.
+ */
+export function patchScene(
+  scene: THREE.Object3D,
+  aoTexture: THREE.Texture,
+  aoInverseResolution: THREE.Vector2,
+): PatchReport {
+  const отчёт: PatchReport = { всего: 0, прошито: 0, мимо: [] };
+  const уникальные = new Set<THREE.Material>();
+
+  scene.traverse((объект) => {
+    const меш = объект as THREE.Mesh & { material?: THREE.Material | THREE.Material[] };
+    if (!меш.material) return;
+    const материалы = Array.isArray(меш.material) ? меш.material : [меш.material];
+    for (const материал of материалы) {
+      if (typeof материал === 'string') continue;
+      уникальные.add(материал);
+    }
+  });
+
+  for (const материал of уникальные) {
+    отчёт.всего++;
+    if (patchMaterial(материал, aoTexture, aoInverseResolution)) отчёт.прошито++;
+    else отчёт.мимо.push(`${материал.type} «${материал.name || 'без имени'}»`);
+  }
+  return отчёт;
+}

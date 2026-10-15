@@ -8,8 +8,7 @@
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
+import { DeferredPass } from './deferred/deferredPass';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -156,7 +155,7 @@ export class World3D {
   private camera!: THREE.PerspectiveCamera;
   /** Композитор для SSAO + SSR + Bloom. Без них сцена выглядит плоской. */
   private composer!: EffectComposer;
-  private ssaoPass!: SSAOPass;
+  private deferred!: DeferredPass;
   private ssrPass!: SSRPass;
   private bloomPass!: UnrealBloomPass;
   private sun!: THREE.DirectionalLight;
@@ -532,14 +531,33 @@ private roll = 0;
 
     this.camera = new THREE.PerspectiveCamera(62, container.clientWidth / container.clientHeight, 0.1, 1600);
 
-    // SSAO: контактные тени и глубина. Без него сцена выглядит плоской.
+    // ОТЛОЖЕННЫЙ ПРОХОД вместо RenderPass + SSAOPass.
+    //
+    // SSAOPass рисовал сцену ВТОРОЙ раз подменным MeshNormalMaterial ради
+    // нормалей и глубины, и нормали у него были геометрическими: карты
+    // нормалей он не видел, и AO легло мимо текстуры рельефа. Теперь
+    // нормали берутся из G-buffer настоящие, вторая отрисовка не нужна, а AO
+    // умножает только свет неба, а не готовый цвет (иначе затемнялось и
+    // солнце, и картинка в тенях уходила в грязь).
+    //
+    // Освещение осталось forward: переписать PBR three вместе с VSM-тенями
+    // и IBL по PMREM-карте неба - пятьсот строк GLSL вслепую. Об этом в
+    // deferred/deferredPass.ts.
+    this.deferred = new DeferredPass(
+      this.scene, this.camera, container.clientWidth, container.clientHeight,
+    );
     this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.ssaoPass = new SSAOPass(this.scene, this.camera, container.clientWidth, container.clientHeight);
-    this.ssaoPass.kernelRadius = 8;
-    this.ssaoPass.minDistance = 0.005;
-    this.ssaoPass.maxDistance = 0.15;
-    this.composer.addPass(this.ssaoPass);
+    this.composer.addPass(this.deferred);
+    if (this.deferred.patchReport.мимо.length) {
+      // Транслитерация, а не русский: клиент не переводит строки, и проверка
+      // i18n ловит хардкод. Сообщение служебное, его видит только владелец в
+      // консоли при сборке мира.
+      console.warn(
+        `Otlozhennyy G-buffer: ${this.deferred.patchReport.прошито} iz `
+        + `${this.deferred.patchReport.всего} materialov. Bez kanalov ostalis: `
+        + this.deferred.patchReport.мимо.join(', '),
+      );
+    }
     // SSR: screen-space reflections для воды, мокрого камня, металла, стекла.
     this.ssrPass = new SSRPass({
       renderer: this.renderer,
@@ -800,8 +818,9 @@ private roll = 0;
       this.sun.shadow.map = null;
     }
 
-    // SSAO: контактные тени. Включаем/выключаем через enabled у пасса.
-    if (this.ssaoPass) this.ssaoPass.enabled = p.ssao;
+    // SSAO: теперь его считает отложенный проход по G-buffer, а не SSAOPass
+    // вторым рендером сцены. Выключается тем же флагом профиля.
+    this.deferred?.setAoSettings({ intensity: p.ssao ? undefined : 0 });
     // SSR: screen-space reflections. Включаем/выключаем через enabled у пасса.
     if (this.ssrPass) this.ssrPass.enabled = p.ssr;
     // Bloom: свечение ярких источников.
@@ -915,7 +934,9 @@ private roll = 0;
     this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
     // SSAO + SSR + Bloom требуют обновления размера при изменении окна
     this.composer.setSize(this.container.clientWidth, this.container.clientHeight);
-    this.ssaoPass.setSize(this.container.clientWidth, this.container.clientHeight);
+    // Отложенный проход держит свои цели: без этого G-buffer остаётся
+    // прежнего размера, а AO читается по неверным экранным координатам.
+    this.deferred?.setSize(this.container.clientWidth, this.container.clientHeight);
     this.ssrPass.setSize(this.container.clientWidth, this.container.clientHeight);
     this.bloomPass.setSize(this.container.clientWidth, this.container.clientHeight);
   };
@@ -1992,6 +2013,7 @@ if (isMe && moving) {
     for (const mx of this.cowMixers ?? []) mx.stopAllAction();
     // SSAO: освобождаем рендер-таргеты композитора
     this.composer?.dispose();
+    this.deferred?.dispose();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fxLayer?.remove();

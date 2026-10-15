@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Стенд отложенного рендера</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, monospace; background: #111; color: #ddd; padding: 16px; }
+  canvas { border: 1px solid #444; display: block; }
+  #итог { white-space: pre; margin-top: 12px; }
+  .плохо { color: #ff6b6b; }
+  .хорошо { color: #7bd88f; }
+</style>
+</head>
+<body>
+<div id="итог">считаю…</div>
+<script type="module" src="./deferred-harness.ts"></script>
+</body>
+</html>
