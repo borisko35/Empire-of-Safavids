@@ -40,6 +40,10 @@ function must(условие: unknown, причина: string): asserts усло
 
 const HUD = читать('client/src/app/hud.ts');
 const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ВОДА = читать('shared/water.ts');
+// WORLD_HALF живёт в shared/water.ts: вода про ширину мира знает (линия
+// берега ищется по всей ширине), а waterWaves.ts не должен импортировать
+// terrain.ts — тот сам импортирует waterWaves, и получился бы круг.
 
 // Холст карты: зашит в разметке. Читаем, а не берём из памяти - иначе
 // проверка считала бы по канвасу, которого в игре уже нет.
@@ -49,8 +53,15 @@ must(размер !== null, 'не нашёл canvas карты мира в ра�
 const W = Number(размер![1]);
 const H = Number(размер![2]);
 
-const HАЛФ = Number(/export const WORLD_HALF = (\d+);/.exec(ТЕРРЕЙН)?.[1]);
-must(Number.isFinite(HАЛФ) && HАЛФ > 0, 'не прочитал WORLD_HALF из terrain.ts — проверка ничего не меряет');
+const HАЛФ = Number(/export const WORLD_HALF = (\d+);/.exec(ВОДА)?.[1]);
+must(
+  Number.isFinite(HАЛФ) && HАЛФ > 0,
+  'не прочитал WORLD_HALF из shared/water.ts — проверка ничего не меряет',
+);
+must(
+  /export \{[^}]*WORLD_HALF[^}]*\}/.test(ТЕРРЕЙН),
+  'terrain.ts не выгружает WORLD_HALF: потребители из «./terrain» сломаются молча',
+);
 const масштаб = Math.min(W, H) / (HАЛФ * 2);
 const toPx = (wx: number, wz: number) => ({ x: W / 2 + wx * масштаб, y: H / 2 + wz * масштаб });
 

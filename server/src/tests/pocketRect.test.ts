@@ -42,10 +42,13 @@ function прямоугольник(): { x0: number; x1: number; z0: number; z1:
   return { x0: Number(m[1]), x1: Number(m[2]), z0: Number(m[3]), z1: Number(m[4]) };
 }
 
-/** Край мира берём из terrain.ts, а не записываем числом: край уже двигался. */
+/** Край мира берём из кода, а не записываем числом: край уже двигался.
+ *  Источник — shared/water.ts: WORLD_HALF переехал туда из terrain.ts,
+ *  потому что вода про ширину мира знает, а waterWaves.ts не должен
+ *  импортировать terrain.ts — получился бы круг импортов. */
 function крайМира(): number {
-  const m = /export const WORLD_HALF = (\d+)/.exec(читать('client/src/app/game3d/terrain.ts'));
-  must(m !== null, 'не нашёл WORLD_HALF в terrain.ts');
+  const m = /export const WORLD_HALF = (\d+)/.exec(читать('shared/water.ts'));
+  must(m !== null, 'не нашёл WORLD_HALF в shared/water.ts');
   return Number(m[1]);
 }
 

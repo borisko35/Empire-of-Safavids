@@ -23,16 +23,14 @@ import {
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
 import { безМёртвыхДорожек } from './realRig';
+import { WAVE_GLSL, WATER_GRIDS, gradedAxis, seaShoreProfile, type WaterBody } from './waterWaves';
 
-// Половина стороны мира. Мир 6350x6350 единиц - в семь раз больше прежних
-// 2400x2400 по площади, как и просили: (6350/2400)^2 = 7.000.
-//
-// ЧИСЛО ВЗЯТО ИЗ КОРНЯ, А НЕ ОКРУГЛЕНО. 3175 = 1200 * sqrt(7) = 3174.9.
-// Круглое 3200 дало бы (6400/2400)^2 = 7.111 - и проверка «мир стал в семь
-// раз больше» перестала бы проверять что-либо. Первую версию этого
-// комментария я написал с числом 7.005: арифметика была неверна,
-// (6350/2400)^2 равно 7.000, и ошибку поймала проверка, а не глаз.
-export const WORLD_HALF = 3175;         // половина стороны мира
+// Половина стороны мира живёт в shared/water.ts, потому что вода про неё тоже
+// знает: линия берега моря ищется по всей ширине мира, и waterWaves.ts не
+// должен импортировать terrain.ts - тот сам импортирует waterWaves, и получился
+// бы круг. Само число и его обоснование - в water.ts, здесь оно выгружается,
+// так что все существующие потребители ничего не заметили.
+export { WORLD_HALF };
 
 /** Половина стороны СТАРОГО мира: 2400x2400. Граница, за которой
  *  начинается рельеф. Внутри него мир сделан руками и не трогается. */
@@ -108,7 +106,7 @@ export const CAMP = { x: 167, z: 132, radius: 16 }; // Полевой лагер
 // море появилось в клиенте, а сервер о нём не узнал. Реэкспорт нужен для
 // существующих потребителей, которые берут LAKE и реки из terrain.ts.
 import {
-  LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
+  LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS, WORLD_HALF,
   seaMask, seaIslandAt, waterMask, isWater, isDeepWater, canFloatAt,
   bridgeDeckY, BRIDGE_DECK_END, BRIDGE_SPAN,
 } from '../../../../shared/water';
@@ -1183,149 +1181,272 @@ function windowPane(
 
 // ── Материалы (с процедурными текстурами) ────────────────────
 // ── Water shader sources (extracted for TS parsing) ──────────────
+//
+// ВОЛНЫ ИЗМЕРЯЮТСЯ В МЕТРАХ. Шейдер берёт координату из vBase.xz, то есть из
+// мирового положения точки, а не из uv. До 15.10.2026 он брал uv (0..1 на
+// каждое тело) и складывал смещение в мировые метры: «9 метров» на озере
+// означали 2720 м, то есть всё озеро помещалось в одну волну и выглядело
+// медленно кренящейся плитой.
+//
+// ГЛУБИНА СЧИТАЕТСЯ ОТ БЕРЕГА, А НЕ ОТ САМОЙ СЕБЯ. Было
+// `depth = uWaterLevel - vWorldPos.y`, но у покоящейся воды vWorldPos.y равен
+// уровню, то есть глубина выходила нулём ВСЕГДА: и озеро, и пруд, и река, и
+// море рисовались мелкой бирюзой. Плюс уровень был один на все тела (уровень
+// озера), так что море получало ещё и чужую глубину. Теперь у каждого тела
+// свой уровень, своя номинальная глубина и своя мера расстояния до берега.
 const waterVertexShader = `
   uniform float uTime;
-  uniform float uWaveScale;
-  varying vec3 vWorldPos;
-  varying vec2 vUv;
+  uniform float uChop;
+  uniform float uField;
+  uniform float uLodNear;
+  uniform float uLodFar;
+  varying vec3 vBase;
+  varying vec3 vWorld;
   varying vec3 vNormal;
   varying vec3 vViewDir;
-  varying float vFoamFactor;
-  vec3 gerstnerWave(vec2 uv, float time, float scale, float amplitude, float wavelength, vec2 direction, float steepness) {
-    float k = 2.0 * 3.14159 / wavelength;
-    float c = sqrt(9.81 / k);
-    float f = k * (direction.x * uv.x + direction.y * uv.y) - c * time;
-    float a = steepness / k;
-    float x = direction.x * (amplitude * sin(f));
-    float z = direction.y * (amplitude * sin(f));
-    float y = amplitude * cos(f);
-    return vec3(x, y, z) * scale;
+  varying float vFoam;
+  varying float vHeight;
+${WAVE_GLSL}
+  void pickField(inout vec3 acc, vec2 p, float t, float scale) {
+    if (uField < 0.5)      gerstner_lake(acc, p, t, scale);
+    else if (uField < 1.5) gerstner_pond(acc, p, t, scale);
+    else if (uField < 2.5) gerstner_river(acc, p, t, scale);
+    else                   gerstner_sea(acc, p, t, scale);
   }
+
   void main() {
-    vUv = uv;
-    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-    vec3 offset = vec3(0.0);
-    offset += gerstnerWave(uv, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45);
-    offset += gerstnerWave(uv, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35);
-    offset += gerstnerWave(uv, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
-    offset += gerstnerWave(uv, uTime * 2.5, 0.3, 0.025, 0.6, vec2(1.0, 0.0), 0.1);
-    vec3 displacedPos = vWorldPos + vec3(offset.x, offset.y, offset.z);
-    float eps = 0.01;
-    vec2 uvX = uv + vec2(0.01, 0.0);
-    vec2 uvY = uv + vec2(0.0, 0.01);
-    vec3 offsetX = gerstnerWave(uvX, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45) +
-                   gerstnerWave(uvX, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35) +
-                   gerstnerWave(uvX, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
-    vec3 offsetY = gerstnerWave(uvY, uTime * 0.5, 1.0, 0.35, 8.0, vec2(0.8, 0.6), 0.45) +
-                   gerstnerWave(uvY, uTime * 0.7, 1.0, 0.18, 4.0, vec2(-0.3, 0.95), 0.35) +
-                   gerstnerWave(uvY, uTime * 1.5, 0.5, 0.06, 1.5, vec2(0.1, 1.0), 0.2);
-    vec3 normal = normalize(cross(
-      vec3(eps, offsetX.y - offset.y, 0.0),
-      vec3(0.0, offsetY.y - offset.y, eps)
-    ));
-    vNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-    vViewDir = normalize(cameraPosition - displacedPos);
-    float foam = smoothstep(0.15, 0.35, offset.y * 2.5);
-    vFoamFactor = foam;
-    gl_Position = projectionMatrix * viewMatrix * vec4(displacedPos, 1.0);
+    vec3 base = (modelMatrix * vec4(position, 1.0)).xyz;
+
+    // Сетка моря coarsen-ится наружу (шаг растёт от 5 м до сотен метров), и
+    // волну в крупных треугольниках рисовать нечем: она превращается в шум.
+    // Поэтому вершинное смещение гаснет к uLodFar, а мелочь остаётся в
+    // карте нормалей, которую фрагментный шейдер читает на любом расстоянии.
+    float dist = distance(cameraPosition, base);
+    float lod = smoothstep(uLodNear, uLodFar, dist);
+    float amp = uChop * (1.0 - lod);
+
+    vec3 off = vec3(0.0);
+    pickField(off, base.xz, uTime, amp);
+
+    // Нормаль по разности высот в МЕТРАХ. Шаг 0.6 м: в uv шаг 0.01 означал
+    // 3.4 м на озере и 63 м на море, то есть наклон считался в разных единицах.
+    float step = 0.6;
+    vec3 offX = vec3(0.0);
+    vec3 offZ = vec3(0.0);
+    pickField(offX, base.xz + vec2(step, 0.0), uTime, amp);
+    pickField(offZ, base.xz + vec2(0.0, step), uTime, amp);
+    vec3 n = normalize(vec3(-(offX.y - off.y), step, -(offZ.y - off.y)));
+
+    vBase = base;
+    vHeight = off.y;
+    vWorld = base + off;
+    vNormal = normalize(mat3(modelMatrix) * n);
+    vViewDir = normalize(cameraPosition - vWorld);
+    // Пена там, где волна стоит на гребне. Делим на амплитуду, иначе при
+    // штиле (amp -> 0) гребень «находился» где угодно.
+    vFoam = smoothstep(0.5, 0.92, off.y / max(amp, 0.05)) * (1.0 - lod);
+    gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
   }
 `;
 
 const waterFragmentShader = `
-  uniform vec3 uCameraPos;
+  uniform float uTime;
+  uniform float uChop;
   uniform vec3 uSunDir;
   uniform vec3 uSunColor;
+  uniform vec3 uSkyColor;
   uniform vec3 uFogColor;
   uniform float uFogNear;
   uniform float uFogFar;
   uniform sampler2D uNormalMap;
   uniform sampler2D uFoamMap;
+  uniform sampler2D uShore;
   uniform vec3 uWaterColorDeep;
   uniform vec3 uWaterColorShallow;
   uniform vec3 uFoamColor;
-  uniform float uRefractionRatio;
-  uniform float uFresnelPower;
-  uniform float uWaveScale;
-  uniform float uFoamThreshold;
   uniform float uFoamOpacity;
-  uniform float uCausticsScale;
-  uniform float uCausticsSpeed;
-  varying vec3 vWorldPos;
-  varying vec2 vUv;
+  uniform float uDetailMetres;
+  uniform float uWorldHalf;
+  uniform float uNominalDepth;
+  uniform float uShoreRamp;
+  uniform vec3 uShoreCenter;
+  uniform float uShoreRadius;
+  uniform float uIsSea;
+  varying vec3 vBase;
+  varying vec3 vWorld;
   varying vec3 vNormal;
   varying vec3 vViewDir;
-  varying float vFoamFactor;
-  float caustics(vec2 uv, float time) {
-    float c = 0.0;
-    c += sin(uv.x * 20.0 + time * 2.0) * 0.5;
-    c += sin(uv.y * 15.0 - time * 1.5) * 0.3;
-    c += sin((uv.x + uv.y) * 10.0 + time) * 0.2;
-    return smoothstep(0.6, 1.0, c) * 0.3;
+  varying float vFoam;
+  varying float vHeight;
+
+  // Расстояние до берега, метры. Для круглых тел это остаток радиуса; для
+  // моря - расстояние до настоящей линии берега, найденной при сборке мира
+  // (берег гуляет на +-60 м из-за шума, и круг вокруг нуля тут не годился).
+  float distanceToShore(vec2 p) {
+    if (uIsSea < 0.5) return uShoreRadius - length(p - uShoreCenter.xz);
+    float u = clamp((p.x + uWorldHalf) / (2.0 * uWorldHalf), 0.0, 1.0);
+    float shoreZ = texture2D(uShore, vec2(u, 0.5)).r;
+    return shoreZ - p.y;
   }
+
   void main() {
-    float depth = max(0.0, uWaterLevel - vWorldPos.y);
-    float depthFactor = smoothstep(0.0, 8.0, depth);
-    vec3 waterColor = mix(uWaterColorShallow, uWaterColorDeep, depthFactor);
-    vec3 normalMap = texture2D(uNormalMap, vUv * 8.0 + vec2(uTime * 0.02, uTime * 0.01)).rgb;
-    vec3 mappedNormal = normalize(vNormal + (normalMap - 0.5) * 0.5);
+    vec2 q = vBase.xz;
+    float dist = distance(cameraPosition, vWorld);
+    float shore = distanceToShore(q);
+    float depth = uNominalDepth * smoothstep(0.0, uShoreRamp, shore);
+    vec3 waterColor = mix(
+      uWaterColorShallow,
+      uWaterColorDeep,
+      smoothstep(0.0, uNominalDepth * 0.55, depth));
+
+    // Деталь по мировым метрам: одна плитка карты равна uDetailMetres в любой
+    // точке мира. В uv одна и та же карта растягивалась на 794 м на море.
+    float inv = 1.0 / uDetailMetres;
+    // Ближние октавы гаснут к 150 м: иначе мелкая рябь мельтешит вдали и
+    // рябит по краям экрана.
+    float near = 1.0 - smoothstep(30.0, 150.0, dist);
+    vec3 n1 = texture2D(uNormalMap, q * inv * 0.5 + vec2(uTime * 0.010, uTime * 0.006)).rgb * 2.0 - 1.0;
+    vec3 n2 = texture2D(uNormalMap, q * inv + vec2(-uTime * 0.017, uTime * 0.011)).rgb * 2.0 - 1.0;
+    vec3 n3 = texture2D(uNormalMap, q * inv * 0.25 - vec2(uTime * 0.004, -uTime * 0.006)).rgb * 2.0 - 1.0;
+    vec2 detail = (n2.xz * near + n1.xz * near * 0.6 + n3.xz) * uChop;
+    vec3 mapped = normalize(vec3(vNormal.x + detail.x, vNormal.y, vNormal.z + detail.y));
+
     vec3 viewDir = normalize(vViewDir);
-    float fresnel = pow(1.0 - max(dot(viewDir, mappedNormal), 0.0), uFresnelPower);
-    vec3 reflection = mix(vec3(0.4, 0.6, 0.9), uSunColor, 0.5) * fresnel * 0.4;
-    float refr = uRefractionRatio;
-    float foam = texture2D(uFoamMap, vUv * 6.0 + vec2(uTime * 0.01, uTime * 0.015)).r;
-    foam = smoothstep(uFoamThreshold, 1.0, foam) * vFoamFactor;
-    float caustic = caustics(vUv * uCausticsScale + vec2(uTime * uCausticsSpeed), uTime);
-    vec3 color = waterColor;
-    color += reflection;
-    color += uFoamColor * foam * uFoamOpacity;
-    color += vec3(caustic) * 0.15;
-    float fogFactor = smoothstep(uFogNear, uFogFar, length(uCameraPos - vWorldPos));
-    color = mix(color, uFogColor, fogFactor * 0.5);
-    float alpha = mix(0.85, 0.65, depthFactor) * (1.0 - foam * 0.3);
+    vec3 halfV = normalize(viewDir + uSunDir);
+    float spec = pow(max(dot(mapped, halfV), 0.0), 180.0);
+    float fresnel = pow(1.0 - max(dot(viewDir, mapped), 0.0), 4.0);
+
+    vec3 color = mix(waterColor, uSkyColor, fresnel * 0.75);
+    color += uSunColor * spec * 1.8;
+
+    // Каустики видны только там, где сквозь воду достаёт до дна.
+    float caustic = sin(q.x * 0.7 + uTime * 2.0) * 0.5
+                  + sin(q.y * 0.55 - uTime * 1.5) * 0.3
+                  + sin((q.x + q.y) * 0.4 + uTime) * 0.2;
+    caustic = smoothstep(0.5, 1.0, caustic) * (1.0 - smoothstep(0.2, 2.5, depth)) * 0.3;
+    color += caustic * uSunColor;
+
+    float foamTex = texture2D(uFoamMap, q * inv * 1.5 + vec2(uTime * 0.008, uTime * 0.005)).r;
+    color += uFoamColor * vFoam * smoothstep(0.2, 0.85, foamTex) * uFoamOpacity;
+
+    float fogFactor = smoothstep(uFogNear, uFogFar, dist);
+    color = mix(color, uFogColor, fogFactor * 0.6);
+    float alpha = mix(0.88, 0.74, smoothstep(0.0, uNominalDepth, depth));
     gl_FragColor = vec4(color, alpha);
-  }
-  float caustics(vec2 uv, float time) {
-    float c = 0.0;
-    c += sin(uv.x * 20.0 + time * 2.0) * 0.5;
-    c += sin(uv.y * 15.0 - time * 1.5) * 0.3;
-    c += sin((uv.x + uv.y) * 10.0 + time) * 0.2;
-    return smoothstep(0.6, 1.0, c) * 0.3;
   }
 `;
 
-// ── Кастомный water shader: волны Герстнера, нормали, пена, преломление, отражения, каустики
-export const waterMaterial = (() => {
+/** Глубина и цвет каждого тела. Всё, что раньше было одной заливкой. */
+export interface WaterLook {
+  readonly body: WaterBody;
+  readonly level: number;
+  /** Номинальная глубина вдали от берега, м. */
+  readonly nominalDepth: number;
+  /** Ширина полосы мелкой воды, м. */
+  readonly shoreRamp: number;
+  readonly deep: number;
+  readonly shallow: number;
+}
+
+export const WATER_LOOKS: Record<WaterBody, WaterLook> = {
+  // Озеро: дно по terrainHeight равно LAKE.level - 3.2, то есть 3.2 м.
+  lake: { body: 'lake', level: LAKE.level, nominalDepth: 3.2, shoreRamp: 45, deep: 0x14405e, shallow: 0x3f8fbe },
+  // Пруд: то же дно, но уровень выше на полметра - 3.6 м.
+  pond: { body: 'pond', level: POND.level, nominalDepth: 3.6, shoreRamp: 20, deep: 0x17475f, shallow: 0x4a9ec4 },
+  // Река мелкая: в ней стоят по щиколотку, глубже метра не бывает.
+  river: { body: 'river', level: LAKE.level, nominalDepth: 1.0, shoreRamp: 0.6, deep: 0x2a6a84, shallow: 0x4f9ab4 },
+  // Море: дно SEA.bed = -12 при уровне -3.2, то есть 8.8 м.
+  sea: { body: 'sea', level: SEA.level, nominalDepth: SEA.bed * -1 + SEA.level, shoreRamp: SEA.ramp, deep: 0x0d3550, shallow: 0x2f8aa8 },
+};
+
+const ПОЛЕ_НОМЕР: Record<WaterBody, number> = { lake: 0, pond: 1, river: 2, sea: 3 };
+
+/** Все материалы воды: обновляются в world3d одним проходом. */
+export const waterMaterials: THREE.ShaderMaterial[] = [];
+
+let shoreTexture: THREE.DataTexture | null = null;
+
+export function buildShoreTexture(): THREE.DataTexture {
+  if (shoreTexture) return shoreTexture;
+  const samples = 1024;
+  const tex = new THREE.DataTexture(seaShoreProfile(samples), samples, 1, THREE.RedFormat, THREE.FloatType);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  shoreTexture = tex;
+  return tex;
+}
+
+export function disposeShoreTexture(): void {
+  shoreTexture?.dispose();
+  shoreTexture = null;
+}
+
+function makeWaterMaterial(
+  look: WaterLook,
+  центр: readonly [number, number],
+  радиус: number,
+  isSea: boolean,
+): THREE.ShaderMaterial {
   const uniforms = {
     uTime: { value: 0 },
-    uWaterLevel: { value: LAKE.level },
-    uCameraPos: { value: new THREE.Vector3() },
+    uChop: { value: 1 },
+    uField: { value: ПОЛЕ_НОМЕР[look.body] },
+    uLodNear: { value: 70 },
+    uLodFar: { value: 210 },
     uSunDir: { value: new THREE.Vector3(0.4, 0.85, -0.3).normalize() },
     uSunColor: { value: new THREE.Color(0xffe8c0) },
+    uSkyColor: { value: new THREE.Color(0xb9c4c9) },
     uFogColor: { value: new THREE.Color(0xb9c4c9) },
     uFogNear: { value: 60 },
     uFogFar: { value: 420 },
-    uNormalMap: { value: waterNormalTexture(6) },
-    uFoamMap: { value: waterFoamTexture(6) },
-    uWaterColorDeep: { value: new THREE.Color(0x1a4a6e) },
-    uWaterColorShallow: { value: new THREE.Color(0x3a8fc8) },
+    uNormalMap: { value: waterNormalTexture(1) },
+    uFoamMap: { value: waterFoamTexture(1) },
+    uShore: { value: isSea ? buildShoreTexture() : null },
+    uWaterColorDeep: { value: new THREE.Color(look.deep) },
+    uWaterColorShallow: { value: new THREE.Color(look.shallow) },
     uFoamColor: { value: new THREE.Color(0xffffff) },
-    uRefractionRatio: { value: 1.0 / 1.33 },
-    uFresnelPower: { value: 3.5 },
-    uWaveScale: { value: 0.8 },
-    uFoamThreshold: { value: 0.65 },
-    uFoamOpacity: { value: 0.75 },
-    uCausticsScale: { value: 4.0 },
-    uCausticsSpeed: { value: 0.5 },
+    uFoamOpacity: { value: 0.8 },
+    uDetailMetres: { value: 6 },
+    uWorldHalf: { value: WORLD_HALF },
+    uNominalDepth: { value: look.nominalDepth },
+    uShoreRamp: { value: look.shoreRamp },
+    uShoreCenter: { value: new THREE.Vector3(центр[0], 0, центр[1]) },
+    uShoreRadius: { value: радиус },
+    uIsSea: { value: isSea ? 1 : 0 },
   };
-  return new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: waterVertexShader,
     fragmentShader: waterFragmentShader,
     transparent: true,
     side: THREE.DoubleSide,
   });
-})();
+  waterMaterials.push(mat);
+  return mat;
+}
 
+// Материал, который импортирует world3d: остаётся первым в списке и служит
+// опорой для проверок «есть ли вообще вода».
+export const waterMaterial = makeWaterMaterial(
+  WATER_LOOKS.lake, [LAKE.x, LAKE.z], LAKE.r, false,
+);
+
+/**
+ * Городская мелкая вода: пруд в саду, чаша фонтана, бассейн хаммама.
+ *
+ * Это НЕ озеро и не река: здесь полметра глубины, гладь почти ровная, и вода
+ * читается светлой. Материалы тела у них разные и общий уровень им не подходит
+ * — раньше они просто пользовались озерной заливкой и получали цвет и волны
+ * шестисотметрового водоёма.
+ */
+export const decorWaterMaterial = makeWaterMaterial(
+  { body: 'river', level: LAKE.level, nominalDepth: 0.4, shoreRamp: 0.2, deep: 0x2f7f9c, shallow: 0x63b6cf },
+  [0, 0], 1e6, false,
+);
+decorWaterMaterial.uniforms.uChop.value = 0.45;
 
 // ── Материалы (с процедурными текстурами) ────────────────────
 const MAT = {
@@ -1364,7 +1485,10 @@ const MAT = {
   // Рама вокруг проёма. Светлый камень: рама и есть то, что глаз читает
   // как окно, а не просто тёмная плашка.
   windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85 }),
-  water: waterMaterial,
+  // Городская мелкая вода: пруд в саду, чаша фонтана, бассейн хаммама.
+  // Озеро, пруд, река и море собираются в buildWater каждое со своим
+  // материалом - у них разный уровень, глубина и мера расстояния до берега.
+  water: decorWaterMaterial,
   waterfall: new THREE.MeshBasicMaterial({
     color: 0xdff0f8, transparent: true, opacity: 0.75, side: THREE.DoubleSide, map: waterfallTexture(2),
   }),
@@ -1420,43 +1544,141 @@ export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
 }
 
 // ── Вода: озеро, пруд, река, водопад ─────────────────────────
+// ── Вода: озеро, пруд, река, водопад ─────────────────────────
+//
+// СЕТКА В МЕТРАХ, А НЕ «ДИСК ИЗ 28 СЕКТОРОВ». До 15.10.2026 озеро строило��ь
+// как CircleGeometry(1, 28) с растягиванием на радиус: 28 секторов веером на
+// 340 м, то есть треугольник основанием 12 м. Море строилось как
+// PlaneGeometry(..., 1, 1) - четыре вершины на 6.3 километра, и вершинному
+// смещению негде было звучаться: гладь стояла идеально ровной.
+//
+// Шаги сеток лежат в waterWaves.ts (WATER_GRIDS), потому что их проверяет
+// пробник check-water-waves.ts: на каждую вершинную октаву должно приходиться
+// не меньше трёх вершин, иначе волна не рисуется.
+
+/** Круглая сетка в метрах: шаг по радиусу задан явно, а не «28 секторов». */
+function discGeometry(радиус: number, шаг: number, секторов: number): THREE.BufferGeometry {
+  const колец = Math.max(2, Math.round(радиус / шаг));
+  const позиции: number[] = [0, 0, 0];
+  const индексы: number[] = [];
+
+  for (let кольцо = 1; кольцо <= колец; кольцо++) {
+    const радиусКольца = (радиус * кольцо) / колец;
+    for (let s = 0; s < секторов; s++) {
+      const a = (s / секторов) * Math.PI * 2;
+      позиции.push(Math.cos(a) * радиусКольца, 0, Math.sin(a) * радиусКольца);
+    }
+  }
+
+  // Веер от центра к первому кольцу, дальше четырёхугольники.
+  for (let s = 0; s < секторов; s++) {
+    индексы.push(0, 1 + ((s + 1) % секторов), 1 + s);
+  }
+  for (let кольцо = 1; кольцо < колец; кольцо++) {
+    const нижний = 1 + (кольцо - 1) * секторов;
+    const верхний = 1 + кольцо * секторов;
+    for (let s = 0; s < секторов; s++) {
+      const s1 = (s + 1) % секторов;
+      индексы.push(нижний + s, верхний + s1, верхний + s);
+      индексы.push(нижний + s, нижний + s1, верхний + s1);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(позиции, 3));
+  geo.setIndex(индексы);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Море: сетка с растущим шагом по обеим осям, X симметричен относительно
+ * нуля, Z мельче у берега.
+ *
+ * Мелкая область обязана быть ПОД игроком, а не в мировом нуле: игрок уходит
+ * на лодке вдоль берега на километры, и при жёстко прибитой к нулю сетке он
+ * оказался бы в крупных треугольниках, где волну рисовать нечем. Поэтому сетка
+ * едет за камерой (см. followSeaToCamera в world3d), а волны считаются в
+ * мировых координатах - поэтому ехать ей можно, не сбивая рисунок.
+ */
+function seaGeometry(zNorth: number, zSouth: number, halfX: number): THREE.BufferGeometry {
+  const сетка = WATER_GRIDS.sea;
+  const вправо = gradedAxis(0, halfX, сетка.step, сетка.growth);
+  // Симметрия относительно нуля: та же сетка, отражённая влево.
+  const xs: number[] = [];
+  for (let i = вправо.length - 1; i >= 1; i--) xs.push(-вправо[i]);
+  for (const x of вправо) xs.push(x);
+  const zs = gradedAxis(zNorth, zSouth, сетка.step, сетка.growth);
+
+  const позиции: number[] = [];
+  const индексы: number[] = [];
+  for (const z of zs) {
+    for (const x of xs) позиции.push(x, 0, z);
+  }
+  const колонок = xs.length;
+  for (let r = 0; r < zs.length - 1; r++) {
+    for (let c = 0; c < колонок - 1; c++) {
+      const a = r * колонок + c;
+      индексы.push(a, a + колонок, a + 1);
+      индексы.push(a + 1, a + колонок, a + колонок + 1);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(позиции, 3));
+  geo.setIndex(индексы);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Меш моря: за world3d перемещается по X вслед за камерой. */
+let seaMesh: THREE.Mesh | null = null;
+
+/** Сдвигает море по X за камерой, с привязкой к шагу сетки. */
+export function followSeaToCamera(x: number): void {
+  if (!seaMesh) return;
+  seaMesh.position.x = Math.round(x / WATER_GRIDS.sea.step) * WATER_GRIDS.sea.step;
+}
+
 export function buildWater(scene: THREE.Scene): void {
-  const water = new THREE.Group();
-  const discGeo = new THREE.CircleGeometry(1, 28);
-  discGeo.rotateX(-Math.PI / 2);
+  const group = new THREE.Group();
+  group.name = 'water';
 
-  const lake = new THREE.Mesh(discGeo, MAT.water);
-  lake.scale.set(LAKE.r, 1, LAKE.r);
+  // Озеро и пруд: круглая сетка в метрах, без растягивания. Растяжение
+  // портило не только плотность сетки, но и смысл uv, из которого шейдер
+  // раньше брал длину волны.
+  const lakeGeo = discGeometry(LAKE.r, WATER_GRIDS.lake.step, WATER_GRIDS.lake.sectors);
+  const lake = new THREE.Mesh(lakeGeo, waterMaterial);
   lake.position.set(LAKE.x, LAKE.level, LAKE.z);
-  water.add(lake);
+  lake.name = 'lake';
+  group.add(lake);
 
-  const pond = new THREE.Mesh(discGeo, MAT.water);
-  pond.scale.set(POND.r, 1, POND.r);
+  const pondMat = makeWaterMaterial(WATER_LOOKS.pond, [POND.x, POND.z], POND.r, false);
+  const pondGeo = discGeometry(POND.r, WATER_GRIDS.pond.step, WATER_GRIDS.pond.sectors);
+  const pond = new THREE.Mesh(pondGeo, pondMat);
   pond.position.set(POND.x, POND.level, POND.z);
-  water.add(pond);
+  pond.name = 'pond';
+  group.add(pond);
 
-  // Море. Одна большая плоскость вместо сетки по маске: острова и берег
-  // выше уровня воды, поэтому рельеф сам выступает из глади, и резать
-  // геометрию по береговой линии не нужно.
-  //
-  // Границы посчитаны, а не подобраны на глаз: северный край - там, где
-  // берег может зайти севернее всего (SEA.coast + SEA.jitter), южный -
-  // край мира. Первая версия обрывала плоскость на 40 м южнее и оставляла
-  // полосу воды без поверхности там, где шум уводил берег на север.
+  // Море. Границы посчитаны, а не подобраны на глаз: северный край - там, где
+  // берег может зайти севернее всего (SEA.coast + SEA.jitter), южный - край
+  // мира. Первая версия обрывала плоскость на 40 м южнее и оставляла полосу
+  // воды без поверхности там, где шум уводил берег на север.
   const seaNorth = SEA.coast + SEA.jitter;
-  const seaDepth = seaNorth - (-WORLD_HALF);
-  const seaGeo = new THREE.PlaneGeometry(WORLD_HALF * 2, seaDepth, 1, 1);
-  seaGeo.rotateX(-Math.PI / 2);
-  const sea = new THREE.Mesh(seaGeo, MAT.water);
-  sea.position.set(0, SEA.level, seaNorth - seaDepth / 2);
-  sea.name = 'sea';
-  water.add(sea);
+  const seaMat = makeWaterMaterial(WATER_LOOKS.sea, [0, 0], 1, true);
+  const seaGeo = seaGeometry(seaNorth, -WORLD_HALF, WATER_GRIDS.sea.radius);
+  seaMesh = new THREE.Mesh(seaGeo, seaMat);
+  seaMesh.position.set(0, SEA.level, 0);
+  seaMesh.name = 'sea';
+  group.add(seaMesh);
 
-  // Река — перекрывающиеся диски вдоль русла. Каждая река отдельным
+  // Река - перекрывающиеся диски вдоль русла. Каждая река отдельным
   // циклом: склейка [RIVER_A, ...RIVER_B] добавляла между ними фантомный
   // сегмент, и его диски уходили на 17 м вне берега озера, где рельеф ниже
   // плоскости (-2.78 при воде -2.0), а isWater по близко этой точки считает
-  // сушей: вода рисовалась прямо на траве.
+  // сушу: вода рисовалась прямо на траве.
+  const riverMat = makeWaterMaterial(WATER_LOOKS.river, [0, 0], 1e6, false);
+  const riverGeo = discGeometry(WATER_GRIDS.river.radius, WATER_GRIDS.river.step, WATER_GRIDS.river.sectors);
   for (const river of [RIVER_A, RIVER_B]) {
     for (let i = 0; i < river.length - 1; i++) {
       const a = river[i], b = river[i + 1];
@@ -1464,10 +1686,9 @@ export function buildWater(scene: THREE.Scene): void {
       const steps = Math.ceil(len / 9);
       for (let s = 0; s <= steps; s++) {
         const t = s / steps;
-        const disc = new THREE.Mesh(discGeo, MAT.water);
-        disc.scale.set(8.5, 1, 8.5);
+        const disc = new THREE.Mesh(riverGeo, riverMat);
         disc.position.set(a.x + (b.x - a.x) * t, LAKE.level, a.z + (b.z - a.z) * t);
-        water.add(disc);
+        group.add(disc);
       }
     }
   }
@@ -1476,18 +1697,19 @@ export function buildWater(scene: THREE.Scene): void {
   const wf = new THREE.Mesh(new THREE.PlaneGeometry(WATERFALL.width, WATERFALL.height), MAT.waterfall);
   wf.position.set(WATERFALL.x, terrainHeight(WATERFALL.x, WATERFALL.z) + WATERFALL.height / 2 - 1, WATERFALL.z + 6);
   wf.name = 'waterfall';
-  const foam = new THREE.Mesh(discGeo, new THREE.MeshStandardMaterial({ color: 0xeef6fa, transparent: true, opacity: 0.5, roughness: 0.3 }));
+  const foamDisc = discGeometry(1, 0.25, 48);
+  const foam = new THREE.Mesh(foamDisc, new THREE.MeshStandardMaterial({ color: 0xeef6fa, transparent: true, opacity: 0.5, roughness: 0.3 }));
   foam.scale.set(9, 1, 7);
   foam.position.set(WATERFALL.x, terrainHeight(WATERFALL.x, WATERFALL.z - 14) + 0.2, WATERFALL.z - 8);
-  water.add(wf, foam);
+  group.add(wf, foam);
   for (const [rx, rz, rk] of [[-362, -560, 1.6], [-342, -556, 2.1], [-356, -548, 1.2]] as const) {
     const boulder = new THREE.Mesh(new THREE.IcosahedronGeometry(rk, 0), MAT.stone);
     boulder.position.set(rx, terrainHeight(rx, rz) + rk * 0.3, rz);
     boulder.castShadow = true;
-    water.add(boulder);
+    group.add(boulder);
   }
 
-  scene.add(water);
+  scene.add(group);
 }
 
 // ── Растительность по биомам (InstancedMesh) ─────────────────

@@ -44,6 +44,12 @@ COPY client/src/app/autobattle.ts ./client/src/app/autobattle.ts
 # тестирование, а сборку образа, и узнать об этом можно было только выкаткой.
 COPY client/src/app/entities.ts ./client/src/app/entities.ts
 COPY client/src/app/state.ts ./client/src/app/state.ts
+# waterWaves.ts тянет набор waterWavesInMetres.test.ts: он поднимает клиентский
+# модуль прямо в тестах, потому что тот тянет только shared/water — ни three, ни
+# DOM — и позволяет проверять настоящий сгенерированный GLSL, а не описание его
+# в комментарии. Без этой строки сборка образа падает на выкатке: локально
+# typecheck зелёный, а в образе модуля нет.
+COPY client/src/app/game3d/waterWaves.ts ./client/src/app/game3d/waterWaves.ts
 
 WORKDIR /app/server
 RUN npm run build

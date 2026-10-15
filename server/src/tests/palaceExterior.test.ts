@@ -40,6 +40,9 @@ function must(условие: unknown, причина: string): asserts усло
 }
 
 const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+// WORLD_HALF живёт в shared/water.ts: вода про ширину мира знает, а
+// waterWaves.ts не должен тянуть terrain.ts — получился бы круг импортов.
+const ВОДА = читать('shared/water.ts');
 
 /**
  * Список ровнялок в теле terrainHeight, в порядке вызова.
@@ -71,7 +74,8 @@ function радиусИгрока(): number {
 
 /** Ступени сетки рельефа: WORLD_HALF и TERRAIN_SEG читаются из исходника. */
 function шагСетки(): number {
-  const half = /export const WORLD_HALF = ([\d.]+)/.exec(ТЕРРЕЙН);
+  // WORLD_HALF читается из shared/water.ts, TERRAIN_SEG остался в terrain.ts.
+  const half = /export const WORLD_HALF = ([\d.]+)/.exec(ВОДА);
   const seg = /const TERRAIN_SEG = (\d+)/.exec(ТЕРРЕЙН);
   must(half !== null && seg !== null, 'не разобрались WORLD_HALF или TERRAIN_SEG');
   return (Number(half![1]) * 2) / Number(seg![1]);

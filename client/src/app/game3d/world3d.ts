@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterial } from './terrain';
+import { waterMaterials, followSeaToCamera } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
@@ -43,6 +43,7 @@ import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { setTextureAnisotropy } from './textures';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
+import { chopFor } from './waterWaves';
 import { audio } from '../audio';
 import { session } from '../state';
 import { getSettings, graphicsProfile, type GraphicsLevel } from '../settings';
@@ -186,6 +187,8 @@ export class World3D {
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
+  /** Общее время воды для всех тел: секунды с запуска мира. */
+  private waterTime = 0;
 
   private container!: HTMLElement;
   private fxLayer!: HTMLElement;
@@ -1885,13 +1888,27 @@ if (isMe && moving) {
     };
     this.env.update(состояниеНеба, dt);
 
-    // Вода: единое время для всех водных поверхностей (озеро, море, река).
-    if (waterMaterial) {
-      waterMaterial.uniforms.uTime.value += dt;
-      waterMaterial.uniforms.uCameraPos.value.copy(this.camera.position);
-      waterMaterial.uniforms.uSunDir.value.copy(lightDir).normalize();
-      waterMaterial.uniforms.uSunColor.value.copy(this.sun.color);
+    // Вода. Материалов теперь четыре (озеро, пруд, река, море) плюс городская
+    // мелкая вода, и у каждого свой уровень и своя глубина, поэтому обход идёт
+    // по всем. Раньше был один общий материал с уровнем озера: море получало
+    // чужие -3.2 м глубины и рисовалось цветом мелкой лагуны.
+    //
+    // Время у всех одно и то же - иначе волны на стыке тел разошлись бы фазой.
+    this.waterTime += dt;
+    const chop = chopFor(this.currentWeather);
+    for (const mat of waterMaterials) {
+      const u = mat.uniforms;
+      u.uTime.value = this.waterTime;
+      u.uChop.value = chop;
+      u.uSunDir.value.copy(lightDir).normalize();
+      u.uSunColor.value.copy(this.sun.color);
+      u.uSkyColor.value.copy(this.sky.horizonColor);
+      u.uFogColor.value.copy(this.sky.horizonColor);
     }
+    // Сетка моря едет за камерой: мелкая область обязана быть под игроком, а не
+    // в мировом нуле, - иначе, отойдя на лодке вдоль берега, он оказывается в
+    // крупных треугольниках, где волну рисовать нечем.
+    followSeaToCamera(this.camera.position.x);
     const dim = 1 - this.sky.overcast * 0.45;
     this.sun.intensity = (useMoon ? 0.32 : 0.25 + dayI * 1.35) * dim;
     this.hemi.intensity = (0.28 + dayI * 0.55) * (1 - this.sky.overcast * 0.3);

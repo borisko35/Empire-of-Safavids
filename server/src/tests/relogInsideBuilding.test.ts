@@ -22,7 +22,11 @@ const read = (p: string): string => readFileSync(join(repoRoot, p), 'utf-8');
 
 const world3d = stripComments(read('client/src/app/game3d/world3d.ts'));
 const world = stripComments(read('client/src/app/world.ts'));
-const terrain = read('client/src/app/game3d/terrain.ts');
+// WORLD_HALF переехал из terrain.ts в shared/water.ts: вода про ширину мира
+// знает (линия берега ищется по всей ширине), а waterWaves.ts не должен
+// импортировать terrain.ts — тот сам импортирует waterWaves, и получился
+// бы круг. Читаем настоящий источник.
+const water = read('shared/water.ts');
 const socketHandler = stripComments(read('server/src/socket/GameSocketHandler.ts'));
 const antiCheat = stripComments(read('server/src/systems/AntiCheatSystem.ts'));
 
@@ -43,7 +47,7 @@ describe('Переподключение внутри здания', () => {
   it('комнаты интерьеров действительно за границей мира', () => {
     // Числа, а не слова. Если бы граница подвинулась за 2500, поломка была
     // бы другой, а тест — врущим
-    const half = Number(terrain.match(/WORLD_HALF = (\d+)/)?.[1]);
+    const half = Number(water.match(/WORLD_HALF = (\d+)/)?.[1]);
     const rooms = [...read('server/src/data/interiors.ts').matchAll(/(?:roomCx|roomCz):\s*(-?\d+)/g)]
       .map(m => Number(m[1]));
     const beyond = rooms.filter(v => Math.abs(v) > half);

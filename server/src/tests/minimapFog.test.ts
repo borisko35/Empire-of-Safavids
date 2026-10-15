@@ -31,6 +31,10 @@ const fog = читать('client/src/app/minimapFog.ts');
 const hud = читать('client/src/app/hud.ts');
 const world = читать('client/src/app/world.ts');
 const terrain = читать('client/src/app/game3d/terrain.ts');
+// WORLD_HALF живёт в shared/water.ts: вода про ширину мира знает (линия
+// берега ищется по всей ширине), а waterWaves.ts не должен импортировать
+// terrain.ts — тот сам импортирует waterWaves, и получился бы круг.
+const sharedWater = читать('shared/water.ts');
 
 // ── Константы читаем из кода, а не дублируем числами ─────────────────────
 function числоИз(источник: string, шаблон: RegExp, что: string): number {
@@ -46,7 +50,11 @@ const MINIMAP_RANGE = числоИз(hud, /const MINIMAP_RANGE = (\d+);/, 'ра�
 // Половина мира берётся из того же места, откуда её берёт сам туман: это константа
 // клиента. Свою копию в проверке держать нельзя — тогда расхождение было бы
 // невозможно заметить, а ровно расхождение тут и ломает карту.
-const WORLD_HALF = числоИз(terrain, /WORLD_HALF\s*=\s*(\d+)/, 'половину мира в клиенте');
+const WORLD_HALF = числоИз(sharedWater, /WORLD_HALF\s*=\s*(\d+)/, 'половину мира в shared/water.ts');
+must(
+  /export \{[^}]*WORLD_HALF[^}]*\}/.test(terrain),
+  'terrain.ts не выгружает WORLD_HALF: потребители из «./terrain» сломаются молча',
+);
 must(
   /import \{ WORLD_HALF \} from '\.\/game3d\/terrain';/.test(fog),
   'туман берёт половину мира не из terrain: маска может уехать относительно карты'
