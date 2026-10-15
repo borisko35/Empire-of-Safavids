@@ -80,9 +80,9 @@ describe('Цифры в карте соответствуют репозитор
     // 315 → 316 при появлении craftingNames.test.ts (§195).
     // 316 → 317 при появлении gamejoltDoc.test.ts (§196).
     // 317 → 318 при появлении skyEnvironment.test.ts (§204).
-// 318 → 319 при появлении deployBrowserCheck.test.ts (§208).
+// 318 → 319 при deployBrowserCheck.test.ts (§208), 319 → 320 при dataTextureColorSpace (§209).
     expect({ файлов: файлы.length, число_в_карте: вКарте === null ? null : Number(вКарте[1]) })
-      .toEqual({ файлов: 319, число_в_карте: 319 });
+      .toEqual({ файлов: 320, число_в_карте: 320 });
   });
 
   it('ключи переводов совпадают во всех трёх языках', () => {

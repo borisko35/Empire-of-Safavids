@@ -146,12 +146,47 @@ export function addMacroLayer(
   material.needsUpdate = true;
 }
 
+/**
+ * Карта ЦВЕТА. sRGB здесь правильно: глаз видит в этих ступенях, и three
+ * приводит линейный цвет к тому, на что смотрит рендер.
+ */
 export function toTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(repeat, repeat);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = МАКС_АНИЗОТРОПИЯ;
+  return tex;
+}
+
+/**
+ * Карта ДАННЫХ — и вот здесь до 15.10.2026 стоял вызов toTexture.
+ *
+ * ЧТО ЭТО ЛОМАЛО. Цветовое пространство текстуры в three — не подпись, а
+ * указание GPU: при SRGBColorSpace и UnsignedByte текстура грузится во
+ * внутренний формат SRGB8_ALPHA8 (WebGLTextures.js, строка 234), и каждое
+ * чтение проходит через sRGB→linear на уровне железа. Этот декод действует на
+ * ЛЮБУЮ роль текстуры — в том числе на карты нормалей, шероховатости и
+ * смещения, которые цветом вовсе не являются.
+ *
+ * ЧТО ИЗ ЭТОГО ПОЛУЧАЛОСЬ. Карта нормалей хранит «ровно вверх» байтами
+ * 128,128,255. Декод даёт шейдеру 0.2159, 0.2159, 1.0, и вычитание
+ * `normalMap - 0.5` даёт (-0.284, -0.284, 0.5) — то есть наклон поверхности
+ * на 38.8 градусов. Каждый камень, каждое дерево и вся вода в игре были
+ * освещены так, будто развёрнуты на 39 градусов, и это видно: свет «плывёт»
+ * по стенам вместо того, чтобы стоять на месте. Шероховатость 0.5 читалась как
+ * 0.216 (поверхности глянцевее задуманного), а карта смещения сжимала
+ * середину рельефа.
+ *
+ * У карты данных линейная передача: NoColorSpace.
+ */
+export function toDataTexture(canvas: HTMLCanvasElement, repeat: number): THREE.CanvasTexture {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeat, repeat);
+  tex.colorSpace = THREE.NoColorSpace;
   tex.anisotropy = МАКС_АНИЗОТРОПИЯ;
   return tex;
 }
@@ -239,7 +274,7 @@ export function stoneDisplacementTexture(repeat = 6): THREE.CanvasTexture {
       ctx.fillRect(x + 1.5, y + 1.5, bw - 3, bh - 3);
     }
   }
-  return toTexture(_canvas as unknown as HTMLCanvasElement, repeat);
+  return toDataTexture(_canvas as unknown as HTMLCanvasElement, repeat);
 }
 
 /** Шершавость для камня: верхние грани полированные, швы и боковины шершавые */
@@ -263,7 +298,7 @@ export function stoneRoughnessTexture(repeat = 6): THREE.CanvasTexture {
       ctx.fillRect(x + 1.5, y + 1.5, 2, bh - 3); // левый шов
     }
   }
-  return toTexture(_canvas as unknown as HTMLCanvasElement, repeat);
+  return toDataTexture(_canvas as unknown as HTMLCanvasElement, repeat);
 }
 
 /** Нормальная карта для каменной кладки: выступающие камни, углублённые швы */
@@ -284,7 +319,7 @@ export function stoneNormalTexture(repeat = 6): THREE.CanvasTexture {
   }
   const img = ctx.getImageData(0, 0, size, size);
   const normalCanvas = heightToNormal(img.data, size, 2.5);
-  return toTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
 
 /** Каменная кладка стен */
@@ -434,7 +469,7 @@ export function woodRoughnessTexture(repeat = 2): THREE.CanvasTexture {
   out.width = size;
   out.height = size;
   out.getContext('2d')!.putImageData(img, 0, 0);
-  return toTexture(out, repeat);
+  return toDataTexture(out, repeat);
 }
 
 /** Нормальная карта для воды: волны Герстнера/синусоиды для деталей поверхности */
@@ -466,7 +501,7 @@ export function waterNormalTexture(repeat = 6): THREE.CanvasTexture {
   }
   ctx.putImageData(img, 0, 0);
   const normalCanvas = heightToNormal(ctx.getImageData(0, 0, size, size).data, size, 1.2);
-  return toTexture(normalCanvas, repeat);
+  return toDataTexture(normalCanvas, repeat);
 }
 
 /** Пена на гребнях волн: белая пена в гребнях волн */
@@ -524,7 +559,7 @@ export function woodNormalTexture(repeat = 2): THREE.CanvasTexture {
   }
   const img = ctx.getImageData(0, 0, size, size);
   const normalCanvas = heightToNormal(img.data, size, 1.8);
-  return toTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
 
 /** Деревянные доски */
