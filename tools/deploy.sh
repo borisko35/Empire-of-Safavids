@@ -611,13 +611,27 @@ say "=== 5. CHTO OTDAYOT SAJT ==="
 say "  zhedem 20 sekund, poka pochty novyy kontayner i edge Cloudflare soglasuyutsya..."
 sleep 20
 
+# ЗАГОЛОВОК ЗАПРОСА ДОЛЖЕН БЫТЬ ТАКИМ ЖЕ, КАК У БРАУЗЕРА.
+#
+# В index.html главный бандл подключён как `<script crossorigin>`. Атрибут
+# crossorigin заставляет браузер отправить заголовок Origin — и Cloudflare
+# кэширует отрицательный ответ ОТДЕЛЬНО для такого запроса. Проверка без
+# Origin видела 200 и объявляла PASS, пока игроки получали 404 на главный
+# бандл и игра не грузилась вовсе: 15 октября 2026 контейнер был здоров
+# (Origin travellers 200, 349888 байт), edge отдавал 404 (1040 байт,
+# text/html, cache-status HIT, age больше часа) — и ни одна прежняя
+# проверка этого не заметила.
+#
+# Поэтому все сетевые проверки ниже шлют Origin наравне с no-cache.
+ORIGIN_HDR="$PUBLIC_URL"
+
 hash_served() {
   # sha256 файла по сети. Без кэша: заголовок запроса не мешает Cloudflare
   # отдать тело из edge, поэтому при расхождении проверка переспрашивает.
-  curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$1" 2>/dev/null | sha256sum | cut -d' ' -f1
+  curl -fsS --max-time 30 -H 'Cache-Control: no-cache' -H "Origin: $ORIGIN_HDR" "$1" 2>/dev/null | sha256sum | cut -d' ' -f1
 }
 
-INDEX_HTML="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "$PUBLIC_URL/game/" 2>/dev/null || true)"
+INDEX_HTML="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' -H "Origin: $ORIGIN_HDR" "$PUBLIC_URL/game/" 2>/dev/null || true)"
 [ -n "$INDEX_HTML" ] || stop "sajt ne otdayot $PUBLIC_URL/game/ : proverit' chto otdayot ne udalos"
 
 # Имя главного бандла — из HTML, а не выдуманное: именно его браузер и пойдёт качать.
@@ -694,7 +708,10 @@ hash_served_retry() {
     # Теперь `-o` кладёт тело в файл, `-w` печатает в stdout только код, и хэш
     # считается с файла. Разбирать нечего.
     : > "$tmp"
-    code="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' \
+    # -H Origin: как у браузера (в index.html стоит crossorigin). Без
+    # этого заголовка проверка видела закэшированную 200 и объявляла PASS,
+    # пока игроки получали 404 на главный бандл (15.10.2026).
+    code="$(curl -fsS --max-time 30 -H 'Cache-Control: no-cache' -H "Origin: $ORIGIN_HDR" \
       -o "$tmp" -w '%{http_code}' "$url" 2>/dev/null || true)"
     bytes="$(wc -c < "$tmp" 2>/dev/null | tr -d ' ')"
     bytes="${bytes:-0}"
@@ -814,7 +831,10 @@ say "proverka vsekh faylov, na kotorye ssylaetsya stranica:"
 DOSTUPNE=0
 NEDOSTUPNE=""
 for a in $(printf '%s' "$INDEX_HTML" | grep -o '/game/assets/[A-Za-z0-9_.-]*\.\(js\|css\)' | sort -u); do
-  if curl -fsS -o /dev/null --max-time 20 "$PUBLIC_URL$a" 2>/dev/null; then
+  # -H Origin: ровно то, что шлёт браузер из-за crossorigin. Без него
+  # проверка видела закэшированную 200 и пропускала выкатку, после которой
+  # игра не грузилась (15.10.2026).
+  if curl -fsS -o /dev/null --max-time 20 -H "Origin: $ORIGIN_HDR" "$PUBLIC_URL$a" 2>/dev/null; then
     DOSTUPNE=$((DOSTUPNE + 1))
   else
     NEDOSTUPNE="$NEDOSTUPNE $a"

@@ -88,9 +88,17 @@ describe('Выкатка не врёт о том, что попало на пр�
       /grep -o '\/game\/assets\/index-\[A-Za-z0-9_-\]\*\\\.js'/.test(СЦЕНАРИЙ),
       'имя бандла не вытаскивается из отдаваемого index.html',
     );
+    // Origin обязателен: в index.html главный бандл подключён с crossorigin,
+    // поэтому браузер шлёт этот заголовок. Cloudflare кэширует отрицательный
+    // ответ отдельно для запросов с Origin — проверка без него видела 200 и
+    // объявляла PASS, пока игроки получали 404 и игра не грузилась (15.10.2026).
     must(
-      /curl -fsS --max-time 30 -H 'Cache-Control: no-cache' "\$PUBLIC_URL\/game\/"/.test(СЦЕНАРИЙ),
+      /curl -fsS --max-time 30 -H 'Cache-Control: no-cache' -H "Origin: [^"]*" "\$PUBLIC_URL\/game\/"/.test(СЦЕНАРИЙ),
       'отдаваемый index.html не читается по сети: сверять не с чем',
+    );
+    must(
+      !СЦЕНАРИЙ.split('\n').map((л) => л.trim()).includes("curl -fsS --max-time 30 -H 'Cache-Control: no-cache' \"\$PUBLIC_URL/game/\" 2>/dev/null || true"),
+      'index.html спрашивается без заголовка Origin: проверка не видит того 404, который получает браузер',
     );
   });
 
