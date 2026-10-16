@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { buildHumanoid, HumanoidCfg, type Rig } from './rig';
+import { spriteVisible } from './spriteClamp';
 import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight } from './terrain';
 import { GATE } from './terrain';
 
@@ -177,7 +178,16 @@ export function questNpcPosition(id: string): { x: number; z: number; nameRu: st
 }
 
 export interface NpcsHandle {
-  update(dt: number, now: number): void;
+  /**
+   * Кадр NPC.
+   *
+   * камера — позиция камеры игрока. Нужна, чтобы прятать имена в упор:
+   * спрайт мирового размера с sizeAttenuation растёт при приближении
+   * без предела, и вплотную подойдя к стражнику, игрок получал его имя
+   * во весь экран. Если камеры не передали (отдельные пробники сцены),
+   * имена остаются видимыми.
+   */
+  update(dt: number, now: number, камера?: THREE.Vector3): void;
   /** Меши для луча клика (по userData.npcPanel и userData.npcName) */
   clickTargets: THREE.Object3D[];
   dispose(): void;
@@ -187,6 +197,9 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   const group = new THREE.Group();
   const clickTargets: THREE.Object3D[] = [];
   const markers: { sprite: THREE.Sprite; phase: number; baseY: number }[] = [];
+  // Имена NPC и знаки «!»: спрайты мирового размера, которые надо гасить
+  // в упор, иначе они занимают пол-экрана (см. spriteClamp и textSprite).
+  const names: { sprite: THREE.Sprite; worldSize: number; x: number; y: number; z: number }[] = [];
   // Сторожевые посты с маршрутом: их тело двигает update, а логика на сервере
   // считает ту же позицию. Список берётся из shared/stealth.ts, поэтому новый
   // патруль не требует правок клиента - модель найдётся по id NPC.
@@ -252,22 +265,41 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       const name = textSprite(def.nameRu);
       name.position.set(x, y + 2.35, z);
       group.add(name);
+      // ТУТ БЫЛА ГИГАНТСКАЯ НАДПИСЬ. Имя — спрайт мирового размера, а у
+      // спрайтов sizeAttenuation по умолчанию включён: они не только
+      // удаляются с расстоянием, но и РАСТУТ при приближении, без предела.
+      // Подойдя к стражнику вплотную, игрок получал «Стражник Фарид»
+      // во весь экран поверх мира. Здесь не размер меряется, а близость:
+      // в упор имя читать не нужно, там и так видно, кто перед тобой.
+      names.push({ sprite: name, worldSize: 0.78, x, y: y + 2.35, z });
 
-      // Маркер квеста «!»
+      // Маркер квеста «!». Он тоже спрайт мирового размера, а значит тоже
+      // разрастается в упор — в список надписей он входит по той же причине.
       if (def.quest) {
         const marker = questMarker();
         marker.position.set(x, y + 3.15, z);
         group.add(marker);
         markers.push({ sprite: marker, phase: Math.random() * Math.PI * 2, baseY: y + 3.15 });
+        names.push({ sprite: marker, worldSize: 0.85, x, y: y + 3.15, z });
       }
     }
   }
 
   scene.add(group);
 
-  function update(dt: number, now: number): void {
+  function update(dt: number, now: number, камера?: THREE.Vector3): void {
     for (const r of rigs) {
       r.update(dt, { moving: false, speed: 0, grounded: true, crouch: false, block: false, dead: false, swimming: false });
+    }
+    // Имена и знаки «!» прячутся в упор: спрайт мирового размера растёт при
+    // приближении без предела, и вплотную подойдя к стражнику, игрок получал
+    // его имя во весь экран. Потолок один на все надписи — spriteClamp.
+    // Без камеры (отдельные пробники сцены) ничего не гасим: гасить нечем.
+    if (камера) {
+      for (const n of names) {
+        const d = Math.hypot(n.x - камера.x, n.y - камера.y, n.z - камера.z);
+        n.sprite.visible = spriteVisible(n.worldSize, d);
+      }
     }
     // Патруль: сторожевой пост с маршрутом идёт. Позиция берётся из
     // shared/stealth.ts той же формулой, что и на сервере, поэтому картинка и

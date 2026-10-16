@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { CITY, CIV_COLLIDERS, COLLIDERS, groundHeight, waterMask } from './terrain';
+import { spriteVisible } from './spriteClamp';
 
 interface Civilian {
   group: THREE.Group;
@@ -141,13 +142,19 @@ const SKIN = [0xe4b284, 0xc89878, 0xa87858];
 const HAIR = [0x2a2018, 0x4a3220, 0x6e563a, 0x8a8a8a];
 const PANTS = [0x3a3630, 0x4a4438, 0x2e3a4a];
 
+/** Высота пузыря реплики в мировых единицах. Держится в одном числе с scale.set в makeBubble. */
+const BUBBLE_WORLD_SIZE = 1.0;
+
 function makeBubble(): THREE.Sprite {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 96;
   const tex = new THREE.CanvasTexture(c);
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
   const sp = new THREE.Sprite(mat);
-  sp.scale.set(2.6, 1.0, 1);
+  // Высота обязана совпадать с BUBBLE_WORLD_SIZE: по ней считается, ближе
+  // какого расстояния пузырь гаснет. Расхождение чисел = пузырь либо
+  // разрастается, либо гаснет на подходе.
+  sp.scale.set(2.6, BUBBLE_WORLD_SIZE, 1);
   sp.visible = false;
   (sp as THREE.Sprite & { setText?: (t: string) => void }).setText = (t: string) => {
     const g = c.getContext('2d')!;
@@ -796,7 +803,14 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     const talking = civs.filter(c => c.bubbleUntil > now).sort((a, b) => dist2(a) - dist2(b));
     for (let i = 0; i < talking.length; i++) {
       const c = talking[i];
-      c.bubble.visible = i < MAX_VISIBLE_BUBBLES;
+      // ТУТ БЫЛА ГИГАНТСКАЯ РЕПЛИКА. Пузырь — спрайт мирового размера, а у
+      // спрайтов sizeAttenuation включён: приближаясь к камере, они растут
+      // без предела. И хуже всего: сортировка выше идёт ПО РАССТОЯНИЮ, то
+      // есть ближайший пузырь всегда попадает первым и рисуется всегда.
+      // Подойдя к говорящему горожанину вплотную, игрок получал его реплику
+      // на весь экран, а у пузыря вдобавок depthTest: false — она рисовалась
+      // поверх всего, включая игрока. Теперь гаснем по потолку размера.
+      c.bubble.visible = i < MAX_VISIBLE_BUBBLES && spriteVisible(BUBBLE_WORLD_SIZE, Math.sqrt(dist2(c)));
       c.bubble.position.y = 2.45 + (i % 3) * 0.42;
     }
 

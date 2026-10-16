@@ -17,6 +17,7 @@
 
 import * as THREE from 'three';
 import { ROAD_PATHS, CITY, groundHeight } from './terrain';
+import { spriteVisible } from './spriteClamp';
 
 export interface RoadTrafficHandle {
   /**
@@ -281,10 +282,13 @@ function questMarker(): THREE.Sprite {
   g.fill(); g.stroke();
   const tex = new THREE.CanvasTexture(c);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
-  sp.scale.set(0.5, 0.5, 1);
+  sp.scale.set(WALKER_MARKER_SIZE, WALKER_MARKER_SIZE, 1);
   sp.position.y = 2.35;
   return sp;
 }
+
+/** Высота метки путника в мировых единицах. Держится в одном числе с scale.set выше. */
+const WALKER_MARKER_SIZE = 0.5;
 
 /** Имена путников. Тот, кто даёт задание, должен звучать как человек. */
 const WALKER_NAMES = [
@@ -414,6 +418,11 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       const marker = w.group.children.find(c => c instanceof THREE.Sprite);
       if (marker) {
         marker.position.y = 2.35 + Math.sin(now / 320) * 0.06;
+        // Метка — спрайт мирового размера, а такие растут при приближении
+        // без предела. Строки выше гасят группу вдали (там метка мелкая и
+        // нужна), но в упор она как раз разрасталась: путник, к которому
+        // подошли вплотную, получал метку на треть экрана поверх дороги.
+        marker.visible = spriteVisible(WALKER_MARKER_SIZE, Math.hypot(p.x - px, p.z - pz));
       }
     }
   }

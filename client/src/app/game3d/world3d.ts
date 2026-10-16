@@ -1926,7 +1926,7 @@ if (isMe && moving) {
     const dayI = 1 - night;
     this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
     this.fauna.update(dt, now);
-    this.npcs.update(dt, now);
+    this.npcs.update(dt, now, this.camera.position);
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.

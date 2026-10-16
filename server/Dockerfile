@@ -51,6 +51,13 @@ COPY client/src/app/state.ts ./client/src/app/state.ts
 # typecheck зелёный, а в образе модуля нет.
 COPY client/src/app/game3d/waterWaves.ts ./client/src/app/game3d/waterWaves.ts
 
+# spriteClamp.ts тянет npcNameNearClamp.test.ts: тест поднимает клиентский
+# модуль, чтобы проверить потолок видимого размера надписей настоящими
+# числами, а не пересказом. Модуль чистый — ни three, ни DOM, — поэтому
+# поднимается где угодно. Без этой строки сборка образа падает на выкатке:
+# локально typecheck зелёный, а в образе модуля нет.
+COPY client/src/app/game3d/spriteClamp.ts ./client/src/app/game3d/spriteClamp.ts
+
 WORKDIR /app/server
 RUN npm run build
 
