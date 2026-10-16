@@ -4573,6 +4573,34 @@ export async function loadSkills(): Promise<void> {
           window.dispatchEvent(new CustomEvent('game:skill-activate', { detail: id }));
         });
       });
+      // Loadout selector
+      const profSelect = document.createElement("select");
+      profSelect.id = "skill-loadout-profile";
+      profSelect.innerHTML = "<option value=\"1\">Профиль 1</option><option value=\"2\">Профиль 2</option><option value=\"3\">Профиль 3</option>";
+      skillsBox.parentNode!.insertBefore(profSelect, skillsBox);
+      profSelect.addEventListener("change", () => {
+        const prof = profSelect.value;
+        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
+        alert("Выбран профиль " + prof + ", ключ: " + key);
+      });
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "skill-loadout-save";
+      saveBtn.textContent = "Сохранить";
+      skillsBox.parentNode!.insertBefore(saveBtn, skillsBox.nextSibling);
+      saveBtn.addEventListener("click", () => {
+        const prof = profSelect.value;
+        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
+        try { localStorage.setItem(key, JSON.stringify(__slots)); alert("Сохранено"); } catch { alert("Ошибка"); }
+      });
+      const delBtn = document.createElement("button");
+      delBtn.className = "skill-loadout-del";
+      delBtn.textContent = "Удалить";
+      skillsBox.parentNode!.insertBefore(delBtn, saveBtn);
+      delBtn.addEventListener("click", () => {
+        const prof = profSelect.value;
+        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
+        try { localStorage.removeItem(key); alert("Профиль удален"); void loadSkills(); } catch { alert("Ошибка"); }
+      });
     } else {
       skillsBox.innerHTML = `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;
     }
