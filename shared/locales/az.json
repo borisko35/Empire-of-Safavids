@@ -1522,7 +1522,8 @@
     "skill_activate": "Aktivləşdir",
     "skill_passive_badge": "passiv",
     "prof_none": "Peşə seçilməyib",
-    "title": "Bacarıqlar və Peşələr"
+    "title": "Bacarıqlar və Peşələr",
+    "empty_slot": "Boş yuva — bacarıq öyrən"
   },
   "prof": {
     "warrior": "Döyüşçü",

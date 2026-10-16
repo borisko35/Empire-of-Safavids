@@ -200,21 +200,44 @@ export async function loadSkillbar(): Promise<void> {
   }
   const bar = $('skillbar');
   bar.innerHTML = '';
-  session.skills.forEach((skill, i) => {
+  const SLOTS = 4;
+  for (let i = 0; i < SLOTS; i++) {
+    const skill = session.skills[i];
     const slot = document.createElement('div');
-    slot.className = 'skill';
-    slot.id = `skill-${skill.id}`;
-    slot.title = `${skill.nameRu} — ${t('world.mana')} ${skill.manaCost} / ${t('world.stamina')} ${skill.staminaCost}`;
-    const isHeal = skill.damageMultiplier < 0;
-    slot.innerHTML =
-      `<span class="key">${i + 1}</span>` +
-      icon(isHeal ? 'heart' : skill.aoe ? 'bolt' : 'sword', 26) +
-      `<span class="cost">${skill.manaCost || skill.staminaCost}</span>` +
-      '<span class="cd"></span>';
-    slot.addEventListener('click', () => window.dispatchEvent(new CustomEvent('game:skill', { detail: skill.id })));
+    slot.className = skill ? 'skill' : 'skill skill-empty';
+    slot.id = skill ? `skill-${skill.id}` : `skill-slot-${i + 1}`;
+    if (skill) {
+      slot.title = `${skill.nameRu} — ${t('world.mana')} ${skill.manaCost} / ${t('world.stamina')} ${skill.staminaCost}`;
+      const iconName = skillIcon(skill);
+      slot.innerHTML =
+        `<span class="key">${i + 1}</span>` +
+        icon(iconName as any, 26) +
+        `<span class="cost">${skill.manaCost || skill.staminaCost}</span>` +
+        '<span class="cd"></span>';
+      slot.addEventListener('click', () => window.dispatchEvent(new CustomEvent('game:skill', { detail: skill.id })));
+    } else {
+      slot.title = t('skills.empty_slot');
+      slot.innerHTML = `<span class="key">${i + 1}</span><span class="socket"></span>`;
+    }
     bar.append(slot);
-  });
+  }
 }
+
+/** Подбор иконки навыка по его id/типам. */
+function skillIcon(skill: { id: string; damageMultiplier: number; aoe: boolean }): string {
+  const id = skill.id;
+  if (id.includes('heal') || id.includes('tonic') || id.includes('antidote')) return 'heart';
+  if (id.includes('aimed') || id.includes('arrow') || id.includes('headshot') || id.includes('eagle')) return 'bow';
+  if (id.includes('haggle') || id.includes('bulk') || id.includes('market') || id.includes('haggle')) return 'coins';
+  if (id.includes('herb') || id.includes('gather')) return 'leaf';
+  if (id.includes('forge') || id.includes('reinforce') || id.includes('masterwork')) return 'hammer';
+  if (id.includes('alams') || id.includes('zikr') || id.includes('taj')) return 'flame';
+  if (id.includes('spot') || id.includes('treasure') || id.includes('explorer')) return 'compass';
+  if (id.includes('shield') || id.includes('wall')) return 'shield';
+  if (id.includes('whirlwind') || id.includes('battle_cry') || id.includes('power_strike') || id.includes('execution')) return 'sword';
+  return skill.aoe ? 'bolt' : 'sword';
+}
+
 
 export function startCooldown(skillId: string, seconds: number): void {
   cooldowns.set(skillId, performance.now() + seconds * 1000);

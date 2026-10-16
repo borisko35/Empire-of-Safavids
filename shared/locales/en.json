@@ -1522,7 +1522,8 @@
     "skill_activate": "Activate",
     "skill_passive_badge": "passive",
     "prof_none": "No profession selected",
-    "title": "Skills & Professions"
+    "title": "Skills & Professions",
+    "empty_slot": "Empty socket — learn a skill"
   },
   "prof": {
     "warrior": "Warrior",
