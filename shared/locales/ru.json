@@ -1523,7 +1523,9 @@
     "skill_passive_badge": "пассивно",
     "prof_none": "Профессия не выбрана",
     "title": "Навыки и Профессии",
-    "empty_slot": "Пустой сокет — изучите навык"
+    "empty_slot": "Пустой сокет — изучите навык",
+    "assign_socket": "В сокет",
+    "all_sockets_filled": "Все сокеты заняты"
   },
   "prof": {
     "warrior": "Воин",

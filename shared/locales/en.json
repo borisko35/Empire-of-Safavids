@@ -1523,7 +1523,9 @@
     "skill_passive_badge": "passive",
     "prof_none": "No profession selected",
     "title": "Skills & Professions",
-    "empty_slot": "Empty socket — learn a skill"
+    "empty_slot": "Empty socket — learn a skill",
+    "assign_socket": "To socket",
+    "all_sockets_filled": "All sockets filled"
   },
   "prof": {
     "warrior": "Warrior",
