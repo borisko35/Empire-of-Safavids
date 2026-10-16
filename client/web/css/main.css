@@ -27,7 +27,10 @@ body {
   font-family: var(--font-body);
   color: var(--cream);
   /* Исторический фон: ночной Исфахан (tools/generate-background.js) */
-  background: var(--bg) url('../assets/bg-history.png') center / cover no-repeat fixed;
+  background: radial-gradient(120% 90% at 50% 10%, rgba(245, 200, 92, 0.16), transparent 62%),
+              linear-gradient(180deg, #0a1322 0%, #050a14 100%);
+  min-height: 100vh;
+  overflow-x: hidden;
   min-height: 100vh;
 }
 
@@ -1213,4 +1216,16 @@ textarea.cms-input { resize: vertical; line-height: 1.5; min-height: 84px; }
   text-align: center;
   color: var(--gold);
   font-size: 14px;
+}
+
+
+/* 3D-parallax фон сайта */
+.bg3d { position: fixed; inset: -8%; z-index: -1; perspective: 900px; pointer-events: none; overflow: hidden; transform: translateZ(0); }
+.bg3d-layer { position: absolute; inset: 0; will-change: transform, opacity; background-position: center; background-size: cover; background-repeat: no-repeat; transform: translate3d(0,0,0) scale(1.08); transition: transform 0.15s ease-out, opacity 0.4s ease; }
+.bg3d-sky { background-image: radial-gradient(90% 60% at 20% 15%, rgba(90, 200, 255, 0.22), transparent 60%), radial-gradient(70% 50% at 80% 25%, rgba(245, 200, 92, 0.18), transparent 65%), linear-gradient(180deg, #0b1a30 0%, #050a15 100%); opacity: 0.95; }
+.bg3d-city { background-image: url('../assets/bg-history.png'); filter: saturate(1.12) contrast(1.06) brightness(0.9); opacity: 0.82; mix-blend-mode: lighten; }
+.bg3d-fog { background: radial-gradient(60% 45% at 55% 75%, rgba(245,200,92,0.12), transparent 70%), radial-gradient(55% 40% at 25% 60%, rgba(90,140,200,0.10), transparent 75%); mix-blend-mode: screen; opacity: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bg3d, .bg3d-layer { transition: none !important; animation: none !important; transform: none !important; }
 }
