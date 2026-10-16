@@ -125,6 +125,20 @@ describe('Отложенный G-buffer включён и прошит', () => {
       + 'AO читается не по тем координатам',
     );
   });
+  it('unpatched materials still declare all G-buffer outputs', () => {
+    must(
+      /gAlbedoRough = vec4\(0\.0\)/.test(gbuffer),
+      'fallback must write gAlbedoRough placeholder vec4(0.0)',
+    );
+    must(
+      /gNormalMetal = vec4\(0\.5, 0\.5, 1\.0, 0\.0\)/.test(gbuffer),
+      'fallback must write gNormalMetal placeholder flat normal',
+    );
+    must(
+      /gEmissiveMask = vec4\(0\.0\)/.test(gbuffer),
+      'fallback must write gEmissiveMask placeholder vec4(0.0)',
+    );
+  });
 });
 
 describe('Отложенность объявлена честно', () => {
