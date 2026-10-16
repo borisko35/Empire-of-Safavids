@@ -70,6 +70,10 @@ const SKILLS: SkillDef[] = [
   { id: 'zikr', name: 'zikr', nameRu: 'Зикр', professionId: 'dervish', level: 5, xp: 100, manaCost: 25, staminaCost: 20, cooldown: 45, damageMultiplier: 0, range: 0, aoe: false, active: { buff: 'buff_damage_zikr' } },
   { id: 'taj', name: 'taj', nameRu: 'Тадж', professionId: 'dervish', level: 10, xp: 300, manaCost: 30, staminaCost: 25, cooldown: 60, damageMultiplier: 0, range: 0, aoe: false, active: { buff: 'buff_protect_taj' } },
   // Explorer skills
+  { id: 'shield_bash', name: 'shield_bash', nameRu: 'Щитовой удар', professionId: 'warrior', level: 3, xp: 0, manaCost: 12, staminaCost: 18, cooldown: 4, damageMultiplier: 1.6, range: 3, aoe: false },
+  { id: 'multi_shot', name: 'multi_shot', nameRu: 'Тройной выстрел', professionId: 'archer', level: 3, xp: 0, manaCost: 12, staminaCost: 12, cooldown: 5, damageMultiplier: 0.9, range: 14, aoe: true },
+  { id: 'whirling_dervish', name: 'whirling_dervish', nameRu: 'Кружащийся дервиш', professionId: 'dervish', level: 3, xp: 0, manaCost: 20, staminaCost: 25, cooldown: 12, damageMultiplier: 1.4, range: 4, aoe: true },
+  { id: 'scout_mark', name: 'scout_mark', nameRu: 'Метка разведчика', professionId: 'explorer', level: 3, xp: 0, manaCost: 8, staminaCost: 6, cooldown: 6, damageMultiplier: 0, range: 25, aoe: false },
   { id: 'spot_secret', name: 'spot_secret', nameRu: 'Поиск секретов', professionId: 'explorer', level: 1, xp: 0, manaCost: 5, staminaCost: 5, cooldown: 10, damageMultiplier: 0, range: 20, aoe: false },
   { id: 'treasure_map', name: 'treasure_map', nameRu: 'Карта сокровищ', professionId: 'explorer', level: 10, xp: 300, manaCost: 20, staminaCost: 10, cooldown: 300, damageMultiplier: 0, range: 0, aoe: false },
 ];

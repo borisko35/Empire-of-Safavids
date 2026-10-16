@@ -234,6 +234,8 @@ function skillIcon(skill: { id: string; damageMultiplier: number; aoe: boolean }
   if (id.includes('alams') || id.includes('zikr') || id.includes('taj')) return 'flame';
   if (id.includes('spot') || id.includes('treasure') || id.includes('explorer')) return 'compass';
   if (id.includes('shield') || id.includes('wall')) return 'shield';
+  if (id.includes('multi_shot') || id.includes('shot')) return 'bow';
+  if (id.includes('whirling')) return 'flame';
   if (id.includes('whirlwind') || id.includes('battle_cry') || id.includes('power_strike') || id.includes('execution')) return 'sword';
   return skill.aoe ? 'bolt' : 'sword';
 }
