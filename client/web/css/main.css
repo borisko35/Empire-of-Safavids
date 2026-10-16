@@ -472,6 +472,11 @@ body {
 .feature-name { font-family: var(--font-head); font-size: 15.5px; color: var(--cream); }
 .feature-desc { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--cream-dim); }
 
+@keyframes bgCityPan {
+  0% { transform: translate3d(-8px, -4px, 0) scale(1.08); }
+  100% { transform: translate3d(10px, 6px, 0) scale(1.22); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .feature-card { transition: none; }
 }
@@ -1225,8 +1230,8 @@ textarea.cms-input { resize: vertical; line-height: 1.5; min-height: 84px; }
 /* 3D-parallax фон сайта */
 .bg3d { position: fixed; inset: -8%; z-index: -1; perspective: 900px; pointer-events: none; overflow: hidden; transform: translateZ(0); }
 .bg3d-layer { position: absolute; inset: 0; will-change: transform, opacity; background-position: center; background-size: cover; background-repeat: no-repeat; transform: translate3d(0,0,0) scale(1.08); transition: transform 0.15s ease-out, opacity 0.4s ease; }
-.bg3d-sky { background-image: radial-gradient(90% 60% at 20% 15%, rgba(90, 200, 255, 0.22), transparent 60%), radial-gradient(70% 50% at 80% 25%, rgba(245, 200, 92, 0.18), transparent 65%), linear-gradient(180deg, #0b1a30 0%, #050a15 100%); opacity: 0.95; }
-.bg3d-city { background-image: url('../assets/bg-history.png'); filter: saturate(1.05) contrast(1.1) brightness(1.05); opacity: 1; mix-blend-mode: normal; }
+.bg3d-sky { background-image: radial-gradient(90% 60% at 20% 15%, rgba(90, 200, 255, 0.22), transparent 60%), radial-gradient(70% 50% at 80% 25%, rgba(245, 200, 92, 0.18), transparent 65%), linear-gradient(180deg, #111a3a 0%, #060b18 100%); opacity: 0.85; }
+.bg3d-city { background-image: url('../assets/bg-history.png'); filter: hue-rotate(22deg) saturate(1.35) contrast(1.08) brightness(1.12); opacity: 1; mix-blend-mode: normal; animation: bgCityPan 24s ease-in-out infinite alternate; }
 .bg3d-fog { background: radial-gradient(60% 45% at 55% 75%, rgba(245,200,92,0.12), transparent 70%), radial-gradient(55% 40% at 25% 60%, rgba(90,140,200,0.10), transparent 75%); mix-blend-mode: screen; opacity: 0.30; }
 
 @media (prefers-reduced-motion: reduce) {
