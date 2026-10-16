@@ -236,7 +236,9 @@ export const api = {
     }),
 
   authMe: () =>
-    req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string; isGuest?: boolean } }>('/api/auth/me'),
+    // adminRole приходит null, если роль не выдана: сервер больше не подставляет
+// 'gm' по умолчанию, потому что это открывало панели сотрудников гостям.
+    req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string | null; isGuest?: boolean } }>('/api/auth/me'),
 
   changePassword: (oldPass: string, newPass: string) =>
     req<{ success: boolean; message: string }>('/api/auth/change-password', {

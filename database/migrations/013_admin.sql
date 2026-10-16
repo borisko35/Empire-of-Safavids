@@ -4,6 +4,14 @@
 -- Административные возможности
 
 -- Флаг администратора на аккаунте
+--
+-- ВНИМАНИЕ, РОЛЬ ПО УМОЛЧАНИЮ ОТМЕНЕНА. Строка ниже добавляла admin_role
+-- с DEFAULT 'gm', а 'gm' входит в SITE_STAFF_ROLES, и проверка
+-- siteStaffCheck идёт по роли одной, без флага is_admin. Роль доставалась
+-- ЛЮБОМУ аккаунту, включая гостя: тот мог переписать новости,
+-- заявление и включить режим техработ через PUT /api/site/content/:key.
+-- Отмена и перенос роли на настоящих сотрудников — миграция 081.
+-- Читать 013 заново нельзя, DEFAULT там должен остаться в истории.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_role VARCHAR(20) NOT NULL DEFAULT 'gm';
 

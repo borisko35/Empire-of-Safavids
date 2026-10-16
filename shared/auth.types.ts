@@ -42,7 +42,15 @@ export interface AuthUser {
   email: string;
   isPremium: boolean;
   isAdmin: boolean;
-  adminRole: string;
+  /**
+   * Роль сотрудника. null — роль не выдана.
+   *
+   * Раньше здесь стояло `string`, а сервер подставлял `'gm'` всем подряд,
+   * и 'gm' входит в SITE_STAFF_ROLES: панели сотрудников показывались
+   * каждому гостю. Теперь роль приходит ровно та, что лежит в базе, а
+   * отсутствие роли означает отсутствие роли (миграция 081).
+   */
+  adminRole: string | null;
   isBanned: boolean;
   banReason?: string;
   banUntil?: Date;

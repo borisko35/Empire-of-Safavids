@@ -1973,7 +1973,10 @@ async function loadAdminRights(): Promise<void> {
     const res = await api.authMe();
     const d = res.data;
     session.isAdmin = !!d.isAdmin;
-    session.isAdminRole = d.adminRole || 'gm';
+    // Роль по умолчанию — пустая строка, а не 'gm'. 'gm' входит в
+    // STAFF_ROLES ниже, и подстановка делала панели сотрудников видимыми
+    // КАЖДОМУ: у гостя роль пустая, но проверка спрашивала только роль.
+    session.isAdminRole = d.adminRole ?? '';
   } catch {
     session.isAdmin = false;
     session.isAdminRole = 'gm';

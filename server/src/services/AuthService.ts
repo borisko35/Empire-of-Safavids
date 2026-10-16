@@ -513,7 +513,12 @@ export class AuthService {
       email: user.email,
       isPremium: !!premiumRow,
       isAdmin: !!user.is_admin,
-      adminRole: user.admin_role ?? 'gm',
+      // Роль НЕ подставляется по умолчанию. Раньше здесь стояло `?? 'gm'`,
+      // и '/gm' входит в SITE_STAFF_ROLES: каждый аккаунт без роли получал
+      // 'gm' в ответе и проходил siteStaffCheck, который смотрит на роль
+      // одну, без флага is_admin. Гость мог переписать новости сайта и
+      // включить режим техработ. Роли выдаёт только миграция, осознанно.
+      adminRole: user.admin_role,
       isBanned: user.is_banned,
       banReason: user.ban_reason ?? undefined,
       banUntil: user.ban_until ? new Date(user.ban_until) : undefined,
