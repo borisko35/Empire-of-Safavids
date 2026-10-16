@@ -4499,7 +4499,7 @@ export async function loadSkills(): Promise<void> {
         }
         return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
       }).join('') + `</div>`;
-      skillsBox.innerHTML = __sockets + skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
+      skillsBox.innerHTML = `<div class="skill-section-title">${t('skills.sockets_title')}</div>` + __sockets + `<div class="skill-section-title">${t('skills.learned_title')}</div>` + skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
 
       // Назначение навыка в сокет: кнопка data-assign
       skillsBox.querySelectorAll('[data-assign]').forEach((btn) => {
@@ -4558,7 +4558,7 @@ export async function loadSkills(): Promise<void> {
       // из ответа того же кода, который потом откажет.
       const { skills: available } = await api.getAvailableSkills(charId, profId);
       availBox.innerHTML = available.length
-        ? available.map(s => `<div class="inv-item"><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
+        ? `<div class="skill-section-title">${t('skills.available_title')}</div>` + available.map(s => `<div class="inv-item skill-row"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
         : '';
       availBox.querySelectorAll('[data-skill]').forEach(btn => {
         btn.addEventListener('click', async () => {

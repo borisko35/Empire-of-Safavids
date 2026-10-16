@@ -2546,6 +2546,15 @@ body.cursor-free .panel-toggles button { box-shadow: 0 0 0 2px rgba(245,200,92,0
 .skill-sockets {
   perspective: 600px;
 }
+.skill-section-title {
+  width: 100%;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold-light);
+  margin: 10px 0 4px;
+  text-shadow: 0 0 8px rgba(245,200,92,0.35);
+}
 .skill-sockets-title {
   width: 100%;
   font-size: 11px;
