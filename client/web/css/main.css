@@ -23,15 +23,18 @@
 
 html { scroll-behavior: smooth; }
 
+html {
+  background: #050a14;
+}
+
 body {
   font-family: var(--font-body);
   color: var(--cream);
   /* Исторический фон: ночной Исфахан (tools/generate-background.js) */
-  background: radial-gradient(120% 90% at 50% 10%, rgba(245, 200, 92, 0.16), transparent 62%),
-              linear-gradient(180deg, #0a1322 0%, #050a14 100%);
+  /* Фон вынесен в .bg3d — слои; здесь прозрачно, иначе параллакс перекрыт */
+  background: transparent;
   min-height: 100vh;
   overflow-x: hidden;
-  min-height: 100vh;
 }
 
 .icon {
