@@ -201,8 +201,11 @@ export async function loadSkillbar(): Promise<void> {
   const bar = $('skillbar');
   bar.innerHTML = '';
   const SLOTS = 4;
+  let loadoutIds: (string | null)[] = [];
+  try { loadoutIds = JSON.parse(localStorage.getItem(`eos_skill_loadout_${session.character?.id}`) || 'null') || []; } catch { loadoutIds = []; }
+  const byId = new Map(session.skills.map((sk: any) => [sk.id, sk]));
   for (let i = 0; i < SLOTS; i++) {
-    const skill = session.skills[i];
+    const skill = (loadoutIds[i] && byId.get(loadoutIds[i])) || session.skills[i];
     const slot = document.createElement('div');
     slot.className = skill ? 'skill' : 'skill skill-empty';
     slot.id = skill ? `skill-${skill.id}` : `skill-slot-${i + 1}`;
