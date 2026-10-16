@@ -106,7 +106,7 @@ docker compose -f docker-compose.prod.yml ps
 
 # Health check
 curl -s http://localhost/game/health
-# → {"status":"ok","game":"Empire of Safavids","version":"0.2.0"}
+# → {"status":"ok","game":"Empire of Safavids","version":"0.5.0"}
 ```
 
 Откройте в браузере: **https://ваш-домен.ru/game/**

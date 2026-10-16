@@ -235,7 +235,7 @@ pm2 logs eos-server
 curl http://localhost:3000/health
 ```
 
-Должно ответить: `{"status":"ok","game":"Empire of Safavids","version":"0.2.0"}`
+Должно ответить: `{"status":"ok","game":"Empire of Safavids","version":"0.5.0"}`
 
 ---
 

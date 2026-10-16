@@ -18,7 +18,7 @@
  * правильно, но править придётся вслед за ней. Состав релиза — в
  * сообщении коммита.
  */
-export const GAME_VERSION = '0.4.0';
+export const GAME_VERSION = '0.5.0';
 export const MAX_LEVEL = 100;
 export const MAX_CHARACTERS_PER_ACCOUNT = 3;
 export const MAX_INVENTORY_SLOTS = 100;
