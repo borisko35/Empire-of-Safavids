@@ -4484,7 +4484,7 @@ export async function loadSkills(): Promise<void> {
         const translated = t(`skills.skill_${s.id}`);
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
-        return `<div class="inv-item skill-row"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
+        return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
           + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
                     : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)
@@ -4525,6 +4525,32 @@ export async function loadSkills(): Promise<void> {
             writeSkillLoadout(slots);
             void loadSkills();
           }
+        });
+      });
+      // Drag-and-drop: перетащить навык из списка в сокет
+      skillsBox.querySelectorAll('.skill-row').forEach((card) => {
+        card.addEventListener('dragstart', (e) => {
+          const id = (card as HTMLElement).dataset.skillId || '';
+          try { (e as DragEvent).dataTransfer?.setData('text/plain', id); } catch { /* ignore */ }
+          card.classList.add('dragging');
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+      });
+      skillsBox.querySelectorAll('.skill-socket').forEach((socket) => {
+        socket.addEventListener('dragover', (e) => { e.preventDefault(); socket.classList.add('drag-over'); });
+        socket.addEventListener('dragleave', () => socket.classList.remove('drag-over'));
+        socket.addEventListener('drop', (e) => {
+          e.preventDefault();
+          socket.classList.remove('drag-over');
+          const id = (e as DragEvent).dataTransfer?.getData('text/plain') || '';
+          const skill = skills.find((x: any) => x.id === id);
+          const idx = Number((socket as HTMLElement).dataset.slot);
+          if (!skill || !Number.isFinite(idx) || idx < 0 || idx >= 4) return;
+          const slots = readSkillLoadout(skills);
+          slots[idx] = skill;
+          for (let j = 0; j < 4; j++) if (j !== idx && slots[j] && slots[j]!.id === skill.id) slots[j] = null;
+          writeSkillLoadout(slots);
+          void loadSkills();
         });
       });
 
