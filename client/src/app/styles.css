@@ -2606,6 +2606,24 @@ body.cursor-free .panel-toggles button { box-shadow: 0 0 0 2px rgba(245,200,92,0
   box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,200,92,0.25) inset;
 }
 .skill-socket.filled:hover {
+.skill-socket.filled::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 7px;
+  background: radial-gradient(120% 120% at 30% 20%, rgba(245,200,92,0.22), transparent 60%);
+  pointer-events: none;
+  z-index: -1;
+}
+.skill-socket.filled {
+  perspective: 600px;
+  transform-style: preserve-3d;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.skill-socket.filled:hover {
+  transform: translateY(-3px) rotateX(6deg) rotateY(-6deg) scale(1.02);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.6), 0 0 12px rgba(245,200,92,0.45), 0 0 8px rgba(245,200,92,0.3);
+}
   transform: translateY(-3px) rotateX(6deg) rotateY(-6deg);
   box-shadow: 0 12px 24px rgba(0,0,0,0.6), 0 0 12px rgba(245,200,92,0.45);
 }
