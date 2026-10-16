@@ -55,6 +55,21 @@ function renderClasses(dict) {
     desc.textContent = dict.classes[`${id}_desc`] ?? '';
     card.append(fig, name, desc);
     grid.append(card);
+
+    // Interactive tilt follow-through: card lightly tilts toward cursor.
+    card.addEventListener('pointermove', (e) => {
+      const r = card.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      card.style.setProperty('--rx', (-y * 9).toFixed(2) + 'deg');
+      card.style.setProperty('--ry', (x * 12).toFixed(2) + 'deg');
+      card.classList.add('news-card--tilt-active');
+    });
+    card.addEventListener('pointerleave', () => {
+      card.style.removeProperty('--rx');
+      card.style.removeProperty('--ry');
+      card.classList.remove('news-card--tilt-active');
+    });
   }
 }
 
@@ -284,7 +299,7 @@ async function renderSiteContent() {
   const items = content.news?.items;
   if (!grid || !Array.isArray(items) || !items.length) return;
   grid.innerHTML = '';
-  for (const item of items) {
+  for (const [idx, item] of items.entries()) {
     const card = document.createElement('article');
     card.className = 'news-card';
     const h3 = document.createElement('h3');
@@ -297,6 +312,7 @@ async function renderSiteContent() {
     // читался как узкая полоса. Решение принимает сам текст, а не
     // заголовок: важна длина текста, а не длина названия.
     if (bodyText.length > 320) card.classList.add('news-card--wide');
+    card.style.animationDelay = (idx * 0.09) + 's';
     card.append(h3, p);
     if (item.date) {
       const time = document.createElement('time');
