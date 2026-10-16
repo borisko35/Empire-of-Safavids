@@ -4484,7 +4484,7 @@ export async function loadSkills(): Promise<void> {
         const translated = t(`skills.skill_${s.id}`);
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
-        return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
+        return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} <div class="xp-bar"><div class="xp-fill" style="width:${Math.min(s.level * 10, 100)}%"></div></div> ⚡${s.manaCost} 🏃${s.staminaCost}`
           + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
                     : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)
@@ -4547,7 +4547,15 @@ export async function loadSkills(): Promise<void> {
           const idx = Number((socket as HTMLElement).dataset.slot);
           if (!skill || !Number.isFinite(idx) || idx < 0 || idx >= 4) return;
           const slots = readSkillLoadout(skills);
+          // если сокет уже занят — меняем местами
+          const existing = slots[idx];
           slots[idx] = skill;
+          if (existing) {
+            // старый навык помещаем в первое свободное место (или просто в слот 0)
+            const firstFree = slots.findIndex(s => !s);
+            if (firstFree >= 0) slots[firstFree] = existing;
+            else slots[0] = existing; // fallback
+          }
           for (let j = 0; j < 4; j++) if (j !== idx && slots[j] && slots[j]!.id === skill.id) slots[j] = null;
           writeSkillLoadout(slots);
           void loadSkills();
