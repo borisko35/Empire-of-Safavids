@@ -1528,7 +1528,8 @@
     "all_sockets_filled": "All sockets filled",
     "sockets_title": "Active sockets",
     "learned_title": "Learned skills",
-    "available_title": "Available skills"
+    "available_title": "Available skills",
+    "remove_from_slot": "Remove from socket"
   },
   "prof": {
     "warrior": "Warrior",

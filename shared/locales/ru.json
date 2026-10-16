@@ -1528,7 +1528,8 @@
     "all_sockets_filled": "Все сокеты заняты",
     "sockets_title": "Активные сокеты",
     "learned_title": "Изученные навыки",
-    "available_title": "Доступные навыки"
+    "available_title": "Доступные навыки",
+    "remove_from_slot": "Убрать с сокета"
   },
   "prof": {
     "warrior": "Воин",

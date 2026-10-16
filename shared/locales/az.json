@@ -1528,7 +1528,8 @@
     "all_sockets_filled": "Bütün yuvalar dolu",
     "sockets_title": "Aktiv yuvalar",
     "learned_title": "Öyrənilmiş bacarıqlar",
-    "available_title": "Mövcud bacarıqlar"
+    "available_title": "Mövcud bacarıqlar",
+    "remove_from_slot": "Yuvalardan çıxar"
   },
   "prof": {
     "warrior": "Döyüşçü",
