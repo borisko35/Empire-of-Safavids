@@ -1229,3 +1229,10 @@ textarea.cms-input { resize: vertical; line-height: 1.5; min-height: 84px; }
 @media (prefers-reduced-motion: reduce) {
   .bg3d, .bg3d-layer { transition: none !important; animation: none !important; transform: none !important; }
 }
+
+.bg3d-vignette {
+  background: radial-gradient(120% 100% at 50% 50%, transparent 38%, rgba(2,6,14,0.72) 92%),
+              radial-gradient(40% 40% at 15% 15%, rgba(245,200,92,0.05), transparent 70%);
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
