@@ -2502,3 +2502,9 @@ body[data-display="windowed"] #screen-world::after {
 /* Секунды отдельным классом: обратный отсчёт меняется каждую секунду,
    и не должен дёргать ширину всей полоски вместе с подписью. */
 #debuff-bar .debuff-time { opacity: 0.75; font-variant-numeric: tabular-nums; }
+
+/* Режим свободного курсора (Alt или открытие панели) */
+body.cursor-free canvas.gl-canvas { cursor: default; }
+body.cursor-free .crosshair { display: none !important; }
+body.cursor-free .panel-toggles { border-color: rgba(245,200,92,0.45); }
+body.cursor-free .panel-toggles button { box-shadow: 0 0 0 2px rgba(245,200,92,0.45), 0 0 18px rgba(245,200,92,0.35); transform: scale(1.04); }
