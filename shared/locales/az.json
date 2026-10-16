@@ -1529,7 +1529,13 @@
     "sockets_title": "Aktiv yuvalar",
     "learned_title": "Öyrənilmiş bacarıqlar",
     "available_title": "Mövcud bacarıqlar",
-    "remove_from_slot": "Yuvalardan çıxar"
+    "remove_from_slot": "Yuvalardan çıxar",
+    "keyboard_nav": "Klaviatura navigasiya",
+    "loadout_profile_1": "Profil 1",
+    "loadout_profile_2": "Profil 2",
+    "loadout_profile_3": "Profil 3",
+    "save_loadout": "Profilı saxla",
+    "delete_loadout": "Profilı sil"
   },
   "prof": {
     "warrior": "Döyüşçü",

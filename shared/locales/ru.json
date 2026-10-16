@@ -1529,7 +1529,13 @@
     "sockets_title": "Активные сокеты",
     "learned_title": "Изученные навыки",
     "available_title": "Доступные навыки",
-    "remove_from_slot": "Убрать с сокета"
+    "remove_from_slot": "Убрать с сокета",
+    "keyboard_nav": "Навигация клавиатурой",
+    "loadout_profile_1": "Профиль 1",
+    "loadout_profile_2": "Профиль 2",
+    "loadout_profile_3": "Профиль 3",
+    "save_loadout": "Сохранить профиль",
+    "delete_loadout": "Удалить профиль"
   },
   "prof": {
     "warrior": "Воин",

@@ -1529,7 +1529,13 @@
     "sockets_title": "Active sockets",
     "learned_title": "Learned skills",
     "available_title": "Available skills",
-    "remove_from_slot": "Remove from socket"
+    "remove_from_slot": "Remove from socket",
+    "keyboard_nav": "Keyboard navigation",
+    "loadout_profile_1": "Loadout 1",
+    "loadout_profile_2": "Loadout 2",
+    "loadout_profile_3": "Loadout 3",
+    "save_loadout": "Save loadout",
+    "delete_loadout": "Delete loadout"
   },
   "prof": {
     "warrior": "Warrior",
