@@ -1525,7 +1525,8 @@
     "title": "Skills & Professions",
     "empty_slot": "Empty socket — learn a skill",
     "assign_socket": "To socket",
-    "all_sockets_filled": "All sockets filled"
+    "all_sockets_filled": "All sockets filled",
+    "sockets_title": "Active sockets"
   },
   "prof": {
     "warrior": "Warrior",

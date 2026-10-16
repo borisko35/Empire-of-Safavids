@@ -1525,7 +1525,8 @@
     "title": "Bacarıqlar və Peşələr",
     "empty_slot": "Boş yuva — bacarıq öyrən",
     "assign_socket": "Yuvaya",
-    "all_sockets_filled": "Bütün yuvalar dolu"
+    "all_sockets_filled": "Bütün yuvalar dolu",
+    "sockets_title": "Aktiv yuvalar"
   },
   "prof": {
     "warrior": "Döyüşçü",
