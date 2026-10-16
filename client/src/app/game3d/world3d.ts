@@ -452,6 +452,39 @@ private roll = 0;
     return оружие / (STANCES[getStance()].attackSpeed || 1);
   }
 
+  /**
+   * Кому SSR вообще положен: собирает отражающие объекты готовой сцены.
+   *
+   * ПОЧЕМУ НЕ ВСЁ. Пока в `selects` стояло null, отражение брала ВСЯ сцена
+   * целиком, и мир становился зеркальным: земля отражала дома, стены — друг
+   * друга, персонаж сам себя. Комментарий над созданием пасса обещал «вода,
+   * мокрый камень, металл, стекло», то есть горстку объектов, а получилась
+   * зеркальная комната. Это не вкус: three прямо пишет, что null означает
+   * всю сцену (SSRPass.js:151).
+   *
+   * КРИТЕРИЙ. Металл по metalness — то, что физически обязано отражать.
+   * Земля, песок, камень, дерево и шкура персонажа имеют metalness 0 и в
+   * список не попадают: они матовые, отражение им не полагается.
+   *
+   * В список не попадает и вода: у неё собственный шейдер с преломлением и
+   * отражениями (§208). Второй проход поверх шейдера не нужен, а раньше он
+   * ещё и дублировал работу.
+   *
+   * Пустой массив — честный случай: отражать нечего, SSR не рисует ничего.
+   */
+  private collectSsrReflectors(): void {
+    const отражающие: THREE.Mesh[] = [];
+    this.scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!(mesh as unknown as { isMesh?: boolean }).isMesh) return;
+      const материалы = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      if (!материалы.length) return;
+      const металл = материалы.some((m) => (m as THREE.MeshStandardMaterial).metalness >= 0.3);
+      if (металл) отражающие.push(mesh);
+    });
+    this.ssrPass.selects = отражающие;
+  }
+
   // ── Инициализация ────────────────────────────────────────────
   init(container: HTMLElement, callbacks: World3DCallbacks): void {
     this.container = container;
@@ -559,13 +592,23 @@ private roll = 0;
       );
     }
     // SSR: screen-space reflections для воды, мокрого камня, металла, стекла.
+    //
+    // `selects: null` — это НЕ «для всех, кто блестит», это «для всей
+    // сцены». Так и написано в самой библиотеке, SSRPass.js:151:
+    //   "Which 3D objects should be affected by SSR.
+    //    If not set, the ENTIRE SCENE is affected."
+    //
+    // Список отражающих подставляет collectSsrReflectors() ниже, после
+    // постройки мира: список собирается обходом готовой сцены. Вода сюда
+    // не попадает — у неё собственный шейдер с отражениями (§208), второй
+    // проход поверх только мешал бы.
     this.ssrPass = new SSRPass({
       renderer: this.renderer,
       scene: this.scene,
       camera: this.camera,
       width: container.clientWidth,
       height: container.clientHeight,
-      selects: null,
+      selects: [],
       isBouncing: false,
       groundReflector: null,
     });
@@ -723,6 +766,9 @@ private roll = 0;
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
     buildPocketGround(this.scene);
     this.navigator = createNavigator(this.scene);
+    // SSR включаем только там, где отражение и правда нужно. Время вызова
+    // не случайно: список отражающих собирается обходом готовой сцены.
+    this.collectSsrReflectors();
 
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
