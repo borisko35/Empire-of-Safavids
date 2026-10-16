@@ -856,4 +856,7 @@ fi
 say "  vse fayly stranicy dostupny"
 
 say ""
+say ""
+say "=== 6. ОЧИСТКА КЭША СБОРКИ (docker builder prune) ==="
+docker builder prune -f 2>/dev/null || say "  кэш не очищен (не критично)"
 say "RESULT: PASS"
