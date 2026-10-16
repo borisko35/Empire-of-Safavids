@@ -1,5 +1,5 @@
 // ============================================================
-// OAuth Service — вход через Google и VK
+// OAuth Service — вход через Google и Facebook
 // ============================================================
 // Зачем: пароль — это стена на пути нового игрока. «Войти через Google» —
 // один клик, и для привлечения людей это работает лучше, чем любой
@@ -163,7 +163,7 @@ export class OAuthService {
    * Отличия от Google, из-за которых нельзя переиспользовать тот же код:
    *   — токен берётся GET-ом с токеном в query, а не POST-ом с телом;
    *   — профиль приходит одним объектом верхнего уровня, без обёртки
-   *     response[] как у ВК;
+   *     response[], которую отдают некоторые другие провайдеры;
    *   — почты, скорее всего, не будет: право email требует проверки
    *     приложения, а мы её не просим. Это нормально, почта не обязательна.
    */
@@ -293,11 +293,10 @@ export class OAuthService {
   /** Создаёт нового игрока по профилю провайдера */
   private async createUserFromProfile(profile: OAuthProfile): Promise<{ userId: string; username: string }> {
     const userId = uuidv4();
-    const username = await this.pickUsername(profile);
 
     // Почта: подтверждённая — настоящая, иначе синтетическая. Синтетическая
-    // нужна потому, что users.email NOT NULL и UNIQUE, а у ВК почты может
-    // не быть вовсе.
+    // нужна потому, что users.email NOT NULL и UNIQUE, а у Facebook почты
+    // может не быть вовсе.
     const serviceEmail = `${profile.provider}_${profile.providerId}@oauth.invalid`;
     let email = serviceEmail;
     if (profile.emailVerified && profile.email) {
@@ -311,12 +310,43 @@ export class OAuthService {
       }
     }
 
-    await this.db.query(
-      `INSERT INTO users (id, username, email, password_hash, is_guest, last_login_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, FALSE, NOW(), NOW(), NOW())`,
-      // Пароль случайный: вход только через провайдера, пароля у игрока нет
-      [userId, username, email, await bcrypt.hash(uuidv4() + uuidv4(), 12)]
-    );
+    // ОТ ИМЕНИ ПРИХОДИТ ЧУЖОЙ ТЕКСТ, И УНИКАЛЬНОСТЬ РЕШАЕТ БАЗА, А НЕ ПРОВЕРКА.
+    //
+    // pickUsername смотрит, есть ли уже такое имя, и этого почти всегда
+    // хватает — но «почти» здесь и есть дыра. Два игрока с одинаковым именем
+    // в профиле (а у Google имена вроде «Иван» повторяются постоянно)
+    // проходят одну и ту же проверку и оба получают одно имя. Второй INSERT
+    // падает с 23505, исключение уходит в общий обработчик, и игрок видит
+    // 500 вместо входа. Заметнее всего это в проверке, где таких игроков
+    // сразу несколько: подбор случайного суффикса даёт всего 900 вариантов,
+    // и все они могут кончиться раньше, чем повторится проверка.
+    //
+    // Правильный порядок: сначала пробуем вставить, и только если база
+    // сказала «занято» — берём следующее имя. Арбитр здесь один, и это сама
+    // база; предварительный SELECT остаётся лишь подсказкой, которая
+    // экономит одну попытку.
+    const passwordHash = await bcrypt.hash(uuidv4() + uuidv4(), 12);
+    let username = await this.pickUsername(profile);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await this.db.query(
+          `INSERT INTO users (id, username, email, password_hash, is_guest, last_login_at, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, FALSE, NOW(), NOW(), NOW())`,
+          // Пароль случайный: вход только через провайдера, пароля у игрока нет
+          [userId, username, email, passwordHash],
+        );
+        break;
+      } catch (err) {
+        // 23505 — нарушение уникальности. Всё остальное (связь с базой,
+        // отказ хоста) пробрасывается наверх: подменять его «занято именем»
+        // нельзя, иначе поломка базы выглядела бы как забитый ник.
+        if ((err as { code?: string }).code !== '23505' || attempt === 4) throw err;
+        logger.warn(`[OAuth] username "${username}" taken at insert, picking another`);
+        // Счётчик проверки пропускаем: следующий кандидат обязан быть новым,
+        // иначе второй круг вернулся бы к тому же занятому имени.
+        username = await this.pickUsername(profile, attempt + 1);
+      }
+    }
     await this.db.query(
       'INSERT INTO user_identities (user_id, provider, provider_id) VALUES ($1, $2, $3)',
       [userId, profile.provider, profile.providerId]
@@ -324,19 +354,29 @@ export class OAuthService {
     return { userId, username };
   }
 
-  /** Имя игрока из профиля провайдера, приводим к допустимому виду */
-  private async pickUsername(profile: OAuthProfile): Promise<string> {
+  /**
+   * Имя игрока из профиля провайдера, приводим к допустимому виду.
+   *
+   * skip — сколько первых кандидатов считать занятыми. Он нужен после
+   * отказа базы: вернуть тот же кандидат нельзя, следующая попытка упала бы
+   * точно так же.
+   */
+  private async pickUsername(profile: OAuthProfile, skip = 0): Promise<string> {
     const base = profile.displayName
       .replace(/[^A-Za-zА-Яа-яЁё0-9_]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '')
       .slice(0, 16) || 'Player';
-    for (let i = 0; i < 12; i++) {
+    for (let i = skip; i < skip + 12; i++) {
       const name = i === 0 ? base : `${base}_${Math.floor(Math.random() * 900 + 100)}`;
       const taken = await this.db.queryOne('SELECT id FROM users WHERE username = $1', [name]);
       if (!taken) return name;
     }
-    return `Player_${profile.providerId.slice(0, 8)}`;
+    // Аварийный вариант. Хвост provider_id уникален, поэтому в норме он
+    // свободен всегда — но и здесь стоит случайный суффикс: возвращать
+    // занятое имя нельзя даже в последней попытке, иначе она упрётся в тот
+    // же отказ.
+    return `Player_${profile.providerId.slice(0, 8)}_${Math.floor(Math.random() * 900 + 100)}`;
   }
 
   /**
