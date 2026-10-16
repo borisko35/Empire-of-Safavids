@@ -4495,9 +4495,9 @@ export async function loadSkills(): Promise<void> {
         if (sk) {
           const si = skills.find((x) => x.id === sk.id);
           const ico = si ? skillIcon(si as any) : 'sword';
-          return `<div class="skill-socket filled" data-slot="${i}" title="${si?.nameRu ?? sk.id}">${icon(ico as any, 20)}<span class="key">${i + 1}</span></div>`;
+          return `<div class="skill-socket filled" data-slot="${i}" title="${si?.nameRu ?? sk.id}" aria-label="${si?.nameRu ?? 'Навык'} сокет ${i + 1}">${icon(ico as any, 20)}<span class="key">${i + 1}</span></div>`;
         }
-        return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
+        return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}" aria-label="Сокет ${i + 1} пуст"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
       }).join('') + `</div>`;
       skillsBox.innerHTML = `<div class="skill-section-title">${t('skills.sockets_title')}</div>` + __sockets + `<div class="skill-section-title">${t('skills.learned_title')}</div>` + skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
 
