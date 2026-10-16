@@ -65,7 +65,7 @@ function defaultNews(): { items: { title: L10n; body: L10n; date: string }[] } {
     en: siteSection(loadLocale(dir, 'en')),
     az: siteSection(loadLocale(dir, 'az')),
   };
-  const items: { title: L10n; body: L10n; date: string }[] = [];
+  const items: { title: L10n; body: L10n; date: string; link?: string; linkText?: L10n }[] = [];
   for (let i = 1; i <= 6; i++) {
     const title: L10n = {};
     const body: L10n = {};
@@ -75,7 +75,13 @@ function defaultNews(): { items: { title: L10n; body: L10n; date: string }[] } {
       if (t) title[lang] = t;
       if (d) body[lang] = d;
     }
-    if (Object.keys(title).length) items.push({ title, body, date: '' });
+    if (Object.keys(title).length) items.push({
+      title,
+      body,
+      date: '',
+      link: '/game/',
+      linkText: { ru: 'Играть сейчас', en: 'Play now', az: 'İndi oyna' },
+    });
   }
   return { items };
 }
