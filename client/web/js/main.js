@@ -338,6 +338,26 @@ async function renderSiteContent() {
 
 document.addEventListener('eos:locale', () => {
   renderSiteContent().catch(console.error);
+
+// 3D-parallax фон: слои смещаются по мыши с разной скоростью, давая глубину.
+const __bg = document.querySelector('.bg3d');
+if (__bg) {
+  const __layers = __bg.querySelectorAll('.bg3d-layer');
+  let __x = 0, __y = 0, __tx = 0, __ty = 0;
+  window.addEventListener('mousemove', (e) => {
+    __tx = (e.clientX / window.innerWidth - 0.5) * 2;
+    __ty = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+  (function tick() {
+    __x += (__tx - __x) * 0.06;
+    __y += (__ty - __y) * 0.06;
+    __layers.forEach((layer, i) => {
+      const depth = (i + 1) * 16;
+      layer.style.transform = 'translate3d(' + (__x * depth).toFixed(2) + 'px, ' + (__y * depth).toFixed(2) + 'px, 0) scale(1.08)';
+    });
+    requestAnimationFrame(tick);
+  })();
+}
 });
 
 renderSiteContent().catch(console.error);
