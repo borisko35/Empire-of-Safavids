@@ -1526,7 +1526,9 @@
     "empty_slot": "Пустой сокет — изучите навык",
     "assign_socket": "В сокет",
     "all_sockets_filled": "Все сокеты заняты",
-    "sockets_title": "Активные сокеты"
+    "sockets_title": "Активные сокеты",
+    "learned_title": "Изученные навыки",
+    "available_title": "Доступные навыки"
   },
   "prof": {
     "warrior": "Воин",

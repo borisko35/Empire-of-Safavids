@@ -1526,7 +1526,9 @@
     "empty_slot": "Empty socket — learn a skill",
     "assign_socket": "To socket",
     "all_sockets_filled": "All sockets filled",
-    "sockets_title": "Active sockets"
+    "sockets_title": "Active sockets",
+    "learned_title": "Learned skills",
+    "available_title": "Available skills"
   },
   "prof": {
     "warrior": "Warrior",
