@@ -60,14 +60,23 @@
         <button class="btn btn-primary btn-lg" type="button" id="btn-guest" data-i18n="auth.play_now"></button>
         <p class="guest-note" data-i18n="auth.guest_note"></p>
 
-        <!-- Внешние входы. Показываются только если они настроены на сервере
-             (иначе кнопка вела бы в никуда). -->
+        <!-- Внешние входы. Прячутся и ряд, и КАЖДАЯ кнопка — по отдельности.
+
+             Раньше `hidden` стоял только на ряде, и это работало ровно до
+             первого настроенного провайдера: стоило включить Google, ряд
+             показывался целиком — вместе с кнопкой Facebook, которая ни к
+             чему не вела. Клик по ней уходил на провайдера, который выключен,
+             и игрок получал отказ вместо входа. Мёртвая кнопка выглядит как
+             рабочая ровно до нажатия.
+
+             Теперь кнопка скрыта сама по себе, а `initOAuthButtons` снимает
+             `hidden` только у тех, что сервер перечислил как настроенные. -->
         <div class="oauth-row hidden" id="oauth-row">
           <span class="oauth-sep" data-i18n="auth.or"></span>
-          <button type="button" class="oauth-btn oauth-google" id="btn-google">
+          <button type="button" class="oauth-btn oauth-google hidden" id="btn-google">
             <span class="oauth-glyph">G</span><span data-i18n="auth.sign_in_google"></span>
           </button>
-          <button type="button" class="oauth-btn oauth-facebook" id="btn-facebook">
+          <button type="button" class="oauth-btn oauth-facebook hidden" id="btn-facebook">
             <span class="oauth-glyph">f</span><span data-i18n="auth.sign_in_facebook"></span>
           </button>
         </div>
