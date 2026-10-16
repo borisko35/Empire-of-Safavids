@@ -509,6 +509,7 @@ export function openPanelById(panel: string): void {
   el.classList.remove('hidden');
   document.querySelector<HTMLButtonElement>(`.panel-toggles button[data-panel="${panel}"]`)
     ?.classList.add('active');
+  audio.playFile('click', '/game/sounds/click.ogg', 0.45);
   // Инвентарь, квесты и карта тянут за собой то, что им нужно для отрисовки
   if (panel === 'panel-inventory') void loadInventory();
   if (panel === 'panel-quests') void loadQuests();
@@ -2324,6 +2325,7 @@ function cycleStance(): void {
 }
 
 function basicAttack(): void {
+  audio.playFile('impact', '/game/sounds/impact.ogg', 0.55);
   if (isDead()) return;        // мёртвый не дерётся и не включает боевую тему
   audio.pokeCombat();          // боевая тема на время драки
   emitCombat('attack');

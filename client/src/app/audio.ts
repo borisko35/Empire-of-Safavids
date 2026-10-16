@@ -84,6 +84,10 @@ class AudioEngine {
   private _muted = localStorage.getItem('eos_mute') === '1';
   private _musicVol = readPct('eos_music_vol', 50);
   private _sfxVol = readPct('eos_sfx_vol', 70);
+  // Файловые пресеты из папки `Sounds and music` (копируются в /game/sounds).
+  private readonly fileSfx = new Map<string, HTMLAudioElement>();
+  private bgMusic: HTMLAudioElement | null = null;
+  private bgMusicFile = 'ambient_music.mp3';
   /**
    * Видел ли браузер настоящий жест игрока.
    *
@@ -103,6 +107,47 @@ class AudioEngine {
   get musicVolume() { return Math.round(this._musicVol * 100); }
   /** Громкость эффектов и эмбиента, проценты 0..100 */
   get sfxVolume() { return Math.round(this._sfxVol * 100); }
+
+  playFile(id: string, url?: string, volumeFactor = 0.5): void {
+    if (this._muted) return;
+    if (!url) url = `/game/sounds/${id}`;
+    let base = this.fileSfx.get(id);
+    if (!base) {
+      base = new Audio(url);
+      base.preload = 'auto';
+      this.fileSfx.set(id, base);
+    }
+    try {
+      const inst = base.cloneNode() as HTMLAudioElement;
+      inst.volume = Math.max(0, Math.min(1, this._sfxVol * volumeFactor));
+      void inst.play().catch(() => { /* autoplay may be blocked */ });
+    } catch { /* ignore */ }
+  }
+
+  startFileMusic(): void {
+    if (this._muted) return;
+    if (this.bgMusic) {
+      this.bgMusic.volume = Math.max(0, Math.min(1, this._musicVol * 0.85));
+      if (this.bgMusic.paused) void this.bgMusic.play().catch(() => {});
+      return;
+    }
+    const a = new Audio(`/game/sounds/${this.bgMusicFile}`);
+    a.loop = true;
+    a.volume = Math.max(0, Math.min(1, this._musicVol * 0.85));
+    this.bgMusic = a;
+    void a.play().catch(() => {});
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
+    }
+  }
+
+  stopFileMusic(): void {
+    if (this.bgMusic) {
+      this.bgMusic.pause();
+      this.bgMusic.currentTime = 0;
+      this.bgMusic = null;
+    }
+  }
 
   /**
    * Создать контекст и включить тему экранов входа/регистрации.
@@ -174,6 +219,8 @@ class AudioEngine {
       ambience: this.ambienceGain?.gain.value ?? -1,
       thunder: this.thunderGain?.gain.value ?? -1,
     }));
+    if (this.bgMusic) this.bgMusic.volume = Math.max(0, Math.min(1, this._musicVol * 0.85));
+    this.fileSfx.forEach((a) => { try { (a as HTMLAudioElement).volume = Math.max(0, Math.min(1, this._sfxVol * 0.6)); } catch {} });
   }
 
   /**
@@ -197,6 +244,7 @@ class AudioEngine {
     this.step = 0;
     пометить('__eosAudio', 'game');
     this.setAmbienceEnabled(true);
+    this.startFileMusic();
   }
 
   /**
@@ -264,6 +312,10 @@ class AudioEngine {
     localStorage.setItem('eos_mute', m ? '1' : '0');
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.05);
+    }
+    if (this.bgMusic) {
+      try { this.bgMusic.volume = m ? 0 : Math.max(0, Math.min(1, this._musicVol * 0.85)); } catch {}
+      if (m) this.bgMusic.pause(); else void this.bgMusic.play().catch(()=>{});
     }
   }
 
