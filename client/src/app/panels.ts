@@ -17,7 +17,7 @@ import { loadMediaPanel } from './media';
 // Панель гильдии вынесена в отдельный файл: в panels.ts она занимала сорок
 // строк, умела три вещи из десяти и не позволяла вступить в чужую гильдию
 import { loadGuild } from './guild';
-import { RARITY_COLORS } from '../ui/icons';
+import { RARITY_COLORS, icon } from '../ui/icons';
 import { getStance, STANCES, STANCE_ORDER } from './stance';
 
 // Простой словарь имен предметов для магазина (itemId -> ключ перевода)
@@ -4377,6 +4377,57 @@ function xpBar(xp: number, level: number, needed?: number): string {
     + `<div class="xp-text">${xp} / ${need} ${t('skills.xp_short')}</div>`;
 }
 
+function skillLoadoutKey(): string {
+  const id = session.character?.id;
+  return id ? `eos_skill_loadout_${id}` : 'eos_skill_loadout';
+}
+
+function readSkillLoadout(skills: { id: string }[]): ({ id: string } | null)[] {
+  const byId = new Map(skills.map((s) => [s.id, s]));
+  const slots: ({ id: string } | null)[] = [null, null, null, null];
+  const raw = localStorage.getItem(skillLoadoutKey());
+  if (raw) {
+    try {
+      const ids = JSON.parse(raw);
+      if (Array.isArray(ids)) {
+        for (let i = 0; i < 4; i++) {
+          if (typeof ids[i] === 'string' && byId.has(ids[i])) slots[i] = byId.get(ids[i])!;
+        }
+      }
+    } catch { /* ignore */ }
+    // убираем дубликаты
+    const seen = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const s = slots[i];
+      if (s) {
+        if (seen.has(s.id)) slots[i] = null;
+        else seen.add(s.id);
+      }
+    }
+  } else {
+    for (let i = 0; i < 4 && i < skills.length; i++) slots[i] = skills[i];
+  }
+  return slots;
+}
+
+function writeSkillLoadout(slots: ({ id: string } | null)[]): void {
+  try { localStorage.setItem(skillLoadoutKey(), JSON.stringify(slots.map((s) => s ? s.id : null))); } catch { /* ignore */ }
+}
+
+function skillIcon(skill: { id: string; damageMultiplier: number; aoe: boolean }): string {
+  const id = skill.id;
+  if (id.includes('heal') || id.includes('tonic') || id.includes('antidote') || id.includes('purify')) return 'heart';
+  if (id.includes('aimed') || id.includes('arrow') || id.includes('headshot') || id.includes('eagle') || id.includes('multi_shot')) return 'bow';
+  if (id.includes('haggle') || id.includes('bulk') || id.includes('market')) return 'coins';
+  if (id.includes('herb') || id.includes('gather')) return 'leaf';
+  if (id.includes('forge') || id.includes('reinforce') || id.includes('masterwork') || id.includes('repair')) return 'hammer';
+  if (id.includes('alams') || id.includes('zikr') || id.includes('taj') || id.includes('whirling')) return 'flame';
+  if (id.includes('spot') || id.includes('treasure') || id.includes('scout')) return 'compass';
+  if (id.includes('shield') || id.includes('wall') || id.includes('shield_bash')) return 'shield';
+  if (id.includes('whirlwind') || id.includes('battle_cry') || id.includes('power_strike') || id.includes('execution')) return 'sword';
+  return skill.aoe ? 'bolt' : 'sword';
+}
+
 export async function loadSkills(): Promise<void> {
   const charId = session.character?.id;
   if (!charId) return;
@@ -4434,11 +4485,48 @@ export async function loadSkills(): Promise<void> {
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
         return `<div class="inv-item"><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
+          + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
                     : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)
           + `${bar}</div>`;
       };
-      skillsBox.innerHTML = skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
+      const __slots = readSkillLoadout(skills);
+      const __sockets = `<div class="skill-sockets">` + __slots.map((sk, i) => {
+        if (sk) {
+          const si = skills.find((x) => x.id === sk.id);
+          const ico = si ? skillIcon(si as any) : 'sword';
+          return `<div class="skill-socket filled" data-slot="${i}" title="${si?.nameRu ?? sk.id}">${icon(ico as any, 20)}<span class="key">${i + 1}</span></div>`;
+        }
+        return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
+      }).join('') + `</div>`;
+      skillsBox.innerHTML = __sockets + skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
+
+      // Назначение навыка в сокет: кнопка data-assign
+      skillsBox.querySelectorAll('[data-assign]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const id = (btn as HTMLButtonElement).dataset.assign;
+          const sk = skills.find((x) => x.id === id);
+          if (!sk) return;
+          const slots = readSkillLoadout(skills);
+          const empty = slots.findIndex((x) => !x);
+          if (empty < 0) { toast(t('skills.all_sockets_filled'), 'info'); return; }
+          slots[empty] = sk;
+          writeSkillLoadout(slots);
+          void loadSkills();
+        });
+      });
+      // Очистка сокета по клику
+      skillsBox.querySelectorAll('.skill-socket').forEach((el) => {
+        el.addEventListener('click', () => {
+          const idx = Number((el as HTMLElement).dataset.slot);
+          const slots = readSkillLoadout(skills);
+          if (Number.isFinite(idx) && idx >= 0 && idx < 4) {
+            slots[idx] = null;
+            writeSkillLoadout(slots);
+            void loadSkills();
+          }
+        });
+      });
 
       // Включение активных навыков: Зикр, Тадж. Ответ сервера приходит
       // сюда же, и панель перерисовывается - игрок видит, что навык работает,

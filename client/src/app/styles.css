@@ -512,6 +512,25 @@ input, select { font: inherit; }
 .skill .cost { position: absolute; bottom: 2px; right: 5px; font-size: 9px; color: var(--mana); }
 .skill.on-cd .icon { opacity: 0.35; }
 
+.skill-sockets {
+  display: flex; gap: 8px; margin-bottom: 10px; padding: 8px;
+  border: 1px dashed var(--panel-border); border-radius: 10px;
+  background: rgba(13, 27, 42, 0.45);
+}
+.skill-socket {
+  width: 46px; height: 46px; border-radius: 9px;
+  border: 1.5px dashed var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold-light); cursor: pointer; position: relative;
+  background: rgba(7, 15, 27, 0.6);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.skill-socket:hover { transform: translateY(-2px); border-color: var(--gold-light); }
+.skill-socket.filled { border-style: solid; background: var(--panel); }
+.skill-socket .key { position: absolute; top: 2px; left: 4px; font-size: 9px; color: var(--cream-dim); }
+.skill-socket .socket-icon { filter: drop-shadow(0 0 6px rgba(245,200,92,0.45)); }
+.skill-socket.empty { opacity: 0.7; }
+
 .skill-empty {
   opacity: 0.55;
   border-style: dashed;
