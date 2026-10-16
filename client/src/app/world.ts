@@ -551,6 +551,10 @@ export function closeAllPanels(): number {
  * успело нарисоваться в прошлый раз.
  */
 export function togglePanel(panel: string): void {
+  // Освобождаем курсор — иначе иконки панелей нельзя выбрать мышью:
+  // пока указатель захвачен браузером (pointer lock), курсор скрыт и
+  // попадания в DOM не срабатывают. Повторный клик по холсту вернёт захват.
+  if (document.pointerLockElement) document.exitPointerLock();
   const el = document.getElementById(panel);
   if (!el) return;
   if (!el.classList.contains('hidden')) {
@@ -1841,6 +1845,14 @@ function wireInput(): void {
       togglePanel('panel-dungeons');
         } else if (e.code === getBind('inventory')) {
       togglePanel('panel-inventory');
+    } else if (e.code === 'AltLeft' || e.code === 'AltRight') {
+      e.preventDefault();
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      } else {
+        const canvas = document.querySelector('canvas.gl-canvas') as (HTMLCanvasElement | null);
+        canvas?.requestPointerLock();
+      }
     } else if (e.code === 'KeyR') {
       // Смена боевой стойки по кругу. Конная стрельба пешком пропускается:
       // иначе каждое второе нажатие упиралось бы в отказ сервера.
