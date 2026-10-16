@@ -4484,7 +4484,7 @@ export async function loadSkills(): Promise<void> {
         const translated = t(`skills.skill_${s.id}`);
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
-        return `<div class="inv-item"><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
+        return `<div class="inv-item skill-row"><b>${name}</b> — ${t('badges.level')}${s.level} ⚡${s.manaCost} 🏃${s.staminaCost}`
           + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
                     : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)

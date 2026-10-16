@@ -2541,3 +2541,43 @@ body.cursor-free canvas.gl-canvas { cursor: default; }
 body.cursor-free .crosshair { display: none !important; }
 body.cursor-free .panel-toggles { border-color: rgba(245,200,92,0.45); }
 body.cursor-free .panel-toggles button { box-shadow: 0 0 0 2px rgba(245,200,92,0.45), 0 0 18px rgba(245,200,92,0.35); transform: scale(1.04); }
+
+/* 3D-сокеты и карточки навыков */
+.skill-sockets {
+  perspective: 600px;
+}
+.skill-socket {
+  transform-style: preserve-3d;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.skill-socket.filled {
+  background: linear-gradient(160deg, rgba(25,35,58,0.9), rgba(8,12,22,0.8));
+  border-color: rgba(245,200,92,0.7);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,200,92,0.25) inset;
+}
+.skill-socket.filled:hover {
+  transform: translateY(-3px) rotateX(6deg) rotateY(-6deg);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.6), 0 0 12px rgba(245,200,92,0.45);
+}
+.skill-socket .icon {
+  filter: drop-shadow(0 0 8px rgba(245,200,92,0.55));
+}
+.skill-socket.empty {
+  background: repeating-linear-gradient(45deg, rgba(245,200,92,0.06), rgba(245,200,92,0.06) 4px, transparent 4px, transparent 8px);
+}
+.skill-row {
+  border-left: 3px solid var(--gold);
+  background: linear-gradient(90deg, rgba(201,168,76,0.08), rgba(7,15,27,0.5));
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.skill-row:hover {
+  transform: translateX(3px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+}
+.skill-row .inv-action {
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.skill-row .inv-action:hover {
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 12px rgba(245,200,92,0.4);
+}
