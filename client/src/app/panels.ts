@@ -4590,7 +4590,7 @@ export async function loadSkills(): Promise<void> {
       saveBtn.addEventListener("click", () => {
         const prof = profSelect.value;
         const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
-        try { localStorage.setItem(key, JSON.stringify(__slots)); alert("Сохранено"); } catch { alert("Ошибка"); }
+        try { localStorage.setItem(key, JSON.stringify(__slots)); alert("Сохранено"); void loadSkills(); } catch { alert("Ошибка"); }
       });
       const delBtn = document.createElement("button");
       delBtn.className = "skill-loadout-del";
