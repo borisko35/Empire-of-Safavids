@@ -1955,6 +1955,12 @@ function wireInput(): void {
     });
   }
 
+  // Класс body отражает то, захвачен ли указатель: UI рисуется по-разному
+  // в 'режиме курсора' (когда мышь свободна и можно щёлкать по иконкам)
+  // и в 'режиме камеры' (указатель скрыт, мышь управляет камерой).
+  const syncCursorFreeClass = () => document.body.classList.toggle('cursor-free', !document.pointerLockElement);
+  document.addEventListener('pointerlockchange', syncCursorFreeClass);
+  syncCursorFreeClass();
   wireSettings();
 }
 
