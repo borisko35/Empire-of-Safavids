@@ -4633,6 +4633,42 @@ export async function loadSkills(): Promise<void> {
       });
     }
   } catch { /* ignore */ }
+      // Keyboard navigation between sockets and skill rows
+      skillsBox.addEventListener('keydown', (e: KeyboardEvent) => {
+        const focused = document.activeElement as HTMLElement;
+        if (focused.hasAttribute('data-slot')) {
+          const idx = Number(focused.dataset.slot);
+          const sockets = skillsBox.querySelectorAll('.skill-socket');
+          switch (e.key) {
+            case 'ArrowUp':
+              const prev = sockets[idx - 1];
+              if ((prev as HTMLElement).focus) (prev as HTMLElement).focus();
+              else (sockets[sockets.length - 1] as HTMLElement).focus();
+              e.preventDefault();
+              break;
+            case 'ArrowDown':
+              const next = sockets[idx + 1] as HTMLElement;
+              if (next) next.focus();
+              else (sockets[0] as HTMLElement).focus();
+              e.preventDefault();
+              break;
+            case 'Enter':
+              focused.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              e.preventDefault();
+              break;
+            case 'Escape':
+              const dragging = skillsBox.querySelector('.dragging');
+              if (dragging) dragging.classList.remove('dragging');
+              break;
+          }
+        }
+        if (focused.hasAttribute('data-skill-id')) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+          }
+        }
+      });
+
 }
 
 // ── Панель настроек ─────────────────────────────────────────
