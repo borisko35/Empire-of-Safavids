@@ -4491,7 +4491,7 @@ export async function loadSkills(): Promise<void> {
           + `${bar}</div>`;
       };
       const __slots = readSkillLoadout(skills);
-      const __sockets = `<div class="skill-sockets">` + __slots.map((sk, i) => {
+      const __sockets = `<div class="skill-sockets-title">${t('skills.sockets_title')}</div><div class="skill-sockets">` + __slots.map((sk, i) => {
         if (sk) {
           const si = skills.find((x) => x.id === sk.id);
           const ico = si ? skillIcon(si as any) : 'sword';
