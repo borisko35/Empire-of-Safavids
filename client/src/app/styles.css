@@ -530,6 +530,15 @@ input, select { font: inherit; }
 .skill-socket .key { position: absolute; top: 2px; left: 4px; font-size: 9px; color: var(--cream-dim); }
 .skill-socket .socket-icon { filter: drop-shadow(0 0 6px rgba(245,200,92,0.45)); }
 .skill-socket.empty { opacity: 0.7; } .skill-socket.empty:hover { opacity: 0.9; border-color: rgba(245,200,92,0.5); }
+.skill-socket:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+.skill-row:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
 .skill-socket.filled.conflict { border-color: #ff6b6b; box-shadow: 0 0 12px rgba(255,107,107,0.5), 0 0 0 2px rgba(255,107,107,0.3) inset; animation: conflictPulse 0.8s ease infinite alternate; }
 @keyframes conflictPulse { from { box-shadow: 0 0 12px rgba(255,107,107,0.5), 0 0 0 2px rgba(255,107,107,0.3) inset; } to { box-shadow: 0 0 20px rgba(255,107,107,0.8), 0 0 0 4px rgba(255,107,107,0.4) inset; } }
 .skill-row .xp-bar { height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; margin-top: 4px; overflow: hidden; }
