@@ -301,6 +301,7 @@ private roll = 0;
   private lastFx = { floater: 0, effect: 0 };
   private targetRing!: THREE.Mesh;
   private targetRingTarget: string | null = null;
+  private targetNameEl!: HTMLElement;
   private wasNight = false;
   private lastDir: { x: number; y: number; z: number } = { x: 0, y: 0, z: 1 };
   private callbacks: World3DCallbacks | null = null;
@@ -807,6 +808,9 @@ private roll = 0;
     this.crosshair = document.createElement('div');
     this.crosshair.className = 'crosshair hidden';
     container.appendChild(this.crosshair);
+    this.targetNameEl = document.createElement('div');
+    this.targetNameEl.className = 'target-name';
+    container.appendChild(this.targetNameEl);
 
     // События
     window.addEventListener('resize', this.onResize);
@@ -1853,6 +1857,13 @@ private roll = 0;
             m.pos.z,
           );
           this.targetRing.rotation.z = now / 900;
+          // Имя цели над кольцом, проецируемое на экран
+          const p = new THREE.Vector3(m.pos.x, m.pos.y + 2.6, m.pos.z).project(this.camera);
+          const name = (m as any).nameRu ?? (m as any).name ?? '';
+          this.targetNameEl.textContent = name;
+          this.targetNameEl.style.display = '';
+          this.targetNameEl.style.transform = `translate(-50%,-50%) translate(${(p.x * 0.5 + 0.5) * this.container.clientWidth}px, ${(-p.y * 0.5 + 0.5) * this.container.clientHeight}px)`;
+          this.targetNameEl.style.opacity = String(Math.max(0, 1 - (p.z < -1 || p.z > 1 ? 1 : 0)));
         }
       }
 // Персонаж развёрнут по направлению движения, а не лицом к камере.
@@ -1891,6 +1902,7 @@ if (isMe && moving) {
     } else if (!this.entities.targetId) {
       this.targetRing.visible = false;
       this.targetRingTarget = null;
+      this.targetNameEl.style.display = 'none';
     }
 
     // ── Камера ──

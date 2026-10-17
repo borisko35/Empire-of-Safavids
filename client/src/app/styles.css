@@ -370,6 +370,19 @@ input, select { font: inherit; }
 }
 .floater3d.crit { font-size: 28px; }
 
+/* Имя цели над кольцом */
+.target-name {
+  position: absolute; left: 0; top: 0;
+  font: 700 14px Georgia, serif;
+  color: #ffd93d;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 1px rgba(0, 0, 0, 0.5);
+  text-stroke: 1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
 /* Прицел (виден при захваченном курсоре) */
 .crosshair {
   position: absolute; left: 50%; top: 50%;
