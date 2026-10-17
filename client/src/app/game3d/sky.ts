@@ -140,7 +140,7 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     color: 0xffffff, roughness: 1, transparent: true, opacity: 0.92, flatShading: true,
     emissive: 0x8a93a8, emissiveIntensity: 0.24,
   });
-  const CLOUD_COUNT = 9;
+  const CLOUD_COUNT = 16;
   const clouds: { group: THREE.Group; speed: number; baseY: number; phase: number; baseScale: number }[] = [];
   for (let i = 0; i < CLOUD_COUNT; i++) {
     const cloud = makePuffCloud(cloudMat);
@@ -173,7 +173,7 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     cover: number;
   }
   const WEATHER_LOOK: Record<WeatherKind, SkyLook> = {
-    clear:     { overcast: 0.00, dark: 0.00, speed: 1.0, low: 0.00, cover: 0.34 },
+    clear:     { overcast: 0.00, dark: 0.00, speed: 1.0, low: 0.00, cover: 0.60 },
     cloudy:    { overcast: 0.55, dark: 0.30, speed: 1.3, low: 0.15, cover: 0.78 },
     rain:      { overcast: 0.90, dark: 0.62, speed: 1.9, low: 0.42, cover: 1.00 },
     storm:     { overcast: 1.00, dark: 0.97, speed: 3.2, low: 0.62, cover: 1.00 },
