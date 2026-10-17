@@ -167,10 +167,10 @@ function makeBubble(): THREE.Sprite {
     g.moveTo(108, 68); g.lineTo(128, 90); g.lineTo(148, 68);
     g.fill();
     g.fillStyle = '#2a2018';
-    g.font = 'bold 24px sans-serif';
+    g.font = 'bold 28px sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    const short = t.length > 14 ? t.slice(0, 13) + '…' : t;
+    const short = t.length > 18 ? t.slice(0, 17) + '…' : t;
     g.fillText(short, 128, 38);
     tex.needsUpdate = true;
   };

@@ -4480,11 +4480,12 @@ export async function loadSkills(): Promise<void> {
       }));
       // Пассивный навык помечен, и кнопки «включить» не получает: такая
       // кнопка обещала бы действие, которого у пассива нет.
-      const skillRows = (s: { id: string; nameRu: string; level: number; manaCost: number; staminaCost: number; active?: unknown }, bar: string): string => {
+      const skillRows = (s: { id: string; nameRu: string; level: number; manaCost: number; staminaCost: number; cooldown: number; active?: unknown }, bar: string): string => {
         const translated = t(`skills.skill_${s.id}`);
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
-        return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} <div class="xp-bar"><div class="xp-fill" style="width:${Math.min(s.level * 10, 100)}%"></div></div> ⚡${s.manaCost} 🏃${s.staminaCost}`
+        const tt = `${name} — ${t('badges.level')}${s.level} • ${t('world.mana')} ${s.manaCost} • ${t('world.stamina')} ${s.staminaCost} • КД ${s.cooldown}с`;
+        return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}" title="${tt}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} <div class="xp-bar"><div class="xp-fill" style="width:${Math.min(s.level * 10, 100)}%"></div></div> ⚡${s.manaCost} 🏃${s.staminaCost}`
           + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
                     : ` <i class="tag">${t('skills.skill_passive_badge')}</i>`)
@@ -4620,7 +4621,10 @@ export async function loadSkills(): Promise<void> {
       // из ответа того же кода, который потом откажет.
       const { skills: available } = await api.getAvailableSkills(charId, profId);
       availBox.innerHTML = available.length
-        ? `<div class="skill-section-title">${t('skills.available_title')}</div>` + available.map(s => `<div class="inv-item skill-row"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`).join('')
+        ? `<div class="skill-section-title">${t('skills.available_title')}</div>` + available.map(s => {
+          const tt = `${s.nameRu} — ${t('badges.level')}${s.level}`;
+          return `<div class="inv-item skill-row" title="${tt}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${s.nameRu}</b> — ${t('badges.level')}${s.level} <button class="inv-action" data-skill="${s.id}">${t('skills.study')}</button></div>`;
+        }).join('')
         : '';
       availBox.querySelectorAll('[data-skill]').forEach(btn => {
         btn.addEventListener('click', async () => {
