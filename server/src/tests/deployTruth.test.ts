@@ -25,8 +25,22 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const корень = join(__dirname, '..', '..', '..');
-const СЦЕНАРИЙ = readFileSync(join(корень, 'tools', 'deploy.sh'), 'utf-8');
-const ПРИМЕР_ENV = readFileSync(join(корень, 'deploy', '.env.example'), 'utf-8');
+
+// Переносы строк приводим к LF ДО любой сверки.
+//
+// ПОЧЕМУ. Сценарий читается как есть, а ищется в нём `\n`. На машине с
+// core.autocrlf=true (Windows, и именно так устроено это рабочее место)
+// сценарий лежит в CRLF, и пара «then\r\n  SSH_OPTS=» не совпадает с
+// «then\n  SSH_OPTS=». Код при этом был правильный — падала проверка
+// правильного кода, и это худший вид поломки: виноват оказывается тот,
+// кто ничего не менял.
+//
+// Отсюда и вторая половина правки: переносы строк в репозитории заданы
+// .gitattributes, а не настройкой каждой машины. Но проверка не должна
+// зависеть от того, отработала ли checkout-нормализация, поэтому
+// приводит текст сама.
+const СЦЕНАРИЙ = readFileSync(join(корень, 'tools', 'deploy.sh'), 'utf-8').replace(/\r\n/g, '\n');
+const ПРИМЕР_ENV = readFileSync(join(корень, 'deploy', '.env.example'), 'utf-8').replace(/\r\n/g, '\n');
 
 function must(условие: unknown, причина: string): asserts условие {
   if (!условие) throw new Error(причина);

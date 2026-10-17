@@ -92,6 +92,13 @@ function panelApi(document: unknown) {
       loadRegions: rec('loadRegions'),
       loadPanelContent: rec('loadPanelContent'),
       onTutorialAction: rec('onTutorialAction'),
+      // Звук щелчка при открытии панели. openPanelById играет его через
+      // audio.playFile, и без заглушки все семь проверок ниже падали с
+      // «ReferenceError: audio is not defined» — не из-за самой панели, а
+      // из-за вырезанного тела, у которого нет модульных переменных.
+      // Звук к предмету проверок отношения не имеет, поэтому он уходит в
+      // тот же регистр и в подсчётах не участвует.
+      audio: { playFile: rec('playFile') },
     },
   );
   return { api: run(document as never), calls };

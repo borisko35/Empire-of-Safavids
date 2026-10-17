@@ -1,0 +1,44 @@
+# Переносы строк в репозитории заданы здесь, а не настройкой каждой машины.
+#
+# ПОЧЕМУ ТАК. core.autocrlf у разных машин бывает включён, выключен и
+# наполовину. Из-за этого один и тот же файл в репозитории и на диске
+# выглядит по-разному, а проверки, ищущие в тексте `\n`, ломаются на
+# машине разработчика и проходят на сервере. Проверка выкатки
+# (deployTruth) падала именно так: сценарий был верный, а сверять его
+# было нечем — CRLF вместо LF.
+#
+# Побочный эффект, который дороже всего: `#!/bin/bash\r` — это «плохой
+# интерпретатор». Скрипт, запущенный как ./deploy.sh, не стартует.
+
+# Сценарии оболочки: LF обязателен, иначе shebang не работает.
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Текст, который читают проверки, сборка и редакторы.
+*.ts text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.gltf text eol=lf
+*.txt text eol=lf
+
+# Ассеты: это не текст, трогать переносы в них нельзя.
+*.glb binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.ogg binary
+*.mp3 binary
+*.wav binary
+*.wasm binary
+*.zip binary

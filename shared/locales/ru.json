@@ -1537,7 +1537,11 @@
     "loadout_profile_2": "Профиль 2",
     "loadout_profile_3": "Профиль 3",
     "save_loadout": "Сохранить профиль",
-    "delete_loadout": "Удалить профиль"
+    "delete_loadout": "Удалить профиль",
+    "cooldown_label": "КД ",
+    "skill_noun": "Навык",
+    "socket_filled_label": "{name} — сокет {n}",
+    "socket_empty_label": "Сокет {n} пуст"
   },
   "prof": {
     "warrior": "Воин",

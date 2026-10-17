@@ -4484,7 +4484,7 @@ export async function loadSkills(): Promise<void> {
         const translated = t(`skills.skill_${s.id}`);
         const name = translated && translated !== `skills.skill_${s.id}` ? translated : s.nameRu;
         const active = !!s.active;
-        const tt = `${name} — ${t('badges.level')}${s.level} • ${t('world.mana')} ${s.manaCost} • ${t('world.stamina')} ${s.staminaCost} • КД ${s.cooldown}с`;
+        const tt = `${name} — ${t('badges.level')}${s.level} • ${t('world.mana')} ${s.manaCost} • ${t('world.stamina')} ${s.staminaCost} • ${t('skills.cooldown_label')}${s.cooldown}${t('common.seconds_short')}`;
         return `<div class="inv-item skill-row" draggable="true" data-skill-id="${s.id}" title="${tt}"><span class="skill-row-icon">${icon(skillIcon(s as any) as any, 18)}</span><b>${name}</b> — ${t('badges.level')}${s.level} <div class="xp-bar"><div class="xp-fill" style="width:${Math.min(s.level * 10, 100)}%"></div></div> ⚡${s.manaCost} 🏃${s.staminaCost}`
           + ` <button class="inv-action" data-assign="${s.id}">${t('skills.assign_socket')}</button>`
           + (active ? ` <button class="inv-action" data-activate="${s.id}">${t('skills.skill_activate')}</button>`
@@ -4496,9 +4496,11 @@ export async function loadSkills(): Promise<void> {
         if (sk) {
           const si = skills.find((x) => x.id === sk.id);
           const ico = si ? skillIcon(si as any) : 'sword';
-          return `<div class="skill-socket filled" data-slot="${i}" title="${si?.nameRu ?? sk.id}" aria-label="${si?.nameRu ?? 'Навык'} сокет ${i + 1}">${icon(ico as any, 20)}<span class="key">${i + 1}</span></div>`;
+          const имя = si?.nameRu ?? sk.id ?? t('skills.skill_noun');
+          const подпись = t('skills.socket_filled_label').replace('{name}', имя).replace('{n}', String(i + 1));
+          return `<div class="skill-socket filled" data-slot="${i}" title="${имя}" aria-label="${подпись}">${icon(ico as any, 20)}<span class="key">${i + 1}</span></div>`;
         }
-        return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}" aria-label="Сокет ${i + 1} пуст"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
+        return `<div class="skill-socket empty" data-slot="${i}" title="${t('skills.empty_slot')}" aria-label="${t('skills.socket_empty_label').replace('{n}', String(i + 1))}"><span class="key">${i + 1}</span><span class="socket"></span></div>`;
       }).join('') + `</div>`;
       skillsBox.innerHTML = `<div class="skill-section-title">${t('skills.sockets_title')}</div>` + __sockets + `<div class="skill-section-title">${t('skills.learned_title')}</div>` + skills.map((s, i) => skillRows(s, bars[i] ?? '')).join('');
 
@@ -4573,34 +4575,6 @@ export async function loadSkills(): Promise<void> {
           const id = (btn as HTMLButtonElement).dataset.activate;
           window.dispatchEvent(new CustomEvent('game:skill-activate', { detail: id }));
         });
-      });
-      // Loadout selector
-      const profSelect = document.createElement("select");
-      profSelect.id = "skill-loadout-profile";
-      profSelect.innerHTML = "<option value=\"1\">Профиль 1</option><option value=\"2\">Профиль 2</option><option value=\"3\">Профиль 3</option>";
-      skillsBox.parentNode!.insertBefore(profSelect, skillsBox);
-      profSelect.addEventListener("change", () => {
-        const prof = profSelect.value;
-        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
-        alert("Выбран профиль " + prof + ", ключ: " + key);
-      });
-      const saveBtn = document.createElement("button");
-      saveBtn.className = "skill-loadout-save";
-      saveBtn.textContent = "Сохранить";
-      skillsBox.parentNode!.insertBefore(saveBtn, skillsBox.nextSibling);
-      saveBtn.addEventListener("click", () => {
-        const prof = profSelect.value;
-        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
-        try { localStorage.setItem(key, JSON.stringify(__slots)); alert("Сохранено"); void loadSkills(); } catch { alert("Ошибка"); }
-      });
-      const delBtn = document.createElement("button");
-      delBtn.className = "skill-loadout-del";
-      delBtn.textContent = "Удалить";
-      skillsBox.parentNode!.insertBefore(delBtn, saveBtn);
-      delBtn.addEventListener("click", () => {
-        const prof = profSelect.value;
-        const key = "eos_skill_loadout_" + session.character?.id + "_" + prof;
-        try { localStorage.removeItem(key); alert("Профиль удален"); void loadSkills(); } catch { alert("Ошибка"); }
       });
     } else {
       skillsBox.innerHTML = `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.no_skills')}</div>`;

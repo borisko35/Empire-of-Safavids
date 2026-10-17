@@ -1537,7 +1537,11 @@
     "loadout_profile_2": "Loadout 2",
     "loadout_profile_3": "Loadout 3",
     "save_loadout": "Save loadout",
-    "delete_loadout": "Delete loadout"
+    "delete_loadout": "Delete loadout",
+    "cooldown_label": "CD ",
+    "skill_noun": "Skill",
+    "socket_filled_label": "{name} — socket {n}",
+    "socket_empty_label": "Socket {n} empty"
   },
   "prof": {
     "warrior": "Warrior",

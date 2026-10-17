@@ -21,6 +21,7 @@ import {
 } from '../../../client/src/app/autobattle';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { extractFunction } from './helpers/extractFn';
 
 const корень = join(__dirname, '..', '..', '..');
 
@@ -290,9 +291,20 @@ describe('Автобой: подключено к игре, а не лежит �
     // бы другим. Это тот класс поломки, что в проекте уже был: счётчик
     // убийств писался через placeholder и падал молча на втором событии.
     const мир2 = readFileSync(join(корень, 'client/src/app/world.ts'), 'utf-8');
-    const блокУдара = мир2.slice(мир2.indexOf('function basicAttack'));
-    must(/emitCombat\('attack'\)/.test(блокУдара.slice(0, 200)),
+    // ПОЧЕМУ ИМЕННО ТЕЛО ФУНКЦИИ, А НЕ ОКОНЦЕК СИМВОЛОВ. Проверка искала
+    // emitCombat в первых 200 символах после `function basicAttack`. Это
+    // окно оказалось шире самого смысла проверки: звук удара и комментарий
+    // про мёртвого отодвинули вызов за него, и проверка падала на коде,
+    // который как раз и был правильным. Окно — это угадывание длины
+    // функции; тело функции — это её точная граница, и добавление звука
+    // в basicAttack больше не сможет её сдвинуть.
+    const блокУдара = extractFunction(мир2, 'basicAttack');
+    must(/emitCombat\('attack'\)/.test(блокУдара),
       'ручной удар идёт не через emitCombat - автобой пойдёт другим путём');
+
+    // И в теле удара нет собственного сетевого вызова: путь должен быть один.
+    must(!/socket\.emit/.test(блокУдара),
+      'ручной удар шлёт пакет сам мимо emitCombat - у боя два пути начисления урона');
 
     // И в самом автобое нет собственного сетевого вызова.
     const модуль = readFileSync(join(корень, 'client/src/app/autobattle.ts'), 'utf-8');

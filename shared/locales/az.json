@@ -1537,7 +1537,11 @@
     "loadout_profile_2": "Profil 2",
     "loadout_profile_3": "Profil 3",
     "save_loadout": "Profilı saxla",
-    "delete_loadout": "Profilı sil"
+    "delete_loadout": "Profilı sil",
+    "cooldown_label": "КД ",
+    "skill_noun": "Bacarıq",
+    "socket_filled_label": "{name} — slot {n}",
+    "socket_empty_label": "Slot {n} boşdur"
   },
   "prof": {
     "warrior": "Döyüşçü",

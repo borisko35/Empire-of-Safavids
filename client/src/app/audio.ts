@@ -128,6 +128,10 @@ class AudioEngine {
     if (this._muted) return;
     if (this.bgMusic) {
       this.bgMusic.volume = Math.max(0, Math.min(1, this._musicVol * 0.85));
+      // QUIET: браузер отклоняет play() до первого настоящего жеста игрока.
+      // Это ожидаемый отказ на каждой загрузке страницы, а не поломка:
+      // логировать его — значит писать в консоль именно тогда, когда всё
+      // работает как задумано. Тот же довод, что и у vid.play() в media.ts.
       if (this.bgMusic.paused) void this.bgMusic.play().catch(() => {});
       return;
     }
@@ -135,6 +139,7 @@ class AudioEngine {
     a.loop = true;
     a.volume = Math.max(0, Math.min(1, this._musicVol * 0.85));
     this.bgMusic = a;
+    // QUIET: то же ожидаемое блокирование автозапуска, что и строкой выше.
     void a.play().catch(() => {});
     if (this.musicGain && this.ctx) {
       this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
@@ -315,7 +320,12 @@ class AudioEngine {
     }
     if (this.bgMusic) {
       try { this.bgMusic.volume = m ? 0 : Math.max(0, Math.min(1, this._musicVol * 0.85)); } catch {}
-      if (m) this.bgMusic.pause(); else void this.bgMusic.play().catch(()=>{});
+      if (m) this.bgMusic.pause(); else {
+        // QUIET: снятие заглушки не считается жестом игрока, поэтому браузер
+        // вправе отклонить play() даже после кликов. Отказ ожидаемый и
+        // повторяется на каждом включении звука до первого настоящего жеста.
+        void this.bgMusic.play().catch(() => {});
+      }
     }
   }
 
