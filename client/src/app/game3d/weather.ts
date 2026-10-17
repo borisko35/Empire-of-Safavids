@@ -32,7 +32,7 @@ const SAND_R = 30;
  * около 18 пикселей — читается как пылинка, а не как пятно на объективе.
  */
 const SAND_NEAR_R = 16;
-const SNOW_COUNT = 900;
+const SNOW_COUNT = 600;
 const SNOW_R = 26;
 const SNOW_H = 22;
 /** Радиус «дыры» у камеры: ни одна частица не появляется ближе */

@@ -361,12 +361,14 @@ input, select { font: inherit; }
 .fx-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 3; }
 .floater3d {
   position: absolute; left: 0; top: 0;
-  font: 700 17px Georgia, serif;
+  font: 700 20px Georgia, serif;
   white-space: nowrap;
-  text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px #000, 0 0 8px rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 1px rgba(0, 0, 0, 0.5);
+  text-stroke: 1px rgba(0, 0, 0, 0.5);
   will-change: transform, opacity;
 }
-.floater3d.crit { font-size: 26px; }
+.floater3d.crit { font-size: 28px; }
 
 /* Прицел (виден при захваченном курсоре) */
 .crosshair {
