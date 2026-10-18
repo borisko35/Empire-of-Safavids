@@ -273,6 +273,6 @@ describe('ЮKassa не попадает в реестр с подписью', ()
     // Даже если кто-то положит его в реестр, разбор тела обязан быть
     // пустым: доверять присланному нельзя ни при каких условиях.
     const p = (PAYMENT_PROVIDERS as Record<string, { parseEvent: (b: unknown) => unknown }>);
-    expect({ ключей: Object.keys(p) }).toEqual({ ключей: ['default'] });
+    expect({ ключей: Object.keys(p) }).toEqual({ ключей: ['default', 'intellectmoney'] });
   });
 });

@@ -299,7 +299,10 @@ describe('Каждый вызов клиента обеспечен маршру
       // Вебхуки платёжных систем: вызывает внешний сервис, не браузер.
       'POST /api/game/payments/webhook/yookassa',
       'POST /api/game/payments/webhook/xsolla',
+      'POST /api/game/payments/webhook/intellectmoney',
       'POST /api/game/payments/webhook/:',
+      // Создание платежа: клиент вызывает через api.paymentTopup
+      'POST /api/game/payments/topup',
       // Дубль набора гильдий: клиент ходит в /api/guilds, а не сюда.
       'GET /api/game/guilds',
       'POST /api/game/guilds',

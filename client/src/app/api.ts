@@ -705,6 +705,21 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       // обязан показать именно это, а не радостно закрыть окно.
       checkoutUrl: string | null;
       providerError: string | null;
+      // Для Intellect Money — параметры инициализации виджета
+      intellectmoneyWidgetParams: {
+        EshopId: string;
+        OrderId: string;
+        ServiceName: string;
+        RecipientAmount: string;
+        RecipientCurrency: string;
+        Email: string;
+        SuccessUrl?: string;
+        BackUrl?: string;
+        ResultUrl?: string;
+        Preference?: string;
+        UserField_1?: string;
+        UserField_2?: string;
+      } | null;
     }>('/api/game/payments/topup', {
       method: 'POST',
       // provider попадает в тело, только если его задали явно: пустая строка

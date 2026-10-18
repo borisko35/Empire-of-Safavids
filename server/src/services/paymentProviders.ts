@@ -12,6 +12,7 @@
 // в metadata/return-url при создании счёта).
 
 import crypto from 'crypto';
+import { INTELLECTMONEY } from './payments/intellectmoney';
 
 export interface ParsedPaymentEvent {
   /** Наш paymentId (pending-запись из POST /payments/topup). */
@@ -73,4 +74,11 @@ export const UNSIGNED_PROVIDERS: readonly string[] = ['yookassa'];
 // Реестр: имя из URL -> провайдер. Неизвестное имя = 404, деньги не двигаются.
 export const PAYMENT_PROVIDERS: Record<string, PaymentProvider> = {
   default: hmacProvider('default', 'PAYMENT_WEBHOOK_SECRET'),
+  // Intellect Money — отдельным провайдером, так как подпись в теле (hash),
+  // а не в заголовке. verifySignature здесь не используется — вебхук свой.
+  intellectmoney: {
+    name: INTELLECTMONEY,
+    verifySignature(): boolean { return false; }, // не используется
+    parseEvent(): ParsedPaymentEvent | null { return null; }, // не используется
+  },
 };
