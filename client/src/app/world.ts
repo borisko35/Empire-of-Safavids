@@ -5,7 +5,7 @@
 
 import { socket, attachConnectionStateTracking } from './net';
 import { api } from './api';
-import { t, detectLocale, loadLocale } from './i18n';
+import { t, detectLocale, loadLocale, имяПредмета } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
 import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop, loadSkills, loadParty } from './panels';
@@ -1000,7 +1000,7 @@ function wireSocket(): void {
         w.addFloater(m.pos.x, m.pos.z - 0.3, `+${gold} ◉`, '#F4D26C');
       }
       if (loot?.length) {
-        const line = `${t('world.loot')}: ${loot.map(l => `${l.nameRu} ×${l.qty}`).join(', ')}`;
+        const line = `${t('world.loot')}: ${loot.map(l => `${имяПредмета(l.itemId, l.nameRu)} ×${l.qty}`).join(', ')}`;
         chatMessage(null, line, true);
         toast(line, 'success');
       }
@@ -1072,10 +1072,9 @@ function wireSocket(): void {
     if (item) {
       // Сервер присылает идентификатор вида mat_dragon_scale. Раньше он
       // уходил в тост как есть — игрок читал «+mat_dragon_scale» вместо
-      // названия. Как и с зонами: ключ при отсутствии — не показываем путь.
-      const key = `items.${item}`;
-      const label = t(key);
-      parts.push(label === key ? item : label);
+      // названия. Отдельный разбор ключа заменён на общий: иначе у тостов
+      // и сумки было по своему правилу, и они расходились на переименованиях.
+      parts.push(имяПредмета(item, item));
     }
     audio.levelUp();
     const reward = parts.length ? `: ${parts.join(' · ')}` : '';
@@ -1105,9 +1104,7 @@ function wireSocket(): void {
     if (d?.gold) parts.push(`+${d.gold} ${t('world.gold')}`);
     // Идентификаторы предметов показываем названиями, как в задаче дня.
     for (const id of d?.items ?? []) {
-      const key = `items.${id}`;
-      const label = t(key);
-      parts.push(label === key ? id : label);
+      parts.push(имяПредмета(id, id));
     }
     const reward = parts.length ? `: ${parts.join(' · ')}` : '';
     // Без названия подземелья заголовок с плейсхолдером бессмысленен,
@@ -1174,9 +1171,7 @@ function wireSocket(): void {
     const части: string[] = [];
     if (d?.price != null) части.push(`${d.price} ${t('world.gold')}`);
     if (d?.itemId) {
-      const ключ = `items.${d.itemId}`;
-      const название = t(ключ);
-      части.unshift(название === ключ ? d.itemId : название);
+      части.unshift(имяПредмета(d.itemId, d.itemId));
     }
     // Русский текст внутри литералов в вызове toast() проверка
     // gameI18n считает хардкодом: игрок с латинским интерфейсом увидел бы

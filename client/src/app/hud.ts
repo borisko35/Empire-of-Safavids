@@ -22,7 +22,7 @@ function заглушкаПредмета(имя: string, редкость: stri
 
 import { api, ApiError } from './api';
 import type { ActiveBuff } from './api';
-import { t } from './i18n';
+import { t, имяПредмета } from './i18n';
 import { fogLayerFor, worldFogMask } from './minimapFog';
 import { icon } from '../ui/icons';
 import { session } from './state';
@@ -557,6 +557,8 @@ function invBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement 
 export function renderEquipment(equipment: {
   items: {
     slot: string;
+    /** Идентификатор предмета — по нему берётся название из словаря */
+    itemId: string;
     nameRu: string;
     rarity: string;
     enhancement: number;
@@ -596,7 +598,8 @@ export function renderEquipment(equipment: {
     value.className = 'equip-value';
     const item = bySlot.get(slot);
     if (item) {
-      value.textContent = item.enhancement > 0 ? `${item.nameRu} +${item.enhancement}` : item.nameRu;
+      const имя = имяПредмета(item.itemId, item.nameRu);
+      value.textContent = item.enhancement > 0 ? `${имя} +${item.enhancement}` : имя;
       value.style.color = RARITY_COLOR[item.rarity] ?? RARITY_COLOR.common;
       rowEl.append(invBtn(t('world.unequip'), async () => {
         renderEquipment(await api.unequip(session.character!.id, slot));
@@ -642,7 +645,8 @@ export async function loadInventory(): Promise<void> {
     for (const it of items) {
       const row = document.createElement('div');
       row.className = 'inv-item';
-      const label = it.enhancement > 0 ? `${it.nameRu} +${it.enhancement}` : it.nameRu;
+      const имя = имяПредмета(it.itemId, it.nameRu);
+      const label = it.enhancement > 0 ? `${имя} +${it.enhancement}` : имя;
       row.innerHTML =
         `<span class="dot" style="background:${RARITY_COLOR[it.rarity] ?? RARITY_COLOR.common}"></span>` +
         `<span class="inv-name">${label}</span><span class="inv-qty">?${it.quantity}</span>`;
@@ -666,7 +670,10 @@ export async function loadInventory(): Promise<void> {
         картинка.loading = 'lazy';
         картинка.src = `/assets/${it.iconPath}`;
         картинка.addEventListener('error', () => {
-          картинка.replaceWith(заглушкаПредмета(it.nameRu, it.rarity));
+          // Заглушка берёт то же имя, что и строка списка. Раньше здесь стояло
+          // nameRu, и у нерусского игрока первая буква плитки была русской,
+          // хотя рядом в том же списке предмет назывался уже по-английски.
+          картинка.replaceWith(заглушкаПредмета(имя, it.rarity));
         });
         row.prepend(картинка);
       }

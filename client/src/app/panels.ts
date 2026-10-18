@@ -6,7 +6,7 @@
 // не используется: после действия — перезагрузка панели.
 
 import { api, EquipmentState } from './api';
-import { t } from './i18n';
+import { t, имяПредмета } from './i18n';
 import { session, Character } from './state';
 import { toast, refreshBars, loadInventory, renderUnreadBadge, setDailyTasksOpen } from './hud';
 import { onTutorialAction } from './tutorial';
@@ -20,33 +20,20 @@ import { loadGuild } from './guild';
 import { RARITY_COLORS, icon } from '../ui/icons';
 import { getStance, STANCES, STANCE_ORDER } from './stance';
 
-// Простой словарь имен предметов для магазина (itemId -> ключ перевода)
-const SHOP_ITEM_NAMES: Record<string, string> = {
-  'con_health_potion_s': 'items.con_health_potion_s',
-  'con_stamina_food': 'items.con_stamina_food',
-  'mat_iron_ore': 'items.mat_iron_ore',
-  'wpn_iron_sword': 'items.wpn_iron_sword',
-  'arm_leather_vest': 'items.arm_leather_vest',
-  'con_health_potion_m': 'items.con_health_potion_m',
-  'con_mana_potion': 'items.con_mana_potion',
-  'mat_silk': 'items.mat_silk',
-  'mat_saffron': 'items.mat_saffron',
-  'con_exp_scroll': 'items.con_exp_scroll',
-  'wpn_qizilbash_saber': 'items.wpn_qizilbash_saber',
-  'arm_silk_robe': 'items.arm_silk_robe',
-  'mat_turquoise': 'items.mat_turquoise',
-  'mat_dragon_scale': 'items.mat_dragon_scale',
-  'acc_silk_road_amulet': 'items.acc_silk_road_amulet',
-  'mount_arabian_horse': 'items.mount_arabian_horse',
-  'mount_bactrian_camel': 'items.mount_bactrian_camel',
-  'mount_qizilbash_warhorse': 'items.mount_qizilbash_warhorse',
-  'acc_boots_silk': 'items.acc_boots_silk_road',
-  'acc_boots_seafarer': 'items.acc_boots_seafarer',
-  'acc_cloim_rain': 'items.acc_cloak_monsoon',
-};
-
-function itemName(itemId: string): string {
-  return t(SHOP_ITEM_NAMES[itemId] ?? itemId);
+// Словарь имён предметов для магазина УДАЛЁН намеренно.
+//
+// Здесь был свой список «itemId -> ключ перевода», из которого восемнадцать
+// записей были просто items.<тот же id>, а две настоящие —
+// acc_boots_silk -> acc_boots_silk_road и acc_cloim_rain ->
+// acc_cloak_monsoon. Первые восемнадцать теперь разрешаются сами, вторые
+// живут в ПСЕВДОНИМЫ рядом с имяПредмета().
+//
+// К чему это привело: имя предмета находилось тремя способами — здесь через
+// список, в сумке через nameRu из данных, в тостах через t('items.…').
+// Списки разошлись, и игрок видел «Нишапурскую Бирюзу» в сумке и «Тофи» в
+// магазине. Третий способ больше не нужен: имяПредмета() одна на все экраны.
+function itemName(itemId: string, nameRu?: string): string {
+  return имяПредмета(itemId, nameRu ?? itemId);
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
@@ -830,7 +817,10 @@ export async function loadShop(): Promise<void> {
         const row = rowEl('inv-item');
         const label = document.createElement('span');
         label.className = 'inv-name';
-        label.textContent = item.nameRu ?? itemName(item.itemId);
+        // Перевод, а не nameRu: имя из данных всегда по-русски, и покупатель
+        // с английским интерфейсом раньше читал русский список покупок при
+        // английских кнопках.
+        label.textContent = itemName(item.itemId, item.nameRu);
         const price = document.createElement('span');
         price.className = 'inv-qty';
         price.textContent = cur2 === 'azens' ? `AZENS ${item.price}` : cur2 === 'silver' ? `SILVER ${item.price}` : cur2 === 'syrian' ? `SYRIAN ${item.price}` : `gold ${item.price}`;
@@ -3958,7 +3948,8 @@ export async function loadCharacterPanel(): Promise<void> {
     if (!el.dataset.emptyLabel) el.dataset.emptyLabel = label.textContent ?? '';
     const item = bySlot.get(slot);
     if (item) {
-      label.textContent = item.enhancement > 0 ? `${item.nameRu} +${item.enhancement}` : item.nameRu;
+      const имя = itemName(item.itemId, item.nameRu);
+      label.textContent = item.enhancement > 0 ? `${имя} +${item.enhancement}` : имя;
       label.style.color = RARITY_COLORS[item.rarity] ?? 'inherit';
       el.classList.add('equipped');
     } else {
