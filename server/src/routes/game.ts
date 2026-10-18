@@ -13,6 +13,7 @@ import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
 import { DUNGEONS_DATABASE, getDungeonsByLevel } from '../data/dungeons';
 import { getWorldBosses } from '../data/monsters';
 import { CharacterService } from '../services/CharacterService';
+import { DatabaseService } from '../services/DatabaseService';
 import { PartySystem } from '../systems/PartySystem';
 import { DungeonService } from '../systems/DungeonService';
 import { KarmaSystem } from '../systems/KarmaSystem';
@@ -54,6 +55,11 @@ import {
   createXsollaPayment, isXsollaEnabled, resolveXsollaNotification, XSOLLA,
 } from '../services/payments/xsolla';
 import { xsollaSku } from '../services/payments/xsolla/token';
+import {
+  intellectMoneyConfig, isIntellectMoneyEnabled, buildWidgetParams,
+  verifyIntellectMoneyHash, intellectMoneyStatusToEvent, INTELLECTMONEY,
+  IntellectMoneyNotification,
+} from '../services/payments/intellectmoney';
 import Joi from 'joi';
 
 export const gameRouter = Router();
@@ -95,12 +101,13 @@ const ЗАПАСНОЙ_ПРОВАЙДЕР = 'yookassa';
  * прописано в двух местах и разъехалось с реальностью.
  *
  * Теперь клиент имя не присылает, а решение принимает сервер по своим
- * ключам. Порядок: сначала Xsolla, потом ЮKassa, а если не настроен
- * ничего - возвращается запасное имя, и маршрут честно отвечает «провайдер
- * не настроен».
+ * ключам. Порядок: сначала Xsolla, потом Intellect Money, потом ЮKassa,
+ * а если не настроен ничего - возвращается запасное имя, и маршрут честно
+ * отвечает «провайдер не настроен».
  */
 export function выборПровайдера(env: NodeJS.ProcessEnv = process.env): string {
   if (isXsollaEnabled(env)) return XSOLLA;
+  if (isIntellectMoneyEnabled(env)) return INTELLECTMONEY;
   if (isYooKassaEnabled()) return 'yookassa';
   return ЗАПАСНОЙ_ПРОВАЙДЕР;
 }
@@ -142,7 +149,6 @@ function paymentCountry(req: Request): string | null {
 import { QuestService } from '../services/QuestService';
 import { REDIS_CHANNELS } from '../../../shared/constants';
 import { GameLoop } from '../systems/GameLoop';
-import { DatabaseService } from '../services/DatabaseService';
 import type { CharacterClass } from '../types/game.types';
 import { AISystem } from '../systems/AISystem';
 // Поиск целей абордажа: общий с сокетом, который начинает заход (§191).
@@ -699,6 +705,28 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
             providerError = 'provider_request_failed';
           }
         }
+      } else if (provider === INTELLECTMONEY) {
+        // Intellect Money — виджет на клиенте. Счёт у провайдера НЕ создаём
+        // заранее: виджет сам создаёт СКО при открытии, а при оплате
+        // Intellect Money пришлёт уведомление на ResultUrl.
+        // Возвращаем параметры для инициализации виджета на клиенте.
+        if (!isIntellectMoneyEnabled()) {
+          providerError = 'provider_not_configured';
+        } else {
+          // Email игрока — из пользователя (userId известен из middleware)
+          const user = await DatabaseService.getInstance().queryOne<{ email: string }>(
+      'SELECT email FROM users WHERE id = $1', [req.userId]
+    );
+          const email = user?.email ?? '';
+          const cfg = intellectMoneyConfig();
+          if (cfg) {
+            checkoutUrl = null; // для виджета checkoutUrl не нужен
+            // widgetParams вернём в ответе отдельно
+            (payment as any).intellectmoneyWidgetParams = buildWidgetParams(cfg, payment, email);
+          } else {
+            providerError = 'provider_not_configured';
+          }
+        }
       } else {
         providerError = 'unknown_provider';
       }
@@ -724,6 +752,8 @@ gameRouter.post('/payments/topup', secureMiddleware, requireCharacterOwnership()
         // «оплачено»: клиент обязан показать это честно, а не закрыть окно.
         checkoutUrl,
         providerError,
+        // Для Intellect Money — параметры виджета (если есть)
+        intellectmoneyWidgetParams: (payment as any).intellectmoneyWidgetParams ?? null,
       });
     } catch (err) {
       return res.status(400).json({ error: (err as Error).message });
@@ -940,6 +970,70 @@ gameRouter.post('/payments/webhook/xsolla', asyncHandler(async (req: Request, re
     azens: result.azens,
     bonus: result.bonus ?? 0,
   });
+}));
+
+// POST /api/game/payments/webhook/intellectmoney — уведомление Intellect Money (ResultUrl).
+//
+// ОСОБЕННОСТИ Intellect Money:
+// 1. Подпись в теле уведомления (поле hash), а не в заголовке.
+// 2. Хэш — MD5 от конкатенации полей через :: + secretKey.
+// 3. Поля уведомления отличаются от общего контракта, маппим их в ParsedPaymentEvent.
+// 4. Статус paymentStatus: «3» = оплачен, «5» = отменён.
+// 5. Дедедупликация по providerPaymentId (paymentId от Intellect Money).
+gameRouter.post('/payments/webhook/intellectmoney', asyncHandler(async (req: Request, res: Response) => {
+  const cfg = intellectMoneyConfig();
+  if (!cfg) {
+    // Не 500: без ключей это не сбой, а штатное состояние. Intellect Money
+    // будет повторять уведомление, и на все попытки ответ одинаковый.
+    return res.status(503).json({ error: 'provider_not_configured' });
+  }
+
+  const body = req.body as {
+    eshopId?: string;
+    orderId?: string;
+    paymentId?: string;
+    serviceName?: string;
+    eshopAccount?: string;
+    recipientAmount?: string;
+    recipientCurrency?: string;
+    paymentStatus?: string;
+    userName?: string;
+    userEmail?: string;
+    paymentData?: string;
+    hash?: string;
+  };
+
+  // Проверка MD5-хэша. Хэш приходит в теле, не в заголовке.
+  if (!verifyIntellectMoneyHash(body as IntellectMoneyNotification, cfg.secretKey)) {
+    logger.warn('[Payments] intellectmoney bad hash');
+    return res.status(401).json({ error: 'Bad webhook hash' });
+  }
+
+  // Наш paymentId пришёл в orderId (мы клали его туда при создании виджета).
+  const paymentId = body.orderId;
+  if (!paymentId) {
+    logger.warn('[Payments] intellectmoney no orderId');
+    return res.status(400).json({ error: 'no_order_id' });
+  }
+
+  const event = intellectMoneyStatusToEvent(body as IntellectMoneyNotification, paymentId);
+  if (!event) {
+    // Промежуточный статус (1, 2, 4...) — не ошибка, ждём финальный.
+    return res.json({ success: true, applied: false, status: body.paymentStatus });
+  }
+
+  const result = event.kind === 'refunded'
+    ? await paymentService.reversePayment({
+        provider: INTELLECTMONEY, providerPaymentId: event.providerPaymentId,
+        paymentId: event.paymentId, reason: event.failReason,
+      })
+    : await paymentService.completePayment({
+        provider: INTELLECTMONEY, providerPaymentId: event.providerPaymentId,
+        paymentId: event.paymentId, succeed: event.kind === 'completed', failReason: event.failReason,
+      });
+
+  if (!result.ok) return res.status(400).json({ error: result.code });
+  return res.json({ success: true, applied: true, deduped: result.deduped ?? false, azens: result.azens });
 }));
 
 // POST /api/game/payments/webhook/:provider — подтверждение провайдера (без auth, по HMAC).

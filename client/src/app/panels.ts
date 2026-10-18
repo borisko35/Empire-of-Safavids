@@ -386,21 +386,31 @@ async function renderShopWallet(box: HTMLElement): Promise<void> {
     /**
  * Что делать с только что созданным платежом.
  *
- * Три честных исхода, и каждый показывается по-разному:
- * 1. Есть адрес оплаты — уводим игрока на страницу провайдера. Только там он
- *    вводит карту.
- * 2. Счёт не создан, потому что приём платежей не настроен — говорим прямо.
- *    Молчаливое «платёж создан» здесь означало бы, что игрок заплатил и ничего
- *    не получил, а узнал бы об этом через неделю.
- * 3. Счёт создан, но адреса нет — счёт где-то есть, а найти его нечем; ждём
+ * Четыре честных исхода, и каждый показывается по-разному:
+ * 1. Есть адрес оплаты (Xsolla, ЮKassa) — уводим игрока на страницу провайдера.
+ * 2. Есть параметры виджета Intellect Money — инициализируем виджет прямо здесь.
+ * 3. Счёт не создан, потому что приём платежей не настроен — говорим прямо.
+ * 4. Счёт создан, но адреса нет — счёт где-то есть, а найти его нечем; ждём
  *    уведомление от провайдера и опрашиваем статус.
  */
 function goToCheckout(created: {
-  paymentId: string; azensExpected: number; checkoutUrl: string | null; providerError: string | null;
+  paymentId: string; azensExpected: number; checkoutUrl: string | null;
+  providerError: string | null;
+  intellectmoneyWidgetParams?: {
+    EshopId: string; OrderId: string; ServiceName: string;
+    RecipientAmount: string; RecipientCurrency: string; Email: string;
+    SuccessUrl?: string; BackUrl?: string; ResultUrl?: string;
+    Preference?: string; UserField_1?: string; UserField_2?: string;
+  } | null;
 }): void {
   if (created.providerError === 'provider_not_configured') {
     statusLabel.textContent = t('wallet.pay_provider_not_ready');
     toast(t('wallet.pay_provider_not_ready'), 'error');
+    return;
+  }
+  // Intellect Money — виджет на нашей странице.
+  if (created.intellectmoneyWidgetParams) {
+    initIntellectMoneyWidget(created.intellectmoneyWidgetParams, created.paymentId, created.azensExpected);
     return;
   }
   if (created.checkoutUrl) {
@@ -416,6 +426,70 @@ function goToCheckout(created: {
     return;
   }
   void pollPayment(created.paymentId, created.azensExpected);
+}
+
+/**
+ * Инициализирует виджет Intellect Money.
+ *
+ * Загружает скрипт виджета с merchant.intellectmoney.ru, создаёт контейнер
+ * и инициализирует Configuration.init с параметрами от сервера.
+ * Колбэки onSuccess / onClosedWindow запускают опрос статуса платежа.
+ */
+function initIntellectMoneyWidget(params: {
+  EshopId: string; OrderId: string; ServiceName: string;
+  RecipientAmount: string; RecipientCurrency: string; Email: string;
+  SuccessUrl?: string; BackUrl?: string; ResultUrl?: string;
+  Preference?: string; UserField_1?: string; UserField_2?: string;
+}, paymentId: string, expected: number): void {
+  // Контейнер для виджета
+  const container = document.createElement('div');
+  container.id = 'intellectmoney-widget';
+  container.style.minHeight = '400px';
+  statusLabel.textContent = t('wallet.pay_widget_loading');
+  statusLabel.parentElement?.insertBefore(container, statusLabel.nextSibling);
+
+  // Загрузка скрипта виджета
+  const script = document.createElement('script');
+  script.src = 'https://merchant.intellectmoney.ru/v2/js/IntellectMoneyMerchantWidget.js';
+  script.async = true;
+  script.onload = () => {
+    try {
+      // @ts-ignore — IntellectMoneyMerchantWidget грузится глобально
+      const widget = window.IntellectMoneyMerchantWidget?.Configuration;
+      if (!widget) throw new Error('IntellectMoneyMerchantWidget not loaded');
+      widget.init({
+        EshopId: params.EshopId,
+        OrderId: params.OrderId,
+        ServiceName: params.ServiceName,
+        RecipientAmount: params.RecipientAmount,
+        RecipientCurrency: params.RecipientCurrency,
+        Email: params.Email,
+        SuccessUrl: params.SuccessUrl ?? '',
+        BackUrl: params.BackUrl ?? '',
+        ResultUrl: params.ResultUrl ?? '',
+        Preference: params.Preference ?? '',
+        UserField_1: params.UserField_1 ?? '',
+        UserField_2: params.UserField_2 ?? '',
+        onSuccess: () => {
+          statusLabel.textContent = t('wallet.pay_widget_success');
+          void pollPayment(paymentId, expected);
+        },
+        onClosedWindow: () => {
+          statusLabel.textContent = t('wallet.pay_widget_cancelled');
+          void pollPayment(paymentId, expected);
+        },
+      });
+    } catch (err) {
+      console.error('[Payments] IntellectMoney widget init failed:', err);
+      statusLabel.textContent = t('wallet.pay_widget_failed');
+      toast(t('wallet.pay_widget_failed'), 'error');
+    }
+  };
+  script.onerror = () => {
+    statusLabel.textContent = t('wallet.pay_widget_failed');
+    toast(t('wallet.pay_widget_failed'), 'error');
+  };
+  document.head.appendChild(script);
 }
 
 async function pollPayment(paymentId: string, expected: number): Promise<void> {
