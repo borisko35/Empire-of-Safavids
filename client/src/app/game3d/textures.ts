@@ -644,3 +644,214 @@ export function waterfallTexture(repeat = 2): THREE.CanvasTexture {
   }
   return toTexture(canvas, repeat);
 }
+
+// ── Растительность и ткань ────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Камень, песок и дерево носили albedo, карту нормалей и
+// карту шероховатости, а листва, стволы и ткань стояли голым цветом с
+// roughness: 1. Разница видна сразу и не в пользу вторых: крона читалась как
+// вырезанная из цветного картона, ствол — как палка, ткань — как заливка.
+// Плоская поверхность не даёт главного, за что цепляется глаз на кустах и
+// кронах: претензионной детали и честной тени от неё.
+//
+// Цвета материалов в terrain.ts остаются те же — текстура приходит в
+// multiply к color, то есть материал по-прежнему красится своим цветом.
+
+/**
+ * Листва: гроздь листьев, а не сплошная заливка.
+ *
+ * Каждый лист — эллипс с осью, повёрнутой случайно. Рисуются в три слоя по
+ * светлоте, тёмный снизу: так крона приобретает объём даже при плоском
+ * освещении, а без слоёв крона выглядит как одно пятно.
+ */
+export function foliageTexture(
+  base: string,
+  repeat = 3,
+  size = 128,
+): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  const тройка = (r: number, g: number, b: number) => `rgb(${r},${g},${b})`;
+  // Разбор базового цвета, чтобы слои отличались тоном, а не случайным
+  // цветом: иначе крона из трёх зелёных уходила бы в пёстрое конфетти.
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [74, 106, 56];
+
+  const слой = (множитель: number, плотность: number) => {
+    ctx.fillStyle = тройка(
+      Math.min(255, Math.round(б * множитель)),
+      Math.min(255, Math.round(г * множитель)),
+      Math.min(255, Math.round(к * множитель)),
+    );
+    for (let i = 0; i < плотность; i++) {
+      // Лист рисуется девять раз со сдвигами, чтобы он уходил за края и
+      // стыковался сам с собой — иначе по периметру была бы рамка.
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const rx = 3 + Math.random() * 6;
+      const ry = 1.6 + Math.random() * 3.2;
+      const угол = Math.random() * Math.PI;
+      for (const [dx, dy] of [
+        [0, 0], [size, 0], [-size, 0], [0, size], [0, -size],
+        [size, size], [-size, size], [size, -size], [-size, -size],
+      ]) {
+        ctx.beginPath();
+        ctx.ellipse(x + dx, y + dy, rx, ry, угол, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  };
+
+  слой(0.66, 90);   // тень снизу
+  слой(1.0, 120);   // основная масса
+  слой(1.34, 45);   // верхний свет
+
+  return toTexture(canvas, repeat);
+}
+
+/**
+ * Карта нормалей для листвы: из той же картинки листьев.
+ *
+ * Нормали берутся из яркости альбедо: у листа своя яркость, значит и
+ * наклон есть. Листья рисуются теми же девятью сдвигами, иначе по краям
+ * нормаль прыгала бы на стыке текстуры.
+ */
+export function foliageNormalTexture(repeat = 3, size = 128): THREE.CanvasTexture {
+  // canvas не нужен: из него читается только картинка, а нормали считаются
+  // из пикселей через heightToNormal. Та же оговорка в barkNormalTexture.
+  const { ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 240; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const rx = 3 + Math.random() * 6;
+    const ry = 1.6 + Math.random() * 3.2;
+    const угол = Math.random() * Math.PI;
+    const свет = 110 + Math.floor(Math.random() * 90);
+    ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+    for (const [dx, dy] of [
+      [0, 0], [size, 0], [-size, 0], [0, size], [0, -size],
+      [size, size], [-size, size], [size, -size], [-size, -size],
+    ]) {
+      ctx.beginPath();
+      ctx.ellipse(x + dx, y + dy, rx, ry, угол, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 2.6);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
+
+/**
+ * Кора: вертикальные гребни, а не доски.
+ *
+ * Отличие от woodTexture принципиальное: доски — это горизонтальные полосы со
+ * стыками, кора — вертикальные волокна, слитые в одну поверхность. На
+ * стволе, обёрнутом цилиндром, доски читались бы как обои в полоску.
+ */
+export function barkTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [90, 70, 48];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Волокна идут вертикально и слегка гуляют по x — кора живая, а не
+  // расчёсана.
+  for (let i = 0; i < 90; i++) {
+    const x0 = Math.random() * size;
+    const свет = Math.random() > 0.5 ? 1.28 : 0.68;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.35 + Math.random() * 0.4})`;
+    ctx.lineWidth = 1 + Math.random() * 3.4;
+    ctx.beginPath();
+    let x = x0;
+    ctx.moveTo(x, -4);
+    for (let y = -4; y <= size + 4; y += 10) {
+      x += (Math.random() - 0.5) * 3.2;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // Короткие поперечные трещины: у коры есть и они, и без них вертикаль
+  // читается как штриховка, а не как растрескавшаяся поверхность.
+  for (let i = 0; i < 26; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    ctx.strokeStyle = `rgba(20,14,8,${0.2 + Math.random() * 0.35})`;
+    ctx.lineWidth = 0.7 + Math.random() * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (Math.random() - 0.5) * 5, y + 4 + Math.random() * 14);
+    ctx.stroke();
+  }
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для коры: вертикальные волокна. */
+export function barkNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 90; i++) {
+    const x0 = Math.random() * size;
+    const свет = 110 + Math.floor(Math.random() * 80);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 1 + Math.random() * 3.4;
+    ctx.beginPath();
+    let x = x0;
+    ctx.moveTo(x, -4);
+    for (let y = -4; y <= size + 4; y += 10) {
+      x += (Math.random() - 0.5) * 3.2;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 2.4);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
+
+/**
+ * Ткань: переплетение нитей.
+ *
+ * Ткани в игре — паруса, шатры, ковры, флаги. Переплетение видно вблизи, а
+ * на плоской заливке ткань выглядит как крашеный картон: нет ни блика на
+ * нитях, ни собственной тени между ними.
+ */
+export function clothTexture(base: string, repeat = 4, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [139, 26, 26];
+
+  const шаг = 4;
+  for (let y = 0; y < size; y += шаг) {
+    for (let x = 0; x < size; x += шаг) {
+      // Через одну клетка основная нить лежит сверху — это и есть
+      // переплетение. Нити одного направления чуть светлее, другого
+      // темнее, и глаз сразу читает ткань, а не сетку.
+      const сверху = ((x / шаг) + (y / шаг)) % 2 === 0;
+      const множитель = сверху ? 1.22 : 0.78;
+      ctx.fillStyle = `rgba(${Math.round(б * множитель)},${Math.round(г * множитель)},${Math.round(к * множитель)},0.9)`;
+      ctx.fillRect(x, y, шаг - 1, шаг - 1);
+    }
+  }
+  // Редкие ворсинки: ткань поношена, а не новая из фабрики.
+  for (let i = 0; i < 60; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.04 + Math.random() * 0.08})`;
+    ctx.fillRect(Math.random() * size, Math.random() * size, 1, 1 + Math.random() * 3);
+  }
+  return toTexture(canvas, repeat);
+}

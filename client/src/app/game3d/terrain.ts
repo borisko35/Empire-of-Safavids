@@ -19,6 +19,7 @@ import {
   stoneRoughnessTexture, woodRoughnessTexture,
   stoneDisplacementTexture,
   waterNormalTexture, waterFoamTexture,
+  foliageTexture, foliageNormalTexture, barkTexture, barkNormalTexture, clothTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1463,17 +1464,24 @@ const MAT = {
   tealDome: new THREE.MeshStandardMaterial({ color: 0x35a0a0, roughness: 0.3, metalness: 0, map: mosaicTexture(4) }),
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7 }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.6, map: woodTexture(1), normalMap: woodNormalTexture(1), normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: woodRoughnessTexture(1) }),
-  foliage: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1 }),
-  foliageDark: new THREE.MeshStandardMaterial({ color: 0x3d5a32, roughness: 1 }),
-  foliageLight: new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1 }),
-  brush: new THREE.MeshStandardMaterial({ color: 0x6a6a3c, roughness: 1 }),
-  trunk: new THREE.MeshStandardMaterial({ color: 0x5a4630, roughness: 1 }),
-  palmTrunk: new THREE.MeshStandardMaterial({ color: 0x7a6244, roughness: 1 }),
-  palmLeaf: new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide }),
-  white: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85 }),
-  clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1 }),
-  clothTeal: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1 }),
-  clothPurple: new THREE.MeshStandardMaterial({ color: 0x7a5fd0, roughness: 1 }),
+  // Растительность и ткань получили процедурные текстуры: до этого они
+  // стояли голым цветом с roughness: 1, и крона читалась как картон, ствол как
+  // палка, парус как заливка. Цвет материала сохранён — текстура приходит в
+  // multiply, то есть красит его по-прежнему он сам.
+  //
+  // normalScale у листвы и коры меньше единицы намеренно: полная сила
+  // нормалей превращала бы крона в шум из чешуек, а читаться должна крона.
+  foliage: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1, map: foliageTexture('#4a6a38', 3), normalMap: foliageNormalTexture(3), normalScale: new THREE.Vector2(0.7, 0.7) }),
+  foliageDark: new THREE.MeshStandardMaterial({ color: 0x3d5a32, roughness: 1, map: foliageTexture('#3d5a32', 3), normalMap: foliageNormalTexture(3), normalScale: new THREE.Vector2(0.7, 0.7) }),
+  foliageLight: new THREE.MeshStandardMaterial({ color: 0x5d7a3c, roughness: 1, map: foliageTexture('#5d7a3c', 3), normalMap: foliageNormalTexture(3), normalScale: new THREE.Vector2(0.7, 0.7) }),
+  brush: new THREE.MeshStandardMaterial({ color: 0x6a6a3c, roughness: 1, map: foliageTexture('#6a6a3c', 4), normalMap: foliageNormalTexture(4), normalScale: new THREE.Vector2(0.8, 0.8) }),
+  trunk: new THREE.MeshStandardMaterial({ color: 0x5a4630, roughness: 1, map: barkTexture('#5a4630', 2), normalMap: barkNormalTexture(2), normalScale: new THREE.Vector2(1.0, 1.0) }),
+  palmTrunk: new THREE.MeshStandardMaterial({ color: 0x7a6244, roughness: 1, map: barkTexture('#7a6244', 2), normalMap: barkNormalTexture(2), normalScale: new THREE.Vector2(1.0, 1.0) }),
+  palmLeaf: new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide, map: foliageTexture('#4f7a3a', 2), normalMap: foliageNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
+  white: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85, map: clothTexture('#e8e0d0', 4) }),
+  clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1, map: clothTexture('#8b1a1a', 4) }),
+  clothTeal: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1, map: clothTexture('#2e8b8b', 4) }),
+  clothPurple: new THREE.MeshStandardMaterial({ color: 0x7a5fd0, roughness: 1, map: clothTexture('#7a5fd0', 4) }),
   dark: new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 1 }),
   // Стекло окна. Не «почти чёрное», как MAT.dark: настоящее стекло ловит
   // небо — низкая шероховатость, слабая металличность и небольшое свечение.
