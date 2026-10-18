@@ -1082,3 +1082,65 @@ export function flowerNormalTexture(repeat = 1, size = 64): THREE.CanvasTexture 
   const normalCanvas = heightToNormal(img.data, size, 1.0);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Черепица для крыш ──────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Крыша стояла плоским коричневым с roughness: 1. Настоящая
+// черепица имеет регулярный рельеф: ряды черепиц с выступами и затиркой.
+
+/** Текстура черепицы: ряды черепиц с выступами. */
+export function roofTileTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [138, 106, 66];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  const рядов = 4;
+  const высотаРяда = size / рядов;
+  for (let r = 0; r < рядов; r++) {
+    const y0 = r * высотаРяда;
+    // Каждая черепица — прямоугольник с лёгким закруглением
+    for (let c = 0; c < 3; c++) {
+      const x0 = c * (size / 3) + 2;
+      const w = size / 3 - 4;
+      const свет = 0.85 + Math.random() * 0.3;
+      ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},0.7)`;
+      ctx.fillRect(x0, y0 + 4, w, высотаРяда - 8);
+      // Выступ черепицы
+      ctx.fillStyle = `rgba(${Math.round(б * (свет + 0.1))},${Math.round(г * (свет + 0.1))},${Math.round(к * (свет + 0.1))},0.5)`;
+      ctx.fillRect(x0, y0 + 4, w, 3);
+    }
+    // Затирка между рядами
+    ctx.fillStyle = 'rgba(40,30,20,0.15)';
+    ctx.fillRect(0, y0 + высотаРяда - 2, size, 2);
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для черепицы: выступы рядов. */
+export function roofTileNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  const рядов = 4;
+  const высотаРяда = size / рядов;
+  for (let r = 0; r < рядов; r++) {
+    const y0 = r * высотаРяда;
+    for (let c = 0; c < 3; c++) {
+      const x0 = c * (size / 3) + 2;
+      const w = size / 3 - 4;
+      const свет = 140 + Math.floor(Math.random() * 30);
+      ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+      ctx.fillRect(x0, y0 + 4, w, высотаРяда - 8);
+    }
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.8);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
