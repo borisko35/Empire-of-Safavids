@@ -1750,3 +1750,69 @@ export function goldNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
   const normalCanvas = heightToNormal(img.data, size, 0.8);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Тёмный камень/металл ──────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Тёмный материал стоял плоским с roughness: 1. Используется
+// для окон и тёмных поверхностей. Настоящий тёмный камень имеет неровности.
+
+/** Текстура тёмного камня: неровности. */
+export function darkStoneTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [42, 42, 48];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Неровности: мелкие пятна
+  for (let i = 0; i < 150; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    const свет = 0.85 + Math.random() * 0.3;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.15 + Math.random() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Трещины: тонкие линии
+  for (let i = 0; i < 8; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 5 + Math.random() * 20;
+    const угол = Math.random() * Math.PI;
+    ctx.strokeStyle = `rgba(${Math.round(б * 0.6)},${Math.round(г * 0.6)},${Math.round(к * 0.6)},${0.15 + Math.random() * 0.1})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для тёмного камня. */
+export function darkStoneNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 150; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    const свет = 110 + Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 0.8);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}

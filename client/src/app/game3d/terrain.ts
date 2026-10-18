@@ -24,6 +24,7 @@ import {
   windowFrameTexture, windowFrameNormalTexture,
   flowerTexture, flowerNormalTexture,
   goldTexture, goldNormalTexture,
+  darkStoneTexture, darkStoneNormalTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1486,7 +1487,7 @@ const MAT = {
   clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1, map: clothTexture('#8b1a1a', 4) }),
   clothTeal: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1, map: clothTexture('#2e8b8b', 4) }),
   clothPurple: new THREE.MeshStandardMaterial({ color: 0x7a5fd0, roughness: 1, map: clothTexture('#7a5fd0', 4) }),
-  dark: new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 1 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 1, map: darkStoneTexture('#2a2a30', 2), normalMap: darkStoneNormalTexture(2), normalScale: new THREE.Vector2(0.3, 0.3) }),
   // Стекло окна. Не «почти чёрное», как MAT.dark: настоящее стекло ловит
   // небо — низкая шероховатость, слабая металличность и небольшое свечение.
   // Без этого окно читалось как дыра в стене (см. windowPane).
