@@ -11,12 +11,22 @@ const конец = src.indexOf('\n];', начало);
 if (конец === -1) throw new Error('конец TRADE_CONTRACTS не найден');
 const блок = src.slice(начало, конец);
 
-const re = /id:\s*'(trade_[a-z0-9_]+)',\s*\n\s*name:\s*'([^']*)',\s*\n\s*nameRu:\s*'([^']*)',/g;
-let m;
+// Комментарии вырезаются ДО разбора полей. Регулярка, требующая соседства
+// id, name и nameRu, ломалась от комментария между ними: контракт выпадал
+// из списка молча, а инструмент заполнения — который доверяет этому
+// списку — переписывал словарь уже без него. Потеря ключа выглядела как
+// успешная работа.
+const { stripComments } = require('./helpers/strip-comments.cjs');
+const чистый = stripComments(блок);
+
+const объекты = чистый.split(/\n {2}\{\n/).slice(1);
 const contracts = [];
-while ((m = re.exec(блок)) !== null) {
-  const [, id, name, nameRu] = m;
-  contracts.push({ id, en: name ?? '', ru: nameRu ?? '' });
+for (const объект of объекты) {
+  const id = /id:\s*'(trade_[a-z0-9_]+)'/.exec(объект);
+  const name = /(?:^|[^\w])name:\s*'([^']*)'/.exec(объект);
+  const nameRu = /(?:^|[^\w])nameRu:\s*'([^']*)'/.exec(объект);
+  if (!id || !name || !nameRu) continue;
+  contracts.push({ id: id[1] ?? '', en: name[1] ?? '', ru: nameRu[1] ?? '' });
 }
 
 module.exports = { contracts };

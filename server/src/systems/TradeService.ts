@@ -101,8 +101,15 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
   {
     id: 'trade_isfahan_khorasan_scale',
-    name: 'Dragon Scale to Khorasan',
-    nameRu: 'Драконья чешуя в Хорасан',
+    // Название приведено в соответствие с грузом. Контракт звался
+    // «Драконья чешуя в Хорасан», а mat_dragon_scale в данных называется
+    // «Перо Симурга» и описан как крайне редкий материал для легендарного
+    // крафта: игрок читал про чешуюю, а везёт перо. Переименован контракт,
+    // а не предмет, потому что на перне держится легенда крафта и описание
+    // предмета, а идентификатор mat_dragon_scale внутренний и на игру не
+    // влияет.
+    name: 'Simurgh Feather to Khorasan',
+    nameRu: 'Перо Симурга в Хорасан',
     fromRegion: Region.ISFAHAN, toRegion: Region.KHORASAN,
     cargoItemId: 'mat_dragon_scale', cargoQty: 1,
     rewardGold: 8000, rewardExp: 5200, rewardSilver: 120, rewardSyrian: 40, minLevel: 70,
