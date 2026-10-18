@@ -1371,3 +1371,95 @@ export function woodDarkNormalTexture(repeat = 2, size = 128): THREE.CanvasTextu
   const normalCanvas = heightToNormal(img.data, size, 1.3);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Тёмная стена ───────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Тёмная стена стояла плоским цветом с roughness: 0.95.
+// Настоящая стена имеет неровности штукатурки и мелкие трещины.
+
+/** Текстура тёмной стены: неровная штукатурка. */
+export function wallDarkTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [168, 144, 97];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Неровности штукатурки: мелкие пятна
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    const свет = 0.9 + Math.random() * 0.2;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.15 + Math.random() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Трещины: тонкие линии
+  for (let i = 0; i < 12; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 8 + Math.random() * 25;
+    const угол = Math.random() * Math.PI;
+    ctx.strokeStyle = `rgba(${Math.round(б * 0.7)},${Math.round(г * 0.7)},${Math.round(к * 0.7)},${0.15 + Math.random() * 0.15})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  // Каменные блоки: лёгкие прямоугольники
+  for (let i = 0; i < 6; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const w = 15 + Math.random() * 30;
+    const h = 10 + Math.random() * 20;
+    const свет = 1.05 + Math.random() * 0.1;
+    ctx.strokeStyle = `rgba(${Math.round(Math.min(255, б * свет))},${Math.round(Math.min(255, г * свет))},${Math.round(Math.min(255, к * свет))},0.1)`;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x, y, w, h);
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для тёмной стены. */
+export function wallDarkNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    const свет = 110 + Math.floor(Math.random() * 30);
+    ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (let i = 0; i < 12; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 8 + Math.random() * 25;
+    const угол = Math.random() * Math.PI;
+    const свет = 100 + Math.floor(Math.random() * 30);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.0);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
