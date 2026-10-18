@@ -855,3 +855,89 @@ export function clothTexture(base: string, repeat = 4, size = 128): THREE.Canvas
   }
   return toTexture(canvas, repeat);
 }
+
+// ── Снег ──────────────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Снег стоял плоским белым с roughness: 1. Настоящий снег
+// имеет мелкие кристаллы, которые ловят свет и дают характерный блеск.
+// Плоская поверхность не даёт этого эффекта: снег выглядит как белая
+// бумага, а не как снежный покров.
+
+/**
+ * Текстура снега: мелкие кристаллы и блики.
+ *
+ * Снег состоит из мелких кристаллов льда, которые отражают свет. Даже в
+ * пасмурный день снег имеет характерный блеск за счёт множества мелких
+ * граней. Текстура воспроизводит этот эффект мелкими светлыми точками и
+ * лёгкими неровностями.
+ */
+export function snowTexture(base: string, repeat = 4, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [238, 242, 246];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Кристаллы снега: мелкие светлые точки разного размера
+  for (let i = 0; i < 400; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.5 + Math.random() * 2.5;
+    const свет = 1.2 + Math.random() * 0.6;
+    ctx.fillStyle = `rgba(${Math.round(Math.min(255, б * свет))},${Math.round(Math.min(255, г * свет))},${Math.round(Math.min(255, к * свет))},${0.3 + Math.random() * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Лёгкие неровности: снег не идеально ровный
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 3 + Math.random() * 12;
+    const свет = 0.92 + Math.random() * 0.12;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.15 + Math.random() * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для снега: мелкие неровности. */
+export function snowNormalTexture(repeat = 4, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  // Мелкие бугорки: снег не идеально ровный
+  for (let i = 0; i < 400; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.5 + Math.random() * 2.5;
+    const свет = 110 + Math.floor(Math.random() * 40);
+    ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Лёгкие волны: следы ветра
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 8 + Math.random() * 20;
+    const свет = 105 + Math.floor(Math.random() * 50);
+    ctx.fillStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.5);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
