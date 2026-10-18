@@ -78,6 +78,15 @@ mounts: {
     // предметы и имяПредмета() по ним не пойдёт.
     разделы: [{ имя: 'mount_names', поле: (x) => x.ru }, { имя: 'mount_names', поле: (x) => x.en }],
   },
+decorations: {
+    модуль: './list-decorations.cjs',
+    ключ: 'decorations',
+    azФайл: 'az-decorations.json',
+    // Один раздел. Раздел house в словарях занят подписями панели дома,
+    // как pets и mounts заняты подписями питомцев и конюшни, — имена
+    // декора положены в свой.
+    разделы: [{ имя: 'decorations', поле: (d) => d.ru }, { имя: 'decorations', поле: (d) => d.en }],
+  },
 };
 
 const вид = process.argv[2];

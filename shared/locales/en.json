@@ -1373,6 +1373,16 @@
     "carpentry": "Carpentry",
     "lvl": "Lv. %d"
   },
+  "decorations": {
+    "trophy_boss": "Boss Trophy",
+    "silk_rug": "Silk Rug",
+    "persian_vase": "Persian Vase",
+    "oil_painting": "Oil Painting",
+    "golden_chandelier": "Golden Chandelier",
+    "weapon_rack": "Weapon Rack",
+    "garden_fountain": "Garden Fountain",
+    "ancient_bookshelf": "Ancient Bookshelf"
+  },
   "mount_names": {
     "mount_arabian_horse": "Arabian Horse",
     "mount_bactrian_camel": "Bactrian Camel",

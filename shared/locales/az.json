@@ -1373,6 +1373,16 @@
     "carpentry": "Təzəkkarlıq",
     "lvl": "Səv. %d"
   },
+  "decorations": {
+    "trophy_boss": "Bossa Trofeisi",
+    "silk_rug": "İpək Xalça",
+    "persian_vase": "Fars Qazası",
+    "oil_painting": "Yağlı Boya",
+    "golden_chandelier": "Qızılı Nərdivanşah",
+    "weapon_rack": "Silah Dayağı",
+    "garden_fountain": "Bağ Fəvvarəsi",
+    "ancient_bookshelf": "Qədim Kitabxana"
+  },
   "mount_names": {
     "mount_arabian_horse": "Ərəb Atı",
     "mount_bactrian_camel": "İki Hörgüclü Dəvə",

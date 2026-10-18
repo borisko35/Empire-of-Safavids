@@ -3221,7 +3221,10 @@ async function loadHouse(): Promise<void> {
       for (const d of available) {
         const opt = document.createElement('option');
         opt.value = d.id;
-        opt.textContent = `${d.name_ru ?? d.name ?? d.id} · ${d.price ?? 0} ${t('world.gold')}`;
+        // Название декора переводится по ключу decorations.<id>. Раньше печаталось
+        // d.name_ru напрямую, и восемь предметов декора были по-русски на
+        // всех трёх языках.
+        opt.textContent = `${tOr(`decorations.${d.id}`, d.name_ru ?? d.name ?? d.id)} · ${d.price ?? 0} ${t('world.gold')}`;
         sel.append(opt);
       }
       const put = document.createElement('button');

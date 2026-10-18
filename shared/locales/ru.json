@@ -1373,6 +1373,16 @@
     "carpentry": "Плотницкое дело",
     "lvl": "Ур. %d"
   },
+  "decorations": {
+    "trophy_boss": "Трофей Босса",
+    "silk_rug": "Шёлковый Ковёр",
+    "persian_vase": "Персидская Ваза",
+    "oil_painting": "Масляная Картина",
+    "golden_chandelier": "Золотая Люстра",
+    "weapon_rack": "Оружейная Стойка",
+    "garden_fountain": "Садовый Фонтан",
+    "ancient_bookshelf": "Древний Шкаф"
+  },
   "mount_names": {
     "mount_arabian_horse": "Арабский Скакун",
     "mount_bactrian_camel": "Двугорбый Верблюд",
