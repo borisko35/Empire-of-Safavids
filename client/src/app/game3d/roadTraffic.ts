@@ -1,7 +1,7 @@
 // ============================================================
 // Дорожное движение: караваны и случайные путники с квестами
 // ============================================================
-import { camelTexture, camelNormalTexture, skinTexture, skinNormalTexture, clothTexture } from './textures';
+import { camelTexture, camelNormalTexture, skinTexture, skinNormalTexture, clothTexture, darkStoneTexture, darkStoneNormalTexture, goldTexture, goldNormalTexture } from './textures';
 //
 // ЗАЧЕМ. Горожане живут в городе и никуда не идут — это правильно, но из-за
 // этого за пределами города было пусто: поле, по которому шёл игрок, не
@@ -53,8 +53,8 @@ const M = {
     new THREE.MeshStandardMaterial({ color: 0x6a4a5a, roughness: 1 }),
     new THREE.MeshStandardMaterial({ color: 0x5a6a4a, roughness: 1 }),
   ],
-  dark: new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 1 }),
-  gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.4, metalness: 0.5 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 1, map: darkStoneTexture('#2a2018', 2), normalMap: darkStoneNormalTexture(2), normalScale: new THREE.Vector2(0.3, 0.3) }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.4, metalness: 0.5, map: goldTexture('#c9a84c', 2), normalMap: goldNormalTexture(2), normalScale: new THREE.Vector2(0.4, 0.4) }),
 };
 
 /** Одна дорога: у неё есть настоящая длина в метрах. */
