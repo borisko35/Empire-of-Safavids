@@ -1611,3 +1611,61 @@ export function skinNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
   const normalCanvas = heightToNormal(img.data, size, 0.8);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Волосы ────────────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Волосы стояли плоским цветом с roughness: 1. Настоящие
+// волосы имеют пряди и неровный рельеф.
+
+/** Текстура волос: пряди. */
+export function hairTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [26, 20, 16];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Пряди: тонкие линии
+  for (let i = 0; i < 150; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 10 + Math.random() * 30;
+    const угол = Math.random() * Math.PI;
+    const свет = 0.7 + Math.random() * 0.6;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.3 + Math.random() * 0.3})`;
+    ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для волос. */
+export function hairNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 150; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 10 + Math.random() * 30;
+    const угол = Math.random() * Math.PI;
+    const свет = 110 + Math.floor(Math.random() * 30);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.0);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}

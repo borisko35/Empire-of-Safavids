@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { CITY, CIV_COLLIDERS, COLLIDERS, groundHeight, waterMask } from './terrain';
+import { clothTexture, skinTexture, skinNormalTexture, hairTexture, hairNormalTexture } from './textures';
 import { spriteVisible } from './spriteClamp';
 import { загрузитьСцену, загрузитьКлип, подогнать, безМёртвыхДорожек } from './realRig';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -553,10 +554,10 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     const skin = SKIN[i % SKIN.length];
     const hairC = HAIR[i % HAIR.length];
     const pantsC = PANTS[i % PANTS.length];
-    const tunicMat = new THREE.MeshStandardMaterial({ color: tunic, roughness: 1 });
-    const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.9 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: hairC, roughness: 1 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: pantsC, roughness: 1 });
+    const tunicMat = new THREE.MeshStandardMaterial({ color: tunic, roughness: 1, map: clothTexture('#' + tunic.toString(16).padStart(6, '0'), 4) });
+    const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.9, map: skinTexture('#' + skin.toString(16).padStart(6, '0'), 2), normalMap: skinNormalTexture(2), normalScale: new THREE.Vector2(0.3, 0.3) });
+    const hairMat = new THREE.MeshStandardMaterial({ color: hairC, roughness: 1, map: hairTexture('#' + hairC.toString(16).padStart(6, '0'), 2), normalMap: hairNormalTexture(2), normalScale: new THREE.Vector2(0.4, 0.4) });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: pantsC, roughness: 1, map: clothTexture('#' + pantsC.toString(16).padStart(6, '0'), 4) });
 
     // Туловище: халат + пояс
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.36, 1.0, 8), tunicMat);
