@@ -377,8 +377,15 @@ export const ITEMS_DATABASE: Record<string, Item> = {
   // ── ЗЕЛЬЯ ──────────────────────────────────────────────
   'pot_health_small': {
     id: 'pot_health_small',
-    name: 'Small Health Potion',
-    nameRu: 'Малое Зелье Здоровья',
+    // Раньше назывался «Малое Зелье Здоровья» — так же, как con_health_potion_s.
+    // Два разных предмета с одинаковым названием: этот лечит 50 HP, тот 200.
+    // Игрок видел в сумке два «малых зелья здоровья» и не мог их различить,
+    // а путаница уже стоила багов — TutorialService.ts:133 пишет, что задание
+    // искало pot_health_small, которого «в магазине нет», и его переписали на
+    // con_health_potion_s. Слово «Малое» осталось за con_health_potion_s:
+    // именно его варится рецепт «Сварить Малое Зелье».
+    name: 'Weak Health Potion',
+    nameRu: 'Слабое Зелье Здоровья',
     type: ItemType.CONSUMABLE,
     rarity: ItemRarity.COMMON,
     level: 1,
@@ -391,8 +398,14 @@ export const ITEMS_DATABASE: Record<string, Item> = {
   },
   'pot_health_medium': {
     id: 'pot_health_medium',
-    name: 'Medium Health Potion',
-    nameRu: 'Среднее Зелье Здоровья',
+    // Раньше назывался «Среднее Зелье Здоровья» — так же, как
+    // con_health_potion_m. Этот лечит 150 HP, тот 800, и игрок их не
+    // различал. «Среднее» осталось за con_health_potion_m: именно его
+    // варится рецепт «Сварить Среднее Зелье». Линейка дропа получила
+    // свою ось: pot_health_small — «Слабое» (50 HP), pot_health_medium —
+    // «Крепкое» (150 HP).
+    name: 'Strong Health Potion',
+    nameRu: 'Крепкое Зелье Здоровья',
     type: ItemType.CONSUMABLE,
     rarity: ItemRarity.UNCOMMON,
     level: 15,
@@ -433,8 +446,12 @@ export const ITEMS_DATABASE: Record<string, Item> = {
   },
   'food_kebab': {
     id: 'food_kebab',
-    name: 'Persian Kebab',
-    nameRu: 'Персидский Кебаб',
+    // Раньше назывался «Персидский Кебаб» — так же, как con_stamina_food.
+    // Эти два предмета лечат разное: этот восстанавливает 80 HP и даёт
+    // бонус к силе, тот 150 стамины и +5% урона. Переименован в «Шаурму»:
+    // в игре два разных блюда, а не одно названное двумя именами.
+    name: 'Shawarma',
+    nameRu: 'Шаурма',
     type: ItemType.CONSUMABLE,
     rarity: ItemRarity.COMMON,
     level: 1,
