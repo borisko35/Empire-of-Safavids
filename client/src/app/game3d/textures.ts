@@ -941,3 +941,68 @@ export function snowNormalTexture(repeat = 4, size = 128): THREE.CanvasTexture {
   const normalCanvas = heightToNormal(img.data, size, 1.5);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Дерево для рамы окна ──────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Рама окна стояла плоским светлым камнем. Настоящая рама —
+// дерево, и без текстуры она читается как пластиковая полоса.
+
+/** Текстура дерева для рамы окна: вертикальные волокна. */
+export function windowFrameTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [205, 185, 143];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Вертикальные волокна дерева
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const свет = 0.75 + Math.random() * 0.5;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.3 + Math.random() * 0.4})`;
+    ctx.lineWidth = 0.5 + Math.random() * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 4, size);
+    ctx.stroke();
+  }
+
+  // Горизонтальные сучки
+  for (let i = 0; i < 8; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 2 + Math.random() * 6;
+    const свет = 0.7 + Math.random() * 0.3;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},0.4)`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для дерева рамы окна. */
+export function windowFrameNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  // Вертикальные волокна
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const свет = 110 + Math.floor(Math.random() * 40);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.5 + Math.random() * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 4, size);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.2);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}

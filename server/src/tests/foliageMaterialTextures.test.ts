@@ -154,4 +154,22 @@ describe('Растительность и ткань носят текстуры
     const значение = Number(шерох[1]);
     must(значение < 1, `snow: roughness ${значение} — блик от кристаллов снега пропадёт`);
   });
+
+  it('у рамы окна есть текстура дерева с нормалями', () => {
+    // Рама окна — один из самых заметных элементов в городской среде.
+    // Плоский светлый цвет читался как пластиковая полоса, а не дерево.
+    const m = материал('windowFrame');
+    must(/map:\s*windowFrameTexture\(/.test(m), 'windowFrame: нет карты цвета');
+    must(/normalMap:\s*windowFrameNormalTexture\(/.test(m), 'windowFrame: нет карты нормалей');
+  });
+
+  it('цвет текстуры рамы окна совпадает с цветом материала', () => {
+    const m = материал('windowFrame');
+    const цвет = /color:\s*0x([0-9a-fA-F]{6})/.exec(m);
+    const текстура = /windowFrameTexture\(\s*'#([0-9a-fA-F]{6})'/.exec(m);
+    must(цвет !== null, 'windowFrame: не найден color');
+    must(текстура !== null, 'windowFrame: не найден базовый цвет текстуры');
+    must(цвет[1]!.toLowerCase() === текстура[1]!.toLowerCase(),
+      `windowFrame: color 0x${цвет[1]}, а текстура #${текстура[1]} — материал уедет в чужой оттенок`);
+  });
 });

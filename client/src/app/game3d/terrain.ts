@@ -21,6 +21,7 @@ import {
   waterNormalTexture, waterFoamTexture,
   foliageTexture, foliageNormalTexture, barkTexture, barkNormalTexture, clothTexture,
   snowTexture, snowNormalTexture,
+  windowFrameTexture, windowFrameNormalTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1493,7 +1494,7 @@ const MAT = {
   }),
   // Рама вокруг проёма. Светлый камень: рама и есть то, что глаз читает
   // как окно, а не просто тёмная плашка.
-  windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85 }),
+  windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85, map: windowFrameTexture('#cdb98f', 2), normalMap: windowFrameNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
   // Городская мелкая вода: пруд в саду, чаша фонтана, бассейн хаммама.
   // Озеро, пруд, река и море собираются в buildWater каждое со своим
   // материалом - у них разный уровень, глубина и мера расстояния до берега.
