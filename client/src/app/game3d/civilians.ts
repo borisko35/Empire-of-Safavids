@@ -1,14 +1,16 @@
 // ============================================================
 // Горожане — Empire of Safavids
 // ============================================================
-// "Не квестовые" NPC: гуляют по Исфахану, стоят, разговаривают
-// друг с другом (пара встаёт лицом друг к другу + облачко реплики).
-// Некликабельны, дают городу жизнь. Коллайдеры — динамические,
-// как у фауны (CIV_COLLIDERS в terrain.ts).
+// Настоящие модели GLB (GLTF) привязаны к скелету, процедурный риг — запасной вариант.
+// Если модель не загрузилась — игрок видит прежний силуэт, пустоты не будет.
+// Модель загружается асинхронно: createCivilians возвращает handle сразу,
+// а аватар подгружается фоном. realRig — та же инфраструктура, что у игрока.
 
 import * as THREE from 'three';
 import { CITY, CIV_COLLIDERS, COLLIDERS, groundHeight, waterMask } from './terrain';
 import { spriteVisible } from './spriteClamp';
+import { загрузитьСцену, загрузитьКлип, подогнать, безМёртвыхДорожек } from './realRig';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 interface Civilian {
   group: THREE.Group;
@@ -63,6 +65,16 @@ interface Civilian {
    */
   homeX: number;
   homeZ: number;
+  /** Настоящая 3D-модель (GLTF/GLB), загруженная асинхронно. */
+  настоящая: THREE.Group | null;
+  /** AnimationMixer для загруженной модели. */
+  миксер: THREE.AnimationMixer | null;
+  /** Действие ( standing-idle / walking ). */
+  действие: THREE.AnimationAction | null;
+  /** Загруженные клипы анимации. */
+  клипы: { idle: THREE.AnimationClip | null; walk: THREE.AnimationClip | null };
+  /** Процедурные части (цилиндр+тюника), которые можно скрыть после загрузки модели. */
+  примитивы: THREE.Object3D[];
 }
 
 export interface CiviliansHandle {
@@ -83,6 +95,70 @@ const PHRASES = [
 ];
 
 const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b4e5a, 0x5a7a8b];
+
+/** Модели горожан — три варианта, как у игрока пять классов. */
+const CIV_MODELS = ['citizen', 'citizen2', 'citizen3'] as const;
+
+/** Клипы анимаций для горожан — стояние и ходьба. */
+const CIV_CLIP_IDLE = 'standing-idle';
+const CIV_CLIP_WALK = 'walking';
+
+
+
+/**
+ * Загружает GLB-модель горожанина и применяет её.
+ *
+ * Модель загружается асинхронно: пока она едет, горожанин остаётся на
+ * процедурном риге. Когда модель пришла — процедурные части скрываются,
+ * а настоящая модель анимируется через AnimationMixer.
+ *
+ * Если модель не загрузилась (нет файла, нет сети, сбой декодера) —
+ * горожанин остаётся на процедурном риге навсегда. Это не ошибка, а
+ * штатное поведение: игра работает с тем, что есть.
+ */
+function loadCivModel(c: Civilian, modelName: string): void {
+  void загрузитьСцену(modelName).then((scene) => {
+    if (!scene) return;
+    try {
+      // Подгоняем масштаб и ставим ноги на нуль
+      const fitted = подогнать(scene, modelName);
+      // Загружаем оба клипа параллельно
+      Promise.all([
+        загрузитьКлип(CIV_CLIP_IDLE),
+        загрузитьКлип(CIV_CLIP_WALK),
+      ]).then(([idleClip, walkClip]) => {
+        if (!idleClip || !walkClip) return;
+        try {
+          // Чистим мёртвые дорожки (кости, которых нет в модели)
+          const cleanIdle = безМёртвыхДорожек(idleClip, fitted, modelName);
+          const cleanWalk = безМёртвыхДорожек(walkClip, fitted, modelName);
+          // Клонируем скелет для каждого горожанина
+          const cloned = cloneSkeleton(fitted) as THREE.Group;
+          c.настоящая = cloned;
+          c.миксер = new THREE.AnimationMixer(cloned);
+          c.клипы = { idle: cleanIdle, walk: cleanWalk };
+          c.примитивы = [];
+          // Собираем список процедурных частей для скрытия
+          c.group.children.forEach((child) => {
+            if (child !== c.group) c.примитивы.push(child);
+          });
+          // Добавляем модель в группу горожанина
+          c.group.add(cloned);
+          // Включаем idle-анимацию по умолчанию
+          const idleAction = c.миксер.clipAction(cleanIdle);
+          idleAction.play();
+          c.действие = idleAction;
+          // Скрываем процедурные части
+          c.примитивы.forEach((p) => { p.visible = false; });
+        } catch (e) {
+          console.warn('[civ] model setup failed:', e);
+        }
+      });
+    } catch (e) {
+      console.warn('[civ] model load failed:', e);
+    }
+  });
+}
 
 /**
  * Предел сдвига горожанина, В СЕКУНДУ, как доля от его обычной скорости.
@@ -554,6 +630,9 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     const bubble = makeBubble();
     bubble.position.y = 2.45;
     g.add(bubble);
+
+    // Загружаем GLB-модель горожанина (асинхронно)
+    const civModel = CIV_MODELS[i % CIV_MODELS.length];
     // Дом — в РАЙОНЕ, а не в случайной точке города.
     //
     // ТУТ БЫЛО freeSpot(CITY.x, CITY.z): случайная точка в 85 м от центра.
@@ -572,7 +651,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     g.position.set(p.x, groundHeight(p.x, p.z), p.z);
     g.rotation.y = Math.random() * Math.PI * 2;
     all.add(g);
-    civs.push({
+    const civilian: Civilian = {
       group: g, body, head, legL, legR, armL, armR, bubble, bubbleUntil: 0,
       state: 'idle', target: { x: p.x, z: p.z },
       speed: 1.1 + Math.random() * 0.7,
@@ -581,7 +660,14 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       frameStartX: p.x, frameStartZ: p.z,
       hiddenUntil: 0,
       homeX: p.x, homeZ: p.z,
-    });
+      настоящая: null,
+      миксер: null,
+      действие: null,
+      клипы: { idle: null, walk: null },
+      примитивы: [],
+    };
+    loadCivModel(civilian, civModel);
+    civs.push(civilian);
   }
 
   let talkTimer = 5000;
@@ -672,10 +758,26 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       c.frameStartX = c.group.position.x;
       c.frameStartZ = c.group.position.z;
 
-      if (c.state === 'talk') {
+      // Если GLB-модель загружена — обновляем её анимацию
+      if (c.настоящая && c.миксер && c.клипы) {
+        c.миксер.update(dt);
+        // Переключаем клип при смене состояния
+        const desiredName = c.state === 'walk' ? CIV_CLIP_WALK : CIV_CLIP_IDLE;
+        if (c.действие?.getClip().name !== desiredName) {
+          const desiredClip = desiredName === CIV_CLIP_WALK ? c.клипы.walk : c.клипы.idle;
+          if (desiredClip) {
+            const newAction = c.миксер.clipAction(desiredClip);
+            if (newAction) {
+              c.действие?.fadeOut(0.15);
+              newAction.reset().fadeIn(0.15).play();
+              c.действие = newAction;
+            }
+          }
+        }
+      } else if (c.state === 'talk') {
+        // Процедурная анимация разговора (запасной вариант)
         if (c.talkWith) face(c, c.talkWith.group.position.x, c.talkWith.group.position.z, dt);
         c.body.position.y = 1.05 + Math.sin(now / 300 + c.phase) * 0.02;
-        // Жестикуляция: правая рука поднята
         c.armR.rotation.x = -0.9 + Math.sin(now / 250 + c.phase) * 0.25;
         c.armL.rotation.x *= 0.9;
         c.legL.rotation.x *= 0.9;
@@ -693,9 +795,6 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         c.legL.rotation.x *= 0.9;
         c.legR.rotation.x *= 0.9;
         if (now >= c.stateUntil) {
-          // Дом — СВОЙ, выданный при создании. Раньше сюда передавались
-          // координаты игрока, и все двадцать два горожанина ходили за ним
-          // по всему миру. Теперь они блуждают вокруг своей точки в городе.
           const t = freeSpot(c.group.position.x, c.group.position.z, c.homeX, c.homeZ);
           c.target = t;
           c.state = 'walk';
@@ -939,6 +1038,19 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         (m as THREE.Material | undefined)?.dispose?.();
       }
     });
+    // Освобождаем ресурсы GLB-моделей горожан
+    for (const c of civs) {
+      if (c.настоящая) {
+        c.настоящая.traverse(o => {
+          if (o instanceof THREE.Mesh) {
+            o.geometry?.dispose?.();
+            const m = o.material as THREE.Material | undefined;
+            m?.dispose?.();
+          }
+        });
+      }
+      c.миксер?.stopAllAction();
+    }
     scene.remove(all);
     CIV_COLLIDERS.length = 0;
   }
