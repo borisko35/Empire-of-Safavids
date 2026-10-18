@@ -105,6 +105,20 @@ services:
       PAYMENT_JOBIK_ENABLED: ${PAYMENT_JOBIK_ENABLED:-}
       PAYMENT_JOBIK_SHOP_ID: ${PAYMENT_JOBIK_SHOP_ID:-}
       PAYMENT_JOBIK_SECRET: ${PAYMENT_JOBIK_SECRET:-}
+      # Intellect Money — активный провайдер приёма платежей (§121). Ровно та
+      # же ловушка, что и у ЮKassa выше: пока эти три строки здесь не
+      # перечислены, значения из deploy/.env до контейнера не доходят,
+      # intellectMoneyConfig() видит пустое окружение и возвращает null —
+      # а игрок на «Пополнить» получает «провайдер не настроен» при живых
+      # ключах в файле.
+      PAYMENT_INTELLECTMONEY_ENABLED: ${PAYMENT_INTELLECTMONEY_ENABLED:-}
+      PAYMENT_INTELLECTMONEY_ESHOP_ID: ${PAYMENT_INTELLECTMONEY_ESHOP_ID:-}
+      PAYMENT_INTELLECTMONEY_SECRET_KEY: ${PAYMENT_INTELLECTMONEY_SECRET_KEY:-}
+      # Секрет Sign API. Код вебхука его пока не читает, но он есть в примере
+      # .env, и перечисление здесь держит пример и compose в согласии:
+      # проверка «всё, что в примере, доходит до контейнера» не должна
+      # нуждаться в исключениях - они и есть места, где баг прорастает.
+      PAYMENT_INTELLECTMONEY_SIGN_SECRET_KEY: ${PAYMENT_INTELLECTMONEY_SIGN_SECRET_KEY:-}
       # PUBLIC_URL: адрес, на который провайдер возвращает игрока после
       # оплаты. Без него адрес собирался из заголовка запроса, а игрок мог
       # прийти с чужого домена - и возврат ушёл бы не туда, куда он

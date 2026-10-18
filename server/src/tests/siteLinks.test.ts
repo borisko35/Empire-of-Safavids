@@ -136,7 +136,12 @@ describe('Ссылки на игру ведут на существующее и
         // Площадки, куда игра выходит: каталоги, сообщества, площадка игроков.
         // Список назван по факту из index.html — Discord, соцсети и itch.io
         // стоят там как наши каналы связи, и «чужим» их назвать нельзя.
-        const площадка = /(bmmorpg|browsermmorpg|itch\.io|gamejolt\.com|github\.com|discord\.gg|facebook\.com|twitter\.com|reddit\.com|bauval\.org)/i
+        //
+        // intellectmoney.ru — платёжный провайдер, наш партнёр (§121), ровно
+        // того же рода, что и bauval.org ниже: игрок уходит туда платить
+        // НАМ, а не кликать рекламу мимо. Без этой строки проверка ругалась
+        // бы на форму Intellect Money в секции «Поддержать проект».
+        const площадка = /(bmmorpg|browsermmorpg|itch\.io|gamejolt\.com|github\.com|discord\.gg|facebook\.com|twitter\.com|reddit\.com|bauval\.org|intellectmoney\.ru)/i
           .test(адрес);
         // Game Jolt добавлен вместе с tools/gamejolt-instructions.md: это
         // площадка, куда игра выходит, ровно того же рода, что itch.io.
