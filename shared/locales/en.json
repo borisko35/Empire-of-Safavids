@@ -1373,6 +1373,19 @@
     "carpentry": "Carpentry",
     "lvl": "Lv. %d"
   },
+  "recipes": {
+    "recipe_iron_sword": "Forge Iron Sword",
+    "recipe_qizilbash_saber": "Forge Qizilbash Saber",
+    "recipe_shah_blade": "Forge Shah's Blade",
+    "recipe_silk_robe": "Weave Isfahan Silk Robe",
+    "recipe_fur_coat": "Sew Fur Coat",
+    "recipe_hunter_amulet": "Set Hunter Amulet",
+    "recipe_health_potion_s": "Brew Small Health Potion",
+    "recipe_health_potion_m": "Brew Medium Health Potion",
+    "recipe_mana_potion": "Brew Mana Elixir",
+    "recipe_persian_kebab": "Cook Persian Kebab",
+    "recipe_turquoise_ring": "Craft Turquoise Ring"
+  },
   "items": {
     "wpn_iron_sword": "Iron Sword",
     "wpn_qizilbash_saber": "Qizilbash Saber",

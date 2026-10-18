@@ -1373,6 +1373,19 @@
     "carpentry": "Плотницкое дело",
     "lvl": "Ур. %d"
   },
+  "recipes": {
+    "recipe_iron_sword": "Ковка Железного Меча",
+    "recipe_qizilbash_saber": "Ковка Сабли Кызылбаша",
+    "recipe_shah_blade": "Ковка Клинка Шаха",
+    "recipe_silk_robe": "Ткать Шёлковый Халат",
+    "recipe_fur_coat": "Сшить Меховую Шубу",
+    "recipe_hunter_amulet": "Собрать Амулет Охотника",
+    "recipe_health_potion_s": "Сварить Малое Зелье",
+    "recipe_health_potion_m": "Сварить Среднее Зелье",
+    "recipe_mana_potion": "Сварить Эликсир Маны",
+    "recipe_persian_kebab": "Приготовить Персидский Кебаб",
+    "recipe_turquoise_ring": "Создать Бирюзовое Кольцо"
+  },
   "items": {
     "wpn_iron_sword": "Железный Меч",
     "wpn_qizilbash_saber": "Сабля Кызылбаша",

@@ -6,7 +6,7 @@
 // не используется: после действия — перезагрузка панели.
 
 import { api, EquipmentState } from './api';
-import { t, имяПредмета } from './i18n';
+import { t, tOr, имяПредмета } from './i18n';
 import { session, Character } from './state';
 import { toast, refreshBars, loadInventory, renderUnreadBadge, setDailyTasksOpen } from './hud';
 import { onTutorialAction } from './tutorial';
@@ -945,7 +945,12 @@ export async function loadCraft(): Promise<void> {
       label.className = 'inv-name';
       // Название результата, а не его идентификатор: «wpn_shah_blade» игроку
       // ничего не говорит.
-      label.textContent = `${r.nameRu} → ${itemName(r.resultItemId, r.resultNameRu)} ×${r.resultQuantity}`;
+      // Название рецепта переводится по своему ключу recipes.<id>: у рецепта
+      // есть name и nameRu в данных, и словарь заполняется из них. Само
+      // слово «сварить» или «ковать» тоже переводится, поэтому перевод
+      // берётся целиком, а не собирается из названия предмета.
+      const имяРецепта = tOr(`recipes.${r.id}`, r.nameRu);
+      label.textContent = `${имяРецепта} → ${itemName(r.resultItemId, r.resultNameRu)} ×${r.resultQuantity}`;
       const meta = document.createElement('span');
       meta.className = 'inv-qty';
       meta.textContent = `${t('badges.level')} ${r.requiredLevel} · ${Math.round(r.successRate * 100)}%`;
