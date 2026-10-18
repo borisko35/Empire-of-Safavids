@@ -18,7 +18,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
-import { plasterTexture, stoneTexture, woodTexture, roofTileTexture, roofTileNormalTexture, hayTexture, hayNormalTexture } from './textures';
+import { plasterTexture, stoneTexture, woodTexture, roofTileTexture, roofTileNormalTexture, hayTexture, hayNormalTexture, ironTexture, ironNormalTexture } from './textures';
 import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
 // глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
@@ -1436,7 +1436,7 @@ const M = {
   red: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1 }),
   cream: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85 }),
   hay: new THREE.MeshStandardMaterial({ color: 0xd8b84a, roughness: 0.9, map: hayTexture('#d8b84a', 2), normalMap: hayNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
-  iron: new THREE.MeshStandardMaterial({ color: 0x6a6e78, roughness: 0.5, metalness: 0.6 }),
+  iron: new THREE.MeshStandardMaterial({ color: 0x6a6e78, roughness: 0.5, metalness: 0.6, map: ironTexture('#6a6e78', 2), normalMap: ironNormalTexture(2), normalScale: new THREE.Vector2(0.5, 0.5) }),
   fire: new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.8 }),
   lamp: new THREE.MeshStandardMaterial({ color: 0xffd980, emissive: 0xffa530, emissiveIntensity: 1.3 }),
   water: new THREE.MeshStandardMaterial({ color: 0x2f6f96, roughness: 0.2 }),
