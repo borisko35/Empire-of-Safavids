@@ -1373,6 +1373,30 @@
     "carpentry": "Carpentry",
     "lvl": "Lv. %d"
   },
+  "mount_names": {
+    "mount_arabian_horse": "Arabian Horse",
+    "mount_bactrian_camel": "Bactrian Camel",
+    "mount_war_elephant": "War Elephant",
+    "mount_qizilbash_warhorse": "Qizilbash Warhorse",
+    "mount_simurgh_chick": "Young Simurgh",
+    "mount_ghost_ship": "Ghost Ship"
+  },
+  "pet_abilities": {
+    "pet_wolf": "Fang Strike",
+    "pet_falcon": "Eye of the Hawk",
+    "pet_cat": "Healing Purr",
+    "pet_snake": "Venom Spit",
+    "pet_simurgh_chick": "Flame Breath",
+    "pet_dragon": "Dragon Fire"
+  },
+  "pet_names": {
+    "pet_wolf": "Grey Wolf",
+    "pet_falcon": "Desert Falcon",
+    "pet_cat": "Isfahan Cat",
+    "pet_snake": "Royal Cobra",
+    "pet_simurgh_chick": "Simurgh Chick",
+    "pet_dragon": "Baby Dragon"
+  },
   "trade_contracts": {
     "trade_tabriz_isfahan_silk": "Silk for Isfahan",
     "trade_isfahan_shiraz_saffron": "Saffron to Shiraz",

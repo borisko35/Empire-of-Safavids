@@ -496,8 +496,10 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
         const n = document.createElement('div');
         n.className = 'guild-row-title';
         // Раньше здесь был it.item_id — игрок видел «mat_dragon_scale»
-        // вместо названия предмета. Сервер теперь отдаёт nameRu
-        n.textContent = it.name_ru ?? it.nameRu ?? it.item_id;
+        // вместо названия предмета. Сервер отдаёт и item_id, и nameRu, но
+        // nameRu печатался напрямую, то есть на en и az склад гильдии
+        // оставался по-русски.
+        n.textContent = имяПредмета(it.item_id, it.nameRu);
         const q = document.createElement('div');
         q.className = 'guild-row-desc';
         q.textContent = `×${it.quantity}`;

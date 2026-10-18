@@ -1629,7 +1629,7 @@ export async function loadMounts(): Promise<void> {
       const row = rowEl('inv-item');
       const name = document.createElement('span');
       name.className = 'inv-name';
-      name.textContent = m.name_ru;
+      name.textContent = tOr(`mount_names.${m.mount_id}`, m.name_ru);
       const speed = document.createElement('span');
       speed.className = 'inv-qty';
       // Текущая скорость, а не диапазон: игроку важно, насколько быстро он
@@ -1646,7 +1646,8 @@ export async function loadMounts(): Promise<void> {
       const actBtn = actionButton(m.is_active ? t('mounts.riding_on') : t('mounts.riding'), async () => {
         await api.mountActivate(cid(), m.mount_id);
         await loadMounts();
-        toast(m.is_active ? t('mounts.released').replace('{name}', m.name_ru) : t('mounts.summoning').replace('{name}', m.name_ru), 'success');
+        const имяМаунта = tOr(`mount_names.${m.mount_id}`, m.name_ru);
+        toast(m.is_active ? t('mounts.released').replace('{name}', имяМаунта) : t('mounts.summoning').replace('{name}', имяМаунта), 'success');
       });
       if (m.is_active) actBtn.style.opacity = '0.7';
       row.append(actBtn);
@@ -2608,7 +2609,7 @@ async function loadPets(): Promise<void> {
           row.className = 'friend-entry';
           const label = document.createElement('span');
           label.className = 'friend-name';
-          label.textContent = p.name_ru ?? p.id;
+          label.textContent = tOr(`pet_names.${p.id}`, p.name_ru ?? p.id);
           const info = document.createElement('span');
           info.className = 'friend-info';
           info.textContent = `${p.type ?? ''} · ${p.rarity ?? ''}`;
@@ -2633,7 +2634,11 @@ async function loadPets(): Promise<void> {
       row.className = 'friend-entry' + (p.is_active ? ' current' : '');
       const nameEl = document.createElement('span');
       nameEl.className = 'friend-name';
-      nameEl.textContent = p.nickname ?? def?.name_ru ?? p.pet_id;
+      // Прозвище, данное игроком, важнее вида: оно и есть имя питомца. Если
+      // прозвища нет, показывается перевод вида по ключу pet_names.<id> —
+      // раньше печатался def.name_ru напрямую, и все шесть питомцев были
+      // по-русски на всех трёх языках.
+      nameEl.textContent = p.nickname ?? (def ? tOr(`pet_names.${def.id}`, def.name_ru) : p.pet_id);
       const infoEl = document.createElement('span');
       infoEl.className = 'friend-info';
       infoEl.textContent = `${t('badges.level')}${p.level} · ${def?.type ?? ''}`;

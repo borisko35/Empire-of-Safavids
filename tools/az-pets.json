@@ -1,0 +1,18 @@
+{
+  "pet_names": {
+    "pet_wolf": "Boz Qurd",
+    "pet_falcon": "Səhra Qarğası",
+    "pet_cat": "İsfahan Pişiyi",
+    "pet_snake": "Şah Kobrası",
+    "pet_simurgh_chick": "Səmürg Cücəsi",
+    "pet_dragon": "Əjderha Balağı"
+  },
+  "pet_abilities": {
+    "pet_wolf": "Tənə Zərbəsi",
+    "pet_falcon": "Qarğanın Gözü",
+    "pet_cat": "Müalicəvi Mürəqqələmə",
+    "pet_snake": "Zəhərli Tüpürmə",
+    "pet_simurgh_chick": "Alov Nəfəsi",
+    "pet_dragon": "Əjderha Alovu"
+  }
+}

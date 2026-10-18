@@ -1373,6 +1373,30 @@
     "carpentry": "Плотницкое дело",
     "lvl": "Ур. %d"
   },
+  "mount_names": {
+    "mount_arabian_horse": "Арабский Скакун",
+    "mount_bactrian_camel": "Двугорбый Верблюд",
+    "mount_war_elephant": "Боевой Слон",
+    "mount_qizilbash_warhorse": "Боевой Конь Кызылбаша",
+    "mount_simurgh_chick": "Молодой Симург",
+    "mount_ghost_ship": "Корабль-Призрак"
+  },
+  "pet_abilities": {
+    "pet_wolf": "Удар Клыком",
+    "pet_falcon": "Глаз Сокола",
+    "pet_cat": "Целебное Мурлыканье",
+    "pet_snake": "Ядовитое Плевание",
+    "pet_simurgh_chick": "Огненное Дыхание",
+    "pet_dragon": "Драконий Огонь"
+  },
+  "pet_names": {
+    "pet_wolf": "Серый Волк",
+    "pet_falcon": "Пустынный Сокол",
+    "pet_cat": "Исфаханская Кошка",
+    "pet_snake": "Королевская Кобра",
+    "pet_simurgh_chick": "Птенец Симурга",
+    "pet_dragon": "Малыш Дракон"
+  },
   "trade_contracts": {
     "trade_tabriz_isfahan_silk": "Шёлк для Исфахана",
     "trade_isfahan_shiraz_saffron": "Шафран в Шираз",

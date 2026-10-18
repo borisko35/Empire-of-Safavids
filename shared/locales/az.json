@@ -1373,6 +1373,30 @@
     "carpentry": "Təzəkkarlıq",
     "lvl": "Səv. %d"
   },
+  "mount_names": {
+    "mount_arabian_horse": "Ərəb Atı",
+    "mount_bactrian_camel": "İki Hörgüclü Dəvə",
+    "mount_war_elephant": "Döyüş Filli",
+    "mount_qizilbash_warhorse": "Qızılbaş Döyüş Atı",
+    "mount_simurgh_chick": "Gənc Səmürg",
+    "mount_ghost_ship": "Kabus Gəmi"
+  },
+  "pet_abilities": {
+    "pet_wolf": "Tənə Zərbəsi",
+    "pet_falcon": "Qarğanın Gözü",
+    "pet_cat": "Müalicəvi Mürəqqələmə",
+    "pet_snake": "Zəhərli Tüpürmə",
+    "pet_simurgh_chick": "Alov Nəfəsi",
+    "pet_dragon": "Əjderha Alovu"
+  },
+  "pet_names": {
+    "pet_wolf": "Boz Qurd",
+    "pet_falcon": "Səhra Qarğası",
+    "pet_cat": "İsfahan Pişiyi",
+    "pet_snake": "Şah Kobrası",
+    "pet_simurgh_chick": "Səmürg Cücəsi",
+    "pet_dragon": "Əjderha Balağı"
+  },
   "trade_contracts": {
     "trade_tabriz_isfahan_silk": "İsfahan üçün İpək",
     "trade_isfahan_shiraz_saffron": "Şiraza Zəfəran",

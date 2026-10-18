@@ -1141,7 +1141,12 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     req<{ success: boolean }>('/api/guilds/deposit-item', { method: 'POST', body: JSON.stringify({ characterId, itemId, qty }) }),
   guildWithdrawItem: (characterId: string, bankId: number, qty = 1) =>
     req<{ success: boolean }>('/api/guilds/withdraw-item', { method: 'POST', body: JSON.stringify({ characterId, bankId, qty }) }),
-  guildBank: (characterId: string) => req<{ items: any[] }>(`/api/guilds/bank?characterId=${characterId}`),
+  // any[] означал, что ни item_id, ни nameRu здесь не проверяются
+  // компилятором: поле можно переименовать на сервере, и подстановка имени
+  // предмета молча собрала бы undefined. Тип взят из GuildService
+  // .getBankItems(), который возвращает строку запроса плюс nameRu.
+  guildBank: (characterId: string) => req<{ items: { id: number; item_id: string; nameRu: string; quantity: number; deposited_by: string; deposited_at: string }[] }>(
+    `/api/guilds/bank?characterId=${characterId}`),
   // Навыки гильдии. Право на покупку и цена приходят готовыми с сервера:
   // клиент не решает, можно ли купить, - иначе он нарисует кнопку там, где
   // покупка невозможна, и игрок увидит цену рядом с отказом.
