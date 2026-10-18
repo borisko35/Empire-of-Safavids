@@ -1816,3 +1816,73 @@ export function darkStoneNormalTexture(repeat = 2, size = 128): THREE.CanvasText
   const normalCanvas = heightToNormal(img.data, size, 0.8);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Шерсть животных ────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Материалы животных создавались функцией mat() с плоским
+// цветом. Настоящая шерсть имеет короткие волосы и неровный рельеф.
+
+/** Текстура шерсти животных: короткие волосы. */
+export function furTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [139, 105, 67];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Короткие волосы: тонкие линии
+  for (let i = 0; i < 250; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 2 + Math.random() * 6;
+    const угол = Math.random() * Math.PI;
+    const свет = 0.8 + Math.random() * 0.4;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.2 + Math.random() * 0.3})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  // Пятна: неровности окраса
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 2 + Math.random() * 8;
+    const свет = 0.85 + Math.random() * 0.3;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.1 + Math.random() * 0.15})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для шерсти животных. */
+export function furNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 250; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 2 + Math.random() * 6;
+    const угол = Math.random() * Math.PI;
+    const свет = 110 + Math.floor(Math.random() * 30);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.0);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}

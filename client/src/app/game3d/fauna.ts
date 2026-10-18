@@ -8,8 +8,12 @@
 
 import * as THREE from 'three';
 import { CITY, CAMP, LAKE, POND, RIVER_A, RIVER_B, groundHeight, biomeAt, waterMask, waterSurfaceY, FAUNA_COLLIDERS, COLLIDERS } from './terrain';
+import { furTexture, furNormalTexture } from './textures';
 
-const mat = (color: number, rough = 0.9) => new THREE.MeshStandardMaterial({ color, roughness: rough });
+const mat = (color: number, rough = 0.9) => {
+  const hex = '#' + color.toString(16).padStart(6, '0');
+  return new THREE.MeshStandardMaterial({ color, roughness: rough, map: furTexture(hex, 2), normalMap: furNormalTexture(2), normalScale: new THREE.Vector2(0.5, 0.5) });
+};
 
 interface Walker {
   group: THREE.Group;
