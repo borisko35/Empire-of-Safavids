@@ -13,7 +13,7 @@
 // дыра, которую видно за пять секунд.
 
 import { api } from './api';
-import { t } from './i18n';
+import { t, имяПредмета } from './i18n';
 import { session } from './state';
 import { toast, loadInventory } from './hud';
 
@@ -542,7 +542,11 @@ async function renderInGuild(box: HTMLElement, guild: { id: string; name: string
       for (const i of usable) {
         const opt = document.createElement('option');
         opt.value = i.itemId;
-        opt.textContent = `${i.enhancement > 0 ? `${i.nameRu} +${i.enhancement}` : i.nameRu} ×${i.quantity}`;
+        // Улучшенный предмет отличается от обычного только припиской +N, поэтому
+        // переводится имя, а не вся строка. Раньше печаталось i.nameRu
+        // напрямую, и игрок на en или az выбирал предмет по-русски.
+        const имя = имяПредмета(i.itemId, i.nameRu);
+        opt.textContent = `${i.enhancement > 0 ? `${имя} +${i.enhancement}` : имя} ×${i.quantity}`;
         pick.append(opt);
       }
       const put = document.createElement('button');

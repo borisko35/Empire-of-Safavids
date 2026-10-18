@@ -1373,6 +1373,13 @@
     "carpentry": "Təzəkkarlıq",
     "lvl": "Səv. %d"
   },
+  "trade_contracts": {
+    "trade_tabriz_isfahan_silk": "İsfahan üçün İpək",
+    "trade_isfahan_shiraz_saffron": "Şiraza Zəfəran",
+    "trade_shiraz_caucasus_turquoise": "Qafqaza Firuzə",
+    "trade_caucasus_meso_ore": "Hərbi düşərgələr üçün Filizi",
+    "trade_isfahan_khorasan_scale": "Xorasana Ejderha Qabruğu"
+  },
   "boat_desc": {
     "boat_rowboat": "İki avara və bir az su sızıntısı. Üzməkdən yaxşıdır, qalan hər şeydən pis.",
     "boat_fishing_skid": "Dayaz sular üçün qurulub: alçaq yanlar, bağlamaq qutusu və tor üçün yer.",

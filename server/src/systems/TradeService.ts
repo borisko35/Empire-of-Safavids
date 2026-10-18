@@ -20,6 +20,10 @@ import { logger } from '../utils/logger';
 
 export interface TradeContractDef {
   id: string;
+  /** Английское название. Раньше у контрактов было только nameRu, и
+   *  перевод невозможно было взять из данных: словарь заполняется из
+   *  серверных названий, а не наоборот. */
+  name: string;
   nameRu: string;
   fromRegion: Region;
   toRegion: Region;
@@ -61,6 +65,7 @@ const KEY_TTL_SECONDS = 7 * 24 * 3600;
 export const TRADE_CONTRACTS: TradeContractDef[] = [
   {
     id: 'trade_tabriz_isfahan_silk',
+    name: 'Silk for Isfahan',
     nameRu: 'Шёлк для Исфахана',
     fromRegion: Region.TABRIZ, toRegion: Region.ISFAHAN,
     cargoItemId: 'mat_silk', cargoQty: 3,
@@ -69,6 +74,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
   {
     id: 'trade_isfahan_shiraz_saffron',
+    name: 'Saffron to Shiraz',
     nameRu: 'Шафран в Шираз',
     fromRegion: Region.ISFAHAN, toRegion: Region.SHIRAZ,
     cargoItemId: 'mat_saffron', cargoQty: 2,
@@ -77,6 +83,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
   {
     id: 'trade_shiraz_caucasus_turquoise',
+    name: 'Turquoise to the Caucasus',
     nameRu: 'Бирюза на Кавказ',
     fromRegion: Region.SHIRAZ, toRegion: Region.CAUCASUS,
     cargoItemId: 'mat_turquoise', cargoQty: 2,
@@ -85,6 +92,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
   {
     id: 'trade_caucasus_meso_ore',
+    name: 'Ore for the Military Camps',
     nameRu: 'Руда для военных лагерей',
     fromRegion: Region.CAUCASUS, toRegion: Region.MESOPOTAMIA,
     cargoItemId: 'mat_iron_ore', cargoQty: 20,
@@ -93,6 +101,7 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
   {
     id: 'trade_isfahan_khorasan_scale',
+    name: 'Dragon Scale to Khorasan',
     nameRu: 'Драконья чешуя в Хорасан',
     fromRegion: Region.ISFAHAN, toRegion: Region.KHORASAN,
     cargoItemId: 'mat_dragon_scale', cargoQty: 1,

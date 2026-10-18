@@ -1373,6 +1373,13 @@
     "carpentry": "Плотницкое дело",
     "lvl": "Ур. %d"
   },
+  "trade_contracts": {
+    "trade_tabriz_isfahan_silk": "Шёлк для Исфахана",
+    "trade_isfahan_shiraz_saffron": "Шафран в Шираз",
+    "trade_shiraz_caucasus_turquoise": "Бирюза на Кавказ",
+    "trade_caucasus_meso_ore": "Руда для военных лагерей",
+    "trade_isfahan_khorasan_scale": "Драконья чешуя в Хорасан"
+  },
   "boat_desc": {
     "boat_rowboat": "Два весла и немного протечек. Лучше, чем плавать, хуже остального.",
     "boat_fishing_skid": "Сделана для мелководья: низкие борта, ящик для приманки и место для невода.",

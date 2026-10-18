@@ -1384,7 +1384,10 @@ export async function loadTrade(): Promise<void> {
       const row = rowEl('inv-item');
       const label = document.createElement('span');
       label.className = 'inv-name';
-      label.textContent = `${c.nameRu} · ${c.cargoNameRu} ×${c.cargoQty} → ◉ ${c.rewardGold}`;
+      // Название контракта переводится по ключу trade_contracts.<id>, груз —
+    // обычный предмет, он переводится по cargoItemId. Раньше обе строки
+    // печатались по-русски прямо из ответа сервера.
+    label.textContent = `${tOr(`trade_contracts.${c.id}`, c.nameRu)} · ${имяПредмета(c.cargoItemId, c.cargoNameRu)} ×${c.cargoQty} → ◉ ${c.rewardGold}`;
       row.append(label);
       if (c.rewardSilver) label.textContent += t('panels.reward_silver_add').replace('{n}', String(c.rewardSilver));
       if (c.rewardSyrian) label.textContent += t('panels.reward_syrian_add').replace('{n}', String(c.rewardSyrian));

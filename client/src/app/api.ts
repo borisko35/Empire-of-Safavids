@@ -668,7 +668,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     }),
 
   tradeContracts: (characterId: string) =>    req<{
-      contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];
+      contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; /** Присылается сервером (TradeService отдаёт определение целиком) и нужен, чтобы перевести название груза. */
+        cargoItemId: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];
       /** Свой караван: null если контракта нет */
       active: { contractId: string; startedAt: number; arrivesAt: number; status: 'transit' | 'arrived'; cargoReturned: boolean; cargoItemId: string; cargoQty: number } | null;
       /** Серверное время — по нему считаем таймер, а не по часам игрока */

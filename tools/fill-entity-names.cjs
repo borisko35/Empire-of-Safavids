@@ -42,6 +42,13 @@ const ВИДЫ = {
       { имя: 'boat_desc', поле: (b) => b.descEn },
     ],
   },
+contracts: {
+    модуль: './list-contracts.cjs',
+    ключ: 'contracts',
+    azФайл: 'az-contracts.json',
+    // Один раздел: у контракта есть только название.
+    разделы: [{ имя: 'trade_contracts', поле: (c) => c.ru }, { имя: 'trade_contracts', поле: (c) => c.en }],
+  },
 };
 
 const вид = process.argv[2];
