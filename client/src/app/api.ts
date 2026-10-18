@@ -829,7 +829,10 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   fishingState: (characterId: string) =>
     req<{
       cast: { castId: string; phase: string; biteAt: number; waitTotalMs: number; deep: boolean; luck: number } | null;
-      boat: { nameRu: string; catchLimit: number; fishingBonus: number } | null;
+      // id присылает сервер (game.ts отдаёт лодку целиком, {...лодка,
+      // swimSpeed}), и по нему находится перевод названия. В типе его не
+      // было, поэтому подстановка имени лодки молча собирала бы undefined.
+      boat: { id: string; nameRu: string; catchLimit: number; fishingBonus: number } | null;
       boatFatigue: number;
       fish: { id: string; nameRu: string; rarity: string; weightKg: number; deepOnly?: boolean; minLevel: number }[];
       serverTime: number;

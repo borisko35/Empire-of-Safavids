@@ -1373,6 +1373,20 @@
     "carpentry": "Təzəkkarlıq",
     "lvl": "Səv. %d"
   },
+  "boat_desc": {
+    "boat_rowboat": "İki avara və bir az su sızıntısı. Üzməkdən yaxşıdır, qalan hər şeydən pis.",
+    "boat_fishing_skid": "Dayaz sular üçün qurulub: alçaq yanlar, bağlamaq qutusu və tor üçün yer.",
+    "boat_caravel": "Palqalı və dənizə davamlı. Körfəz balıqçıları bunlarla Hormuzə keçir.",
+    "boat_dhow": "Yamaq parça parça örtüklü qısq çələklər. Hər küləkdə sürətlidir və çox balıq daşıyır.",
+    "boat_galley": "Yirmi səkkiz avara və qızılı büdrük. Şah hər kəsdən yaxşı balıq tutar."
+  },
+  "boats": {
+    "boat_rowboat": "Sadə Qayıq",
+    "boat_fishing_skid": "Balıqçı Barkası",
+    "boat_caravel": "Karavel",
+    "boat_dhow": "Körfəz Dhowu",
+    "boat_galley": "Şahın Qalereyası"
+  },
   "recipes": {
     "recipe_iron_sword": "Dəmir Qılıncı Hazırlamaq",
     "recipe_qizilbash_saber": "Qızılbaş Xəncəri Hazırlamaq",

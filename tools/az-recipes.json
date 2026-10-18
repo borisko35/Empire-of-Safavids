@@ -1,13 +1,15 @@
 {
-  "recipe_iron_sword": "Dəmir Qılıncı Hazırlamaq",
-  "recipe_qizilbash_saber": "Qızılbaş Xəncəri Hazırlamaq",
-  "recipe_shah_blade": "Şah Abbasın Xəncərini Hazırlamaq",
-  "recipe_silk_robe": "İsfahan İpək Xalatını Toxumaq",
-  "recipe_fur_coat": "Xəzli Palto Tikmək",
-  "recipe_hunter_amulet": "Ovçu Asqilətini Hazırlamaq",
-  "recipe_health_potion_s": "Kiçik Sağlamlıq Bakısı Hazırlamaq",
-  "recipe_health_potion_m": "Orta Sağlamlıq Bakısı Hazırlamaq",
-  "recipe_mana_potion": "Mana İksiri Hazırlamaq",
-  "recipe_persian_kebab": "Fars Kebabı Bişirmək",
-  "recipe_turquoise_ring": "Firuzə Üzük Hazırlamaq"
+  "recipes": {
+    "recipe_iron_sword": "Dəmir Qılıncı Hazırlamaq",
+    "recipe_qizilbash_saber": "Qızılbaş Xəncəri Hazırlamaq",
+    "recipe_shah_blade": "Şah Abbasın Xəncərini Hazırlamaq",
+    "recipe_silk_robe": "İsfahan İpək Xalatını Toxumaq",
+    "recipe_fur_coat": "Xəzli Palto Tikmək",
+    "recipe_hunter_amulet": "Ovçu Asqilətini Hazırlamaq",
+    "recipe_health_potion_s": "Kiçik Sağlamlıq Bakısı Hazırlamaq",
+    "recipe_health_potion_m": "Orta Sağlamlıq Bakısı Hazırlamaq",
+    "recipe_mana_potion": "Mana İksiri Hazırlamaq",
+    "recipe_persian_kebab": "Fars Kebabı Bişirmək",
+    "recipe_turquoise_ring": "Firuzə Üzük Hazırlamaq"
+  }
 }

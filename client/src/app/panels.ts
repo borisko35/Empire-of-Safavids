@@ -1046,7 +1046,7 @@ export async function loadAuction(): Promise<void> {
         const row = rowEl('inv-item');
         const name = document.createElement('span');
         name.className = 'inv-name';
-        name.textContent = `${l.nameRu} ×${l.quantity}`;
+        name.textContent = `${itemName(l.itemId, l.nameRu)} ×${l.quantity}`;
         const price = document.createElement('span');
         price.className = 'inv-qty';
         // Срок горит жёлтым, когда лот уже просрочен: предмет вернётся сам,
@@ -1112,7 +1112,7 @@ export async function loadAuction(): Promise<void> {
         for (const it of items) {
           const opt = document.createElement('option');
           opt.value = it.itemId;
-          opt.textContent = `${it.nameRu} ×${it.quantity}`;
+          opt.textContent = `${itemName(it.itemId, it.nameRu)} ×${it.quantity}`;
           itemSel.append(opt);
         }
         const qtyInput = document.createElement('input');
@@ -1462,7 +1462,7 @@ export async function loadTrade(): Promise<void> {
       for (const it of items) {
         const o = document.createElement('option');
         o.value = it.itemId;
-        o.textContent = `${it.nameRu} x${it.quantity}`;
+        o.textContent = `${itemName(it.itemId, it.nameRu)} x${it.quantity}`;
         itemSel.append(o);
       }
       const qtyInput = document.createElement('input');
@@ -4206,8 +4206,11 @@ async function renderBoatGarage(): Promise<HTMLElement> {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    label.textContent = def.nameRu;
-    label.title = def.descriptionRu;
+    // Название и описание лодки переводятся по ключам boats.<id> и
+    // boat_desc.<id>. Раньше печатались nameRu и descriptionRu напрямую:
+    // пять лодок не были переведены ни на одном языке.
+    label.textContent = tOr(`boats.${def.id}`, def.nameRu);
+    label.title = tOr(`boat_desc.${def.id}`, def.descriptionRu);
     row.append(label);
     row.append(actionButton(t('panels.fishing_board'), async () => {
       try {
@@ -4299,7 +4302,7 @@ export async function loadFishing(): Promise<void> {
       const boatRow = rowEl('inv-item');
       const name = document.createElement('span');
       name.className = 'inv-name';
-      name.textContent = `${t('panels.fishing_boat')}: ${boat.nameRu}`;
+      name.textContent = `${t('panels.fishing_boat')}: ${tOr(`boats.${boat.id}`, boat.nameRu)}`;
       boatRow.append(name);
       boatRow.append(actionButton(t('panels.fishing_land'), async () => {
         await api.boatDeactivate(session.character!.id);
@@ -4361,7 +4364,11 @@ export async function loadFishing(): Promise<void> {
       const row = rowEl('inv-item');
       const name = document.createElement('span');
       name.className = `inv-name fish-${f.rarity}`;
-      name.textContent = `${f.nameRu} · ${f.weightKg < 1 ? Math.round(f.weightKg * 1000) + t('common.grams') : f.weightKg + t('common.kg')}`;
+      // Название рыбы переводится по идентификатору предмета: FISH_TABLE уже
+      // несёт f.id — это id в ITEMS_DATABASE, и все рыбы переведены. Раньше
+      // здесь печаталось f.nameRu напрямую, и игрок на en или az видел
+      // «Осётр» и «Пила-рыба Залива» среди переведённых строк.
+      name.textContent = `${имяПредмета(f.id, f.nameRu)} · ${f.weightKg < 1 ? Math.round(f.weightKg * 1000) + t('common.grams') : f.weightKg + t('common.kg')}`;
       if (f.deepOnly) {
         const tag = document.createElement('small');
         tag.className = 'fish-tag';

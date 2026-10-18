@@ -1373,6 +1373,20 @@
     "carpentry": "Carpentry",
     "lvl": "Lv. %d"
   },
+  "boat_desc": {
+    "boat_rowboat": "Two oars and a leaky bottom. Better than swimming, worse than everything else.",
+    "boat_fishing_skid": "Built for the shallows: low sides, a bait box and room for a net.",
+    "boat_caravel": "Decked and seaworthy. The Gulf fishermen cross to Hormuz in these.",
+    "boat_dhow": "Lateen sails of patched cloth. Fast in any wind, and she carries a lot of fish.",
+    "boat_galley": "Twenty-eight oars and a gilded stern. The Shah fishes better than anyone."
+  },
+  "boats": {
+    "boat_rowboat": "Rowboat",
+    "boat_fishing_skid": "Fishing Skiff",
+    "boat_caravel": "Caravel",
+    "boat_dhow": "Dhow of the Gulf",
+    "boat_galley": "Shah’s Galley"
+  },
   "recipes": {
     "recipe_iron_sword": "Forge Iron Sword",
     "recipe_qizilbash_saber": "Forge Qizilbash Saber",
