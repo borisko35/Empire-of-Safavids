@@ -23,6 +23,7 @@ import {
   snowTexture, snowNormalTexture,
   windowFrameTexture, windowFrameNormalTexture,
   flowerTexture, flowerNormalTexture,
+  goldTexture, goldNormalTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1465,7 +1466,7 @@ const MAT = {
   // Физически изразец — диэлектрик с глазурью, то есть metalness 0 и
   // невысокая шероховатость за глянец.
   tealDome: new THREE.MeshStandardMaterial({ color: 0x35a0a0, roughness: 0.3, metalness: 0, map: mosaicTexture(4) }),
-  gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7 }),
+  gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.35, metalness: 0.7, map: goldTexture('#c9a84c', 2), normalMap: goldNormalTexture(2), normalScale: new THREE.Vector2(0.4, 0.4) }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.6, map: woodTexture(1), normalMap: woodNormalTexture(1), normalScale: new THREE.Vector2(0.8, 0.8), roughnessMap: woodRoughnessTexture(1) }),
   // Растительность и ткань получили процедурные текстуры: до этого они
   // стояли голым цветом с roughness: 1, и крона читалась как картон, ствол как

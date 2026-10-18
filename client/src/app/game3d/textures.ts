@@ -1669,3 +1669,84 @@ export function hairNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
   const normalCanvas = heightToNormal(img.data, size, 1.0);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Золото ────────────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Золото стояло плоским цветом с metalness: 0.7. Настоящее
+// золото имеет царапины, потёртости и патину.
+
+/** Текстура золота: царапины и патина. */
+export function goldTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [201, 168, 76];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Царапины: тонкие линии
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 3 + Math.random() * 20;
+    const угол = Math.random() * Math.PI;
+    const свет = 0.8 + Math.random() * 0.4;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.15 + Math.random() * 0.2})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  // Потёртости: светлые пятна
+  for (let i = 0; i < 25; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 2 + Math.random() * 6;
+    const свет = 1.1 + Math.random() * 0.2;
+    ctx.fillStyle = `rgba(${Math.round(Math.min(255, б * свет))},${Math.round(Math.min(255, г * свет))},${Math.round(Math.min(255, к * свет))},${0.08 + Math.random() * 0.12})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Патина: тёмные пятна
+  for (let i = 0; i < 12; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 1 + Math.random() * 4;
+    ctx.fillStyle = `rgba(${Math.round(б * 0.7)},${Math.round(г * 0.7)},${Math.round(к * 0.7)},${0.08 + Math.random() * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для золота. */
+export function goldNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 60; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const длина = 3 + Math.random() * 20;
+    const угол = Math.random() * Math.PI;
+    const свет = 110 + Math.floor(Math.random() * 30);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(угол) * длина, y + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 0.8);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
