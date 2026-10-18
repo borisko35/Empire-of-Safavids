@@ -641,7 +641,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   // Список целей фильтруется общим фильтром: лодка, вода, своя зона,
   // дистанция. Без вызова кнопка абордажа рисовалась бы некому.
   boardingTargets: (characterId: string, mode: 'pve' | 'pvp') =>
-    req<{ targets: { id: string; nameRu: string; mode: string; level: number }[]; reason?: string }>(
+    req<{ targets: { id: string; /** Вид монстра для PvE; у PvP-целей его нет — там имя задал игрок. */
+        monsterId?: string; nameRu: string; mode: string; level: number }[]; reason?: string }>(
       `/api/game/boarding/targets?characterId=${characterId}&mode=${mode}`,
     ),
   dungeonStatus: (characterId: string) =>

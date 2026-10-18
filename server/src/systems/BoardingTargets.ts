@@ -66,6 +66,8 @@ export function pveTargets(
     if (!def.aquatic) continue;
     const цель: BoardTarget = {
       id: ctx.instanceId,
+      // Вид монстра, а не instanceId: по нему клиент находит перевод имени.
+      monsterId: def.id,
       nameRu: def.nameRu,
       mode: 'pve',
       level: def.level,

@@ -4266,7 +4266,13 @@ async function renderBoatGarage(): Promise<HTMLElement> {
           return;
         }
         const цель = resp.targets[0];
-        toast(`${t('panels.boarding_found')}: ${цель.nameRu} (${t('badges.level')} ${цель.level})`, 'info');
+        // Цели абордажа — водные монстры, и их имена переводятся по monsters.<id>.
+        // PvE-цели приходят с id монстра; у PvP-целей id — персонаж, и там
+        // показывается имя, заданное игроком, переводить которое не нужно.
+        const имяЦели = цель.mode === 'pve' && цель.monsterId
+          ? tOr(`monsters.${цель.monsterId}`, цель.nameRu)
+          : цель.nameRu;
+        toast(`${t('panels.boarding_found')}: ${имяЦели} (${t('badges.level')} ${цель.level})`, 'info');
         // §191. Кнопка «Список» только показывала тост: нажать было нечего.
         // Теперь заход можно начать — и он уходит в сокет, а не в REST.
         строка.append(

@@ -5,7 +5,7 @@
 
 import { socket, attachConnectionStateTracking } from './net';
 import { api } from './api';
-import { t, detectLocale, loadLocale, имяПредмета } from './i18n';
+import { t, tOr, detectLocale, loadLocale, имяПредмета } from './i18n';
 import { Character, session, Vec3 } from './state';
 import { World, PlayerEntity } from './entities';
 import { loadPanelContent, checkWaterDanger, resetWaterDanger, loadActiveMount, loadShop, loadSkills, loadParty } from './panels';
@@ -1279,7 +1279,11 @@ function wireSocket(): void {
         const m = world.monsters.get(r.targetId);
         if (m && r.targetHp != null) m.hp = r.targetHp;
         if (r.targetId === world.targetId && r.targetHp != null) {
-          showTarget(m?.nameRu ?? '', r.targetHp, r.targetMaxHp ?? m?.maxHp ?? 1);
+          // Имя монстра переводится по ключу monsters.<id>: сорок монстров не были
+        // переведены ни на одном языке, и рамка прицела показывала
+        // «Великий Симург» игроку на en или az. monsterId присылает сокет
+        // вместе с nameRu.
+        showTarget(m ? tOr(`monsters.${m.monsterId}`, m.nameRu) : '', r.targetHp, r.targetMaxHp ?? m?.maxHp ?? 1);
         }
       }
     }
