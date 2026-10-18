@@ -1,6 +1,7 @@
 // ============================================================
 // Дорожное движение: караваны и случайные путники с квестами
 // ============================================================
+import { camelTexture, camelNormalTexture } from './textures';
 //
 // ЗАЧЕМ. Горожане живут в городе и никуда не идут — это правильно, но из-за
 // этого за пределами города было пусто: поле, по которому шёл игрок, не
@@ -39,8 +40,8 @@ const CARAVAN_SPEED = 1.7;
 const WALKER_SPEED = 1.35;
 
 const M = {
-  camel: new THREE.MeshStandardMaterial({ color: 0xc0a074, roughness: 1 }),
-  camelDark: new THREE.MeshStandardMaterial({ color: 0x9a7d54, roughness: 1 }),
+  camel: new THREE.MeshStandardMaterial({ color: 0xc0a074, roughness: 1, map: camelTexture('#c0a074', 2), normalMap: camelNormalTexture(2), normalScale: new THREE.Vector2(0.5, 0.5) }),
+  camelDark: new THREE.MeshStandardMaterial({ color: 0x9a7d54, roughness: 1, map: camelTexture('#9a7d54', 2), normalMap: camelNormalTexture(2), normalScale: new THREE.Vector2(0.5, 0.5) }),
   wood: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 1 }),
   pack1: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1 }),
   pack2: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1 }),
