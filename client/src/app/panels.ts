@@ -945,7 +945,7 @@ export async function loadCraft(): Promise<void> {
       label.className = 'inv-name';
       // Название результата, а не его идентификатор: «wpn_shah_blade» игроку
       // ничего не говорит.
-      label.textContent = `${r.nameRu} → ${r.resultNameRu} ×${r.resultQuantity}`;
+      label.textContent = `${r.nameRu} → ${itemName(r.resultItemId, r.resultNameRu)} ×${r.resultQuantity}`;
       const meta = document.createElement('span');
       meta.className = 'inv-qty';
       meta.textContent = `${t('badges.level')} ${r.requiredLevel} · ${Math.round(r.successRate * 100)}%`;
@@ -974,7 +974,7 @@ export async function loadCraft(): Promise<void> {
         const chip = document.createElement('span');
         chip.className = 'inv-qty';
         const own = свои.get(i.itemId) ?? 0;
-        chip.textContent = `${i.nameRu} ${own}/${i.quantity}`;
+        chip.textContent = `${itemName(i.itemId, i.nameRu)} ${own}/${i.quantity}`;
         // Не хватает — слово, а не только число: «3/5» читается и так, но при
         // беглом взгляде по панели без него легко пропустить.
         if (own < i.quantity) chip.textContent += ` · ${t('panels.craft_short')}`;

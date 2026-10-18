@@ -1021,11 +1021,13 @@ function wireSocket(): void {
   socket.on('quest:completed', ({ quests }: {
     quests: {
       questId: string; titleRu: string; experience: number; gold: number;
-      items: { nameRu: string; quantity: number }[]; leveledUp?: boolean; newLevel?: number;
+      items: { itemId: string; nameRu: string; quantity: number }[]; leveledUp?: boolean; newLevel?: number;
     }[];
   }) => {
     for (const q of quests) {
-      const items = q.items?.length ? ` · ${q.items.map((i) => `${i.nameRu} ×${i.quantity}`).join(', ')}` : '';
+      const items = q.items?.length
+        ? ` · ${q.items.map((i) => `${имяПредмета(i.itemId, i.nameRu)} ×${i.quantity}`).join(', ')}`
+        : '';
       toast(`${t('world.quest_completed')}: ${q.titleRu} (+${q.experience} ${t('world.exp')}, +${q.gold} ◉${items})`, 'success');
       if (q.leveledUp && q.newLevel) {
         session.level = q.newLevel;
