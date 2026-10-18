@@ -1006,3 +1006,79 @@ export function windowFrameNormalTexture(repeat = 2, size = 128): THREE.CanvasTe
   const normalCanvas = heightToNormal(img.data, size, 1.2);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Лепестки цветов ────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Цветок стоял плоским белым с roughness: 1. Настоящие
+// лепестки имеют тонкие прожилки и полупрозрачные края, которые ловят
+// свет. Плоская поверхность не даёт этого эффекта.
+
+/** Текстура лепестков: тонкие прожилки на белом фоне. */
+export function flowerTexture(base: string, repeat = 1, size = 64): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [255, 255, 255];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Прожилки: тонкие линии от центра к краям
+  for (let i = 0; i < 12; i++) {
+    const угол = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.3;
+    const длина = 12 + Math.random() * 18;
+    ctx.strokeStyle = `rgba(${Math.round(б * 0.85)},${Math.round(г * 0.85)},${Math.round(к * 0.85)},${0.2 + Math.random() * 0.3})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(size / 2, size / 2);
+    const конецX = size / 2 + Math.cos(угол) * длина;
+    const конецY = size / 2 + Math.sin(угол) * длина;
+    ctx.lineTo(конецX, конецY);
+    ctx.stroke();
+  }
+
+  // Мелкие точки: пыльца и текстура лепестка
+  for (let i = 0; i < 40; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.3 + Math.random() * 1.2;
+    const свет = 0.9 + Math.random() * 0.2;
+    ctx.fillStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.15 + Math.random() * 0.25})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Полупрозрачные края: лепесток тоньше по краям
+  const градиент = ctx.createRadialGradient(size / 2, size / 2, size / 4, size / 2, size / 2, size / 2);
+  градиент.addColorStop(0, 'rgba(255,255,255,0)');
+  градиент.addColorStop(1, 'rgba(255,255,255,0.15)');
+  ctx.fillStyle = градиент;
+  ctx.fillRect(0, 0, size, size);
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для лепестков: тонкие прожилки. */
+export function flowerNormalTexture(repeat = 1, size = 64): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  // Прожилки: тонкие линии от центра к краям
+  for (let i = 0; i < 12; i++) {
+    const угол = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.3;
+    const длина = 12 + Math.random() * 18;
+    const свет = 110 + Math.floor(Math.random() * 40);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 0.3 + Math.random() * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(size / 2, size / 2);
+    ctx.lineTo(size / 2 + Math.cos(угол) * длина, size / 2 + Math.sin(угол) * длина);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.0);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}

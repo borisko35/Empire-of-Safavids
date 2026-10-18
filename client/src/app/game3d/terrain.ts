@@ -22,6 +22,7 @@ import {
   foliageTexture, foliageNormalTexture, barkTexture, barkNormalTexture, clothTexture,
   snowTexture, snowNormalTexture,
   windowFrameTexture, windowFrameNormalTexture,
+  flowerTexture, flowerNormalTexture,
 } from './textures';
 import { t } from '../i18n';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
@@ -1503,7 +1504,7 @@ const MAT = {
     color: 0xdff0f8, transparent: true, opacity: 0.75, side: THREE.DoubleSide, map: waterfallTexture(2),
   }),
   snow: new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.9, map: snowTexture('#eef2f6', 4), normalMap: snowNormalTexture(4), normalScale: new THREE.Vector2(0.5, 0.5) }),
-  flower: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }),
+  flower: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: flowerTexture('#ffffff', 1), normalMap: flowerNormalTexture(1), normalScale: new THREE.Vector2(0.4, 0.4) }),
 };
 
 // ── Рельеф ───────────────────────────────────────────────────
