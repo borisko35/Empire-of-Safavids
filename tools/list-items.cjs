@@ -18,8 +18,7 @@ while ((m = re.exec(src)) !== null) {
   // 'Scholar\'s Scroll' читалось как 'Scholar\' — с висящим обратным слэшем
   // на конце. Что хуже: расхождение потом выглядит как ошибка в данных
   // предмета, и чинить начинают не разбор, а сам предмет.
-  const nm = /(?:^|[^\w])name: '((?:[^'\\]|\\.)*)'/.exec(body)
-    || /(?:^|[^\w])name: "([^"]*)"/.exec(body);
+  const nm = /(?:^|[^\w])name:\s*(?:'((?:[^'\\]|\\.)*)'|"([^"]*)")/.exec(body);
   const nru = /(?:^|[^\w])nameRu: '((?:[^'\\]|\\.)*)'/.exec(body);
   const rar = /(?:^|[^\w])rarity: ItemRarity\.([A-Z]+)/.exec(body);
   const lvl = /(?:^|[^\w])level: (\d+)/.exec(body);
@@ -29,7 +28,7 @@ while ((m = re.exec(src)) !== null) {
     // Слэш-экранирование снимается: в файле это синтаксис TypeScript,
     // а в словаре перевода должен попасть сам апостроф, иначе название
     // уедет в JSON вместе со слэшем и станет странным для игрока.
-    en: nm ? nm[1].replace(/\\(.)/g, '$1') : null,
+    en: nm ? (nm[1] ?? nm[2]).replace(/\\(.)/g, '$1') : null,
     ru: nru ? nru[1].replace(/\\(.)/g, '$1') : null,
     rarity: rar ? rar[1] : null,
     level: lvl ? Number(lvl[1]) : null,

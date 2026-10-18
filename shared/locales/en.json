@@ -1373,6 +1373,24 @@
     "carpentry": "Carpentry",
     "lvl": "Lv. %d"
   },
+  "professions": {
+    "warrior": "Warrior",
+    "archer": "Archer",
+    "merchant": "Merchant",
+    "herbalist": "Herbalist",
+    "blacksmith": "Blacksmith",
+    "explorer": "Explorer",
+    "dervish": "Dervish"
+  },
+  "dungeons": {
+    "dungeon_tabriz_catacombs": "Catacombs of Tabriz",
+    "dungeon_isfahan_palace": "Palace of Forty Columns",
+    "dungeon_khorasan_caves": "Caves of the Fire Divs",
+    "dungeon_caucasus_fort": "Fortress at the Pass",
+    "dungeon_shiraz_tomb": "The Sheikh's Tomb",
+    "dungeon_baghdad_citadel": "Fall of the Baghdad Citadel",
+    "dungeon_simurgh_temple": "Temple of the Simurgh"
+  },
   "monsters": {
     "mob_herat_gate_guard": "Gate Guard of Herat",
     "mob_herat_road_reaver": "Silk Road Reaver",

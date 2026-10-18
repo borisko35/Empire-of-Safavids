@@ -526,7 +526,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   // Сложность едет только когда выбрана: пустая строка означала бы
   // «выбрана не та» и молча спускала бы игрока на normal.
   dungeonEnter: (dungeonId: string, characterId: string, difficulty?: string) =>
-    req<{ session: { id: string; dungeonNameRu: string; monsterCount: number; bossCount: number; difficulty?: string; timeLeftSec?: number } }>(
+    req<{ session: { id: string; /** Присылается сервером и нужен для перевода названия: по nameRu перевод не ищется. */
+        dungeonId: string; dungeonNameRu: string; monsterCount: number; bossCount: number; difficulty?: string; timeLeftSec?: number } }>(
       `/api/game/dungeons/${dungeonId}/enter`,
       { method: 'POST', body: JSON.stringify(difficulty ? { characterId, difficulty } : { characterId }) },
     ),
@@ -646,7 +647,7 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       `/api/game/boarding/targets?characterId=${characterId}&mode=${mode}`,
     ),
   dungeonStatus: (characterId: string) =>
-    req<{ active: boolean; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number; difficulty?: string; timeLeftSec?: number }>(
+    req<{ active: boolean; id?: string; dungeonId?: string; dungeonNameRu?: string; bossCount?: number; killedBossCount?: number; difficulty?: string; timeLeftSec?: number }>(
       '/api/game/dungeons/status',
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),

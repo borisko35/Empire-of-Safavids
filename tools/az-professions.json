@@ -1,0 +1,24 @@
+{
+  "az": {
+    "professions": {
+      "warrior": "Döyüşçü",
+      "archer": "Oxçı",
+      "merchant": "Ticarətçi",
+      "herbalist": "Dərmançı",
+      "blacksmith": "Dəmirçi",
+      "explorer": "Kəşfçi",
+      "dervish": "Dərviş"
+    }
+  },
+  "en": {
+    "professions": {
+      "warrior": "Warrior",
+      "archer": "Archer",
+      "merchant": "Merchant",
+      "herbalist": "Herbalist",
+      "blacksmith": "Blacksmith",
+      "explorer": "Explorer",
+      "dervish": "Dervish"
+    }
+  }
+}

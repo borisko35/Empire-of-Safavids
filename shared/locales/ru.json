@@ -1373,6 +1373,24 @@
     "carpentry": "Плотницкое дело",
     "lvl": "Ур. %d"
   },
+  "professions": {
+    "warrior": "Воин",
+    "archer": "Лучник",
+    "merchant": "Торговец",
+    "herbalist": "Травник",
+    "blacksmith": "Кузнец",
+    "explorer": "Исследователь",
+    "dervish": "Дервиш"
+  },
+  "dungeons": {
+    "dungeon_tabriz_catacombs": "Катакомбы Тебриза",
+    "dungeon_isfahan_palace": "Дворец Сорока Колонн",
+    "dungeon_khorasan_caves": "Пещеры Огненных Дивов",
+    "dungeon_caucasus_fort": "Крепость на перевале",
+    "dungeon_shiraz_tomb": "Гробница Шеиха",
+    "dungeon_baghdad_citadel": "Падение Багдадской Цитадели",
+    "dungeon_simurgh_temple": "Храм Симурга"
+  },
   "monsters": {
     "mob_herat_gate_guard": "Страж Врат Герата",
     "mob_herat_road_reaver": "Шёлковый Дорожник",

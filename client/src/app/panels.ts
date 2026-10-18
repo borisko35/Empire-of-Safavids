@@ -113,7 +113,7 @@ export async function loadDungeons(): Promise<void> {
       const st = rowEl('inv-item dungeon-status');
       const name = document.createElement('span');
       name.className = 'inv-name';
-      name.textContent = `${status.dungeonNameRu} (${t('panels.bosses')}: ${status.killedBossCount}/${status.bossCount})`;
+      name.textContent = `${status.dungeonId ? tOr(`dungeons.${status.dungeonId}`, status.dungeonNameRu ?? '') : (status.dungeonNameRu ?? '')} (${t('panels.bosses')}: ${status.killedBossCount}/${status.bossCount})`;
       st.append(name);
       // Сложность и остаток времени.
       //
@@ -146,7 +146,10 @@ export async function loadDungeons(): Promise<void> {
       const label = document.createElement('span');
       label.className = 'inv-name';
       label.textContent =
-        `${d.nameRu} · ${t('badges.level')} ${d.minLevel}–${d.maxLevel}` +
+        // Название подземелья переводится по ключу dungeons.<id>: семи
+        // подземелий не было в словарях вовсе, и игрок на en или az выбирал,
+        // куда идти, по-русски.
+        `${tOr(`dungeons.${d.id}`, d.nameRu)} · ${t('badges.level')} ${d.minLevel}–${d.maxLevel}` +
         // Срок захода показывается ДО входа, а не только внутри: игрок должен
         // знать, во сколько он закончит, ещё до того, как начал.
         (d.timeLimit ? ` · ${t('panels.time_limit')}: ${d.timeLimit} ${t('panels.minutes')}` : '') +
@@ -177,7 +180,7 @@ export async function loadDungeons(): Promise<void> {
         }
         row.append(actionButton(t('panels.enter'), async () => {
           const res = await api.dungeonEnter(d.id, cid(), выбрана ?? сложности[0]);
-          toast(`${res.session.dungeonNameRu}: ${t('panels.dungeon_started')}`, 'success');
+          toast(`${tOr(`dungeons.${res.session.dungeonId}`, res.session.dungeonNameRu)}: ${t('panels.dungeon_started')}`, 'success');
           await loadDungeons();
         }));
       }
@@ -4537,7 +4540,7 @@ export async function loadSkills(): Promise<void> {
       // Полоса опыта у профессии. Раньше стояло только «уровень 3 (240 XP)»:
       // игрок видел число, но не знал, сколько нужно до следующего уровня,
       // и не мог понять, растёт оно вообще или нет.
-      ? `<div class="inv-item"><b>${profession.nameRu}</b> — ${t('badges.level')}${profession.level}</div>`
+      ? `<div class="inv-item"><b>${tOr(`professions.${profession.id}`, profession.nameRu)}</b> — ${t('badges.level')}${profession.level}</div>`
         + xpBar(profession.xp, profession.level)
       : `<div class="inv-item" style="color:var(--cream-dim)">${t('skills.prof_none')}</div>
          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
@@ -4549,7 +4552,7 @@ export async function loadSkills(): Promise<void> {
       btn.addEventListener('click', async () => {
         try {
           const res = await api.unlockProfession(charId, (btn as HTMLButtonElement).dataset.prof!);
-          toast(t('skills.prof_unlocked').replace('{name}', res.profession.nameRu), 'success');
+          toast(t('skills.prof_unlocked').replace('{name}', tOr(`professions.${res.profession.id}`, res.profession.nameRu)), 'success');
           void loadSkills();
         } catch (e) { toast((e as Error).message, 'error'); }
       });

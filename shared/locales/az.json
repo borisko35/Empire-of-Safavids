@@ -1373,6 +1373,24 @@
     "carpentry": "Təzəkkarlıq",
     "lvl": "Səv. %d"
   },
+  "professions": {
+    "warrior": "Döyüşçü",
+    "archer": "Oxçı",
+    "merchant": "Ticarətçi",
+    "herbalist": "Dərmançı",
+    "blacksmith": "Dəmirçi",
+    "explorer": "Kəşfçi",
+    "dervish": "Dərviş"
+  },
+  "dungeons": {
+    "dungeon_tabriz_catacombs": "Təbriz Katakombları",
+    "dungeon_isfahan_palace": "Qırx Sütunlu Saray",
+    "dungeon_khorasan_caves": "Alov Divlərinin Mağaraları",
+    "dungeon_caucasus_fort": "Keçid Qalası",
+    "dungeon_shiraz_tomb": "Məzarə Pilləkəni",
+    "dungeon_baghdad_citadel": "Bağdad Qalasının Düşüşü",
+    "dungeon_simurgh_temple": "Səmürg Məbədi"
+  },
   "monsters": {
     "mob_herat_gate_guard": "Herat Qapı Mühafizi",
     "mob_herat_road_reaver": "İpək Yolu Qəssadı",

@@ -1098,9 +1098,11 @@ function wireSocket(): void {
   // Подземелье пройдено. Сервер уже начислил опыт, золото и предметы;
   // nameRu приходит вместе с наградой, придумывать название не нужно.
   socket.on(SERVER_EVENTS.DUNGEON_COMPLETED, (d: {
-    dungeonNameRu?: string; experience?: number; gold?: number; items?: string[];
+    dungeonId?: string; dungeonNameRu?: string; experience?: number; gold?: number; items?: string[];
   }) => {
-    const name = d?.dungeonNameRu ?? '';
+    // dungeonId приходит в том же событии — без него перевод названия
+    // подземелья искать не по чему, и остаётся русский текст из nameRu.
+    const name = d?.dungeonId ? tOr(`dungeons.${d.dungeonId}`, d.dungeonNameRu ?? '') : (d?.dungeonNameRu ?? '');
     const parts: string[] = [];
     if (d?.experience) parts.push(`+${d.experience} ${t('world.exp')}`);
     if (d?.gold) parts.push(`+${d.gold} ${t('world.gold')}`);

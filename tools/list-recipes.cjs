@@ -14,8 +14,7 @@ while ((m = re.exec(src)) !== null) {
   // одинарных кавычках, так и в двойных — "Forge Shah's Blade" написан
   // вторым, потому что в имени апостроф. Разбор только одинарных молча
   // терял такие рецепты.
-  const nm = /(?:^|[^\w])name: '((?:[^'\\]|\\.)*)'/.exec(body)
-    || /(?:^|[^\w])name: "([^"]*)"/.exec(body);
+  const nm = /(?:^|[^\w])name:\s*(?:'((?:[^'\\]|\\.)*)'|"([^"]*)")/.exec(body);
   const nru = /(?:^|[^\w])nameRu: '((?:[^'\\]|\\.)*)'/.exec(body);
   const res = /(?:^|[^\w])resultItemId: '([^']*)'/.exec(body);
   const cat = /(?:^|[^\w])category: '([^']*)'/.exec(body);
@@ -23,7 +22,7 @@ while ((m = re.exec(src)) !== null) {
   const снять = (s) => s.replace(/\\(.)/g, '$1');
   recipes.push({
     id,
-    en: снять(nm[1] ?? ''),
+    en: снять(nm[1] ?? nm[2] ?? ''),
     ru: снять(nru[1] ?? ''),
     result: res ? res[1] : null,
     category: cat ? cat[1] : null,
