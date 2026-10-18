@@ -1295,3 +1295,79 @@ export function ironNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
   const normalCanvas = heightToNormal(img.data, size, 1.2);
   return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
 }
+
+// ── Тёмное дерево ──────────────────────────────────────────────
+//
+// ЗАЧЕМ ЭТОТ БЛОК. Тёмное дерево стояло плоским с roughness: 1. Настоящее
+// тёмное дерево (орех, махагон) имеет глубокий цвет и видимую текстуру
+// волокон.
+
+/** Текстура тёмного дерева: глубокие волокна. */
+export function woodDarkTexture(base: string, repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas, ctx } = makeCanvas(size);
+  const числа = base.match(/\w\w/g);
+  const [б, г, к] = числа
+    ? [parseInt(числа[0], 16), parseInt(числа[1], 16), parseInt(числа[2], 16)]
+    : [90, 70, 48];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+
+  // Глубокие волокна: тёмные линии
+  for (let i = 0; i < 50; i++) {
+    const x = Math.random() * size;
+    const свет = 0.6 + Math.random() * 0.3;
+    ctx.strokeStyle = `rgba(${Math.round(б * свет)},${Math.round(г * свет)},${Math.round(к * свет)},${0.3 + Math.random() * 0.3})`;
+    ctx.lineWidth = 1 + Math.random() * 3;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 8, size);
+    ctx.stroke();
+  }
+
+  // Светлые волокна: более тонкие
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * size;
+    const свет = 1.1 + Math.random() * 0.3;
+    ctx.strokeStyle = `rgba(${Math.round(Math.min(255, б * свет))},${Math.round(Math.min(255, г * свет))},${Math.round(Math.min(255, к * свет))},${0.15 + Math.random() * 0.2})`;
+    ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 4, size);
+    ctx.stroke();
+  }
+
+  // Сучки: тёмные пятна
+  for (let i = 0; i < 6; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 3 + Math.random() * 8;
+    ctx.fillStyle = `rgba(${Math.round(б * 0.5)},${Math.round(г * 0.5)},${Math.round(к * 0.5)},0.4)`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  return toTexture(canvas, repeat);
+}
+
+/** Карта нормалей для тёмного дерева. */
+export function woodDarkNormalTexture(repeat = 2, size = 128): THREE.CanvasTexture {
+  const { canvas: _canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  for (let i = 0; i < 50; i++) {
+    const x = Math.random() * size;
+    const свет = 110 + Math.floor(Math.random() * 40);
+    ctx.strokeStyle = `rgb(${свет},${свет},${свет})`;
+    ctx.lineWidth = 1 + Math.random() * 3;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + (Math.random() - 0.5) * 8, size);
+    ctx.stroke();
+  }
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const normalCanvas = heightToNormal(img.data, size, 1.3);
+  return toDataTexture(normalCanvas as unknown as HTMLCanvasElement, repeat);
+}
