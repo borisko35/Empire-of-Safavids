@@ -62,6 +62,7 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'mat_saffron', price: 150, currency: 'gold' },
       { itemId: 'con_exp_scroll', price: 600, currency: 'gold', minLevel: 20 },
       { itemId: 'wpn_qizilbash_saber', price: 3000, currency: 'gold', minLevel: 20 },
+      { itemId: 'wpn_shamshir_damascus', price: 6000, currency: 'gold', minLevel: 30 },
       { itemId: 'arm_silk_robe', price: 6000, currency: 'gold', minLevel: 25 },
       // Снаряжение для воды: снимает замедление в реке и экономит выносливость
       { itemId: 'acc_boots_silk', price: 700, currency: 'gold', minLevel: 10 },
@@ -75,6 +76,8 @@ export const NPC_SHOPS: Record<string, { nameRu: string; items: ShopItem[] }> = 
       { itemId: 'mat_dragon_scale', price: 60000, currency: 'gold', minLevel: 70 },
       { itemId: 'acc_silk_road_amulet', price: 22000, currency: 'gold', minLevel: 60 },
       { itemId: 'acc_cloim_rain', price: 7000, currency: 'gold', minLevel: 40 },
+      { itemId: 'arm_mirror_char_aina', price: 10500, currency: 'gold', minLevel: 35 },
+      { itemId: 'acc_belt_golden_isfahan', price: 16000, currency: 'gold', minLevel: 45 },
     ],
   },
   // Шираз: рукописи и лекарственные травы. Раньше qst_hafiz_scroll и

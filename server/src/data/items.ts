@@ -109,6 +109,23 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     maxStack: 1,
     price: 9999999,
   },
+  'wpn_shamshir_damascus': {
+    id: 'wpn_shamshir_damascus',
+    name: 'Shamshir of Damascus Steel',
+    nameRu: 'Шамшир Дамасской Стали',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.RARE,
+    level: 30,
+    stats: { strength: 42, agility: 14 },
+    // Параметры удара: раньше у оружия не было ни урона, ни дальности,
+    // ни скорости, поэтому все виды оружия били одинаково.
+    weapon: { damage: 1.12, speed: 0.41, range: 2.55 },
+    description: 'Изогнутый клинок из сирийской стали. Волны узора видны по всему лезвию.',
+    iconPath: 'icons/weapons/shamshir_damascus.png',
+    stackable: false,
+    maxStack: 1,
+    price: 5200,
+  },
 
   // ── БРОНЯ ────────────────────────────────────────────────
   'arm_leather_vest': {
@@ -153,6 +170,20 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     maxStack: 1,
     price: 5000,
   },
+  'arm_mirror_char_aina': {
+    id: 'arm_mirror_char_aina',
+    name: 'Char-Aina Mirror Armor',
+    nameRu: 'Зерцальный Доспех Чахар-Айна',
+    type: ItemType.ARMOR,
+    rarity: ItemRarity.RARE,
+    level: 35,
+    stats: { endurance: 58, strength: 12 },
+    description: 'Стальные пластины, нашитые на кожу, и четыре зеркала на груди. Доспех персидских всадников.',
+    iconPath: 'icons/armor/mirror_char_aina.png',
+    stackable: false,
+    maxStack: 1,
+    price: 9000,
+  },
 
   // ── АКСЕССУАРЫ ───────────────────────────────────────────
   'acc_turquoise_ring': {
@@ -182,6 +213,20 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     stackable: false,
     maxStack: 1,
     price: 18000,
+  },
+  'acc_belt_golden_isfahan': {
+    id: 'acc_belt_golden_isfahan',
+    name: 'Golden Belt of Isfahan',
+    nameRu: 'Золотой Пояс Исфахана',
+    type: ItemType.ACCESSORY,
+    rarity: ItemRarity.EPIC,
+    level: 45,
+    stats: { charisma: 30, endurance: 24, strength: 8 },
+    description: 'Пояс придворного с золотой нитью и бирюзовыми бляхами. Знак места при дворе.',
+    iconPath: 'icons/accessories/golden_belt.png',
+    stackable: false,
+    maxStack: 1,
+    price: 14000,
   },
 
   // ── РАСХОДНИКИ ───────────────────────────────────────────
