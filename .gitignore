@@ -62,6 +62,14 @@ server/.pg/
 # Сборка клиента (vite)
 client/web/game/
 
+# Отладочный конфиг vite: собирает локальный клиент против живого прода,
+# чтобы проверить правку на настоящей игре (подробности — в шапке файла).
+# В выкатку он не идёт: deploy.sh собирает обычный vite.config.ts. Но лежит
+# он в client/, и без этой строки `git status --porcelain -- client` не
+# пустой — то есть каждая выкатка требовала DEPLOY_ALLOW_DIRTY=1 ради файла,
+# который в образ не попадает.
+client/vite.debug-prod.ts
+
 # Личные файлы сайта EOSOnline (не часть репозитория)
 site/install/app.js
 site/install/index.html
