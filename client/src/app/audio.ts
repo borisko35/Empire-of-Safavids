@@ -87,6 +87,17 @@ class AudioEngine {
   // Файловые пресеты из папки `Sounds and music` (копируются в /game/sounds).
   private readonly fileSfx = new Map<string, HTMLAudioElement>();
   private bgMusic: HTMLAudioElement | null = null;
+  /**
+   * Фоновая тема мира.
+   *
+   * Файл — CC0 1.0, автор RandomMind (OpenGameArt), исходник
+   * `Loop_Market_Day.mp3`, переименован в `ambient_music.mp3`.
+   *
+   * До 20 октября 2026 здесь лежала дорожка Zvukogram «Средневековый Танец»:
+   * чужой копирайт в публичном репозитории, отдавался игрокам по прямому
+   * адресу. Поэтому менять этот файл можно только на свободный — разбор
+   * источников и проверка лицензий в `Sounds and music/CREDITS.md`.
+   */
   private bgMusicFile = 'ambient_music.mp3';
   /**
    * Видел ли браузер настоящий жест игрока.
