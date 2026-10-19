@@ -150,15 +150,18 @@
          ярлыка. Поэтому блока нет — есть прямой путь в игру. -->
     <section class="section" id="play-free">
       <div class="panel panel-download">
-        <h2 class="panel-title"><span class="panel-title-icon" data-icon="play" data-icon-size="22"></span><span data-i18n="site.play_free_title"></span></h2>
-        <p class="panel-desc" data-i18n="site.play_free_desc"></p>
-        <div class="download-row">
-          <a class="btn btn-gold btn-big" href="/game/?guest=1">
-            <span data-icon="play" data-icon-size="22"></span>
-            <span data-i18n="menu.play_now"></span>
-          </a>
-          <span class="requirements" data-i18n="site.play_free_note"></span>
+        <div class="panel-download-body">
+          <h2 class="panel-title"><span class="panel-title-icon" data-icon="play" data-icon-size="22"></span><span data-i18n="site.play_free_title"></span></h2>
+          <p class="panel-desc" data-i18n="site.play_free_desc"></p>
+          <div class="download-row">
+            <a class="btn btn-gold btn-big" href="/game/?guest=1">
+              <span data-icon="play" data-icon-size="22"></span>
+              <span data-i18n="menu.play_now"></span>
+            </a>
+            <span class="requirements" data-i18n="site.play_free_note"></span>
+          </div>
         </div>
+        <span class="deco deco-play" aria-hidden="true"></span>
       </div>
     </section>
 
@@ -176,6 +179,7 @@
     <!-- Классы: витрина системы иконок -->
     <section class="section" id="classes">
       <h2 class="section-title"><span data-icon="shield" data-icon-size="22"></span>&nbsp;<span data-i18n="site.classes_title"></span></h2>
+      <span class="deco deco-classes" aria-hidden="true"></span>
       <div class="class-grid" id="class-grid"></div>
     </section>
 
@@ -435,6 +439,16 @@
     <a href="https://discord.gg/UzUNXthnRE" target="_blank" rel="noopener" class="footer-link">Discord</a>
     <a href="https://twitter.com/EmpireOfSafavids" target="_blank" rel="noopener" class="footer-link">Twitter</a>
     <a href="https://www.reddit.com/r/Empire_of_Sefevids" target="_blank" rel="noopener" class="footer-link">Reddit</a>
+    <!-- Атрибуция Flaticon — условие бесплатной лицензии, а не украшение:
+         у неё «Free download — You must attribute the author», то есть
+         нужна видимая ссылка с текстом «designed by … from Flaticon».
+         Без этой строки две иконки из client/web/assets/deco/ использовать
+         нельзя. Автор (Magnific) вычитан из поля authorName на странице
+         иконки, а не придуман. -->
+    <span class="footer-credits">Иконки:
+      <a href="https://www.flaticon.com/free-icon/interactivity_8467660" class="footer-link" target="_blank" rel="nofollow noopener">Interactivity</a> и
+      <a href="https://www.flaticon.com/free-icon/rol-game_826214" class="footer-link" target="_blank" rel="nofollow noopener">Rol game</a>
+      — designed by Magnific from Flaticon</span>
     <!-- Видно только персоналу (см. main.js → revealAdminLink) -->
     <a href="/admin.html" class="footer-link hidden" id="admin-link" data-i18n="site.admin_link">Управление сайтом</a>
   </footer>

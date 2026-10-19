@@ -270,7 +270,56 @@ body {
 
 /* ── Секция скачивания ──────────────────────────────────────── */
 
-.panel-download { text-align: left; }
+/* Текст панели слева, иллюстрация справа. Обёртка нужна, чтобы декор
+   не попал в поток между заголовком, кнопкой и подписью. */
+.panel-download {
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
+}
+
+.panel-download-body { flex: 1 1 auto; min-width: 0; }
+
+/* ── Иллюстрации-иконки ──────────────────────────────────────────
+   ЗАЧЕМ МАСКА, А НЕ <img>. Файлы — чёрный лайн-арт на прозрачном фоне
+   (alpha у угла = 0), и в тёмной теме они были бы невидимы чёрным по
+   синему. Маска берёт из PNG только форму, а цвет даёт тема, поэтому
+   иконка не выпадает из золотой палитры.
+   Файлы лежат в client/web/assets/deco/ — там, где отдаётся сайт. Папка
+   называется deco, а не icons: отсутствие assets/icons/ фиксирует тест
+   itemIconsReachPlayer (арта предметов нет), и путать эти две вещи нельзя. */
+.deco {
+  display: block;
+  flex: 0 0 auto;
+  background: linear-gradient(180deg, var(--gold-light), var(--gold));
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* «Играть не скачивая»: рука нажимает на узел — клик и играешь */
+.deco-play {
+  width: 96px;
+  height: 96px;
+  -webkit-mask-image: url('/assets/deco/interactivity.png');
+  mask-image: url('/assets/deco/interactivity.png');
+}
+
+/* «Классы империи»: двое воинов с мечами — выбор роли */
+.deco-classes {
+  width: 104px;
+  height: 104px;
+  margin: -4px auto 16px;
+  opacity: 0.6;
+  -webkit-mask-image: url('/assets/deco/role-play.png');
+  mask-image: url('/assets/deco/role-play.png');
+}
 
 .steps {
   list-style: none;
@@ -512,6 +561,15 @@ body {
   border-bottom-color: var(--gold);
 }
 
+/* Строка атрибуции Flaticon: занимает свой ряд целиком. Это условие
+   лицензии, поэтому её нельзя терять в общем ряду ссылок. */
+.footer-credits {
+  flex-basis: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
 /* ── Адаптивность ───────────────────────────────────────────── */
 
 @media (max-width: 720px) {
@@ -529,6 +587,10 @@ body {
   }
   .timeline li:nth-child(odd)::before,
   .timeline li:nth-child(even)::before { left: 0; right: auto; }
+
+  /* Иллюстрация уводит кнопку вниз по панели — на узком экране убираем */
+  .deco-play { display: none; }
+  .deco-classes { width: 84px; height: 84px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
