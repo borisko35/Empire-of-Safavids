@@ -20,6 +20,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { подогнать, безМёртвыхДорожек } from './game3d/realRig';
+// Модели закрыты входом (см. game3d/modelAccess.ts).
+import { сВходом } from './game3d/modelAccess';
 
 /** Сколько раз three пожаловался на дорожку без цели за один запуск миксера. */
 function замерить(корень: THREE.Object3D, клип: THREE.AnimationClip): number {
@@ -44,7 +46,7 @@ function замерить(корень: THREE.Object3D, клип: THREE.Animatio
 
 export async function сравнитьФильтрНаЖителях(): Promise<string[]> {
   const строки: string[] = [];
-  const загрузчик = new GLTFLoader();
+  const загрузчик = сВходом(new GLTFLoader());
   const draco = new DRACOLoader();
   draco.setDecoderPath('/game/draco/');
   загрузчик.setDRACOLoader(draco);

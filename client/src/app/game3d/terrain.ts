@@ -11,6 +11,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+// Модели закрыты входом: заголовок ставится перед загрузкой
+// (см. modelAccess.ts).
+import { сВходом } from './modelAccess';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
@@ -6095,7 +6098,7 @@ export function loadDecorModel(path: string): Promise<THREE.Group | null> {
     try {
       const draco = new DRACOLoader();
       draco.setDecoderPath('/game/draco/');
-      const l = new GLTFLoader();
+      const l = сВходом(new GLTFLoader());
       l.setDRACOLoader(draco);
       l.load(
         `/game/models/${path}`,

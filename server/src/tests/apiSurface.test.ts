@@ -294,6 +294,12 @@ describe('Каждый вызов клиента обеспечен маршру
       'GET /api/auth/check-username/:',
       'GET /api/auth/check-email/:',
       'POST /api/auth/reset-rate-limit',
+      // Проверка входа для закрытых файлов моделей (§215). Зовёт её не
+      // клиент, а nginx: auth_request перед отдачей `/game/models/…` смотрит
+      // только на код ответа. Клиентского вызова поэтому и нет — сам запрос
+      // файла делает загрузчик three.js, у которого заголовок входа ставит
+      // game3d/modelAccess.ts.
+      'GET /api/auth/gate',
       'GET /api/chronicles/:',
       'GET /api/game/shops/:',
       // Вебхуки платёжных систем: вызывает внешний сервис, не браузер.

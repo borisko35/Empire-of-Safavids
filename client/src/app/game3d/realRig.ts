@@ -19,6 +19,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { buildShield, buildWeapon, type Rig, type RigPose, type Weapon } from './rig';
+// Модели закрыты входом: заголовок ставится перед каждой загрузкой
+// (см. modelAccess.ts — почему не один раз при создании загрузчика).
+import { сВходом } from './modelAccess';
 
 /** Куда сложены модели. Тот же префикс, что у бандла игры. */
 const MODEL_BASE = '/game/models/';
@@ -238,7 +241,7 @@ export function загрузитьСцену(имя: string): Promise<THREE.Grou
     try {
       const l = загрузчик();
       if (!l) { готово(null); return; }
-      l.load(
+      сВходом(l).load(
         `${MODEL_BASE}${имя}.glb`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),
         undefined,
@@ -268,7 +271,7 @@ export function загрузитьКлип(имя: string): Promise<THREE.Animat
     try {
       const l = загрузчик();
       if (!l) { готово(null); return; }
-      l.load(
+      сВходом(l).load(
         `${MODEL_BASE}${имя}.glb`,
         (gltf) => готово((gltf.animations && gltf.animations[0]) ?? null),
         undefined,

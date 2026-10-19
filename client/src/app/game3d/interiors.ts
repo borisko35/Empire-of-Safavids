@@ -18,6 +18,9 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider } from './terrain';
+// Модели закрыты входом: заголовок ставится при создании загрузчика
+// (см. modelAccess.ts).
+import { сВходом } from './modelAccess';
 import { plasterTexture, stoneTexture, woodTexture, roofTileTexture, roofTileNormalTexture, hayTexture, hayNormalTexture, ironTexture, ironNormalTexture, woodDarkTexture, woodDarkNormalTexture, wallDarkTexture, wallDarkNormalTexture, clothTexture, waterNormalTexture, foliageTexture, foliageNormalTexture } from './textures';
 import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
@@ -292,7 +295,7 @@ function loadThroneModel(): Promise<THREE.Group | null> {
     try {
       const draco = new DRACOLoader();
       draco.setDecoderPath('/game/draco/');
-      const l = new GLTFLoader();
+      const l = сВходом(new GLTFLoader());
       l.setDRACOLoader(draco);
       l.load(
         `/game/models/${THRONE_MODEL}`,
@@ -321,7 +324,7 @@ function loadTavernRoomModel(): Promise<THREE.Group | null> {
     try {
       const draco = new DRACOLoader();
       draco.setDecoderPath('/game/draco/');
-      const l = new GLTFLoader();
+      const l = сВходом(new GLTFLoader());
       l.setDRACOLoader(draco);
       l.load(
         `/game/models/${TAVERN_ROOM_MODEL}`,
@@ -347,7 +350,7 @@ function loadDrawerModel(): Promise<THREE.Group | null> {
     try {
       const draco = new DRACOLoader();
       draco.setDecoderPath('/game/draco/');
-      const l = new GLTFLoader();
+      const l = сВходом(new GLTFLoader());
       l.setDRACOLoader(draco);
       l.load(
         `/game/models/${DRAWER_MODEL}`,

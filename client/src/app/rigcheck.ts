@@ -17,6 +17,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { loadRealPlayerRig, CLASS_WEAPON, подогнать } from './game3d/realRig';
 import { сравнитьФильтрНаЖителях } from './rigcheckMix';
+// Модели закрыты входом (см. game3d/modelAccess.ts).
+import { сВходом } from './game3d/modelAccess';
 
 const КЛАССЫ = ['qizilbash', 'sufi_mystic', 'persian_archer', 'bazaar_merchant', 'court_diplomat'];
 const ВЫСОТА_ЭТАЛОНА = 1.9;
@@ -102,7 +104,7 @@ const сводка = document.getElementById('сводка')!;
  */
 async function проверитьПодошвуЖителей(): Promise<string[]> {
   const строки: string[] = [];
-  const загрузчик = new GLTFLoader();
+  const загрузчик = сВходом(new GLTFLoader());
   const draco = new DRACOLoader();
   draco.setDecoderPath('/game/draco/');
   загрузчик.setDRACOLoader(draco);
@@ -147,7 +149,7 @@ async function проверитьПодошвуЖителей(): Promise<string[
 
 async function проверитьПривязку(): Promise<string[]> {
   const строки: string[] = [];
-  const загрузчик = new GLTFLoader();
+  const загрузчик = сВходом(new GLTFLoader());
   const draco = new DRACOLoader();
   draco.setDecoderPath('/game/draco/');
   загрузчик.setDRACOLoader(draco);
