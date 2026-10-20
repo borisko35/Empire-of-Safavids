@@ -2884,14 +2884,22 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       rail.position.set(0, h + 0.18, w * 0.45 + 0.5);
       house.add(upper, balcony, rail);
     }
+    // Обвес по верхнему контуру: у одноэтажных — крыша корпуса, у
+    // двухэтажных — крыша верхнего яруса. Парапет и пояс — тот же
+    // фасадный язык, что у brickHouse и посёлков.
+    домОбвес(house, twoStory ? w * 0.8 : w, twoStory ? h + h * 0.7 : h, twoStory ? w * 0.75 : w * 0.9);
+    // Вход по центру фасада первого этажа; окна первого этажа — попарно
+    // по бокам портала (центр раньше занимала одна плоская лепушка).
+    входДом(house, w * 0.9);
+    house.add(windowPane(-w * 0.3, h * 0.55, w * 0.45 + 0.02, 0));
+    house.add(windowPane(w * 0.3, h * 0.55, w * 0.45 + 0.02, 0));
+    if (twoStory) house.add(windowPane(0, h * 1.02, w * 0.38, 0));
     const domeR = Math.min(w, h * 1.4) * 0.55;
     const domeY = twoStory ? h + h * 0.7 : h;
     const hd = new THREE.Mesh(new THREE.SphereGeometry(domeR, 10, 8), rng() > 0.55 ? MAT.tealDome : MAT.sandstoneDark);
     hd.scale.y = 0.72;
     hd.position.y = domeY;
     house.add(hd);
-    house.add(windowPane(0, h * 0.55, w * 0.45, 0));
-    if (twoStory) house.add(windowPane(0, h * 1.02, w * 0.38, 0));
     // Восточный колорит столицы: бадгиры и балконы на части домов
     if (rng() < 0.45) badgir(house, w * 0.26, -w * 0.2, h, 1.8 + rng() * 1.2);
     if (rng() < 0.4) {
@@ -3105,12 +3113,65 @@ function tiledIwan(parent: THREE.Group, x: number, z: number, w: number, h: numb
 }
 
 /**
+ * Обвес корпуса: парапет по крыше и каменный пояс под карнизом.
+ * Раньше жил только в brickHouse; процедурные дома столицы стояли голыми
+ * коробками — фасадная работа стала общей для обоих типов домов.
+ * (w, h, d) — габариты объёма, обвесимого по его контуру.
+ */
+function домОбвес(house: THREE.Group, w: number, h: number, d: number): void {
+  // Парапет: плоская крыша с невысоким зубцом — жилой силуэт Исфахана.
+  const пт = 0.14, пh = 0.34;
+  const поперёк = new THREE.BoxGeometry(w, пh, пт);
+  const вдоль = new THREE.BoxGeometry(пт, пh, d - пт * 2);
+  const край = d / 2 - пт / 2;
+  const бортХ = new THREE.Mesh(поперёк, MAT.sandstoneDark);
+  бортХ.position.set(0, h + пh / 2, край);
+  const бортХ2 = бортХ.clone();
+  бортХ2.position.z = -край;
+  const бортZ = new THREE.Mesh(вдоль, MAT.sandstoneDark);
+  бортZ.position.set(-(w / 2 - пт / 2), h + пh / 2, 0);
+  const бортZ2 = бортZ.clone();
+  бортZ2.position.x = w / 2 - пт / 2;
+  бортХ.castShadow = true;
+  house.add(бортХ, бортХ2, бортZ, бортZ2);
+
+  // Каменный пояс под карнизом: опора для глаза — стена перестаёт быть
+  // голой плоскостью.
+  const пояс = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.2, d + 0.12), MAT.sandstoneDark);
+  пояс.position.y = h - 0.62;
+  house.add(пояс);
+}
+
+/**
+ * Вход: две опоры портала, перекладина, деревянная дверь со стойкой
+ * и крыльцо перед ней. Фасад — грань z+ локально, на глубине d/2.
+ */
+function входДом(house: THREE.Group, d: number): void {
+  const опора = new THREE.BoxGeometry(0.16, 2.05, 0.3);
+  const лево = new THREE.Mesh(опора, MAT.sandstoneDark);
+  лево.position.set(-0.63, 1.02, d / 2 + 0.05);
+  const право = лево.clone();
+  право.position.x = 0.63;
+  const портал = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.22, 0.34), MAT.sandstoneDark);
+  портал.position.set(0, 2.16, d / 2 + 0.05);
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.9, 0.07), MAT.wood);
+  дверь.position.set(0, 0.95, d / 2 + 0.03);
+  const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.02), MAT.dark);
+  стойка.position.set(0, 0.95, d / 2 + 0.075);
+  const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.14, 0.55), MAT.sandstoneDark);
+  крыльцо.position.set(0, 0.07, d / 2 + 0.3);
+  лево.castShadow = true;
+  право.castShadow = true;
+  портал.castShadow = true;
+  house.add(лево, право, портал, дверь, стойка, крыльцо);
+}
+
+/**
  * Кирпичный дом — не одна коробка. Состав: главный корпус, у части домов
- * пристройка ниже и уже (выступает за заднюю грань на длину, вычисляемую
- * по хэшу позиции — дом обязан выглядеть прежним после перезагрузки),
- * парапет по крыше, каменный пояс под карнизом, два окна через windowPane
- * (рама, утопленное стекло, средник — как на стенах города) и вход:
- * портал, деревянная дверь и крыльцо. Купол, балкон и бадгир — прежние.
+ * пристройка ниже и уже (выступает за заднюю грань, сдвиг по хэшу позиции —
+ * дом обязан выглядеть прежним после перезагрузки), обвес из домОбвес
+ * (парапет, пояс), два окна через windowPane и вход из входДом.
+ * Купол, балкон и бадгир — прежние.
  *
  * rotY — куда смотрит фасад (+z локально). Раньше дом был одинаковым со
  * всех четырёх сторон, и «дома лицом к центру» в комментариях поселений
@@ -3159,53 +3220,12 @@ function brickHouse(
     }
   }
 
-  // Парапет: плоская крыша с невысоким зубцом — жилой силуэт Исфахана.
-  const пт = 0.14, пh = 0.34;
-  const поперёк = new THREE.BoxGeometry(w, пh, пт);
-  const вдоль = new THREE.BoxGeometry(пт, пh, d - пт * 2);
-  const край = d / 2 - пт / 2;
-  const бортХ = new THREE.Mesh(поперёк, MAT.sandstoneDark);
-  бортХ.position.set(0, h + пh / 2, край);
-  const бортХ2 = бортХ.clone();
-  бортХ2.position.z = -край;
-  const бортZ = new THREE.Mesh(вдоль, MAT.sandstoneDark);
-  бортZ.position.set(-(w / 2 - пт / 2), h + пh / 2, 0);
-  const бортZ2 = бортZ.clone();
-  бортZ2.position.x = w / 2 - пт / 2;
-  бортХ.castShadow = true;
-  house.add(бортХ, бортХ2, бортZ, бортZ2);
-
-  // Каменный пояс под карнизом: опора для глаза — фасад перестаёт быть
-  // голой плоскостью.
-  const пояс = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.2, d + 0.12), MAT.sandstoneDark);
-  пояс.position.y = h - 0.62;
-  house.add(пояс);
-
-  // Окна на фасаде — те же, что на стенах города: рама, утопленное
-  // стекло, средник. Плоские тёмные пластины отсюда убраны: они читались
-  // дырами на штукатурке (см. комментарий к windowPane).
+  // Парапет, пояс, окна и вход — общий фасадный язык с процедурными
+  // домами столицы.
+  домОбвес(house, w, h, d);
   house.add(windowPane(-w * 0.3, h * 0.55, d / 2 + 0.02, 0));
   house.add(windowPane(w * 0.3, h * 0.55, d / 2 + 0.02, 0));
-
-  // Вход: две опоры портала, перекладина, деревянная дверь со стойкой
-  // и крыльцо перед ней.
-  const опора = new THREE.BoxGeometry(0.16, 2.05, 0.3);
-  const лево = new THREE.Mesh(опора, MAT.sandstoneDark);
-  лево.position.set(-0.63, 1.02, d / 2 + 0.05);
-  const право = лево.clone();
-  право.position.x = 0.63;
-  const портал = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.22, 0.34), MAT.sandstoneDark);
-  портал.position.set(0, 2.16, d / 2 + 0.05);
-  const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.9, 0.07), MAT.wood);
-  дверь.position.set(0, 0.95, d / 2 + 0.03);
-  const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.02), MAT.dark);
-  стойка.position.set(0, 0.95, d / 2 + 0.075);
-  const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.14, 0.55), MAT.sandstoneDark);
-  крыльцо.position.set(0, 0.07, d / 2 + 0.3);
-  лево.castShadow = true;
-  право.castShadow = true;
-  портал.castShadow = true;
-  house.add(лево, право, портал, дверь, стойка, крыльцо);
+  входДом(house, d);
 
   if (opts.dome !== false) {
     const dome = new THREE.Mesh(new THREE.SphereGeometry(w * 0.32, 10, 8), MAT.tealDome);
