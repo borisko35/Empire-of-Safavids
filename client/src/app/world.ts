@@ -764,6 +764,12 @@ export async function enterWorld(character: Character): Promise<void> {
       attack(): void { world3d?.attackFromCamera(); },
       setHour(hour: number): void { world3d?.setClock(hour); },
       get audioMode() { return audio.currentMode; },
+      // Движок для замеров кадра: снимок экрана из браузера не всегда можно
+      // снять (окно бывает свёрнуто), а кадр нужно и видеть, и мерить числом.
+      // Своего буфера у WebGL нет (preserveDrawingBuffer выключен), поэтому
+      // рисовать и читать надо в одной задаче: composer.render() сразу за
+      // вызовом. В прод-сборку это не попадает — как и весь __eos.
+      get engine() { return world3d; },
       tp(x: number, z: number): void {
         if (me && world) {
           me.pos.x = x; me.pos.z = z;

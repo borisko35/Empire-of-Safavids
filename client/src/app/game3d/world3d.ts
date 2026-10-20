@@ -115,6 +115,17 @@ const ROLL_LIMIT = 0.6;
  * нельзя было бы выбить в принципе.
  */
 const COMBO_WINDOW_MS = 2000;
+
+/**
+ * Как часто искать в сцене материалы, появившиеся после прошивки G-buffer, с.
+ *
+ * Мир прошивается один раз после постройки, но игрок, монстры, лошади и
+ * караваны приходят в сцену моделями — в любой момент. Прошивка нового
+ * материала — это обход сцены и компиляция шейдера, поэтому каждый кадр её
+ * делать нельзя, а раз в две секунды она не видна: AO на пришедшем монстре
+ * появляется на секунду позже, и это не замечается.
+ */
+const ПЕРИОД_ПРОШИВКИ = 2;
 /** Клавиши, двойное нажатие которых означает рывок: WASD плюс стрелки */
 const DOUBLE_TAP_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']);
 const DODGE_SPEED = 15.0;    // скорость рывка, юниты/сек
@@ -186,6 +197,10 @@ export class World3D {
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
+  /** Накопитель времени до следующего поиска новых материалов для G-buffer. */
+  private patchTimer = 0;
+  /** О непрошитых материалах предупреждаем один раз, а не каждые две секунды. */
+  private patchWarned = false;
   /** Общее время воды для всех тел: секунды с запуска мира. */
   private waterTime = 0;
 
@@ -486,6 +501,34 @@ private roll = 0;
     this.ssrPass.selects = отражающие;
   }
 
+  /**
+   * Прошить материалы мира в G-buffer: нормали с картами нормалей, альбедо,
+   * шероховатость и свечение.
+   *
+   * ЗАЧЕМ ПОСЛЕ ПОСТРОЙКИ, А НЕ В ПРОХОДЕ. Проход создаётся в начале сборки
+   * мира, когда сцена пуста: отчёт той прошивки — «0 из 0», и у всего мира
+   * каналы оставались пустыми. Внешне это почти не видно, поэтому жило долго:
+   * AO умножал свет по нулевой нормали, а экранные отражения не знали, что
+   * отражать. Проверено на живом мире: 1119 материалов, прошито 0.
+   *
+   * ПОЧЕМУ ПОВТОРЯЕТСЯ. Модели приходят позже постройки: персонаж игрока,
+   * монстры, лошади, караваны. Прошивка нового материала компилирует шейдер,
+   * поэтому поиск идёт раз в ПЕРИОД_ПРОШИВКИ секунд, а не в каждом кадре.
+   */
+  private patchWorldMaterials(первый: boolean): void {
+    const отчёт = this.deferred.patch(this.scene);
+    if (!отчёт.мимо.length) return;
+    if (!первый && this.patchWarned) return;
+    this.patchWarned = true;
+    // Транслитерация, а не русский: клиент не переводит строки, и проверка
+    // i18n ловит хардкод. Сообщение служебное, его видит только владелец в
+    // консоли при сборке мира.
+    console.warn(
+      `Otlozhennyy G-buffer: ${отчёт.прошито} iz ${отчёт.всего} materialov. `
+      + `Bez kanalov ostalis: ${отчёт.мимо.join(', ')}`,
+    );
+  }
+
   // ── Инициализация ────────────────────────────────────────────
   init(container: HTMLElement, callbacks: World3DCallbacks): void {
     this.container = container;
@@ -582,16 +625,8 @@ private roll = 0;
     );
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(this.deferred);
-    if (this.deferred.patchReport.мимо.length) {
-      // Транслитерация, а не русский: клиент не переводит строки, и проверка
-      // i18n ловит хардкод. Сообщение служебное, его видит только владелец в
-      // консоли при сборке мира.
-      console.warn(
-        `Otlozhennyy G-buffer: ${this.deferred.patchReport.прошито} iz `
-        + `${this.deferred.patchReport.всего} materialov. Bez kanalov ostalis: `
-        + this.deferred.patchReport.мимо.join(', '),
-      );
-    }
+    // Прошивка здесь НЕ делается: сцена на этот момент пуста, и отчёт был бы
+    // «0 из 0». Мир прошивается ниже, после постройки, — см. patchWorldMaterials.
     // SSR: screen-space reflections для воды, мокрого камня, металла, стекла.
     //
     // `selects: null` — это НЕ «для всех, кто блестит», это «для всей
@@ -770,6 +805,8 @@ private roll = 0;
     // SSR включаем только там, где отражение и правда нужно. Время вызова
     // не случайно: список отражающих собирается обходом готовой сцены.
     this.collectSsrReflectors();
+    // И только теперь прошиваем G-buffer: до этого места сцены ещё нет.
+    this.patchWorldMaterials(true);
 
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
@@ -2030,6 +2067,13 @@ if (isMe && moving) {
     }
 
     if (this.attackCd > 0) this.attackCd -= dt;
+    // Новые материалы (монстры, лошади, караваны) прошиваем пачкой раз в
+    // ПЕРИОД_ПРОШИВКИ секунд: см. patchWorldMaterials.
+    this.patchTimer += dt;
+    if (this.patchTimer >= ПЕРИОД_ПРОШИВКИ) {
+      this.patchTimer = 0;
+      this.patchWorldMaterials(false);
+    }
     this.composer.render();
   }
 

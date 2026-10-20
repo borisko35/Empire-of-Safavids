@@ -53,10 +53,16 @@ export class DeferredPass extends Pass {
   readonly gbuffer: GBuffer;
   readonly ao: GBufferAo;
   /** Отчёт о прошивке: сколько материалов попало в G-buffer, а сколько нет. */
-  readonly patchReport: PatchReport;
+  patchReport: PatchReport;
 
   private readonly copyMaterial: THREE.ShaderMaterial;
   private readonly copyQuad: FullScreenQuad;
+  /**
+   * Инверс разрешения AO для поздно прошитых материалов: их uniform создаётся
+   * в момент компиляции, и без живого значения они читали бы AO по чужим
+   * координатам.
+   */
+  private readonly aoInvRes: THREE.Vector2;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -94,6 +100,11 @@ export class DeferredPass extends Pass {
     this.copyQuad = new FullScreenQuad(this.copyMaterial);
 
 
+    // Прошивка здесь почти всегда пустая: проход создаётся ДО постройки мира,
+    // и в сцене на этот момент лежит только то, что успели добавить до него.
+    // Настоящая прошивка — методом patch() после сборки мира; эта оставлена
+    // на случай материалов, добавленных раньше прохода.
+    this.aoInvRes = new THREE.Vector2(1 / Math.max(1, width), 1 / Math.max(1, height));
     this.patchReport = patchScene(
       scene,
       this.gbuffer.aoTexture,
@@ -101,7 +112,7 @@ export class DeferredPass extends Pass {
       // gl_FragCoord идёт в пикселях полного кадра, а размер текстуры для
       // выборки не важен - она нормализует координаты сама. От инверса
       // полуразмерной карты UV уезжал бы вдвое за единицу.
-      new THREE.Vector2(1 / Math.max(1, width), 1 / Math.max(1, height)),
+      this.aoInvRes,
     );
   }
 
@@ -117,6 +128,8 @@ export class DeferredPass extends Pass {
    */
   private updateAoInverseResolution(width: number, height: number): void {
     const inv = new THREE.Vector2(1 / Math.max(1, width), 1 / Math.max(1, height));
+    // Живое значение — для материалов, которые прошьются позже ресайза.
+    this.aoInvRes.copy(inv);
     this.scene.traverse((объект) => {
       const меш = объект as THREE.Mesh & { material?: THREE.Material | THREE.Material[] };
       if (!меш.material) return;
@@ -135,6 +148,23 @@ export class DeferredPass extends Pass {
 
   setAoSettings(настройки: Partial<AoSettings>): void {
     this.ao.setSettings(настройки);
+  }
+
+  /**
+   * Прошить материалы, которые есть в сцене сейчас.
+   *
+   * ЗАЧЕМ ОТДЕЛЬНЫЙ ВЫЗОВ, ЕСЛИ ПРОШИВКА ЕСТЬ В КОНСТРУКТОРЕ. Проход
+   * создаётся в начале сборки мира — сцена на тот момент пуста, и отчёт
+   * выходит «0 из 0». Так каналы G-buffer не заполнялись ни у одного объекта:
+   * AO применялся по нулевой нормали, экранные отражения не знали, что
+   * отражать. Теперь мир прошивается после постройки, а этот же метод
+   * повторяют для моделей, которые пришли позже (игрок, монстры, караваны).
+   *
+   * Повторный вызов безопасен: уже прошитые материалы пропускаются.
+   */
+  patch(scene: THREE.Object3D = this.scene): PatchReport {
+    this.patchReport = patchScene(scene, this.gbuffer.aoTexture, this.aoInvRes);
+    return this.patchReport;
   }
 
   get aoSettings(): AoSettings {
