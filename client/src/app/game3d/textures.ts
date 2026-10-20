@@ -227,6 +227,152 @@ export function sandTexture(repeat = 48): THREE.CanvasTexture {
   return toTexture(canvas, repeat);
 }
 
+// ── Деталь земли ─────────────────────────────────────────────
+/**
+ * Размер плитки детальной карты земли, м.
+ *
+ * ЧЕТЫРЕ МЕТРА, А НЕ ДЕСЯТКИ. Рельеф — это 6350 м одним мешем с шагом сетки
+ * около 14 м: своей геометрической мелочи у него нет вовсе. Детальная карта
+ * возвращает земле зерно, и её плитка должна быть такой, чтобы у ног читались
+ * крупинки, а вдали мип-уровни сливались в ровный тон. При 4 м плитка 256
+ * точек даёт 1,6 см на точку — крупинка видна, а повтор в кадре не ловится.
+ */
+export const GROUND_TILE_M = 4;
+
+/**
+ * Карта высот земли: бугры, крупинки, камешки.
+ *
+ * ОДНА КАРТА НА ДВЕ. И цвет, и нормаль земли строятся из ЭТОЙ высоты, поэтому
+ * бугорок и его освещение всегда в одном месте. Если рисовать их двумя
+ * независимыми генераторами, нормаль осветит не то, что нарисовано цветом, и
+ * поверхность прочтётся шумом.
+ */
+function groundHeightCanvas(size = 256): HTMLCanvasElement {
+  const { canvas, ctx } = makeCanvas(size);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+
+  // КРУПНЫХ БУГРОВ ЗДЕСЬ НЕТ НАМЕРЕННО. Сначала они были — 22 мягких пятна на
+  // плитку, — и на кадре это дало правильную решётку: пятно повторяется каждые
+  // 4 м, и свет рисует из него сетку. Низкочастотная пестрота — дело
+  // макро-слоя (addMacroLayer, пятна на сотни метров), а у плитки остаётся
+  // только зерно, у которого периода не видно.
+
+  // Крупинки: песок и мелкая крошка. Светлые — выше, тёмные — ниже.
+  for (let i = 0; i < 2600; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const r = 0.4 + Math.random() * 1.0;
+    const вверх = Math.random() < 0.5;
+    const альфа = 0.10 + Math.random() * 0.22;
+    ctx.fillStyle = вверх ? `rgba(255,255,255,${альфа})` : `rgba(0,0,0,${альфа})`;
+    // Края тоже перерисовываем со сдвигом: крупинка на стыке не должна
+    // превращаться в половинку.
+    for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
+      ctx.beginPath();
+      ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Камешки: крупнее крупинок, приподняты, с тенью снизу.
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const rx = 1.4 + Math.random() * 2.2;
+    const ry = rx * (0.6 + Math.random() * 0.4);
+    const поворот = Math.random() * Math.PI;
+    for (const [ox, oy] of [[0, 0], [size, 0], [-size, 0], [0, size], [0, -size]]) {
+      // тень под камешком
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(x + ox, y + oy + ry * 0.45, rx * 1.05, ry * 0.75, поворот, 0, Math.PI * 2);
+      ctx.fill();
+      // сам камешек
+      const тон = 168 + Math.floor(Math.random() * 46);
+      ctx.fillStyle = `rgb(${тон},${тон},${тон})`;
+      ctx.beginPath();
+      ctx.ellipse(x + ox, y + oy, rx, ry, поворот, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // СГЛАЖИВАНИЕ ПЕРЕД НОРМАЛЬЮ.
+  //
+  // Карта высот из одиночных точек при переводе в нормаль даёт «ткань»:
+  // соседние тексели чередуются вверх-вниз, и на земле проступает регулярная
+  // решётка. Проверено кадром: без карты нормалей земля ровная, с ней — сетка,
+  // и это читается не землёй, а мешковиной. Мягкое размытие убирает
+  // чередование, оставляя зерно размером в 2-3 точки.
+  //
+  // РАЗМЫВАТЬ МОЖНО ТОЛЬКО ЧЕРЕЗ ВОСЕМЬ КОПИЙ. Если размыть одну плитку, край
+  // впитывает прозрачную пустоту за границей холста: у шва выходит тёмная
+  // полоса, и на земле появляется «рубчик» — ровные полосы каждые 4 м, снова
+  // пойманные кадром уже после первого сглаживания. Поэтому плитка сначала
+  // повторяется трижды по обеим осям, размывается ЦЕЛИКОМ (соседи дают
+  // правильное продолжение за краем), а из середины берётся центральный
+  // квадрат — он сходится сам с собой без шва.
+  const обои = document.createElement('canvas');
+  обои.width = size * 3;
+  обои.height = size * 3;
+  const окс = обои.getContext('2d')!;
+  for (let ox = 0; ox < 3; ox++) {
+    for (let oy = 0; oy < 3; oy++) окс.drawImage(canvas, ox * size, oy * size);
+  }
+
+  const размытая = document.createElement('canvas');
+  размытая.width = обои.width;
+  размытая.height = обои.height;
+  const ркс = размытая.getContext('2d')!;
+  ркс.filter = 'blur(1px)';
+  ркс.drawImage(обои, 0, 0);
+
+  const мягкая = document.createElement('canvas');
+  мягкая.width = size;
+  мягкая.height = size;
+  const mctx = мягкая.getContext('2d')!;
+  mctx.drawImage(размытая, size, size, size, size, 0, 0, size, size);
+  return мягкая;
+}
+
+/**
+ * Детальная карта цвета земли: почти белая, с зерном.
+ *
+ * ПОЧЕМУ ПОЧТИ БЕЛАЯ. Материал земли раскрашен вершинными цветами по биомам
+ * (buildTerrain), и карта УМНОЖАЕТСЯ на них. Значит её дело — добавить зерно, а
+ * не цвет: средняя яркость 0.96, разброс небольшой, и биом остаётся собой.
+ * Раньше карты не было вовсе, и земля вблизи читалась картоном.
+ */
+export function groundDetailTexture(repeat: number): THREE.CanvasTexture {
+  const высота = groundHeightCanvas();
+  const size = высота.width;
+  const { canvas, ctx } = makeCanvas(size);
+  const h = высота.getContext('2d')!.getImageData(0, 0, size, size).data;
+  const цвет = ctx.createImageData(size, size);
+  for (let i = 0; i < h.length; i += 4) {
+    // 245 при средней высоте: карта светлая, биом красит её собой.
+    const v = Math.max(200, Math.min(255, Math.round(245 + (h[i] - 128) * 0.32)));
+    цвет.data[i] = цвет.data[i + 1] = цвет.data[i + 2] = v;
+    цвет.data[i + 3] = 255;
+  }
+  ctx.putImageData(цвет, 0, 0);
+  return toTexture(canvas, repeat);
+}
+
+/**
+ * Карта нормалей земли: та же высота, что у карты цвета.
+ *
+ * Сила 1.6, а не 3: земля — не кладка, у неё нет вертикальных граней. Сильнее
+ * — и гравий начинает блестеть, как битое стекло.
+ */
+export function groundDetailNormalTexture(repeat: number): THREE.CanvasTexture {
+  const высота = groundHeightCanvas();
+  const size = высота.width;
+  const img = высота.getContext('2d')!.getImageData(0, 0, size, size);
+  const normal = heightToNormal(img.data, size, 5.0);
+  return toDataTexture(normal as unknown as HTMLCanvasElement, repeat);
+}
+
 /** Тёплая штукатурка домов */
 export function plasterTexture(base: string, repeat = 2): THREE.CanvasTexture {
   const size = 256;
@@ -422,12 +568,29 @@ function heightToNormal(heightData: Uint8ClampedArray, size: number, strength = 
   const ctx = canvas.getContext('2d')!;
   const img = ctx.createImageData(size, size);
   const d = img.data;
+
+  // ВЫСОТА — ЭТО ОДИН БАЙТ НА ТОЧКУ, А ПРИХОДИТ RGBA.
+  //
+  // До 20.10.2026 здесь стоял прямой разбор `heightData[y * size + x]` — то
+  // есть данные читались как «байт на точку», хотя это ImageData с четырьмя
+  // байтами на точку. Соседние индексы оказывались каналами R,G,B,A ОДНОЙ
+  // точки, и высота «прыгала» через каждый байт: нормаль чередовалась по
+  // столбцам, а на земле это дало ровный «рубчик» полосами в один тексель
+  // (поймано кадром и замером: соседние столбцы отличались на 96 из 255 при
+  // 2.6 по строкам). Так же были испорчены ВСЕ карты нормалей игры — камня,
+  // дерева, воды, снега: там это читалось битым стеклом и «шумом» на стенах.
+  //
+  // Поэтому сначала берём из каждой точки её яркость (карта высот серая, R
+  // достаточно), и только потом считаем Sobel.
+  const высота = new Uint8Array(size * size);
+  for (let i = 0; i < высота.length; i++) высота[i] = heightData[i * 4];
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const xm = (x - 1 + size) % size, xp = (x + 1) % size;
       const ym = (y - 1 + size) % size, yp = (y + 1) % size;
-      const hL = heightData[y * size + xm], hR = heightData[y * size + xp];
-      const hD = heightData[ym * size + x], hU = heightData[yp * size + x];
+      const hL = высота[y * size + xm], hR = высота[y * size + xp];
+      const hD = высота[ym * size + x], hU = высота[yp * size + x];
       const dx = (hL - hR) / 255 * strength;
       const dy = (hD - hU) / 255 * strength;
       const len = Math.sqrt(dx * dx + dy * dy + 1);

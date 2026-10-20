@@ -18,6 +18,7 @@ import { clone as копияСкелета } from 'three/examples/jsm/utils/Skel
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterfallTexture, macroTexture, addMacroLayer,
+  groundDetailTexture, groundDetailNormalTexture, GROUND_TILE_M,
   stoneNormalTexture, woodNormalTexture,
   stoneRoughnessTexture, woodRoughnessTexture,
   stoneDisplacementTexture,
@@ -1553,7 +1554,28 @@ export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
+  // ЗЕМЛЯ БЫЛА ОДНИМ РОВНЫМ ТОНОМ, И ЭТО САМОЕ ЗАМЕТНОЕ «КАРТОННОЕ» МЕСТО.
+  //
+  // До этого у рельефа не было ни карты цвета, ни карты нормалей: только
+  // вершинные цвета по биомам. Цвет — есть, поверхности — нет. Вблизи земля
+  // выглядела крашеной, а в кадре половину площади занимал один ровный массив.
+  //
+  // Теперь две карты DETAIL (зерно на 4 м, см. GROUND_TILE_M) и макро-слой
+  // поверх них. Макро-слой обязателен: одна плитка на 6350 м площади читается
+  // решёткой повтора за секунды, а низкочастотные пятна на сотни метров прячут
+  // этот период — тот же приём, что у плитки площади города.
+  const повтор = Math.max(1, Math.round((SIZE / GROUND_TILE_M)));
+  const материал = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 1,
+    map: groundDetailTexture(повтор),
+    normalMap: groundDetailNormalTexture(повтор),
+    // Не 1.0: у земли нет вертикальных граней, сильная нормаль превращает
+    // гравий в битое стекло.
+    normalScale: new THREE.Vector2(0.6, 0.6),
+  });
+  addMacroLayer(материал, macroTexture(), 0.3, 6);
+  const mesh = new THREE.Mesh(geo, материал);
   mesh.receiveShadow = true;
   scene.add(mesh);
   return mesh;
