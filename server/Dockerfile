@@ -59,6 +59,17 @@ COPY client/src/app/game3d/waterWaves.ts ./client/src/app/game3d/waterWaves.ts
 COPY client/src/app/game3d/spriteClamp.ts ./client/src/app/game3d/spriteClamp.ts
 
 WORKDIR /app/server
+# ТИПОВАЯ ПРОВЕРКА ВСЕГО ПРОЕКТА, ВКЛЮЧАЯ ТЕСТЫ, И ЛИМИТ КУЧИ.
+#
+# На выкатке 20.10.2026 сборка образа упала: `tsc` дошёл до
+#   FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory
+# и контейнер умер через 133 секунды. Это не ошибка в коде: проверяются все
+# 342 файла тестов сразу (именно поэтому в образ копируются клиентские модули
+# выше — сторож видит их импорты), и программа типов перестала помещаться в
+# кучу node по умолчанию. На машине сборки свободно около 460 ГБ, поэтому
+# предел поднят явно: без этого следующая пара тестовых файлов снова уронит
+# выкатку, и снова только на сервере.
+ENV NODE_OPTIONS=--max-old-space-size=8192
 RUN npm run build
 
 # Production image: запуск через tsx из исходников.
