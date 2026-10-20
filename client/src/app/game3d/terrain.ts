@@ -3817,6 +3817,19 @@ export function buildSettlements(scene: THREE.Scene): void {
       g.add(tower, cap);
     }
 
+    // ── Окна тронного зала ──
+    // Стена зала в 26 метров стояла глухой плитой (21 октября 2026, §225).
+    // Теперь на ней окна — те же, что в городах и на четырёх местах (§222,
+    // §224): стекло, рама, перекладина и стойка.
+    //
+    // ВЫШЕ ПИШТАКА. Пиштак шириной 12 м закрывает центр стены, поэтому окна
+    // стоят по обе стороны от него и высоко: зал в 11 м, пиштак в 15 — и
+    // из окна зала видно двор.
+    for (const s of [-1, 1] as const) {
+      g.add(windowPane(s * 8.2, 7.2, HALL_FRONT_Z, 0, 1.2, 1.8));
+      g.add(windowPane(s * 10.8, 7.2, HALL_FRONT_Z, 0, 1.2, 1.8));
+    }
+
     // ── Тронный зал ──
     const hallBack = HALL_FRONT_Z - HALL_D;
     const hallBox = (cx: number, cz: number, w: number, d: number, h: number, mat: THREE.Material) => {
@@ -3922,10 +3935,36 @@ export function buildSettlements(scene: THREE.Scene): void {
       заглушка.position.set(0, 2.5, HALL_FRONT_Z + 0.12);
       g.add(заглушка);
       // Бирюзовая керамика по пилонам — то, за что Исфахан и узнают.
+      //
+      // БЫЛО: одна сплошная плита на пилон. С плоской стороны это читалось как
+      // бирюзовая заплатка на стене, а не как изразцы. СТАЛО: изразцы
+      // отдельными плитками с зазором и тёмной подложкой — керамика видна
+      // швом, а не пятном.
       for (const s of [-1, 1] as const) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(pil + 0.12, ПИШТАК.h * 0.34, ПИШТАК.выступ + 0.12), MAT.tealDome);
-        band.position.set(s * (ПАЛАЦНЫЙ_ПРОЁМ / 2 + pil / 2), ПИШТАК.h * 0.68, portalZ);
-        g.add(band);
+        const изразцов = 3;
+        const высотаИзразца = ПИШТАК.h * 0.34;
+        const подложка = new THREE.Mesh(
+          new THREE.BoxGeometry(pil + 0.12, высотаИзразца, ПИШТАК.выступ + 0.1),
+          MAT.sandstoneDark,
+        );
+        подложка.position.set(
+          s * (ПАЛАЦНЫЙ_ПРОЁМ / 2 + pil / 2),
+          ПИШТАК.h * 0.68,
+          portalZ,
+        );
+        g.add(подложка);
+        for (let i = 0; i < изразцов; i++) {
+          const изразец = new THREE.Mesh(
+            new THREE.BoxGeometry(pil - 0.14, высотаИзразца / изразцов - 0.14, ПИШТАК.выступ + 0.16),
+            MAT.tealDome,
+          );
+          изразец.position.set(
+            s * (ПАЛАЦНЫЙ_ПРОЁМ / 2 + pil / 2),
+            ПИШТАК.h * 0.68 - высотаИзразца / 2 + (высотаИзразца / изразцов) * (i + 0.5),
+            portalZ,
+          );
+          g.add(изразец);
+        }
       }
       // Наличник над проёмом.
       const cornice = new THREE.Mesh(new THREE.BoxGeometry(pw + 0.5, 0.5, ПИШТАК.выступ + 0.5), MAT.sandstoneDark);
@@ -5838,6 +5877,47 @@ export function buildSettlements(scene: THREE.Scene): void {
     перемычка.position.set(0, DOOR_H + (HALL_H - DOOR_H) / 2, WALL_T / 2);
     перемычка.castShadow = true;
     g.add(перемычка);
+
+    // ── Окна, карниз и портал гробницы ──
+    // Корпус гробницы стоял коробкой с hip-крышей и чёрной дверью (21 октября
+    // 2026, §225). Теперь у него то же, что у остальных построек: узкие
+    // окна, каменный карниз под кровлей и опоры у входа.
+    //
+    // ОКНА УЗКИЕ И ВЫСОКИЕ. Гробница — не дом: это надземный корпус над
+    // подземной комнатой, и света в ней немного. Широкий проём читался бы
+    // окном жилой комнаты.
+    for (const s of [-1, 1] as const) {
+      g.add(windowPane(s * 3.2, 2.4, WALL_T, 0, 0.7, 1.3));
+    }
+    // Карниз под кровлей: отбивает стену от крыши, иначе корпус читается как
+    // коробка, поставленная на землю. Светлый камень — тёмный карниз на
+    // тёмной стене не виден вовсе.
+    const карниз = new THREE.Mesh(
+      new THREE.BoxGeometry(HALL_W + 0.3, 0.24, HALL_D + 0.3),
+      MAT.sandstone,
+    );
+    карниз.position.set(0, HALL_H - 0.12, zЗад + HALL_D / 2);
+    карниз.castShadow = true;
+    g.add(карниз);
+    // Наличник над входом: перемычка в стене уходит в её же плоскость и не
+    // читается, а вход в гробницу должен быть виден издалека.
+    const наличник = new THREE.Mesh(
+      new THREE.BoxGeometry(DOOR_W + 0.9, 0.3, WALL_T + 0.3),
+      MAT.sandstoneDark,
+    );
+    наличник.position.set(0, DOOR_H + 0.05, WALL_T / 2);
+    наличник.castShadow = true;
+    g.add(наличник);
+    // Опоры у входа: без них дверь была чёрным провалом в стене.
+    for (const s of [-1, 1] as const) {
+      const опора = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, DOOR_H + 0.2, 0.3),
+        MAT.sandstoneDark,
+      );
+      опора.position.set(s * (DOOR_W / 2 + 0.11), (DOOR_H + 0.2) / 2, WALL_T / 2 + 0.1);
+      опора.castShadow = true;
+      g.add(опора);
+    }
 
     // Купол/пирамидальная кровля.
     const крыша = new THREE.Mesh(
