@@ -19,7 +19,7 @@
 // один пакет не загрузится, env собирается процедурно. Никакого «белого
 // экрана» или «отсутствия света» не наступает.
 import * as THREE from 'three';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import {
   buildEquirect,
   ISFAHAN_DESERT,
@@ -93,7 +93,11 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
   private loadHdrVariant(_renderer: THREE.WebGLRenderer, v: Variant): Promise<THREE.WebGLRenderTarget | null> {
     return new Promise((resolve) => {
       try {
-        new RGBELoader().load(
+        // HDRLoader вместо RGBELoader: с three 0.18x старый загрузчик объявлен
+        // устаревшим и печатает предупреждение при каждом вызове, а их четыре
+        // (по варианту неба на старте). Приёмник тот же — DataTexture в
+        // линейном пространстве; mapping и colorSpace ниже задаются явно.
+        new HDRLoader().load(
           HDR[v],
           (tex) => {
             if (this.disposed) { tex.dispose(); resolve(null); return; }

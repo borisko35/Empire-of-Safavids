@@ -211,10 +211,26 @@ const ПУСТАЯ_ЗАПИСЬ = `
   gEmissiveMask = vec4(0.0);
 `;
 
-/** Есть ли в шейдере всё, от чего патч зависит. */
+/**
+ * Есть ли в шейдере всё, от чего патч зависит.
+ *
+ * ОДНИХ INCLUDE'ОВ МАЛО. `#include <opaque_fragment>` и `<aomap_fragment>` есть
+ * и у MeshBasicMaterial с LineBasicMaterial, но величин `roughnessFactor`,
+ * `metalnessFactor` и `totalEmissiveRadiance` в их шейдерах НЕТ вовсе. Прошивка
+ * по одному признаку include'ов дала у них ошибку компиляции 1282 и выбросила
+ * объект из кадра целиком — поймано в логе дев-сервера:
+ * `ERROR: 'roughnessFactor' : undeclared identifier`.
+ *
+ * Поэтому спрашиваем ещё и о самих величинах: писать можно только туда, где их
+ * считают. Остальные идут путём заглушки (ПУСТАЯ_ЗАПИСЬ) — они объявляют все
+ * четыре выхода, но в AO не участвуют.
+ */
 function подходит(фрагмент: string): boolean {
   return фрагмент.includes('#include <opaque_fragment>')
-    && фрагмент.includes('#include <aomap_fragment>');
+    && фрагмент.includes('#include <aomap_fragment>')
+    && фрагмент.includes('roughnessFactor')
+    && фрагмент.includes('metalnessFactor')
+    && фрагмент.includes('totalEmissiveRadiance');
 }
 
 const ГЛАВНАЯ = /void\s+main\s*\(\s*\)\s*\{/;
