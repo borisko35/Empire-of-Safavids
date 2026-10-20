@@ -9,7 +9,8 @@
 import * as THREE from 'three';
 import type { audio as audioType } from '../audio';
 
-export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'storm' | 'fog' | 'sandstorm' | 'snow' | 'wind';
+import type { WeatherKind } from './skyEnvironmentMath';
+export type { WeatherKind };
 
 const RAIN_COUNT = 700;
 const RAIN_W = 55;

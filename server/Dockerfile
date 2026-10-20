@@ -58,6 +58,12 @@ COPY client/src/app/game3d/waterWaves.ts ./client/src/app/game3d/waterWaves.ts
 # локально typecheck зелёный, а в образе модуля нет.
 COPY client/src/app/game3d/spriteClamp.ts ./client/src/app/game3d/spriteClamp.ts
 
+# skyEnvironmentMath.ts тянет skyEnvironment.test.ts: тест проверяет математику
+# неба (flip-упаковка эквиректа, §221) настоящими числами. Модуль чистый — ни
+# three, ни DOM, — поэтому поднимается где угодно. Без этой строки сборка
+# образа падает на выкатке: локально typecheck зелёный, а в образе модуля нет.
+COPY client/src/app/game3d/skyEnvironmentMath.ts ./client/src/app/game3d/skyEnvironmentMath.ts
+
 WORKDIR /app/server
 # ТИПОВАЯ ПРОВЕРКА ВСЕГО ПРОЕКТА, ВКЛЮЧАЯ ТЕСТЫ, И ЛИМИТ КУЧИ.
 #

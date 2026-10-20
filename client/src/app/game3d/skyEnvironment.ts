@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import {
   buildEquirect,
+  equirectToRgba,
   ISFAHAN_DESERT,
   type EquirectMap,
   type SkyState,
@@ -241,24 +242,20 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
   private переключитьИнтенсивность(состояние: SkyState, в: Variant | string): void {
     // Приглушаем рассеянный свет с наступлением ночи — круто падаем при
     // глубокой ночи, чтобы звёзд/луна-блик оставались мягче.
+    // Прицел по суткам (§221): день 0.18–0.30, ночь почти ноль.
     const базовая = состояние.sunHeight > -0.12
-      ? Math.max(0.3, состояние.sunHeight) * 0.5
-      : 0.15 + (состояние.sunHeight + 1) * 0.05;
-    const инт = Math.max(0.02, базовая * (1 - состояние.overcast * 0.4)
+      ? Math.max(0.24, состояние.sunHeight) * 0.28
+      : 0.05 + (состояние.sunHeight + 1) * 0.03;
+    const инт = Math.max(0.015, базовая * (1 - состояние.overcast * 0.4)
       * (в === 'night' ? 0.5 : 1) * this.множительПоПогоде(состояние.weather));
     this.scene.environmentIntensity = инт;
   }
 
   private вRGBA(карта: EquirectMap): Float32Array {
-    const { data, width, height } = карта;
-    const out = new Float32Array(width * height * 4);
-    for (let i = 0, j = 0; i < data.length; i += 3, j += 4) {
-      out[j] = data[i];
-      out[j + 1] = data[i + 1];
-      out[j + 2] = data[i + 2];
-      out[j + 3] = 1;
-    }
-    return out;
+    // Переворот строк и упаковка — в математике: там их можно проверить
+    // набором, а не глазами в браузере. Подробности — в комментарии к
+    // equirectToRgba (небо раньше рисовалось вверх ногами).
+    return equirectToRgba(карта);
   }
 
   dispose(): void {
