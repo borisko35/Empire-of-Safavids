@@ -226,6 +226,35 @@ if [ -n "$DIRTY" ]; then
   fi
 fi
 
+# ── Домашний туннель при цели aws ──────────────────────────────────────────
+# СТОИТ ПЕРЕД ПЕРЕСБОРКОЙ, А НЕ ПОСЛЕ НЕЁ (21 октября 2026). Раньше этот блок
+# жил после шага 4 и выполнялся только при УСПЕШНОЙ удалённой сборке. Но сам
+# раскол валит не сборку, а шаг 5 УДАЛЁННОЙ машины: жилой коннектор под боевым
+# адресом отдаёт старую сборку, шаг 5 падает, удалённый сценарий кончается с
+# ошибкой, внешний скрипт останавливается — и дом-блок так и не выполняется.
+# Раскол каждый раз требовал рук: 08.10 - так нашёлся при предыдущем переезде,
+# 21.10 - домашний docker подняли руками во время выкатки, и она остановилась
+# на финале со старым бандлом. Теперь правило действует ДО пересборки: если
+# цель - aws, домашний туннель снимается прежде, чем что-либо ещё начнётся.
+if [ "$TUNNEL" -eq 1 ] && [ "$TARGET" = "aws" ]; then
+  say ""
+  say "  cel vykati - aws, znachit tunnel dolzhen byt tolko na prode."
+  LOCAL_CF=$($C ps -aq cloudflared 2>/dev/null | head -1)
+  if [ -n "$LOCAL_CF" ]; then
+    LOCAL_CF_STATE=$(docker inspect -f '{{.State.Status}}' "$LOCAL_CF" 2>/dev/null | tr -d '\r')
+    if [ "$LOCAL_CF_STATE" = "running" ]; then
+      say "  domashny cloudflared ($LOCAL_CF_STATE) sidit pod boevym adresom - ostanavlivayu"
+      $C stop cloudflared >>/tmp/deploy-build.log 2>&1 || true
+      say "  domashny cloudflared ostanovlen"
+    else
+      say "  domashny cloudflared uzhe ne rabotaet ($LOCAL_CF_STATE) - ne trogayu"
+    fi
+  else
+    say "  domashnogo cloudflared net - ne trogayu"
+  fi
+  say "  tunnel proda: proverka dalee idet po udalennoy mashine"
+fi
+
 # ── 3. Пересобрать и перезапустить ─────────────────────────────────────────
 say ""
 say "=== 3. PERESBORKA ==="
@@ -490,24 +519,11 @@ fi
 # AWS (шаг 1): если AWS недоступен, выкатка останавливается ещё до сборки.
 # Значит дойти до этой строки при цели aws можно только когда прод уже отвечает
 # по ssh, и отключение домашнего туннеля не оставит сайт без обслуживания.
-if [ "$TUNNEL" -eq 1 ] && [ "$TARGET" = "aws" ]; then
-  say ""
-  say "  cel vykati - aws, znachit tunnel dolzhen byt tolko na prode."
-  LOCAL_CF=$($C ps -aq cloudflared 2>/dev/null | head -1)
-  if [ -n "$LOCAL_CF" ]; then
-    LOCAL_CF_STATE=$(docker inspect -f '{{.State.Status}}' "$LOCAL_CF" 2>/dev/null | tr -d '\r')
-    if [ "$LOCAL_CF_STATE" = "running" ]; then
-      say "  domashny cloudflared ($LOCAL_CF_STATE) sidit pod boevym adresom - ostanavlivayu"
-      $C stop cloudflared >>/tmp/deploy-build.log 2>&1 || true
-      say "  domashny cloudflared ostanovlen"
-    else
-      say "  domashny cloudflared uzhe ne rabotaet ($LOCAL_CF_STATE) - ne trogayu"
-    fi
-  else
-    say "  domashnogo cloudflared net - ne trogayu"
-  fi
-  say "  tunnel proda: proverka dalee idet po udalennoy mashine"
-fi
+# Сам КОД блока переехал ВЫШЕ, перед пересборкой (см. начало шага 3): росполагаясь
+# здесь, он никогда не выполнялся при том расколе, ради которого написан, —
+# раскол валит шаг 5 удалённой машины, удалённый сценарий кончается с ошибкой,
+# и внешний скрипт останавливается до этой строки. 21.10.2026 домашний docker
+# подняли во время выкатки, и она остановилась на финале со старым бандлом.
 
 if [ "$TUNNEL" -eq 1 ] && [ "$TARGET" != "aws" ]; then
   CF_ID=$($C ps -aq cloudflared 2>/dev/null | head -1)
@@ -857,6 +873,6 @@ say "  vse fayly stranicy dostupny"
 
 say ""
 say ""
-say "=== 6. ������� ���� ������ (docker builder prune) ==="
-docker builder prune -f 2>/dev/null || say "  ��� �� ������ (�� ��������)"
+say "=== 6. ������� ���� ������ (docker builder prune) ==="
+docker builder prune -f 2>/dev/null || say "  ��� �� ������ (�� ��������)"
 say "RESULT: PASS"
