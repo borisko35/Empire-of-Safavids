@@ -1151,12 +1151,18 @@ export function isRoad(x: number, z: number): boolean {
  *
  * Размеры — по старой пластине, чтобы дома не стали крупнее: проём 0.9x1.3,
  * рама выступает на 0.06 в каждую сторону.
+ *
+ * РАЗМЕРЫ — ПАРАМЕТРЫ, А НЕ КОНСТАНТЫ (21 октября 2026, §224). Пока размеры
+ * были зашиты (0.9 x 1.3), окно подходило только дому Исфахана, а в мастерской
+ * ткацкой стояли чёрные плашки в проёмах: стекло в игре было одно, и то
+ * только у части зданий. Теперь любое окно строится этой же функцией, и
+ * мастерская, таможня и ханза получают то же стекло с тем же средником.
  */
 function windowPane(
   cx: number, cy: number, faceZ: number, rotY: number,
+  W = 0.9, H = 1.3,
 ): THREE.Group {
   const g = new THREE.Group();
-  const W = 0.9, H = 1.3;
 
   // Рама: четыре бруса вокруг проёма.
   const t = 0.1;
@@ -1507,6 +1513,18 @@ const MAT = {
   // Рама вокруг проёма. Светлый камень: рама и есть то, что глаз читает
   // как окно, а не просто тёмная плашка.
   windowFrame: new THREE.MeshStandardMaterial({ color: 0xcdb98f, roughness: 0.85, map: windowFrameTexture('#cdb98f', 2), normalMap: windowFrameNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
+  // Огонь (21 октября 2026, §224). Пламя в святилище было конусом из тёмно-
+  // красной ткани и золота: со стороны это читалось как дорожный конус на
+  // треноге. Огонь должен светиться сам — без свечения он остаётся фигурой.
+  fire: new THREE.MeshStandardMaterial({
+    color: 0xd8541a, roughness: 0.6,
+    emissive: 0xff6a12, emissiveIntensity: 2.1,
+  }),
+  // Дым: светлее фона, но полупрозрачный. Плотный белый блок читался как
+  // глыба, а не как дым.
+  smoke: new THREE.MeshStandardMaterial({
+    color: 0xd9d9d4, roughness: 1, transparent: true, opacity: 0.4, depthWrite: false,
+  }),
   // Городская мелкая вода: пруд в саду, чаша фонтана, бассейн хаммама.
   // Озеро, пруд, река и море собираются в buildWater каждое со своим
   // материалом - у них разный уровень, глубина и мера расстояния до берега.
@@ -4164,6 +4182,52 @@ export function buildSettlements(scene: THREE.Scene): void {
       }
     }
 
+    // ── Зубцы и пояс стены ──
+    // Стена была гладкой плитой в пять метров: с дороги читалась как забор из
+    // двух прямоугольников, и таможня выглядела складским ангаром. Зубцы по
+    // краю — те же, что на башнях, только мельче: стена должна читаться как
+    // стена, а башни как башни. Пояс под ними отбивает кладку от верха и
+    // ловит тень, а без него верх стены — ровная линия.
+    const зубец = (x: number, z: number): void => {
+      const м = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.5), MAT.sandstoneDark);
+      м.position.set(x, WALL_H + 0.275, z);
+      м.castShadow = true;
+      g.add(м);
+    };
+    // Боковые пролёты: от башни до башни, шаг 1.3 м.
+    for (const s of [-1, 1] as const) {
+      const x = s * (WALL_W / 2 - WALL_T / 2);
+      for (let z = zBack + 2.0; z < zGate - 1.8; z += 1.3) зубец(x, z);
+    }
+    // Передняя стена: по полотнам, от ворот до башен.
+    for (const s of [-1, 1] as const) {
+      const центр = s * (GATE_W / 2 + seg / 2);
+      for (let x = центр - seg / 2 + 0.65; x < центр + seg / 2 - 0.4; x += 1.3) {
+        зубец(x, zGate - WALL_T / 2);
+      }
+    }
+    // Пояс: одна полоса вдоль всей стены, выпущенная на 8 см.
+    for (const s of [-1, 1] as const) {
+      const бок = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_T + 0.16, 0.2, zGate - zBack),
+        MAT.sandstone,
+      );
+      бок.position.set(s * (WALL_W / 2 - WALL_T / 2), WALL_H - 0.78, (zBack + zGate) / 2);
+      g.add(бок);
+      const перед = new THREE.Mesh(
+        new THREE.BoxGeometry(seg, 0.2, WALL_T + 0.16),
+        MAT.sandstone,
+      );
+      перед.position.set(s * (GATE_W / 2 + seg / 2), WALL_H - 0.78, zGate - WALL_T / 2);
+      g.add(перед);
+    }
+    const надВоротами = new THREE.Mesh(
+      new THREE.BoxGeometry(GATE_W, 0.2, WALL_T + 0.16),
+      MAT.sandstone,
+    );
+    надВоротами.position.set(0, WALL_H - 0.78, zGate - WALL_T / 2);
+    g.add(надВоротами);
+
     // ── Таможенный дом ──
     // Стена сплошная с трёх сторон, четвёртая — с проёмом двери. Крыша плоская
     // с бортиком: дом служебный, и башня на нём была бы враньём.
@@ -4212,6 +4276,32 @@ export function buildSettlements(scene: THREE.Scene): void {
       par.position.set(bx, HOUSE_H + 0.75, bz);
       g.add(par);
     }
+
+    // ── Окна и пояс дома ──
+    // Дом служебный, и раньше он был глухим: три стены без единого проёма.
+    // Теперь те же окна, что в домах Исфахана (§222, §224) — стекло, рама и
+    // средник, — и каменный пояс под карнизом, как у домов квартала.
+    //
+    // ПРОЁМЫ ПО ВЫСОТЕ, А НЕ ПО ЦЕНТРУ СТЕНЫ. Дом высотой 6.2, дверь 3.4,
+    // окна на фасаде — над дверью: за ними второй этаж, а не голая штукатурка.
+    for (const s of [-1, 1] as const) {
+      g.add(windowPane(s * 4.5, 4.3, HOUSE_T, 0, 1.1, 1.3));
+    }
+    // Боковые стены смотрят в стороны, задняя — в поле.
+    for (const s of [-1, 1] as const) {
+      const поворот = s * Math.PI / 2;
+      g.add(windowPane(s * HOUSE_W / 2, 3.6, -3.2, поворот, 1.1, 1.3));
+      g.add(windowPane(s * HOUSE_W / 2, 3.6, -6.8, поворот, 1.1, 1.3));
+    }
+    g.add(windowPane(-3.5, 3.6, zBack, Math.PI, 1.1, 1.3));
+    g.add(windowPane(3.5, 3.6, zBack, Math.PI, 1.1, 1.3));
+    // Пояс под карнизом: стена перестаёт быть голой плоскостью.
+    const пояс = new THREE.Mesh(
+      new THREE.BoxGeometry(HOUSE_W + 0.2, 0.2, HOUSE_D + 0.2),
+      MAT.sandstoneDark,
+    );
+    пояс.position.set(0, HOUSE_H - 0.62, zBack + HOUSE_D / 2);
+    g.add(пояс);
 
     // Дверь. Лицо в плоскости стены плюс половина толщины: игрок выходит
     // в (-900, 804), то есть на четыре метра впереди, и должен оказаться
@@ -4482,56 +4572,32 @@ export function buildSettlements(scene: THREE.Scene): void {
     // Окна. Узкие и высокие, двумя ярусами — станкам нужен свет, а стена
     // глухая в девять метров читалась бы как цоколь.
     //
-    // ПОЧЕМУ ПРОЁМЫ, А НЕ ТЁМНЫЕ НАКЛЕЙКИ. Настоящее отверстие в стене
-    // пропускает свет и вид на двор; наклейка выглядит как окно снаружи и
-    // обманывает ровно до того момента, пока игрок не подойдёт вплотную.
-    // Окна второго яруса — единственный источник света в цехе, поэтому они
-    // и на дальней стене тоже.
+    // БЫЛО: ПРОЁМ ИЗ ТЁМНОЙ ВСТАВКИ. Настоящее отверстие в стене не делали —
+    // в неё вставляли чёрный брус во всю толщину, он торчал из штукатурки и
+    // читался чёрным прямоугольником с точечной обвязкой. На кадре мастерской
+    // это были дыры, а не окна: стекло в игре было одно, и стояло оно только в
+    // домах Исфахана (§222).
+    //
+    // СТАЛО: ОКНО, КАК ВЕЗДЕ. Те же windowPane — стекло, рама, перекладина и
+    // стойка, — и того же материала, что в домах столицы. Окна второго яруса
+    // остаются на дальней стене: без них цех тёмный с обеих сторон.
     const ОКНА_ВЕРХНИЕ = 5;
     const ОКНА_НИЖНИЕ = 3;
-    const оконныйПроём = (y: number, h: number): void => {
-      for (let i = 0; i < ОКНА_ВЕРХНИЕ; i++) {
-        const x = -HOUSE_W / 2 + (HOUSE_W / ОКНА_ВЕРХНИЕ) * (i + 0.5);
-        const win = new THREE.Mesh(new THREE.BoxGeometry(1.2, h, HOUSE_T + 0.3), MAT.dark);
-        win.position.set(x, y, HOUSE_T / 2);
-        g.add(win);
-        // Откос — узкая рамка, окно читается как проём, а не как щель.
-        const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(1.55, h + 0.3, HOUSE_T + 0.15),
-          MAT.sandstoneDark,
-        );
-        frame.position.set(x, y, HOUSE_T / 2 - 0.1);
-        g.add(frame);
-      }
-    };
-    оконныйПроём(HOUSE_H - 2.0, 1.8);
+    for (let i = 0; i < ОКНА_ВЕРХНИЕ; i++) {
+      const x = -HOUSE_W / 2 + (HOUSE_W / ОКНА_ВЕРХНИЕ) * (i + 0.5);
+      g.add(windowPane(x, HOUSE_H - 2.0, HOUSE_T, 0, 1.2, 1.8));
+    }
     // Нижний ярус — реже и ниже: цех заслоняют станки.
     for (let i = 0; i < ОКНА_НИЖНИЕ; i++) {
       const x = -HOUSE_W / 2 + (HOUSE_W / ОКНА_НИЖНИЕ) * (i + 0.5);
       if (Math.abs(x) < DOOR_W / 2 + 1.0) continue;
-      const win = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, HOUSE_T + 0.3), MAT.dark);
-      win.position.set(x, 2.6, HOUSE_T / 2);
-      g.add(win);
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(1.75, 1.75, HOUSE_T + 0.15),
-        MAT.sandstoneDark,
-      );
-      frame.position.set(x, 2.6, HOUSE_T / 2 - 0.1);
-      g.add(frame);
+      g.add(windowPane(x, 2.6, HOUSE_T, 0, 1.4, 1.4));
     }
-    // Дальняя стена — окна того же верхнего яруса. Без них цех был бы тёмным
-    // с обеих сторон, а свет в интерьере берётся именно оттуда.
+    // Дальняя стена — окна того же верхнего яруса. Стена смотрит в -x,
+    // поэтому окно повернуто на четверть оборота.
     for (let i = 0; i < ОКНА_ВЕРХНИЕ; i++) {
       const z = zBack + (HOUSE_D / ОКНА_ВЕРХНИЕ) * (i + 0.5);
-      const win = new THREE.Mesh(new THREE.BoxGeometry(HOUSE_T + 0.3, 1.8, 1.2), MAT.dark);
-      win.position.set(-HOUSE_W / 2 + HOUSE_T / 2, HOUSE_H - 2.0, z);
-      g.add(win);
-      const frame = new THREE.Mesh(
-        new THREE.BoxGeometry(HOUSE_T + 0.15, 2.1, 1.55),
-        MAT.sandstoneDark,
-      );
-      frame.position.set(-HOUSE_W / 2 + HOUSE_T / 2 - 0.1, HOUSE_H - 2.0, z);
-      g.add(frame);
+      g.add(windowPane(-HOUSE_W / 2, HOUSE_H - 2.0, z, -Math.PI / 2, 1.2, 1.8));
     }
 
     // Крыша плоская с бортиком, как у служебных построек.
@@ -4996,6 +5062,36 @@ export function buildSettlements(scene: THREE.Scene): void {
     перемычка.position.set(0, DOOR_H + 0.5, WALL_T / 2);
     перемычка.castShadow = true;
     g.add(перемычка);
+    // Карниз по верху передней стены (21 октября 2026, §224). Стена зала была
+    // голой плитой в двадцать два метра, и читалась как забор. Полоса под
+    // верхом отбивает кладку от стены и перекрывает проём двери — как
+    // перемычка, но на всю ширину.
+    const карниз = new THREE.Mesh(
+      new THREE.BoxGeometry(HALL_W + 0.3, 0.22, WALL_T + 0.26),
+      MAT.sandstoneDark,
+    );
+    карниз.position.set(0, 3.3, WALL_T / 2);
+    карниз.castShadow = true;
+    g.add(карниз);
+    // Узкие окна святилища (21 октября 2026, §224). Два вертикальных проёма
+    // по бокам от двери: священная постройка не окна широкие, но и стена без
+    // единого проёма читалась как глухой забор.
+    for (const s of [-1, 1] as const) {
+      g.add(windowPane(s * 5, 2.1, WALL_T, 0, 0.8, 1.6));
+    }
+
+    // Портал входа (21 октября 2026, §224). Дверь была тёмным прямоугольником
+    // в стене и читалась как дыра: опоры по краям проёма дают входу край, а
+    // перемычка над дверью уже есть — это карниз стены.
+    for (const s of [-1, 1] as const) {
+      const опора = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, DOOR_H + 0.1, 0.3),
+        MAT.sandstoneDark,
+      );
+      опора.position.set(s * (DOOR_W / 2 + 0.11), (DOOR_H + 0.1) / 2, WALL_T / 2 + 0.1);
+      опора.castShadow = true;
+      g.add(опора);
+    }
 
     // ── Дальняя стена руинного двора с проломом ──
     // Это та стена, что в интерьере стоит на cz - 10.2, то есть ЗА алтарём.
@@ -5055,18 +5151,31 @@ export function buildSettlements(scene: THREE.Scene): void {
     // издалека, а не искаться на карте.
     const труба = new THREE.Mesh(
       new THREE.BoxGeometry(chimney.w, chimney.h, chimney.d),
-      MAT.sandstone,
+      MAT.sandstoneDark,
     );
     труба.position.set(0, chimney.h / 2, zЗад + 3.5);
     труба.castShadow = true;
     g.add(труба);
-    // Дым: три убывающих блока, чтобы читался столб, а не куб.
+    // Колпак на трубе: труба должна кончиться, а не упираться в край стены.
+    const колпак = new THREE.Mesh(
+      new THREE.BoxGeometry(chimney.w + 0.6, 0.32, chimney.d + 0.6),
+      MAT.dark,
+    );
+    колпак.position.set(0, chimney.h + 0.16, zЗад + 3.5);
+    колпак.castShadow = true;
+    g.add(колпак);
+    // Дым: три УБЫВАЮЩИХ блока, чтобы читался столб, а не куб.
+    //
+    // БЫЛО: блоки РОСЛИ вверх (chimney.w + i * 1.1) — над трубой вырастала
+    // белая глыба в три раза шире её самой, и весь «дым» читался как
+    // парашютный купол. Комментарий обещал убывающий дым, код делал
+    // наоборот. ТЕПЕРЬ: столб сужается, полупрозрачен и стоит над трубой.
     for (let i = 0; i < 3; i++) {
       const дым = new THREE.Mesh(
-        new THREE.BoxGeometry(chimney.w + i * 1.1, 1.5, chimney.d + i * 1.1),
-        MAT.white,
+        new THREE.ConeGeometry(0.95 - i * 0.28, 1.8, 6),
+        MAT.smoke,
       );
-      дым.position.set(0, chimney.h + 0.9 + i * 1.7, zЗад + 3.5);
+      дым.position.set(0, chimney.h + 1.2 + i * 1.5, zЗад + 3.5);
       g.add(дым);
     }
 
@@ -5091,19 +5200,37 @@ export function buildSettlements(scene: THREE.Scene): void {
       нога.position.set(жаровняX + s * 0.5, 0.45, жаровняZ);
       g.add(нога);
     }
-    // Пламя: два конуса, малый в большом, как в интерьере у алтаря.
+    // Пламя: три конуса, малый в большом, как в интерьере у алтаря.
+    //
+    // БЫЛО: два конуса в метр и полтора высотой из тёмно-красной ткани и
+    // золота, торчащие из чаши. Со стороны это был дорожный конус на треноге:
+    // ровный, гладкий, без огня. ТЕПЕРЬ: пламя меньше, светится само
+    // (MAT.fire) и стоит в чаше, а не над ней.
     const пламя1 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.28, 0.62, 1.3, 8),
-      MAT.clothRed,
+      new THREE.CylinderGeometry(0.16, 0.36, 0.7, 8),
+      MAT.fire,
     );
-    пламя1.position.set(жаровняX, brazier.h + 1.5, жаровняZ);
+    пламя1.position.set(жаровняX, brazier.h + 0.55, жаровняZ);
     g.add(пламя1);
     const пламя2 = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.18, 0.42, 1.9, 8),
-      MAT.gold,
+      new THREE.CylinderGeometry(0.1, 0.24, 1.05, 8),
+      MAT.fire,
     );
-    пламя2.position.set(жаровняX, brazier.h + 1.75, жаровняZ);
+    пламя2.position.set(жаровняX, brazier.h + 0.72, жаровняZ);
     g.add(пламя2);
+    const пламя3 = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.12, 0.5, 6),
+      MAT.fire,
+    );
+    пламя3.position.set(жаровняX + 0.22, brazier.h + 0.4, жаровняZ + 0.1);
+    g.add(пламя3);
+    // Угли в чаше: тлеющий слой под пламенем, без него чаша выглядит пустой.
+    const угли = new THREE.Mesh(
+      new THREE.CylinderGeometry(brazier.r * 0.75, brazier.r * 0.7, 0.12, 8),
+      MAT.dark,
+    );
+    угли.position.set(жаровняX, brazier.h + 0.2, жаровняZ);
+    g.add(угли);
 
     // ── Дверь в передней стене ──
     // Лицо в плоскости стены плюс половина толщины: игрок выходит в (1200,
@@ -5260,7 +5387,7 @@ export function buildSettlements(scene: THREE.Scene): void {
   // (1600, 1004) на четыре метра дальше по плюс z.
   {
     const {
-      зал: { w: HALL_W },
+      зал: { w: HALL_W, d: HALL_D },
       wall: { t: WALL_T },
       door: { w: DOOR_W, h: DOOR_H },
       yard: { w: YARD_W, d: YARD_D },
@@ -5331,10 +5458,15 @@ export function buildSettlements(scene: THREE.Scene): void {
 
     // ── Зал: стены ──
     // Три глухие стены и передняя с проёмом двери.
+    //
+    // БЫЛО: боковые стены мерились шириной зала (HALL_W - WALL_T = 20.6 м)
+    // вместо его глубины (16 м). Они вылезали на 4.6 м во двор и делали
+    // въезд узкой щелью между двумя высокими стенами. Теперь длина стены —
+    // глубина зала.
     for (const [hx, hz, hw, hd] of [
       [0, zЗад + WALL_T / 2, HALL_W, WALL_T],
-      [-HALL_W / 2 + WALL_T / 2, zЗад + (HALL_W - WALL_T) / 2, WALL_T, HALL_W - WALL_T],
-      [HALL_W / 2 - WALL_T / 2, zЗад + (HALL_W - WALL_T) / 2, WALL_T, HALL_W - WALL_T],
+      [-HALL_W / 2 + WALL_T / 2, zЗад + (HALL_D - WALL_T) / 2, WALL_T, HALL_D - WALL_T],
+      [HALL_W / 2 - WALL_T / 2, zЗад + (HALL_D - WALL_T) / 2, WALL_T, HALL_D - WALL_T],
     ] as const) {
       const w = new THREE.Mesh(new THREE.BoxGeometry(hw, 4.4, hd), MAT.sandstone);
       w.position.set(hx, 2.2, hz);
@@ -5358,6 +5490,35 @@ export function buildSettlements(scene: THREE.Scene): void {
     перемычка.position.set(0, DOOR_H + 0.4, WALL_T / 2);
     перемычка.castShadow = true;
     g.add(перемычка);
+
+    // ── Окна и пояс зала ──
+    // Зал ханзы был глухим боксом: двадцать два метра стены без единого
+    // проёма, и товарный двор читался как склад. Теперь те же окна, что в
+    // городах и мастерской (§222, §224) — стекло, рама, средник, — и
+    // каменный пояс под карнизом.
+    for (const s of [-1, 1] as const) {
+      g.add(windowPane(s * 4.6, 2.5, WALL_T, 0, 1.2, 1.4));
+      g.add(windowPane(s * 8.6, 2.5, WALL_T, 0, 1.2, 1.4));
+      // Боковые стены смотрят в стороны: зал виден и с торга, и с дороги.
+      const поворот = s * Math.PI / 2;
+      g.add(windowPane(s * HALL_W / 2, 2.5, -4.0, поворот, 1.2, 1.4));
+      g.add(windowPane(s * HALL_W / 2, 2.5, -9.0, поворот, 1.2, 1.4));
+    }
+    // Пояс: одна полоса под верхом стен зала.
+    const поясПеред = new THREE.Mesh(
+      new THREE.BoxGeometry(HALL_W + 0.24, 0.2, WALL_T + 0.24),
+      MAT.sandstoneDark,
+    );
+    поясПеред.position.set(0, 3.62, WALL_T / 2);
+    g.add(поясПеред);
+    for (const s of [-1, 1] as const) {
+      const поясБок = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_T + 0.24, 0.2, HALL_D),
+        MAT.sandstoneDark,
+      );
+      поясБок.position.set(s * (HALL_W / 2 - WALL_T / 2), 3.62, zЗад + HALL_D / 2);
+      g.add(поясБок);
+    }
 
     // Крыша хана: двускатная, читается издалека.
     const крыша = new THREE.Mesh(
@@ -5384,6 +5545,18 @@ export function buildSettlements(scene: THREE.Scene): void {
     );
     заглушка.position.set(0, DOOR_H / 2, WALL_T / 2 - 0.05);
     g.add(заглушка);
+    // Опоры по краям входа (21 октября 2026, §224): без них дверь читалась как
+    // чёрный провал в стене, а въезд в караван-сарай должен быть виден с
+    // дороги.
+    for (const s of [-1, 1] as const) {
+      const опора = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, DOOR_H + 0.1, 0.32),
+        MAT.sandstoneDark,
+      );
+      опора.position.set(s * (DOOR_W / 2 + 0.12), (DOOR_H + 0.1) / 2, WALL_T / 2 + 0.12);
+      опора.castShadow = true;
+      g.add(опора);
+    }
 
     // ── Навес над товарными рядами ──
     // Стойки и скат: ряды товара под крышей, как в караван-сарае.
