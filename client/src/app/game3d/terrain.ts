@@ -3452,11 +3452,27 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
   p1.position.set(-1.4, 1.3, -0.8);
   const p2 = p1.clone(); p2.position.x = 1.4;
   stall.add(table, roof, p1, p2);
+  // ── Товар на прилавке (§237) ──
+  //
+  // Лавка стояла под навесом, и товар на ней тонул в его тени: с улицы
+  // читался пустой тёмный стол. Теперь на переднем крае — полотнище цвета
+  // навеса (лавка видна издали даже в тени), горшки светлее, и добавлены
+  // мешки с товаром.
+  const полотнище = new THREE.Mesh(
+    new THREE.BoxGeometry(3.02, 0.72, 0.06),
+    canopies[kind % 3],
+  );
+  полотнище.position.set(0, 0.85, 0.83);
+  stall.add(полотнище);
   if (kind === 0) {
     for (let j = 0; j < 4; j++) {
-      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.42, 7), MAT.sandstoneDark);
+      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.42, 7), MAT.sandstone);
       jar.position.set(-1 + j * 0.65, 1.5, (j % 2 ? 0.25 : -0.25));
       stall.add(jar);
+      // Крышка: без неё горшок читается обручем.
+      const крышка = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.07, 7), MAT.sandstoneDark);
+      крышка.position.set(-1 + j * 0.65, 1.74, (j % 2 ? 0.25 : -0.25));
+      stall.add(крышка);
     }
   } else if (kind === 1) {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.7), MAT.wood);
@@ -3465,6 +3481,16 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
     const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.6), MAT.wood);
     crate2.position.set(-0.7, 1.5, 0.1);
     stall.add(crate, crate2);
+    // Свитки ткани поверх ящиков: товар виден и с улицы.
+    for (let j = 0; j < 2; j++) {
+      const свиток = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.15, 0.9, 8),
+        canopies[(kind + j) % 3],
+      );
+      свиток.rotation.z = Math.PI / 2;
+      свиток.position.set(-0.4 + j * 0.7, 1.92, 0.05);
+      stall.add(свиток);
+    }
   } else {
     for (let j = 0; j < 3; j++) {
       const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 8), canopies[(kind + j) % 3]);
@@ -3472,6 +3498,14 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
       roll.position.set(-0.7 + j * 0.7, 1.42, 0.2);
       stall.add(roll);
     }
+  }
+  // Мешки у края: полая лавка выглядит полой, а набитая — нет.
+  for (const s of [-1, 1] as const) {
+    const мешок = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), MAT.sand);
+    мешок.position.set(s * 1.18, 1.58, -0.42);
+    мешок.scale.set(1, 1.25, 0.9);
+    мешок.castShadow = true;
+    stall.add(мешок);
   }
   return stall;
 }
