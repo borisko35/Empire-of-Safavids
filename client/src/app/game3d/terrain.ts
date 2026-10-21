@@ -2359,8 +2359,15 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   // решёткой: глаз находит период повтора за секунды, и площадь перестаёт
   // быть площадью. Поверх плитки кладётся низкочастотная пестрота на всю
   // площадь целиком — её повтор глаз не видит, а рисунок плиты остаётся.
+  //
+  // ПОВТОР 40, А НЕ 10 (21 октября 2026, §227). В одном повторе текстуры
+  // четыре плитки по стороне, а повтор ложился на все 212 метров площади:
+  // плитка выходила 5.3 метра — это не мостовая, а квадратные плиты
+  // размером с палатку. При 40 повторах плитка выходит 1.3 метра, и
+  // площадь читается в масштабе человека: к ней хочется подойти, а не
+  // замереть её шагами.
   const материалПлощади = new THREE.MeshStandardMaterial({
-    color: 0xc8b48a, roughness: 0.95, map: plazaTexture(10),
+    color: 0xc8b48a, roughness: 0.95, map: plazaTexture(40),
   });
   addMacroLayer(материалПлощади, macroTexture(), 0.34, 1.4);
   const plaza = new THREE.Mesh(
@@ -2804,9 +2811,33 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   mosque.add(base);
   const portal = new THREE.Mesh(new THREE.BoxGeometry(7, 12, 2), MAT.sandstoneDark);
   portal.position.set(0, 6, 9.4);
-  const arch = new THREE.Mesh(new THREE.BoxGeometry(3.4, 6, 0.8), MAT.dark);
-  arch.position.set(0, 3, 10.5);
-  mosque.add(portal, arch);
+  // ВХОД МЕЧЕТИ (21 октября 2026, §227). Раньше здесь стояла чёрная плита
+  // во весь проём: она читалась вырезом в стене, потому что зала за ней
+  // нет, и мечеть в центре площади была самым тёмным пятном города.
+  // Теперь это дверь: полотно в каменной раме, со створом и скобами. Зала
+  // за ней действительно нет, и дверь закрыта, но она выглядит как дверь,
+  // а не как дыра.
+  const полотно = new THREE.Mesh(new THREE.BoxGeometry(3.0, 5.2, 0.24), MAT.wood);
+  полотно.position.set(0, 2.6, 10.5);
+  const рама = new THREE.Mesh(new THREE.BoxGeometry(3.7, 5.9, 0.34), MAT.sandstone);
+  рама.position.set(0, 2.95, 10.32);
+  const створ = new THREE.Mesh(new THREE.BoxGeometry(0.1, 5.0, 0.3), MAT.dark);
+  створ.position.set(0, 2.6, 10.6);
+  mosque.add(portal, полотно, рама, створ);
+  // Два фонаря-чаши у входа: мечеть стоит в центре площади, и её портал
+  // был единственным тёмным местом в центре города.
+  for (const side of [-1, 1] as const) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 3.2, 6), MAT.dark);
+    pole.position.set(side * 3.4, 1.6, 10.8);
+    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.24, 0.42, 8), MAT.gold);
+    bowl.position.set(side * 3.4, 3.4, 10.8);
+    mosque.add(pole, bowl);
+    lights.push({
+      x: CITY.x + side * 3.4,
+      z: CITY.z + (10.8 - 8),
+      y: baseY + 0.3 + 3.4,
+    });
+  }
   const dome = new THREE.Mesh(new THREE.SphereGeometry(7.5, 18, 14), MAT.tealDome);
   dome.scale.set(1, 1.15, 1);
   dome.position.y = 12.5;
