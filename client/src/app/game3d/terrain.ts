@@ -1509,6 +1509,10 @@ const MAT = {
   street: new THREE.MeshStandardMaterial({
     color: 0x9a8a68, roughness: 1, map: plazaTexture(3),
   }),
+  // Огонь в городском фонаре (§232): светящийся шар под стеклом.
+  lampGlow: new THREE.MeshStandardMaterial({
+    color: 0xffcf8a, roughness: 0.4, emissive: 0xffa04a, emissiveIntensity: 1.6,
+  }),
   palmLeaf: new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide, map: foliageTexture('#4f7a3a', 2), normalMap: foliageNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
   white: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85, map: clothTexture('#e8e0d0', 4) }),
   clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1, map: clothTexture('#8b1a1a', 4) }),
@@ -2294,6 +2298,33 @@ function кронаКипариса(
   }
 }
 
+/**
+ * Городской фонарь: столб, чаша, стеклянный фонарь и огонь в нём.
+ *
+ * БЫЛО (§232): столб и золотая чаша. Чаша была пустой — днём читалась как
+ * золотая миска на палке, а ночью свет горел над ней в воздухе, без
+ * фонаря. ТЕПЕРЬ: под чашей стеклянный фонарь с огнём внутри, и источник
+ * света оказывается ВНУТРИ фонаря, а не над ним.
+ *
+ * Возвращает высоту огня над землёй (в локальных координатах группы) —
+ * по ней ставится источник света.
+ */
+function фонарь(parent: THREE.Object3D, x: number, z: number): number {
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 4.4, 6), MAT.dark);
+  pole.position.set(x, 2.2, z);
+  pole.castShadow = true;
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.5, 8), MAT.gold);
+  bowl.position.set(x, 4.65, z);
+  const стекло = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.44, 0.72, 8), MAT.glass);
+  стекло.position.set(x, 5.22, z);
+  const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), MAT.lampGlow);
+  огонь.position.set(x, 5.18, z);
+  const колпак = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.34, 8), MAT.gold);
+  колпак.position.set(x, 5.72, z);
+  parent.add(pole, bowl, стекло, огонь, колпак);
+  return 5.18;
+}
+
 function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1, cityLocal = false): void {
   const palm = new THREE.Group();
   const lean = (Math.random() - 0.5) * 0.28;
@@ -2473,12 +2504,8 @@ function buildQuarters(
   }
   // По фонарю на квартал (ночная подсветка через общий механизм lights)
   for (const [lx, lz] of [[84, 8], [11.7, -75.2], [59.4, 51.4], [-31.5, 69.9]] as const) {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 4.4, 6), MAT.dark);
-    pole.position.set(lx, 2.4, lz);
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.5, 8), MAT.gold);
-    bowl.position.set(lx, 4.8, lz);
-    city.add(pole, bowl);
-    lights.push({ x: CITY.x + lx, z: CITY.z + lz });
+    const высотаОгня = фонарь(city, lx, lz);
+    lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + высотаОгня });
     addCollider(CITY.x + lx, CITY.z + lz, 0.5);
   }
 }
@@ -3293,16 +3320,12 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     куст(city, qx + 6.2, qz - 4.5, ВЕРХ_ПЛИТКИ, 0.95);
   }
 
-  // Городские фонари-чаши
+  // Городские фонари: столб, чаша, стеклянный фонарь с огнём (§232).
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2 + 0.4;
     const x = Math.cos(a) * CITY.radius * 0.55, z = Math.sin(a) * CITY.radius * 0.55;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 4.4, 6), MAT.dark);
-    pole.position.set(x, 2.4, z);
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.5, 8), MAT.gold);
-    bowl.position.set(x, 4.8, z);
-    city.add(pole, bowl);
-    lights.push({ x: CITY.x + x, z: CITY.z + z });
+    const высотаОгня = фонарь(city, x, z);
+    lights.push({ x: CITY.x + x, z: CITY.z + z, y: city.position.y + высотаОгня });
     addCollider(CITY.x + x, CITY.z + z, 0.5);
   }
 
