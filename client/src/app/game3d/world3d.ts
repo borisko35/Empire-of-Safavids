@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -198,6 +198,10 @@ export class World3D {
   private вихри!: DustDevilsHandle;
   /** Марево над горизонтом в жару (§265). */
   private марево!: MirageHandle;
+  /** Дым из печных труб города (§266). */
+  private дымТруб!: Puffs;
+  /** Когда в следующий раз пойдёт клуб из трубы. */
+  private дымТрубТаймер = 0;
   /** Птицы над пустыней и городом (§259). */
   private птицы!: BirdsHandle;
   /** Насколько земля мокрая, 0..1 (§261). */
@@ -918,6 +922,18 @@ private roll = 0;
     this.вихри = createDustDevils(this.scene);
     // Марево над горизонтом в жару (§265).
     this.марево = createMirage(this.scene);
+    // Дым из печных труб (§266): город из жары выглядел выключенным.
+    this.дымТруб = createPuffs(this.scene, {
+      количество: 16,
+      цвет: 0x8f8880,
+      размер: 0.8,
+      рост: 2.4,
+      жизнь: 4.2,
+      подъём: 1.1,
+      разброс: 0.35,
+      непрозрачность: 0.3,
+      затухание: 0.9,
+    });
     // Птицы над пустыней и городом (§259): небо не должно быть пустым.
     this.птицы = createBirds(this.scene);
     this.weather = createWeather(this.scene, audio);
@@ -2127,6 +2143,19 @@ if (isMe && moving) {
       ? 0
       : Math.max(0, Math.min(1, (sunDir.y - 0.12) / 0.45)) * (1 - night) * (1 - this.sky.overcast);
     this.марево.update(dt, now, me.pos.x, me.pos.z, жар);
+    // Дым из труб (§266): клуб из случайной трубы, и не чаще раза в полсекунды.
+    if (дымныеТрубы.length) {
+      this.дымТрубТаймер += dt;
+      if (this.дымТрубТаймер >= 0.5) {
+        this.дымТрубТаймер = 0;
+        const труба = дымныеТрубы[Math.floor(Math.random() * дымныеТрубы.length)];
+        // Дым из дальней трубы не видно: он ушёл бы в туман, а стоил бы кадр.
+        if (Math.hypot(труба.x - me.pos.x, труба.z - me.pos.z) < 90) {
+          this.дымТруб.всплеск(труба.x, труба.y, труба.z);
+        }
+      }
+    }
+    this.дымТруб.update(dt);
 
     // HDRI-окружение пересобирается само, когда небо изменилось достаточно.
     // Состояние собирается здесь — рядом с расчётом света, потому что оба
@@ -2314,6 +2343,7 @@ if (isMe && moving) {
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
     this.марево?.dispose();
+    this.дымТруб?.dispose();
     this.птицы?.dispose();
     this.civilians?.dispose();
     this.townfolk?.dispose();
