@@ -2410,6 +2410,34 @@ function buildQuarters(
     city.add(ave);
     const nx = -q.x / len, nz = -q.z / len;
 
+    // ── Фонари вдоль проспекта (§245) ──
+    //
+    // БЫЛО: на весь город шесть фонарей (пять городских и четыре квартальных),
+    // а проспектов четыре и улиц десятки. Ночью город выключался целиком:
+    // тёмная плита, тёмные дома, и идти некуда.
+    //
+    // ДВА ФОНАРЯ НА ПРОСПЕКТ, ПОПЕРЕМЕННО ПО СТОРОНАМ: один фонарь на
+    // проспект — это дорожка с ночником, а через два-три метра фонари
+    // становились бы стеной огней.
+    for (let i = 0; i < 2; i++) {
+      const d = r0 + 14 + i * ((r1 - r0 - 20) / 2);
+      const сторона = i % 2 ? 1 : -1;
+      const lx = (q.x / len) * d + nx * сторона * 3.4;
+      const lz = (q.z / len) * d + nz * сторона * 3.4;
+      const земля = groundHeight(CITY.x + lx, CITY.z + lz) - city.position.y;
+      const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.4, 6), MAT.dark);
+      столб.position.set(lx, земля + 1.7, lz);
+      столб.castShadow = true;
+      const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.24, 0.42, 8), MAT.gold);
+      чаша.position.set(lx, земля + 3.6, lz);
+      const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), MAT.lampGlow);
+      огонь.position.set(lx, земля + 3.55, lz);
+      city.add(столб, чаша, огонь);
+      // Источник света — в фонаре, как у городских (§232).
+      lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + земля + 3.55 });
+      addCollider(CITY.x + lx, CITY.z + lz, 0.35);
+    }
+
     // ── Ворота квартала (§235) ──
     //
     // Проспект упирался в пустое место: квартал был группами домов на
