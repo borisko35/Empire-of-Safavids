@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // 3D-мир: рельеф, биомы, вода, города — Empire of Safavids
 // ============================================================
 // Бесшовный ландшафт 6350x6350: поля вокруг Исфахана, пустыня с
@@ -4116,17 +4116,74 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   return city;
 }
 
-/** Прилавок с товаром (кувшины / ящики / рулоны) */
+/**
+ * Прилавок с товаром (кувшины / ящики / рулоны).
+ *
+ * §290. БЫЛО: стол — ящик 3×1×1.6, навес — наклонённая плоская плита, кувшины —
+ * цилиндры, ящики — сплошные бруски. Лавка читалась как ящик с плоской
+ * крышей, а товар — как гильзы.
+ *
+ * ТЕПЕРЬ: столешница на четырёх ножках с полкой снизу; навес — купол из
+ * полотна с бахромой; кувшины — гончарные (тело вращением профиля, горло и
+ * ручка); ящики — из реек, а не сплошные; корзины — плетёные, с ободком и
+ * дужкой.
+ */
 function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE.Group {
   const stall = new THREE.Group();
-  const table = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 1.6), MAT.wood);
-  table.position.y = 0.8; table.castShadow = true;
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.2, 2.4), canopies[kind % 3]);
-  roof.position.y = 2.6; roof.rotation.x = 0.16;
+  // Столешница.
+  const table = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 1.6), MAT.wood);
+  table.position.y = 0.94; table.castShadow = true;
+  // Ножки: у стола, стоящего на земле, они есть.
+  for (const [lx, lz] of [[-1.35, -0.65], [1.35, -0.65], [-1.35, 0.65], [1.35, 0.65]] as const) {
+    const ножка = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.94, 6), MAT.wood);
+    ножка.position.set(lx, 0.47, lz);
+    ножка.castShadow = true;
+    stall.add(ножка);
+  }
+  // Полка снизу: под полкой стоит товар, который видно снизу.
+  const полка = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.08, 1.2), MAT.wood);
+  полка.position.y = 0.36;
+  stall.add(полка);
+  // Навес: купол из полотна, а не плоская плита. Половина цилиндра вдоль
+  // прилавка, дугой вверх; полотно двустороннее — из-под навеса его видно.
+  // Геометрия строится сразу в нужном положении: поворотами цилиндра дуга
+  // вставала боком.
+  const полотно = (canopies[kind % 3] as THREE.MeshStandardMaterial).clone();
+  полотно.side = THREE.DoubleSide;
+  const дуга: number[] = [];
+  const полосы: number[] = [];
+  const дуг = 8;
+  const длина = 3.5;
+  for (let i = 0; i <= дуг; i++) {
+    const a = -Math.PI / 2 + (Math.PI * i) / дуг;
+    const y = Math.cos(a) * 1.25;
+    const z = Math.sin(a) * 1.25;
+    дуга.push(-длина / 2, y, z);
+    дуга.push(длина / 2, y, z);
+  }
+  for (let i = 0; i < дуг; i++) {
+    const a = i * 2;
+    полосы.push(a, a + 1, a + 3, a, a + 3, a + 2);
+  }
+  const геометрияНавеса = new THREE.BufferGeometry();
+  геометрияНавеса.setAttribute('position', new THREE.BufferAttribute(new Float32Array(дуга), 3));
+  геометрияНавеса.setIndex(полосы);
+  геометрияНавеса.computeVertexNormals();
+  const roof = new THREE.Mesh(геометрияНавеса, полотно);
+  roof.position.set(0, 2.42, 0);
+  roof.castShadow = true;
+  stall.add(roof);
+  // Бахрома по краю навеса: полотно не обрывается ровно.
+  for (let j = 0; j < 9; j++) {
+    const бахрома = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.3), canopies[(kind + j) % 3]);
+    бахрома.position.set(-1.6 + j * 0.4, 2.42, 1.16);
+    бахрома.rotation.z = (j % 2 ? 0.12 : -0.12);
+    stall.add(бахрома);
+  }
   const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.6, 5), MAT.wood);
   p1.position.set(-1.4, 1.3, -0.8);
   const p2 = p1.clone(); p2.position.x = 1.4;
-  stall.add(table, roof, p1, p2);
+  stall.add(p1, p2);
   // ── Товар на прилавке (§237) ──
   //
   // Лавка стояла под навесом, и товар на ней тонул в его тени: с улицы
@@ -4137,25 +4194,67 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
     new THREE.BoxGeometry(3.02, 0.72, 0.06),
     canopies[kind % 3],
   );
-  полотнище.position.set(0, 0.85, 0.83);
+  полотнище.position.set(0, 0.72, 0.83);
   stall.add(полотнище);
   if (kind === 0) {
     for (let j = 0; j < 4; j++) {
-      const jar = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.42, 7), MAT.sandstone);
-      jar.position.set(-1 + j * 0.65, 1.5, (j % 2 ? 0.25 : -0.25));
-      stall.add(jar);
-      // Крышка: без неё горшок читается обручем.
-      const крышка = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.07, 7), MAT.sandstoneDark);
-      крышка.position.set(-1 + j * 0.65, 1.74, (j % 2 ? 0.25 : -0.25));
-      stall.add(крышка);
+      // Гончарный кувшин: тело вращением профиля, горло, ручка. Цилиндр
+      // читался как гильза.
+      const профиль: THREE.Vector2[] = [];
+      for (let i = 0; i <= 7; i++) {
+        const t = i / 7;
+        // Расширяется книзу, сужается к плечику.
+        профиль.push(new THREE.Vector2(0.06 + Math.sin(t * Math.PI * 0.92) * 0.14, t * 0.34));
+      }
+      const кувшин = new THREE.Mesh(new THREE.LatheGeometry(профиль, 9), MAT.sandstone);
+      кувшин.position.set(-1 + j * 0.65, 1.0, j % 2 ? 0.25 : -0.25);
+      кувшин.castShadow = true;
+      stall.add(кувшин);
+      // Горло.
+      const горло = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.11, 7), MAT.sandstoneDark);
+      горло.position.set(-1 + j * 0.65, 1.38, j % 2 ? 0.25 : -0.25);
+      stall.add(горло);
+      // Ручка.
+      const ручка = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 5, 10, Math.PI), MAT.sandstoneDark);
+      ручка.position.set(-1 + j * 0.65, 1.3, j % 2 ? 0.25 : -0.25);
+      ручка.rotation.set(Math.PI / 2, 0, 0);
+      stall.add(ручка);
     }
   } else if (kind === 1) {
-    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.7), MAT.wood);
-    crate.position.set(0.4, 1.55, 0);
-    crate.rotation.y = 0.3;
-    const crate2 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.6), MAT.wood);
-    crate2.position.set(-0.7, 1.5, 0.1);
-    stall.add(crate, crate2);
+    // Ящик из реек: сплошной брусок читался как кирпич.
+    const ящик = (x: number, y: number, z: number, w: number, h: number, d: number, поворот: number) => {
+      const г = new THREE.Group();
+      г.position.set(x, y, z);
+      г.rotation.y = поворот;
+      // Угловые стойки.
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.07, h, 0.07), MAT.wood);
+        стойка.position.set((sx * w) / 2, h / 2, (sz * d) / 2);
+        г.add(стойка);
+      }
+      // Планки по бокам: между ними щели, и ящик читается как ящик.
+      for (let i = 0; i < 2; i++) {
+        const yy = h * (0.25 + i * 0.5);
+        const бок = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.3, 0.05), MAT.wood);
+        бок.position.set(0, yy, d / 2);
+        г.add(бок);
+        const бок2 = бок.clone(); бок2.position.z = -d / 2;
+        г.add(бок2);
+        const торец = new THREE.Mesh(new THREE.BoxGeometry(0.05, h * 0.3, d), MAT.wood);
+        торец.position.set(w / 2, yy, 0);
+        г.add(торец);
+        const торец2 = торец.clone(); торец2.position.x = -w / 2;
+        г.add(торец2);
+      }
+      // Дно.
+      const дно = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), MAT.wood);
+      дно.position.y = 0.025;
+      г.add(дно);
+      stall.add(г);
+      return г;
+    };
+    ящик(0.4, 1.0, 0, 0.9, 0.55, 0.7, 0.3);
+    ящик(-0.7, 1.0, 0.1, 0.7, 0.45, 0.6, -0.2);
     // Свитки ткани поверх ящиков: товар виден и с улицы.
     for (let j = 0; j < 2; j++) {
       const свиток = new THREE.Mesh(
@@ -4170,14 +4269,27 @@ function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE
     for (let j = 0; j < 3; j++) {
       const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 8), canopies[(kind + j) % 3]);
       roll.rotation.z = Math.PI / 2;
-      roll.position.set(-0.7 + j * 0.7, 1.42, 0.2);
+      roll.position.set(-0.7 + j * 0.7, 1.16, 0.2);
       stall.add(roll);
     }
+    // Плетёная корзина: расширяющийся конус с ободком и дужкой.
+    const корзина = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.24, 0.4, 10), MAT.sand);
+    корзина.position.set(1.15, 1.2, -0.35);
+    корзина.castShadow = true;
+    stall.add(корзина);
+    const ободок = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 5, 12), MAT.sand);
+    ободок.position.set(1.15, 1.4, -0.35);
+    ободок.rotation.x = Math.PI / 2;
+    stall.add(ободок);
+    const дужка = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.018, 5, 12, Math.PI), MAT.wood);
+    дужка.position.set(1.15, 1.4, -0.35);
+    дужка.rotation.set(0, Math.PI / 2, 0);
+    stall.add(дужка);
   }
   // Мешки у края: полая лавка выглядит полой, а набитая — нет.
   for (const s of [-1, 1] as const) {
     const мешок = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), MAT.sand);
-    мешок.position.set(s * 1.18, 1.58, -0.42);
+    мешок.position.set(s * 1.18, 1.28, -0.42);
     мешок.scale.set(1, 1.25, 0.9);
     мешок.castShadow = true;
     stall.add(мешок);
