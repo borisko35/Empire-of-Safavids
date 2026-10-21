@@ -2093,7 +2093,7 @@ if (isMe && moving) {
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.
-    this.townfolk.update(dt);
+    this.townfolk.update(dt, me.pos.x, me.pos.z);
     updateCows(this.cowMixers, dt);
     this.roadTraffic.update(dt, now, me.pos.x, me.pos.z, night);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
