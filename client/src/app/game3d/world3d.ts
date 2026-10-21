@@ -2041,7 +2041,7 @@ if (isMe && moving) {
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.
     this.townfolk.update(dt);
     updateCows(this.cowMixers, dt);
-    this.roadTraffic.update(dt, now, me.pos.x, me.pos.z);
+    this.roadTraffic.update(dt, now, me.pos.x, me.pos.z, night);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
     // Солнце/луна по дуге: источник света следует за светилом.

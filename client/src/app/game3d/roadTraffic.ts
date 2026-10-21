@@ -24,8 +24,10 @@ export interface RoadTrafficHandle {
   /**
    * px/pz — позиция игрока. Нужна, чтобы не рисовать то, чего не видно:
    * дороги длинные, а караваны и путники на них всегда идут.
+   *
+   * night — 0 днём, 1 ночью: по нему горят фонари караванов (§254).
    */
-  update(dt: number, now: number, px: number, pz: number): void;
+  update(dt: number, now: number, px: number, pz: number, night?: number): void;
   /** Кликабельные путники: у них userData.npcPanel и userData.npcName */
   clickTargets: THREE.Object3D[];
   dispose(): void;
@@ -55,7 +57,31 @@ const M = {
   ],
   dark: new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 1, map: darkStoneTexture('#2a2018', 2), normalMap: darkStoneNormalTexture(2), normalScale: new THREE.Vector2(0.3, 0.3) }),
   gold: new THREE.MeshStandardMaterial({ color: 0xc9a84c, roughness: 0.4, metalness: 0.5, map: goldTexture('#c9a84c', 2), normalMap: goldNormalTexture(2), normalScale: new THREE.Vector2(0.4, 0.4) }),
+  // Огонь в фонаре каравана (§254): тот же, что у городских фонарей.
+  fire: new THREE.MeshStandardMaterial({ color: 0xffcf8a, roughness: 0.4, emissive: 0xffa04a, emissiveIntensity: 1.6 }),
 };
+
+/**
+ * Фонарь в руке у головы каравана (§254).
+ *
+ * БЫЛО: караваны ходили по дорогам и ночью, и в темноте читались чёрными
+ * силуэтами — дорога была пуста. ТЕПЕРЬ: у головы колонны фонарь, который
+ * светит и на дорогу, и на сами верблюды.
+ *
+ * Возвращает и фонарь, и точку огня в мировых координатах — источник света
+ * создаёт createRoadTraffic, потому что он должен двигаться вместе с караваном.
+ */
+function makeLantern(): { группа: THREE.Group; высота: number } {
+  const группа = new THREE.Group();
+  const коробка = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.26, 0.2), M.gold);
+  коробка.position.y = 0.13;
+  const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), M.fire);
+  огонь.position.y = 0.13;
+  const колпак = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.1, 6), M.gold);
+  колпак.position.y = 0.31;
+  группа.add(коробка, огонь, колпак);
+  return { группа, высота: 0.13 };
+}
 
 /** Одна дорога: у неё есть настоящая длина в метрах. */
 type RoadDef = (typeof ROAD_PATHS)[number];
@@ -304,6 +330,14 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
 
   const travellers: Walker[] = [];
   const caravanPaths: typeof ROAD_PATHS = [];
+  // Фонари караванов (§254): у каждой колонны один, у головы.
+  const фонари: {
+    лидер: Walker;
+    свет: THREE.PointLight;
+    высота: number;
+    локX: number;
+    локZ: number;
+  }[] = [];
 
   // ── Караваны ───────────────────────────────────────────────
   // Идут по дальним дорогам, чтобы не резать игроку путь в город. Три штуки
@@ -342,6 +376,20 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       w.len = roadLength(road);
       w.road = road;
       travellers.push(w);
+    });
+    // Фонарь у головы колонны (§254) и источник света при нём.
+    const глава = column[0];
+    const фонарь = makeLantern();
+    фонарь.группа.position.set(0.34, 0.95, 0.22);
+    глава.group.add(фонарь.группа);
+    const свет = new THREE.PointLight(0xffa04a, 0, 18, 1.8);
+    scene.add(свет);
+    фонари.push({
+      лидер: глава,
+      свет,
+      высота: 0.95 + фонарь.высота,
+      локX: 0.34,
+      локZ: 0.22,
     });
   });
 
@@ -384,7 +432,26 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
     travellers.push(w);
   }
 
-  function update(dt: number, now: number, px: number, pz: number): void {
+  function update(dt: number, now: number, px: number,pz: number, night = 0): void {
+    // Фонари караванов (§254): едут вместе с колонной и горят по ночному
+    // правилу — днём тише, ночью в полную силу. Вдали гаснут: каравана не
+    // видно, а источник в сцене всё равно стоит кадру.
+    for (const ф of фонари) {
+      const p = ф.лидер.group.position;
+      if (Math.hypot(p.x - px, p.z - pz) > VISIBLE_DIST) {
+        ф.свет.intensity = 0;
+        continue;
+      }
+      const a = ф.лидер.group.rotation.y;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      ф.свет.position.set(
+        p.x + ф.локX * ca + ф.локZ * sa,
+        p.y + ф.высота,
+        p.z - ф.локX * sa + ф.локZ * ca,
+      );
+      ф.свет.intensity = 1.6 * (0.35 + night * 0.65);
+    }
     for (const w of travellers) {
       const road = w.road;
       if (!road) continue;

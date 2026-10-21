@@ -116,8 +116,10 @@ describe('По дорогам кто-то идёт', () => {
   });
 
   it('есть покадровое обновление, иначе они снова застынут', () => {
-    expect(traffic).toMatch(/update\(dt: number, now: number, px: number, pz: number\)/);
-    expect(world).toMatch(/this\.roadTraffic\.update\(dt, now, me\.pos\.x, me\.pos\.z\)/);
+    // С 21 октября 2026 (§254) в обновление добавилось время суток: по нему
+    // горят фонари караванов.
+    expect(traffic).toMatch(/update\(dt: number, now: number, px: number, pz: number, night\?: number\)/);
+    expect(world).toMatch(/this\.roadTraffic\.update\(dt, now, me\.pos\.x, me\.pos\.z, night\)/);
   });
 
   it('движение меняет положение, а не только рисует', () => {
