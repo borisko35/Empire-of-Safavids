@@ -2600,6 +2600,25 @@ function buildQuarters(
     addCollider(CITY.x + д.x, CITY.z + д.z, Math.max(д.w, д.d) / 2 + 0.4);
   }
 
+  // ── Свет в пригороде (§247) ──
+  //
+  // Ночью пригород был выключен: у городских ворот и у мечети фонари есть, а
+  // здесь — только склады в темноте, и с городской стены окраина читалась как
+  // выключенная. Три фонаря: у входа в пригород, между домами и у мельницы.
+  for (const [lx, lz] of [[100, 92], [124, 108], [112, 82]] as const) {
+    const земля = groundHeight(CITY.x + lx, CITY.z + lz) - city.position.y;
+    const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.4, 6), MAT.dark);
+    столб.position.set(lx, земля + 1.7, lz);
+    столб.castShadow = true;
+    const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.24, 0.42, 8), MAT.gold);
+    чаша.position.set(lx, земля + 3.6, lz);
+    const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), MAT.lampGlow);
+    огонь.position.set(lx, земля + 3.55, lz);
+    city.add(столб, чаша, огонь);
+    lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + земля + 3.55 });
+    addCollider(CITY.x + lx, CITY.z + lz, 0.35);
+  }
+
   // Базар: два ряда лавок
   const stallKinds = [0, 1, 2, 0, 1, 2] as const;
   const stallSpots: [number, number][] = [[78, -5], [78, 5], [84, -5], [84, 5], [90, -4], [90, 5]];
