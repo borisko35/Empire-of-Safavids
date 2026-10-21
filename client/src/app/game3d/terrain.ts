@@ -8161,6 +8161,50 @@ export function buildMosqueCourtyard(scene: THREE.Scene): void {
     addCollider(c.x - hx, c.z + wz, 1.1);
     addCollider(c.x + hx, c.z + wz, 1.1);
   }
+
+  // ── Двор мечети снаружи (§243) ──
+  //
+  // БЫЛО: мечеть стояла на голом песке — к воротам приходилось идти по
+  // песку, и место читалось как модель, поставленная в пустыню.
+  // ТЕПЕРЬ: мостовая от дороги к воротам, кипарисы по сторонам и два
+  // фонаря у входа.
+  //
+  // ПРО МОДЕЛЬ: у неё own стены и купол (габариты x −30…−10, z −485…−470),
+  // поэтому ограду внутри двора ставить нельзя — она оказывается ВНУТРИ
+  // модели и её не видно. Первая версия правки ставила именно её.
+  {
+    // Мостовая к воротам (ворота — на стороне +z).
+    const подход = new THREE.Mesh(
+      new THREE.BoxGeometry(6.0, 0.14, 16.0),
+      MAT.sandstoneDark,
+    );
+    подход.position.set(c.x, 0.07, c.z + hz + 8);
+    подход.receiveShadow = true;
+    scene.add(подход);
+    // Кипарисы по сторонам подхода.
+    for (const s of [-1, 1] as const) {
+      for (let i = 0; i < 2; i++) {
+        const x = c.x + s * (4.6 + i * 1.6);
+        const z = c.z + hz + 5 + i * 7;
+        кронаКипариса(scene, x, groundHeight(x, z), z, 0.85 + i * 0.1, MAT.foliageDark);
+        addCollider(x, z, 0.6);
+      }
+    }
+    // Два фонаря у входа: тёплый свет на ступенях.
+    for (const s of [-1, 1] as const) {
+      const x = c.x + s * 3.4;
+      const z = c.z + hz + 1.6;
+      const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.2, 6), MAT.dark);
+      столб.position.set(x, 1.6, z);
+      столб.castShadow = true;
+      const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.22, 0.4, 8), MAT.gold);
+      чаша.position.set(x, 3.4, z);
+      const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), MAT.lampGlow);
+      огонь.position.set(x, 3.36, z);
+      scene.add(столб, чаша, огонь);
+      addCollider(x, z, 0.35);
+    }
+  }
 }
 
 // ── Факелы у ворот караван-сарая ──────────────────────────────────
