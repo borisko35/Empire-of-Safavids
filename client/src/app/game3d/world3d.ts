@@ -35,6 +35,7 @@ import { waterMaterials, followSeaToCamera, качающиеся, setGroundState
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
+import { createMirage, type MirageHandle } from './mirage';
 import { createBirds, type BirdsHandle } from './birds';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
@@ -195,6 +196,8 @@ export class World3D {
   private дым: { дым: Puffs; x: number; y: number; z: number; таймер: number }[] = [];
   /** Пыльные вихри в пустыне (§257). */
   private вихри!: DustDevilsHandle;
+  /** Марево над горизонтом в жару (§265). */
+  private марево!: MirageHandle;
   /** Птицы над пустыней и городом (§259). */
   private птицы!: BirdsHandle;
   /** Насколько земля мокрая, 0..1 (§261). */
@@ -913,6 +916,8 @@ private roll = 0;
     this.roadTraffic = createRoadTraffic(this.scene);
     // Пыльные вихри в пустыне (§257): ветер поднимает песок сам по себе.
     this.вихри = createDustDevils(this.scene);
+    // Марево над горизонтом в жару (§265).
+    this.марево = createMirage(this.scene);
     // Птицы над пустыней и городом (§259): небо не должно быть пустым.
     this.птицы = createBirds(this.scene);
     this.weather = createWeather(this.scene, audio);
@@ -2109,6 +2114,20 @@ if (isMe && moving) {
     const useMoon = sunDir.y < 0.05;
     const lightDir = useMoon ? sunDir.clone().multiplyScalar(-1) : sunDir;
 
+    // Марево в жару (§265): над горизонтом в полдень в ясную погоду. В пасмурок
+    // и в дождь марева нет, ночью — тоже.
+    //
+    // Погода проверяется не по «ясно», а по «не жарко»: в мире чаще всего
+    // стоит 'cloudy', и при нём марево должно быть — облака гасят солнце, но
+    // не жар. Гасит его уже пасмурность неба.
+    const неЖарко = this.currentWeather === 'rain' || this.currentWeather === 'storm'
+      || this.currentWeather === 'snow' || this.currentWeather === 'sandstorm'
+      || this.currentWeather === 'fog';
+    const жар = неЖарко
+      ? 0
+      : Math.max(0, Math.min(1, (sunDir.y - 0.12) / 0.45)) * (1 - night) * (1 - this.sky.overcast);
+    this.марево.update(dt, now, me.pos.x, me.pos.z, жар);
+
     // HDRI-окружение пересобирается само, когда небо изменилось достаточно.
     // Состояние собирается здесь — рядом с расчётом света, потому что оба
     // читают одно и то же: направление на солнце, глубину ночи и пасмурность.
@@ -2294,6 +2313,7 @@ if (isMe && moving) {
     this.npcs?.dispose();
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
+    this.марево?.dispose();
     this.птицы?.dispose();
     this.civilians?.dispose();
     this.townfolk?.dispose();
