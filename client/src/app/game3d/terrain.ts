@@ -840,7 +840,7 @@ export { addCollider };
 
 function fract(v: number): number { return v - Math.floor(v); }
 
-function hash2(x: number, y: number): number {
+export function hash2(x: number, y: number): number {
   return fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453);
 }
 
@@ -1550,7 +1550,16 @@ export const сетиРыбаков: { x: number; z: number }[] = [];
  * ТЕПЕРЬ: три чайки на досках причала, и места их записываются — сторож
  * проверяет, что чайки стоят на причале, а не в поле.
  */
-export const чайкиНаПричале: { x: number; z: number }[] = [];
+export const чайкиНаПричале: {
+  x: number;
+  z: number;
+  группа: THREE.Group;
+  base: THREE.Vector3;
+  /** 0 — сидит, 1 — взлетает, 2 — улетел, 3 — возвращается (§278). */
+  состояние: number;
+  /** Сколько времени в текущем состоянии, секунды. */
+  t: number;
+}[] = [];
 
 /** Текстура сети: тонкие нити квадратом по холсту. */
 function netTexture(): THREE.CanvasTexture {
@@ -4493,18 +4502,34 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
       const lz = Math.cos(кОзеру) * 12 - сдвиг * Math.cos(кОзеру) + бокZ;
       const земля = groundHeight(PORT.x + lx, PORT.z + lz) - g.position.y;
       const чайка = new THREE.Group();
+      // ПОЛОЖЕНИЕ ГРУППЫ, А НЕ ТОЛЬКО ЕЁ ДЕТЕЛЕЙ. Раньше детали (тело, хвост,
+      // клюв) стояли на своих местах, а сама группа — в нуле, то есть все чайки
+      // стояли в центре порта, а не на причале. Записанные места были верные,
+      // а фигуры стояли в другом месте, и никто этого не видел: проверка смотрела
+      // на список, а не на сцену.
+      чайка.position.set(lx, земля, lz);
       const тело = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6), MAT.white);
       тело.scale.set(0.8, 0.8, 1.35);
-      тело.position.y = земля + 0.78;
+      тело.position.y = 0.78;
       const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.28), MAT.white);
-      хвост.position.set(0, земля + 0.76, 0.2);
+      хвост.position.set(0, 0.76, 0.2);
       const клюв = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.13, 4), MAT.clothRed);
       клюв.rotation.x = -Math.PI / 2;
-      клюв.position.set(0, земля + 0.78, -0.26);
+      клюв.position.set(0, 0.78, -0.26);
       чайка.add(тело, хвост, клюв);
       чайка.rotation.y = кОзеру + Math.PI;
       g.add(чайка);
-      чайкиНаПричале.push({ x: PORT.x + lx, z: PORT.z + lz });
+      // Место чайки — мировое (по нему сторож проверяет, что она на причале),
+      // плюс сама фигура и её исходная поза: чайка улетает и возвращается
+      // (§278), а для этого нужно знать, где она стояла.
+      чайкиНаПричале.push({
+        x: PORT.x + lx,
+        z: PORT.z + lz,
+        группа: чайка,
+        base: чайка.position.clone(),
+        состояние: 0,
+        t: 0,
+      });
     }
     // Сети рыбаков у кромки воды (§274): на порту есть рыбак, лодки и озеро,
     // а промысла не видно — берег пустой. Сеть стоит наклонно: жерди и

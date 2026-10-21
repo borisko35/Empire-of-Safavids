@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира, чайкиНаПричале, hash2 } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -2324,6 +2324,50 @@ if (isMe && moving) {
         д.дым.всплеск(д.x, д.y, д.z);
       }
       д.дым.update(dt);
+    }
+    // Чайки слетают с причала, когда игрок подходит (§278): живая птица от
+    // человека улетает, а каменная — нет.
+    for (const ч of чайкиНаПричале) {
+      ч.t += dt;
+      const близко = Math.hypot(ч.x - me.pos.x, ч.z - me.pos.z) < 5;
+      if (ч.состояние === 0 && близко) {
+        // Взлёт: вверх и в сторону от игрока. Сторона — по детерминированному
+        // генератору, а не случайно: после перезагрузки страницы чайка должна
+        // улететь так же.
+        const к = hash2(Math.round(ч.x), Math.round(ч.z));
+        const угол = Math.atan2(ч.z - me.pos.z, ч.x - me.pos.x) + (к - 0.5) * 1.4;
+        ч.состояние = 1;
+        ч.t = 0;
+        ч.группа.userData.угол = угол;
+      }
+      if (ч.состояние === 1) {
+        // Поднимается и уходит: за полторы секунды — метр вверх и три в сторону.
+        const k = Math.min(1, ч.t / 1.5);
+        const угол = ч.группа.userData.угол as number;
+        ч.группа.position.set(
+          ч.base.x + Math.cos(угол) * 3 * k,
+          ч.base.y + 1.2 * k,
+          ч.base.z + Math.sin(угол) * 3 * k,
+        );
+        ч.группа.rotation.y = угол + Math.PI;
+        if (ч.t > 1.5) { ч.состояние = 2; ч.t = 0; }
+      } else if (ч.состояние === 2) {
+        // Улетел и ждёт, пока отойдёшь.
+        if (ч.t > 7) { ч.состояние = 3; ч.t = 0; }
+      } else if (ч.состояние === 3) {
+        // Возвращается на место.
+        const k = Math.max(0, 1 - ч.t / 2);
+        const угол = ч.группа.userData.угол as number;
+        ч.группа.position.set(
+          ч.base.x + Math.cos(угол) * 3 * k,
+          ч.base.y + 1.2 * k,
+          ч.base.z + Math.sin(угол) * 3 * k,
+        );
+        if (ч.t > 2) {
+          ч.состояние = 0;
+          ч.группа.position.copy(ч.base);
+        }
+      }
     }
     // Лодки у причала качаются вместе с водой (§277).
     for (const л of лодкиУПира) {
