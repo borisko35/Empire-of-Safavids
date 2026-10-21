@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundWet } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -199,6 +199,8 @@ export class World3D {
   private птицы!: BirdsHandle;
   /** Насколько земля мокрая, 0..1 (§261). */
   private мокрота = 0;
+  /** Насколько земля заснежена, 0..1 (§262). */
+  private снег = 0;
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
   private currentWeather: WeatherKind = 'clear';
@@ -2223,13 +2225,16 @@ if (isMe && moving) {
     this.вихри.update(dt, now, me.pos.x, me.pos.z);
     // Птицы (§259): стая облетает игрока по дуге.
     this.птицы.update(dt, now, me.pos.x, me.pos.z);
-    // Мокрая земля (§261): в дождь песок и мостовая темнеют и блестят, а
-    // после дождя ещё некоторое время мокрые — сохнет земля медленнее, чем
-    // набирает воду.
+    // Мокрая земля (§261) и снег на ней (§262): в дождь песок и мостовая
+    // темнеют и блестят, после дождя ещё некоторое время мокрые; в снег земля
+    // белеет, и снег лежит на ней долго — дольше, чем сохнет вода.
     const идётДождь = this.currentWeather === 'rain' || this.currentWeather === 'storm';
     if (идётДождь) this.мокрота = Math.min(1, this.мокрота + dt * 0.7);
     else this.мокрота = Math.max(0, this.мокрота - dt * 0.05);
-    setGroundWet(this.мокрота);
+    const идётСнег = this.currentWeather === 'snow';
+    if (идётСнег) this.снег = Math.min(1, this.снег + dt * 0.25);
+    else this.снег = Math.max(0, this.снег - dt * 0.02);
+    setGroundState(this.мокрота, this.снег);
     // Ветер качает зелень (§258): кусты, трава и кроны деревьев стояли
     // неподвижно, хотя ветер в мире есть. В буре качание вдвое сильнее.
     const ветер = this.currentWeather === 'sandstorm' ? 2 : 1;
