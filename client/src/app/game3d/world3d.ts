@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -2324,6 +2324,12 @@ if (isMe && moving) {
         д.дым.всплеск(д.x, д.y, д.z);
       }
       д.дым.update(dt);
+    }
+    // Лодки у причала качаются вместе с водой (§277).
+    for (const л of лодкиУПира) {
+      л.группа.position.y = л.y + Math.sin(now * 0.85 + л.фаза) * 0.09;
+      л.группа.rotation.z = Math.sin(now * 0.62 + л.фаза) * 0.035;
+      л.группа.rotation.x = Math.sin(now * 0.47 + л.фаза * 1.7) * 0.02;
     }
     // Пыльные вихри (§257): бродят по песку рядом с игроком.
     this.вихри.update(dt, now, me.pos.x, me.pos.z);
