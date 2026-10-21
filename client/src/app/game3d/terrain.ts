@@ -8753,7 +8753,19 @@ export const REGION_TOWNS: RegionTownDef[] = [
  * коллайдеры внутри Исфахана. Поэтому здесь свои локальные деревья, а
  * коллайдеры считаются в мировых координатах явно.
  */
-export function buildRegionTowns(scene: THREE.Scene): void {
+export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z: number }[] {
+  // Фонари городов регионов (§250).
+  //
+  // БЫЛО: в городах регионов были стены, дома, ряды и колодец — и НИ ОДНОГО
+  // источника света. Ночью такой город стоял чёрным силуэтом: игрок, выбравший
+  // регион, возрождался у ворот и не видел ничего.
+  //
+  // ТЕПЕРЬ: два фонаря на город — у колодца на площади и у ворот. Фонарь тот
+  // же, что и в столице (§232), со стеклом и огнём.
+  //
+  // Возвращаются мировые координаты огней: источники света создаёт world3d,
+  // потому что свет — его дело (там же и ночное правило).
+  const огни: { x: number; y: number; z: number }[] = [];
   for (const t of REGION_TOWNS) {
     const g = new THREE.Group();
     const baseY = groundHeight(t.x, t.z);
@@ -9027,6 +9039,16 @@ export function buildRegionTowns(scene: THREE.Scene): void {
       }
     }
 
+    // ── Фонари: у колодца и у ворот (§250) ────────────────────
+    //
+    // Места выбраны так, чтобы не попасть в постройки: у ворот стоит
+    // айван, у колодца ряды, а по кольцу дома (кроме сектора ворот).
+    for (const [lx, lz] of [[0, -t.radius * 0.46], [0, t.radius * 0.82]] as const) {
+      const высотаОгня = фонарь(g, lx, lz);
+      огни.push({ x: t.x + lx, y: baseY + высотаОгня, z: t.z + lz });
+      коллайдер(lx, lz, 0.5);
+    }
+
     // ── Зелень по кольцу, кроме сектора ворот ──────────────────
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * Math.PI * 2 + 0.9;
@@ -9037,6 +9059,7 @@ export function buildRegionTowns(scene: THREE.Scene): void {
     scene.add(g);
   }
 
+  return огни;
 }
 
 /**
