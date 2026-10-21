@@ -17,7 +17,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // координатам, иначе игрок увидит одно, а проверят другое.
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
-import { CITY, addCollider } from './terrain';
+import { CITY, addCollider, windowPane } from './terrain';
 // Модели закрыты входом: заголовок ставится при создании загрузчика
 // (см. modelAccess.ts).
 import { сВходом } from './modelAccess';
@@ -1520,9 +1520,17 @@ export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
       g.add(stele);
     }
     const lamp = box(0.5, 0.5, 0.5, M.lamp, 2.1, 3.1, 3.1);
-    const win1 = box(1.4, 1.2, 0.2, M.teal, -2.9, 2.6, 3.05);
-    const win2 = box(1.4, 1.2, 0.2, M.teal, 2.9, 1.2, 3.05);
-    g.add(body, roof, frame, door, sign, lamp, win1, win2);
+    // ОКНА — ОБЩИЕ С ГОРОДОМ (§233). Раньше здесь стояли плоские бирюзовые
+    // плашки 1.4 x 1.2: они читались как наклейки, а не как окна, и дом был
+    // голой коробкой с двумя пятнами. Теперь это те же окна, что в домах
+    // Исфахана и на четырёх местах (§222, §224): стекло, рама, перекладина и
+    // стойка.
+    const win1 = windowPane(-2.9, 2.6, 3.02, 0, 1.4, 1.2);
+    const win2 = windowPane(2.9, 1.2, 3.02, 0, 1.4, 1.2);
+    // Пояс под кровлей: без него стена в четыре с половиной метра — просто
+    // коробка, и дом не отличается от сарая.
+    const пояс = box(8.2, 0.2, 6.2, M.wallDark, 0, 4.2, 0);
+    g.add(body, roof, frame, door, sign, lamp, win1, win2, пояс);
     g.position.set(wx, 0.4, wz);
     g.rotation.y = faceRy;
     scene.add(g);

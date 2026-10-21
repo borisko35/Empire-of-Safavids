@@ -1158,7 +1158,7 @@ export function isRoad(x: number, z: number): boolean {
  * только у части зданий. Теперь любое окно строится этой же функцией, и
  * мастерская, таможня и ханза получают то же стекло с тем же средником.
  */
-function windowPane(
+export function windowPane(
   cx: number, cy: number, faceZ: number, rotY: number,
   W = 0.9, H = 1.3,
 ): THREE.Group {

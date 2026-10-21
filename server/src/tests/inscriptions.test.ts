@@ -328,7 +328,21 @@ function читатьКонстанту(имя: string): Record<string, number> 
  */
 function читатьКоробку(имя: string): { w: number; h: number; d: number; x: number; y: number; z: number } | null {
   const m = new RegExp(`const ${имя} = box\\(([^)]*)\\)`).exec(interiorsSrc);
-  if (!m) return null;
+  if (!m) {
+    // §233: окна домов кварталов строятся общей функцией города
+    // windowPane(cx, cy, faceZ, rotY, W, H) — разбираем и её, иначе проверка
+    // «верх стелы ниже подоконника окна» ослепла бы после правки фасада.
+    const окно = new RegExp(`const ${имя} = windowPane\\(([^)]*)\\)`).exec(interiorsSrc);
+    if (!окно) return null;
+    const ч = окно[1].split(',').map((s) => s.trim());
+    const w = Number(ч[4]);
+    const h = Number(ч[5]);
+    const x = Number(ч[0]);
+    const y = Number(ч[1]);
+    const z = Number(ч[2]);
+    if ([w, h, x, y, z].some((v) => !Number.isFinite(v))) return null;
+    return { w, h, d: 0.24, x, y, z };
+  }
   const числа = m[1].split(',').map((s) => s.trim());
   // Первые три - размеры, четвёртый - материал, дальше координаты.
   const w = Number(числа[0]);
