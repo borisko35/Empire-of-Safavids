@@ -34,6 +34,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
 import { waterMaterials, followSeaToCamera } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
+import { createDustDevils, type DustDevilsHandle } from './dustDevil';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -185,6 +186,8 @@ export class World3D {
   private flames: THREE.Mesh[] = [];
   /** Дым над большими огнями (§255): костёр в лагере и факелы караван-сарая. */
   private дым: { дым: Puffs; x: number; y: number; z: number; таймер: number }[] = [];
+  /** Пыльные вихри в пустыне (§257). */
+  private вихри!: DustDevilsHandle;
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
   private currentWeather: WeatherKind = 'clear';
@@ -887,7 +890,6 @@ private roll = 0;
 
     // Небо, фауна и NPC города
     this.sky = createSky(this.scene);
-    // Порядок важен: PMREMGenerator берёт рендерер, и карта собирается сразу,
     // чтобы первый кадр не показал мир без освещения.
     this.env = new SkyEnvironment(this.scene, this.renderer);
     this.fauna = createFauna(this.scene);
@@ -896,6 +898,8 @@ private roll = 0;
     // Жители трёх региональных городов на настоящих моделях.
     this.townfolk = createTownfolk(this.scene);
     this.roadTraffic = createRoadTraffic(this.scene);
+    // Пыльные вихри в пустыне (§257): ветер поднимает песок сам по себе.
+    this.вихри = createDustDevils(this.scene);
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
@@ -2202,6 +2206,8 @@ if (isMe && moving) {
       }
       д.дым.update(dt);
     }
+    // Пыльные вихри (§257): бродят по песку рядом с игроком.
+    this.вихри.update(dt, now, me.pos.x, me.pos.z);
 
     if (this.attackCd > 0) this.attackCd -= dt;
     // Новые материалы (монстры, лошади, караваны) прошиваем пачкой раз в
@@ -2237,6 +2243,7 @@ if (isMe && moving) {
     this.fauna?.dispose();
     this.npcs?.dispose();
     for (const д of this.дым) д.дым.dispose();
+    this.вихри?.dispose();
     this.civilians?.dispose();
     this.townfolk?.dispose();
     this.weather?.dispose();

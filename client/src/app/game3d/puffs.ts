@@ -34,6 +34,8 @@ export interface PuffOptions {
    * долго и только потом рассеивается — иначе столб дыма не читается.
    */
   затухание?: number;
+  /** Вращение клуба, оборотов в секунду. Для пыльного вихря (§257). */
+  вращение?: number;
 }
 
 export interface Puffs {
@@ -130,6 +132,9 @@ export function createPuffs(scene: THREE.Scene, opts: PuffOptions): Puffs {
       к.sprite.scale.set(размер, размер, 1);
       (к.sprite.material as THREE.SpriteMaterial).opacity =
         непрозрачность * Math.pow(доля, opts.затухание ?? 2);
+      if (opts.вращение) {
+        (к.sprite.material as THREE.SpriteMaterial).rotation += opts.вращение * dt;
+      }
     }
   }
 
