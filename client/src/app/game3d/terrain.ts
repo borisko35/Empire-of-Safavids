@@ -1554,6 +1554,52 @@ export function setGroundState(wet: number, snow: number): void {
   MAT.street.color.setHex(0x9a8a68).multiplyScalar(1 - 0.26 * м).lerp(ЦВЕТ_СНЕГА, с * 0.85);
 }
 
+/**
+ * Снег на зелени и крышах (§263).
+ *
+ * БЫЛО: земля белела, а кусты, пальмы и черепица оставались летними: дерево
+ * в снегу с зелёной кроной выглядит нелепо, и снегопад читается как
+ * декорация половины мира.
+ *
+ * ТЕПЕРЬ: снег ложится и на зелень, и на кровли, и на купола. Цвета
+ * материалов не заменяются, а смещаются к белому, и при таянии возвращаются
+ * к своим — для этого исходные цвета сохранены.
+ */
+const СНЕЖНЫЕ_МАТЕРИАЛЫ: THREE.MeshStandardMaterial[] = [];
+const ИСХОДНЫЕ_ЦВЕТА = new Map<THREE.MeshStandardMaterial, THREE.Color>();
+const ИСХОДНЫЕ_КАРТЫ = new Map<THREE.MeshStandardMaterial, THREE.Texture | null>();
+
+/** Запомнить исходный цвет материала, чтобы снег сошёл без следа. */
+function запомнитьЦвет(материал: THREE.MeshStandardMaterial): void {
+  ИСХОДНЫЕ_ЦВЕТА.set(материал, материал.color.clone());
+  ИСХОДНЫЕ_КАРТЫ.set(материал, материал.map ?? null);
+}
+
+export function setSnowOnSurfaces(snow: number): void {
+  const с = Math.max(0, Math.min(1, snow));
+  for (const материал of СНЕЖНЫЕ_МАТЕРИАЛЫ) {
+    const база = ИСХОДНЫЕ_ЦВЕТА.get(материал);
+    if (!база) continue;
+    // КАРТА, А НЕ ТОЛЬКО ЦВЕТ. Зелёная текстура листвы, помноженная на
+    // белый цвет, остаётся зелёной: цвет материала её только осветляет. Под
+    // снегом нужна снежная карта, а плавность даёт цвет — он идёт от своего
+    // к белому. Своя карта возвращается, когда снег сходит.
+    const своя = ИСХОДНЫЕ_КАРТЫ.get(материал) ?? null;
+    const карта = с > 0.02 ? (MAT.snow.map ?? своя) : своя;
+    if (материал.map !== карта) {
+      материал.map = карта;
+      // Карта поменялась — шейдер пересобирается. Это происходит дважды за
+      // снегопад, а не каждый кадр.
+      материал.needsUpdate = true;
+    }
+    // Зелень белеет слабее: снег на иголках виден, но иголки видны.
+    const зелень = материал === MAT.foliage || материал === MAT.foliageDark
+      || материал === MAT.foliageLight || материал === MAT.brush;
+    const доля = зелень ? с * 0.55 : с * 0.8;
+    материал.color.copy(база).lerp(ЦВЕТ_СНЕГА, доля);
+  }
+}
+
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
   stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4), displacementMap: stoneDisplacementTexture(4), displacementScale: 0.15, displacementBias: -0.07 }),
@@ -1645,6 +1691,19 @@ const MAT = {
   snow: new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.9, map: snowTexture('#eef2f6', 4), normalMap: snowNormalTexture(4), normalScale: new THREE.Vector2(0.5, 0.5) }),
   flower: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: flowerTexture('#ffffff', 1), normalMap: flowerNormalTexture(1), normalScale: new THREE.Vector2(0.4, 0.4) }),
 };
+
+// Материалы, на которые ложится снег (§263): зелень, ткань (навесы, кровли),
+// купола и камень. Исходные цвета запоминаются, чтобы после таяния всё
+// вернулось к своему виду.
+for (const материал of [
+  MAT.foliage, MAT.foliageDark, MAT.foliageLight, MAT.brush,
+  MAT.clothRed, MAT.clothTeal, MAT.clothPurple,
+  MAT.tealDome, MAT.sandstone, MAT.sandstoneDark, MAT.stone,
+  MAT.white, MAT.wood, MAT.trunk, MAT.palmTrunk, MAT.windowFrame, MAT.gold,
+]) {
+  СНЕЖНЫЕ_МАТЕРИАЛЫ.push(материал);
+  запомнитьЦвет(материал);
+}
 
 // ── Рельеф ───────────────────────────────────────────────────
 export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
@@ -2146,6 +2205,12 @@ export function buildRoads(scene: THREE.Scene): void {
 
   const roadMat = roadMaterial(false);
   const stoneRoadMat = roadMaterial(true);
+  // Дороги тоже покрываются снегом (§263): на белой пустыне тёмная полоса
+  // дороги читается как след, а не как дорога.
+  for (const материал of [roadMat, stoneRoadMat]) {
+    СНЕЖНЫЕ_МАТЕРИАЛЫ.push(материал);
+    запомнитьЦвет(материал);
+  }
 
   // Вспомогательная функция: строит одну дорогу как единый BufferGeometry
   function buildSingleRoad(
@@ -2973,6 +3038,10 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     color: 0xc8b48a, roughness: 0.95, map: plazaTexture(40),
   });
   addMacroLayer(материалПлощади, macroTexture(), 0.34, 1.4);
+  // Площадь тоже покрывается снегом (§263): иначе город стоит в белом мире,
+  // а под ногами — летняя плитка.
+  СНЕЖНЫЕ_МАТЕРИАЛЫ.push(материалПлощади);
+  запомнитьЦвет(материалПлощади);
   const plaza = new THREE.Mesh(
     new THREE.CylinderGeometry(CITY.radius * 0.92, CITY.radius, 0.5, 36),
     материалПлощади,

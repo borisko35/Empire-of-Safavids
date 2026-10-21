@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundState } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -2235,6 +2235,9 @@ if (isMe && moving) {
     if (идётСнег) this.снег = Math.min(1, this.снег + dt * 0.25);
     else this.снег = Math.max(0, this.снег - dt * 0.02);
     setGroundState(this.мокрота, this.снег);
+    // Снег на зелени и крышах (§263): земля белая, а кроны и черепица ещё
+    // летние — так снегопад читается наполовину декорацией.
+    setSnowOnSurfaces(this.снег);
     // Ветер качает зелень (§258): кусты, трава и кроны деревьев стояли
     // неподвижно, хотя ветер в мире есть. В буре качание вдвое сильнее.
     const ветер = this.currentWeather === 'sandstorm' ? 2 : 1;
