@@ -2543,6 +2543,63 @@ function buildQuarters(
     addCollider(CITY.x + мx, CITY.z + мз, 2.6);
   }
 
+  // ── Жильё в пригороде (§246) ──
+  //
+  // БЫЛО: в пригороде стояли только склады и мастерская — жить рядом было
+  // нечем, и место читалось как товарная станция, а не как окраина города.
+  // ТЕПЕРЬ: два дома с дверью, окнами и забором. Окна — те же, что везде
+  // (windowPane: стекло, рама, средник).
+  for (const д of [
+    { x: 117, z: 119, w: 6.5, d: 5.5, h: 3.6, поворот: 0.3 },
+    { x: 131, z: 100, w: 5.5, d: 5, h: 3.2, поворот: -0.6 },
+  ] as const) {
+    const земля = groundHeight(CITY.x + д.x, CITY.z + д.z) - city.position.y;
+    const дом = new THREE.Group();
+    const корпус = new THREE.Mesh(new THREE.BoxGeometry(д.w, д.h, д.d), MAT.sandstone);
+    корпус.position.y = д.h / 2;
+    корпус.castShadow = true;
+    корпус.receiveShadow = true;
+    const крыша = new THREE.Mesh(
+      new THREE.BoxGeometry(д.w + 0.4, 0.3, д.d + 0.4),
+      MAT.sandstoneDark,
+    );
+    крыша.position.y = д.h + 0.15;
+    крыша.castShadow = true;
+    // Парапет по крыше: без него дом — коробка.
+    for (const [bx, bz, bw, bd] of [
+      [0, д.d / 2, д.w + 0.4, 0.25],
+      [0, -д.d / 2, д.w + 0.4, 0.25],
+      [д.w / 2, 0, 0.25, д.d + 0.4],
+      [-д.w / 2, 0, 0.25, д.d + 0.4],
+    ] as const) {
+      const борт = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.55, bd), MAT.sandstoneDark);
+      борт.position.set(bx, д.h + 0.55, bz);
+      борт.castShadow = true;
+      дом.add(борт);
+    }
+    // Дверь по центру фасада и окна по бокам от неё.
+    const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.18), MAT.wood);
+    дверь.position.set(0, 1.05, д.d / 2 + 0.04);
+    дверь.castShadow = true;
+    дом.add(дверь, корпус, крыша);
+    дом.add(windowPane(-д.w / 4, 1.7, д.d / 2 + 0.02, 0, 0.9, 1.2));
+    дом.add(windowPane(д.w / 4, 1.7, д.d / 2 + 0.02, 0, 0.9, 1.2));
+    // Забор вдоль двора: дом не стоит вплотную к улице.
+    for (const s of [-1, 1] as const) {
+      const столб = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.0, 0.22), MAT.wood);
+      столб.position.set(s * (д.w / 2 + 1.6), 0.5, д.d / 2 + 1.4);
+      столб.castShadow = true;
+      const рейка = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.5, 2.8), MAT.wood);
+      рейка.position.set(s * (д.w / 2 + 1.6), 0.62, д.d / 2 + 0.1);
+      рейка.castShadow = true;
+      дом.add(столб, рейка);
+    }
+    дом.position.set(д.x, земля, д.z);
+    дом.rotation.y = д.поворот;
+    city.add(дом);
+    addCollider(CITY.x + д.x, CITY.z + д.z, Math.max(д.w, д.d) / 2 + 0.4);
+  }
+
   // Базар: два ряда лавок
   const stallKinds = [0, 1, 2, 0, 1, 2] as const;
   const stallSpots: [number, number][] = [[78, -5], [78, 5], [84, -5], [84, 5], [90, -4], [90, 5]];
