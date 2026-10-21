@@ -253,33 +253,56 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   group.add(body);
 
   // Ноги
+  //
+  // §288. БЫЛО: нога — ящик 0.16×0.95×0.19. ТЕПЕРЬ: сужающийся цилиндр и
+  // сапог с округлым носком. Ящик читался как колода карт.
   const legL = new THREE.Group(); legL.position.set(-0.12, 0.95, 0);
   const legR = new THREE.Group(); legR.position.set(0.12, 0.95, 0);
   const legGeo = () => {
-    const l = box(0.16, 0.95, 0.19, robeDark);
-    l.position.y = -0.475;
+    const l = cyl(0.085, 0.07, 0.92, robeDark, 8);
+    l.position.y = -0.46;
     const foot = box(0.17, 0.09, 0.3, MAT.leatherDark);
     foot.position.set(0, -0.93, 0.06);
+    // Носок сапога округлый: острый угол читался как кирпич.
+    const toe = sphere(0.075, MAT.leatherDark, 8);
+    toe.scale.set(1, 0.62, 1.35);
+    toe.position.set(0, -0.9, 0.19);
     const leg = new THREE.Group();
-    leg.add(l, foot);
+    leg.add(l, foot, toe);
     return leg;
   };
   legL.add(legGeo()); legR.add(legGeo());
   body.add(legL, legR);
 
-  // Юбка халата (прячет стык ног)
+  // Юбка халата (прячет стык ног): раструбом, с подгибом по краю.
   const skirt = cyl(0.24, 0.37, 0.6, robeDark, 12);
   skirt.position.y = 0.72;
-  body.add(skirt);
+  const подгиб = torusRing(0.36, robe);
+  подгиб.position.y = 0.44;
+  body.add(skirt, подгиб);
 
   // Торс с головой и руками
+  //
+  // §288. БЫЛО: грудь — ящик 0.42×0.56×0.26. ТЕПЕРЬ: округлое тело с
+  // плечами, воротником и перевязью через грудь — как халат.
   const torso = new THREE.Group();
   torso.position.y = 0.98;
-  const chest = box(0.42, 0.56, 0.26, robe);
+  const chest = cyl(0.21, 0.17, 0.56, robe, 12);
   chest.position.y = 0.32;
+  chest.scale.set(1, 1, 0.62); // грудь шире, чем глубже
+  const плечоЛ = sphere(0.105, robe, 10);
+  плечоЛ.position.set(-0.2, 0.54, 0);
+  плечоЛ.scale.set(1, 0.9, 0.85);
+  const плечоП = плечоЛ.clone(); плечоП.position.x = 0.2;
+  const ворот = cyl(0.115, 0.125, 0.08, robeDark, 10);
+  ворот.position.y = 0.6;
   const belt = cyl(0.23, 0.25, 0.07, MAT.gold, 12);
   belt.position.y = 0.04;
-  torso.add(chest, belt);
+  // Перевязь: тонкая полоса через грудь от плеча к бедру.
+  const перевязь = box(0.07, 0.62, 0.3, robeDark);
+  перевязь.position.set(0.02, 0.32, 0.02);
+  перевязь.rotation.z = 0.42;
+  torso.add(chest, плечоЛ, плечоП, ворот, belt, перевязь);
 
   const head = new THREE.Group();
   head.position.y = 0.68;
@@ -297,15 +320,20 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
   torso.add(head);
 
   // Руки
+  //
+  // §288. БЫЛО: рука — ящик 0.12×0.56×0.13. ТЕПЕРЬ: сужающийся цилиндр с
+  // манжетой у запястья.
   const armL = new THREE.Group(); armL.position.set(-0.28, 0.52, 0);
   const armR = new THREE.Group(); armR.position.set(0.28, 0.52, 0);
   const armGeo = () => {
-    const a = box(0.12, 0.56, 0.13, robe);
+    const a = cyl(0.072, 0.055, 0.56, robe, 8);
     a.position.y = -0.28;
+    const манжета = cyl(0.062, 0.062, 0.05, robeDark, 8);
+    манжета.position.y = -0.545;
     const hand = sphere(0.075, MAT.skin, 8);
     hand.position.y = -0.6;
     const arm = new THREE.Group();
-    arm.add(a, hand);
+    arm.add(a, манжета, hand);
     return arm;
   };
   armL.add(armGeo()); armR.add(armGeo());
