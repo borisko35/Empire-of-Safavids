@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { buildHumanoid, HumanoidCfg, type Rig } from './rig';
 import { spriteVisible } from './spriteClamp';
-import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight } from './terrain';
+import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight, REGION_TOWNS } from './terrain';
 import { GATE } from './terrain';
 
 // Стража ворот стоит относительно ворот (а не на захардкоженных точках),
@@ -36,6 +36,59 @@ export interface NpcGroup {
 }
 
 const GUARD = (robe = 0x8b1a1a): HumanoidCfg => ({ robe, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 });
+
+// ── Жители городов регионов (§253) ────────────────────────────────
+//
+// БЫЛО: девять городов регионов (Хорасан, Тебриз, Шираз, Кавказ, Месопотамия,
+// Залив, Герат, Застава, Маяк) стояли без единого человека. Стены, дома,
+// торговые ряды, колодец — всё на месте, а жителей нет: город читается как
+// макет, а не как место, где кто-то живёт.
+//
+// ТЕПЕРЬ: по два жителя в каждом городе — стражник у ворот (рядом с фонарём
+// §250) и торговец на площади. Смещения считаются ОТ ГОРОДА, поэтому если
+// город сдвинется, жители поедут вместе с ним.
+const ЖИТЕЛИ_ГОРОДОВ: [string, string][] = [
+  ['Стражник Ахмед', 'Торговец Юсуф'],
+  ['Стражник Карим', 'Торговка Лейла'],
+  ['Стражник Омар', 'Торговец Хасан'],
+  ['Стражник Аслан', 'Кузнец Марат'],
+  ['Стражник Барбар', 'Торговец Ибрагим'],
+  ['Стражник Рейхан', 'Торговка Зухра'],
+  ['Стражник Джамиль', 'Торговец Бахтиё'],
+  ['Стражник Тимур', 'Торговка Сана'],
+  ['Стражник Абдулло', 'Торговец Шоди'],
+];
+
+/** Группа жителей города региона: стражник у ворот и торговец на площади. */
+function группаГорода(
+  t: { region: string; x: number; z: number; radius: number },
+  i: number,
+): NpcGroup {
+  const [страж, торговец] = ЖИТЕЛИ_ГОРОДОВ[i % ЖИТЕЛИ_ГОРОДОВ.length];
+  return {
+    origin: { x: t.x, z: t.z },
+    npcs: [
+      {
+        id: `npc_region_guard_${t.region}`,
+        nameRu: страж,
+        panel: 'panel-dungeons',
+        quest: false,
+        dx: t.radius * 0.12,
+        dz: t.radius * 0.78,
+        look: GUARD(),
+      },
+      {
+        id: `npc_region_trader_${t.region}`,
+        nameRu: торговец,
+        panel: 'panel-shop',
+        quest: false,
+        dx: t.radius * 0.45,
+        dz: 0,
+        look: { robe: 0x8a5a2b, robeDark: 0x5e3a1c, hat: 'cap', hatColor: 0x3a2a1c, weapon: 'none', scale: 1.02 },
+      },
+    ],
+  };
+}
 
 export const NPC_GROUPS: NpcGroup[] = [
   // ── Исфахан ──
@@ -108,6 +161,8 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_fort_guide', nameRu: 'Проводник Сирина', panel: 'panel-quests', quest: true, dx: 4, dz: -4, look: { robe: 0x9db4e8, robeDark: 0x6a80b0, hat: 'hood', hatColor: 0xb2b8c4, weapon: 'bow', scale: 0.97 } },
     ],
   },
+  // Жители городов регионов (§253): по два в каждом из девяти.
+  ...REGION_TOWNS.map(группаГорода),
 ];
 
 function textSprite(text: string): THREE.Sprite {
@@ -242,7 +297,11 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
     group.add(rig.group);
     переходные.push({ kind: событие.kind, group: rig.group, rig });
   }
-  const rigs: { update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void }[] = [];
+  const rigs: {
+    update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void;
+    x: number;
+    z: number;
+  }[] = [];
 
   for (const { origin, npcs } of NPC_GROUPS) {
     for (const def of npcs) {
@@ -265,7 +324,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
         o.userData.npcId = def.id;
       });
       group.add(rig.group);
-      rigs.push({ update: (dt, p) => rig.update(dt, p) });
+      rigs.push({ update: (dt, p) => rig.update(dt, p), x, z });
       clickTargets.push(rig.group);
       COLLIDERS.push({ x, z, r: 0.55 });
 
@@ -297,6 +356,11 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
 
   function update(dt: number, now: number, камера?: THREE.Vector3): void {
     for (const r of rigs) {
+      // ДАЛЬНИЕ ЖИТЕЛИ НЕ ПЕРЕСЧИТЫВАЮТСЯ (§253). Поза камерой анимацию
+      // никто не видит, а пересчёт позы стоит процессора: из-за этого в мире
+      // появилось восемнадцать новых жителей городов регионов, и кадр не
+      // потяжел. Когда игрок подходит, анимация включается снова.
+      if (камера && Math.hypot(r.x - камера.x, r.z - камера.z) > 70) continue;
       r.update(dt, { moving: false, speed: 0, grounded: true, crouch: false, block: false, dead: false, swimming: false });
     }
     // Имена и знаки «!» прячутся в упор: спрайт мирового размера растёт при
