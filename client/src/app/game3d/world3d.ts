@@ -790,7 +790,15 @@ private roll = 0;
     buildBazaarChests(this.scene);
     // Двор мечети с куполом и минаретом: первое здание из шести, которому
     // владелец велел достроить экстерьер.
-    buildMosqueCourtyard(this.scene);
+    // Фонари у входа в мечетный двор (§252): были столб с чашей и шар огня —
+    // без стекла и без источника света. Теперь общий фонарь и свой свет.
+    const огниДвора = buildMosqueCourtyard(this.scene);
+    for (const [i, огонь] of огниДвора.entries()) {
+      const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
+      light.position.set(огонь.x, огонь.y, огонь.z);
+      this.scene.add(light);
+      this.torches.push({ light, base: 1.6, phase: i * 2.4 + 2.1 });
+    }
     // Акведук деревни: разрушенная аркада к востоку от неё.
     buildAqueduct(this.scene);
     // Шатёр в базарном квартале и кузница в деревне.

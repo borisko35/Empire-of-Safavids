@@ -7079,6 +7079,16 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
     const факел = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.4, 8), MAT.gold);
     факел.position.set(px, 2.6, ворота.t / 2 + 1.0);
     g.add(факел);
+    // Огонь в факеле и свой источник света (§252): стояла золотая чаша без
+    // пламени, и ворота крепости ночью стояли чёрными.
+    const пламяКавказ = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), MAT.lampGlow);
+    пламяКавказ.position.set(px, 2.85, ворота.t / 2 + 1.0);
+    g.add(пламяКавказ);
+    огни.push({
+      x: CAUCASUS_FORT.x + px,
+      y: CAUCASUS_FORT.level + 2.85,
+      z: CAUCASUS_FORT.z + ворота.t / 2 + 1.0,
+    });
   }
 
   // Стена с зубцами по бокам двора.
@@ -7174,6 +7184,16 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
     const факел = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.24, 0.5, 8), MAT.gold);
     факел.position.set(px, 3.0, ворота.t / 2 + 1.0);
     g.add(факел);
+    // Огонь в факеле и свой источник света (§252): как у кавказского
+    // форпоста — чаша без пламени, и ворота цитадели стояли чёрными.
+    const пламяБагдад = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), MAT.lampGlow);
+    пламяБагдад.position.set(px, 3.3, ворота.t / 2 + 1.0);
+    g.add(пламяБагдад);
+    огни.push({
+      x: BAGHDAD_CITADEL.x + px,
+      y: BAGHDAD_CITADEL.level + 3.3,
+      z: BAGHDAD_CITADEL.z + ворота.t / 2 + 1.0,
+    });
   }
 
   // Стена с зубцами по бокам двора.
@@ -8296,7 +8316,10 @@ export const МЕЧЕТЬ_ВОРОТА = 2.6;
 /** Радиус купола: в него нельзя войти, и он в 5 м от двери. */
 export const МЕЧЕТЬ_КУПОЛ = 3.5;
 
-export function buildMosqueCourtyard(scene: THREE.Scene): void {
+export function buildMosqueCourtyard(scene: THREE.Scene): { x: number; y: number; z: number }[] {
+  // Огни двора мечети (§252): источники создаёт world3d, как и у остальных
+  // мест (города регионов — §250, поселения — §251).
+  const огни: { x: number; y: number; z: number }[] = [];
   const c = MOSQUE_COURTYARD;
   // Подъём нулевой: земля под двором ровная, перепад по четырём углам — 0.000,
   // а основание модели уже на нуле. Скан нашёл 2647 ровных площадки; взята та,
@@ -8358,20 +8381,22 @@ export function buildMosqueCourtyard(scene: THREE.Scene): void {
       }
     }
     // Два фонаря у входа: тёплый свет на ступенях.
+    //
+    // БЫЛО (§252): свои столб, чаша и шар огня — без стеклянного фонаря и без
+    // источника света. Тот же дефект, что был у фонарей садов в §249: огонь
+    // нарисован, а света нет, и ночью вход во двор читался чёрным провалом.
+    // ТЕПЕРЬ: общий фонарь (§232) со стеклом, колпаком и огнём, и свой
+    // источник света по высоте огня.
     for (const s of [-1, 1] as const) {
       const x = c.x + s * 3.4;
       const z = c.z + hz + 1.6;
-      const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.2, 6), MAT.dark);
-      столб.position.set(x, 1.6, z);
-      столб.castShadow = true;
-      const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.22, 0.4, 8), MAT.gold);
-      чаша.position.set(x, 3.4, z);
-      const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), MAT.lampGlow);
-      огонь.position.set(x, 3.36, z);
-      scene.add(столб, чаша, огонь);
-      addCollider(x, z, 0.35);
+      const высотаОгня = фонарь(scene, x, z);
+      огни.push({ x, y: высотаОгня, z });
+      addCollider(x, z, 0.5);
     }
   }
+
+  return огни;
 }
 
 // ── Факелы у ворот караван-сарая ──────────────────────────────────
