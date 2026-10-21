@@ -2536,21 +2536,60 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   city.add(plaza);
 
   // Фонтан в центре площади
+  //
+  // БЫЛО (§231): чаша из тёмного камня с сильной полосатостью на боку
+  // читалась как ДЕРЕВЯННАЯ БОЧКА, а струя была отдельным конусом, висящим
+  // в воздухе над чашей: между конусом и водой не было ничего, и фонтан
+  // выглядел сломанным. ТЕПЕРЬ: каменная чаша с венцом и ступенчатым
+  // основанием, струя идёт от чаши к воде, и по кромке чаши переливаются
+  // четыре тонких струи.
   const fountain = new THREE.Group();
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.8, 1.1, 12), MAT.sandstoneDark);
-  basin.position.y = 0.55;
+  // Основание — ступень кругом чаши: без неё чаша стоит на земле боком.
+  const пьедестал = new THREE.Mesh(
+    new THREE.CylinderGeometry(4.0, 4.4, 0.35, 16),
+    MAT.sandstone,
+  );
+  пьедестал.position.y = 0.17;
+  пьедестал.castShadow = true;
+  пьедестал.receiveShadow = true;
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.8, 1.1, 16), MAT.sandstone);
+  basin.position.y = 0.9;
   basin.castShadow = true; basin.receiveShadow = true;
-  const water = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.05, 0.16, 12), MAT.water);
-  water.position.y = 1.02;
+  // Венец чаши: кольцо поверх стенки, иначе верх чаши — просто срез.
+  const венец = new THREE.Mesh(new THREE.TorusGeometry(3.36, 0.16, 8, 24), MAT.sandstoneDark);
+  венец.position.y = 1.42;
+  венец.rotation.x = Math.PI / 2;
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.05, 0.16, 16), MAT.water);
+  water.position.y = 1.22;
   const column = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.8, 2.4, 8), MAT.sandstone);
-  column.position.y = 1.9;
+  column.position.y = 2.4;
   column.castShadow = true;
   const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.1, 0.35, 10), MAT.tealDome);
-  bowl.position.y = 3.1;
-  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.24, 1.5, 6), MAT.water);
-  jet.position.y = 4.1;
-  jet.rotation.x = Math.PI;
-  fountain.add(basin, water, column, bowl, jet);
+  bowl.position.y = 3.6;
+  // Струя: тонкая колонна от чаши к воде, а не конус в воздухе.
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 1.7, 8), MAT.water);
+  jet.position.y = 2.95;
+  // Падающие капли: четыре точки на разной высоте, чтобы струя читалась
+  // движущейся, а не гладкой палочкой.
+  for (let i = 0; i < 4; i++) {
+    const капля = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), MAT.water);
+    const a = i * 1.3;
+    капля.position.set(Math.cos(a) * 0.18, 2.5 - i * 0.38, Math.sin(a) * 0.18);
+    fountain.add(капля);
+  }
+  // Перелив через край чаши: четыре тонких струи в бассейн.
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + 0.4;
+    const струя = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.07, 2.1, 5),
+      MAT.water,
+    );
+    струя.position.set(Math.cos(a) * 1.28, 2.6, Math.sin(a) * 1.28);
+    струя.rotation.z = Math.cos(a) * 0.12;
+    струя.rotation.x = -Math.sin(a) * 0.12;
+    fountain.add(струя);
+  }
+  fountain.add(пьедестал, basin, венец, water, column, bowl, jet);
   fountain.position.set(6, 0.3, 6);
   city.add(fountain);
   addCollider(CITY.x + 6, CITY.z + 6, 4.2);
