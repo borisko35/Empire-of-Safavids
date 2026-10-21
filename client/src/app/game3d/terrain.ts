@@ -1513,7 +1513,17 @@ const MAT = {
   lampGlow: new THREE.MeshStandardMaterial({
     color: 0xffcf8a, roughness: 0.4, emissive: 0xffa04a, emissiveIntensity: 1.6,
   }),
-  palmLeaf: new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide, map: foliageTexture('#4f7a3a', 2), normalMap: foliageNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
+  // Лист пальмы. Плоский лист, освещённый с изнанки, не ловит солнце вовсе:
+  // замер в кадре давал #020b01 — почти чёрный силуэт на фоне неба. Слабое
+  // свечение поднимает изнанку до тёмно-зелёного (#1e3320), и лист читается
+  // листом, а не дырой. Ночью это не светится: 0x1e3320 при ночном
+  // окружении почти неразличимо.
+  palmLeaf: new THREE.MeshStandardMaterial({
+    color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide,
+    map: foliageTexture('#4f7a3a', 2), normalMap: foliageNormalTexture(2),
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    emissive: 0x1e3320, emissiveIntensity: 0.7,
+  }),
   white: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85, map: clothTexture('#e8e0d0', 4) }),
   clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1, map: clothTexture('#8b1a1a', 4) }),
   clothTeal: new THREE.MeshStandardMaterial({ color: 0x2e8b8b, roughness: 1, map: clothTexture('#2e8b8b', 4) }),
