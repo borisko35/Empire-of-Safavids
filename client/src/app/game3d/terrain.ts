@@ -2451,6 +2451,70 @@ function buildQuarters(
     city.add(sign);
   }
 
+  // ── Пригород за городской стеной (§241) ──
+  //
+  // За стеной (радиус 116) было пусто: город кончался обрывом кладки, а
+  // ближайший караван-сарай — за полкилометра. Теперь за воротами видно, что
+  // город чем-то живёт: склады, мастерская с трубой и мельница.
+  //
+  // ВЫСОТА СЧИТАЕТСЯ ОТ ЗЕМЛИ (localY): за стеной рельеф идёт вниз, и
+  // зашитая высота оставила бы постройки висящими в воздухе.
+  for (const п of [
+    { x: 106, z: 98, w: 11, d: 7, h: 4.4, труба: false },
+    { x: 120, z: 111, w: 7.5, d: 6, h: 3.6, труба: true },
+    { x: 95, z: 113, w: 6.5, d: 5.5, h: 3.2, труба: false },
+  ] as const) {
+    const земля = groundHeight(CITY.x + п.x, CITY.z + п.z) - city.position.y;
+    const корпус = new THREE.Mesh(
+      new THREE.BoxGeometry(п.w, п.h, п.d),
+      MAT.sandstone,
+    );
+    корпус.position.set(п.x, земля + п.h / 2, п.z);
+    корпус.castShadow = true;
+    корпус.receiveShadow = true;
+    const крыша = new THREE.Mesh(
+      new THREE.BoxGeometry(п.w + 0.6, 0.34, п.d + 0.6),
+      MAT.sandstoneDark,
+    );
+    крыша.position.set(п.x, земля + п.h + 0.17, п.z);
+    крыша.castShadow = true;
+    // Ворота складов: широкие проёмы, из которых выезжают повозки.
+    const ворота = new THREE.Mesh(
+      new THREE.BoxGeometry(п.w * 0.42, п.h * 0.6, 0.2),
+      MAT.wood,
+    );
+    ворота.position.set(п.x, земля + п.h * 0.3, п.z + п.d / 2 + 0.02);
+    city.add(корпус, крыша, ворота);
+    if (п.труба) {
+      const труба = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3.4, 1.0), MAT.sandstoneDark);
+      труба.position.set(п.x + п.w * 0.3, земля + п.h + 1.7, п.z);
+      труба.castShadow = true;
+      city.add(труба);
+    }
+    addCollider(CITY.x + п.x, CITY.z + п.z, Math.max(п.w, п.d) / 2 + 0.4);
+  }
+  // Мельница за городом: та же модель, что у караван-сарая (§74), но в другом
+  // месте — и город виден с её крыльев.
+  {
+    const мx = 122, мз = 92;
+    const земля = groundHeight(CITY.x + мx, CITY.z + мз) - city.position.y;
+    void loadDecorModel('decor/windmill.glb').then((модель) => {
+      if (!модель) return;
+      const мельница = модель.clone();
+      мельница.position.set(мx, земля - 0.13, мз);
+      мельница.rotation.y = -0.9;
+      мельница.scale.setScalar(1);
+      мельница.traverse((o) => {
+        const м = o as THREE.Mesh;
+        if (!м.isMesh) return;
+        м.castShadow = true;
+        м.receiveShadow = true;
+      });
+      city.add(мельница);
+    });
+    addCollider(CITY.x + мx, CITY.z + мз, 2.6);
+  }
+
   // Базар: два ряда лавок
   const stallKinds = [0, 1, 2, 0, 1, 2] as const;
   const stallSpots: [number, number][] = [[78, -5], [78, 5], [84, -5], [84, 5], [90, -4], [90, 5]];
