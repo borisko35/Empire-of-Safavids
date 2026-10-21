@@ -2149,6 +2149,108 @@ export function buildRoads(scene: THREE.Scene): void {
 }
 
 /** Пальма: изогнутый ствол + веер листьев */
+/**
+ * Лист финиковой пальмы — поникающее перо из трёх сегментов.
+ *
+ * БЫЛО (21 октября 2026, §228): конус (ConeGeometry 0.34 x 2.6 на четыре
+ * грани). В кроне такие шипы торчали во все стороны, и пальма читалась чёрной
+ * звездой — силуэтом, у которого не видно ни листа, ни ветки.
+ *
+ * Теперь лист сложен из плоских сегментов: каждый следующий свисает
+ * сильнее предыдущего, и крона получает объём и поникание.
+ */
+function листФиника(parent: THREE.Object3D, угол: number, k: number): void {
+  const ветка = new THREE.Group();
+  // Местная ось +X смотрит наружу: поворот вокруг Y на минус угол.
+  ветка.rotation.y = -угол;
+  const длина = 2.6 * k;
+  const сегменты = [
+    { доля: 0.38, ширина: 0.62, наклон: -0.16 },
+    { доля: 0.3, ширина: 0.5, наклон: -0.5 },
+    { доля: 0.2, ширина: 0.34, наклон: -0.85 },
+    // Кончик загнут вверх: без этого лист просто падает, а финиковая пальма
+    // узнаётся именно изгибом — вниз, потом вверх.
+    { доля: 0.12, ширина: 0.18, наклон: -0.25 },
+  ];
+  let начало = 0;
+  for (const c of сегменты) {
+    const д = длина * c.доля;
+    const сегмент = new THREE.Mesh(
+      new THREE.BoxGeometry(д, 0.06 * k, c.ширина * k),
+      MAT.palmLeaf,
+    );
+    const центр = начало + д / 2;
+    сегмент.position.set(центр, Math.sin(c.наклон) * центр, 0);
+    сегмент.rotation.z = c.наклон;
+    сегмент.castShadow = true;
+    ветка.add(сегмент);
+    начало += д;
+  }
+  parent.add(ветка);
+}
+
+/**
+ * Крона финиковой пальмы: восемь поникающих листьев и шапка у ствола.
+ *
+ * Шапка нужна, чтобы лист не начинался в воздухе: без неё крона выглядит
+ * приколоченной к стволу сбоку.
+ */
+function кронаФиника(parent: THREE.Object3D, k: number, листьев = 11): THREE.Group {
+  const крона = new THREE.Group();
+  for (let i = 0; i < листьев; i++) {
+    // Сдвиг через один — листья не встают в одну плоскость.
+    const a = (i / листьев) * Math.PI * 2 + (i % 2) * 0.19;
+    листФиника(крона, a, k);
+  }
+  // Шапка кроны: мелкие листья у самого ствола, чтобы лист не начинался в
+  // воздухе. Материал светлее листа — иначе середина кроны чёрная.
+  for (let i = 0; i < 4; i++) {
+    const a = i * 1.6;
+    const шапка = new THREE.Mesh(
+      new THREE.ConeGeometry(0.26 * k, 1.0 * k, 5),
+      MAT.foliageLight,
+    );
+    шапка.position.set(Math.cos(a) * 0.34 * k, 0.42 * k, Math.sin(a) * 0.34 * k);
+    шапка.rotation.z = -0.9;
+    шапка.castShadow = true;
+    крона.add(шапка);
+  }
+  parent.add(крона);
+  return крона;
+}
+
+/**
+ * Крона кипариса: слоистый конус, а не ровный.
+ *
+ * БЫЛО (§228): один конус — силуэт без объёма, и два кипариса рядом читались
+ * как одинаковые геометрические фигуры. Теперь крона собрана из четырёх
+ * слоёв со смещением и разным поворотом: силуэт неровный, как у живого
+ * дерева.
+ */
+function кронаКипариса(
+  parent: THREE.Object3D, x: number, y: number, z: number,
+  s: number, материал: THREE.Material,
+): void {
+  const слои = [
+    { р: 0.9, в: 2.0, см: 0 },
+    { р: 0.72, в: 1.7, см: 0.13 },
+    { р: 0.52, в: 1.3, см: -0.11 },
+    { р: 0.3, в: 0.9, см: 0.08 },
+  ];
+  let низ = y;
+  for (const слой of слои) {
+    const конус = new THREE.Mesh(
+      new THREE.ConeGeometry(слой.р * s, слой.в * s, 8),
+      материал,
+    );
+    конус.position.set(x + слой.см * s, низ + (слой.в * s) / 2, z);
+    конус.rotation.y = слой.см * 3.1;
+    конус.castShadow = true;
+    parent.add(конус);
+    низ += слой.в * s * 0.42;
+  }
+}
+
 function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1, cityLocal = false): void {
   const palm = new THREE.Group();
   const lean = (Math.random() - 0.5) * 0.28;
@@ -2158,14 +2260,11 @@ function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1, cityLocal 
   trunk.castShadow = true;
   palm.add(trunk);
   const topX = -Math.sin(lean) * 5.4 * k, topY = Math.cos(lean) * 5.4 * k;
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.34 * k, 2.6 * k, 4), MAT.palmLeaf);
-    leaf.position.set(topX + Math.cos(a) * 1.0 * k, topY + 0.15 * k, Math.sin(a) * 1.0 * k);
-    leaf.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25 - lean * 2);
-    leaf.castShadow = true;
-    palm.add(leaf);
-  }
+  // Крона из настоящих поникающих листьев (§228) — раньше здесь стояли семь
+  // конических шипов, и пальма читалась чёрной звездой.
+  const крона = кронаФиника(palm, k);
+  крона.position.set(topX, topY, 0);
+  крона.rotation.z = -lean;
   for (let i = 0; i < 3; i++) {
     const nut = new THREE.Mesh(new THREE.SphereGeometry(0.12 * k, 6, 5), MAT.trunk);
     nut.position.set(topX + (Math.random() - 0.5) * 0.4 * k, topY - 0.25 * k, (Math.random() - 0.5) * 0.4 * k);
@@ -3299,10 +3398,9 @@ function brickHouse(
 function cypress(parent: THREE.Group, x: number, z: number, baseY: number, s: number): void {
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.7, 6), MAT.trunk);
   trunk.position.set(x, baseY + 0.35, z);
-  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.85 * s, 3.6 * s, 7), MAT.foliageDark);
-  crown.position.set(x, baseY + 0.7 + 1.8 * s, z);
-  crown.castShadow = true;
-  parent.add(trunk, crown);
+  // Крона слоями, а не ровный конус (§228).
+  кронаКипариса(parent, x, baseY + 0.7, z, s, MAT.foliageDark);
+  parent.add(trunk);
   addCollider(CITY.x + x, CITY.z + z, 0.55);
 }
 
@@ -8255,10 +8353,8 @@ function деревоКипарис(
   trunk.position.set(x, 1.1 * s, z);
   trunk.castShadow = true;
   g.add(trunk);
-  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.95 * s, 4.4 * s, 7), MAT.palmLeaf);
-  crown.position.set(x, 2.2 * s + 2.2 * s, z);
-  crown.castShadow = true;
-  g.add(crown);
+  // Крона слоями, а не ровный конус (§228).
+  кронаКипариса(g, x, 1.6 * s, z, s, MAT.palmLeaf);
   коллайдер(x, z, 0.55);
 }
 
@@ -8271,13 +8367,8 @@ function деревоФиник(
   trunk.position.set(x, 2.7 * k, z);
   trunk.castShadow = true;
   g.add(trunk);
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2;
-    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.34 * k, 2.6 * k, 4), MAT.palmLeaf);
-    leaf.position.set(x + Math.cos(a) * 1 * k, 5.4 * k + 0.15 * k, z + Math.sin(a) * 1 * k);
-    leaf.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25);
-    leaf.castShadow = true;
-    g.add(leaf);
-  }
+  // Крона из поникающих листьев (§228) — раньше семь конических шипов.
+  const крона = кронаФиника(g, k);
+  крона.position.set(x, 5.4 * k, z);
   коллайдер(x, z, 0.55);
 }
