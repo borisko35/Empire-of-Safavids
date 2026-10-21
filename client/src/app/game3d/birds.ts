@@ -8,6 +8,7 @@
 // облетает игрока по широкой дуге, крылья бьют вразнобой (у каждой птицы своя
 // фаза), и птицы иногда проходят совсем близко над головой.
 import * as THREE from 'three';
+import { LAKE } from './terrain';
 
 export interface BirdsHandle {
   update(dt: number, now: number, px: number, pz: number): void;
@@ -74,6 +75,8 @@ export function createBirds(scene: THREE.Scene): BirdsHandle {
   let центрX = 0;
   let центрZ = 0;
   let начато = false;
+  // На какой высоте летит стая сейчас (§273): над водой она садится.
+  let высота = ВЫСОТА;
 
   function update(dt: number, now: number, px: number, pz: number): void {
     if (!начато) {
@@ -92,6 +95,17 @@ export function createBirds(scene: THREE.Scene): BirdsHandle {
     // Угол поворота стаи: туда, куда она летит.
     const курс = Math.atan2(центрZ - pz, центрX - px) + Math.PI / 2;
     const взмах = Math.sin(now * 2.4) * 0.5;
+
+    // ПТИЦЫ САДЯТСЯ НА ВОДУ (§273). Пока стая летала всегда в воздухе, озеро
+    // у порта было пустым: вода без птиц читается как зеркало, а не как место,
+    // где что-то живёт. Когда стая подлетает к озеру, она опускается на воду,
+    // сидит какое-то время и снова взлетает.
+    const уОзера = Math.hypot(центрX - LAKE.x, центрZ - LAKE.z) < 150;
+    const цельY = уОзера ? LAKE.level + 0.22 : ВЫСОТА;
+    высота += (цельY - высота) * Math.min(1, dt * 0.5);
+    // 0 — летит, 1 — сидит на воде.
+    const сидит = Math.max(0, Math.min(1, (ВЫСОТА - высота) / 8));
+
     for (const п of птицы) {
       // Птица стоит в строю: смещение поворачивается вместе со стаей.
       const поворот = курс;
@@ -99,11 +113,12 @@ export function createBirds(scene: THREE.Scene): BirdsHandle {
       const sn = Math.sin(поворот);
       const wx = центрX + п.dx * cs - п.dz * sn;
       const wz = центрZ + п.dx * sn + п.dz * cs;
-      const wy = ВЫСОТА + Math.sin(now * 0.7 + п.фаза) * 2.2 + (п.dz < 0 ? 1.5 : 0);
+      const wy = высота + Math.sin(now * 0.7 + п.фаза) * 2.2 * (1 - сидит) + (п.dz < 0 ? 1.5 : 0);
       п.группа.position.set(wx, wy, wz);
       п.группа.rotation.y = -курс + Math.PI / 2;
-      // Крылья бьют вразнобой: у каждой птицы своя фаза и свой размах.
-      const бой = Math.sin(now * 7.5 + п.фаза) * 0.55 + взмах;
+      // Крылья бьют вразнобой: у каждой птицы своя фаза и свой размах. А когда
+      // птица сидит на воде — крылья сложены, и бой затихает.
+      const бой = (Math.sin(now * 7.5 + п.фаза) * 0.55 + взмах) * (1 - сидит);
       п.крылоЛ.rotation.z = 0.22 - бой;
       п.крылоП.rotation.z = -0.22 + бой;
     }
