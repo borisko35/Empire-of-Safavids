@@ -1497,6 +1497,18 @@ const MAT = {
   brush: new THREE.MeshStandardMaterial({ color: 0x6a6a3c, roughness: 1, map: foliageTexture('#6a6a3c', 4), normalMap: foliageNormalTexture(4), normalScale: new THREE.Vector2(0.8, 0.8) }),
   trunk: new THREE.MeshStandardMaterial({ color: 0x5a4630, roughness: 1, map: barkTexture('#5a4630', 2), normalMap: barkNormalTexture(2), normalScale: new THREE.Vector2(1.0, 1.0) }),
   palmTrunk: new THREE.MeshStandardMaterial({ color: 0x7a6244, roughness: 1, map: barkTexture('#7a6244', 2), normalMap: barkNormalTexture(2), normalScale: new THREE.Vector2(1.0, 1.0) }),
+  // Уличная плитка города: проспекты от центра к кварталам и дорога к
+  // точке возрождения. Мутнее мостовой площади, чтобы улица читалась
+  // улицей, а не светлой полосой, разрезающей город пополам (§230).
+  //
+  // С ПЛИТКОЙ, А НЕ ГОЛЫМ ЦВЕТОМ. Пока улица была ровной заливкой, она
+  // выходила РОВНО ТЕМ ЖЕ ЦВЕТОМ, что мостовая (замер в кадре: полоса
+  // #a58457, мостовая рядом #a58357 — разница в один из 255), и читалась не
+  // как улица, а как вырезанная из площади полоса без рисунка. Плитка мельче
+  // и темнее — улица видна как улица.
+  street: new THREE.MeshStandardMaterial({
+    color: 0x9a8a68, roughness: 1, map: plazaTexture(3),
+  }),
   palmLeaf: new THREE.MeshStandardMaterial({ color: 0x4f7a3a, roughness: 1, side: THREE.DoubleSide, map: foliageTexture('#4f7a3a', 2), normalMap: foliageNormalTexture(2), normalScale: new THREE.Vector2(0.6, 0.6) }),
   white: new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.85, map: clothTexture('#e8e0d0', 4) }),
   clothRed: new THREE.MeshStandardMaterial({ color: 0x8b1a1a, roughness: 1, map: clothTexture('#8b1a1a', 4) }),
@@ -2095,7 +2107,38 @@ export function buildRoads(scene: THREE.Scene): void {
   }
 
   for (const r of roads) {
-    buildSingleRoad(scene, r.from, r.to, r.w, r.stone ? stoneRoadMat : roadMat);
+    // ДОРОГА ВНУТРИ ГОРОДА — УЛИЦА, А НЕ МИРОВАЯ ДОРОГА (§230). Точка
+    // возрождения (0, 0) лежит ВНУТРИ стен (43 м от центра при радиусе 116),
+    // и полотно к ней рисовалось мировой дорогой: светлая полоса разрезала
+    // площадь пополам. То же было с дорогами к порту и к караван-сараю — они
+    // начинались в центре площади и шли по ней светлым полотном.
+    //
+    // ТЕПЕРЬ ДОРОГА ДЕЛИТСЯ У СТЕНЫ: кусок внутри города — городской
+    // уличной плиткой (как проспекты от центра к кварталам), кусок снаружи —
+    // мировым полотном.
+    const материалМир = r.stone ? stoneRoadMat : roadMat;
+    const fx = r.from.x - CITY.x, fz = r.from.z - CITY.z;
+    const dx = r.to.x - r.from.x, dz = r.to.z - r.from.z;
+    const d0 = Math.hypot(fx, fz);
+    const d1 = Math.hypot(r.to.x - CITY.x, r.to.z - CITY.z);
+    if (d1 < CITY.radius) {
+      // Вся дорога внутри города — улица целиком.
+      buildSingleRoad(scene, r.from, r.to, r.w, MAT.street);
+      continue;
+    }
+    if (d0 >= CITY.radius) {
+      buildSingleRoad(scene, r.from, r.to, r.w, материалМир);
+      continue;
+    }
+    // Точка выхода дороги из-под стен города: пересечение отрезка с окружностью.
+    const a = dx * dx + dz * dz;
+    const b = 2 * (fx * dx + fz * dz);
+    const c = fx * fx + fz * fz - CITY.radius * CITY.radius;
+    const диск = b * b - 4 * a * c;
+    const t = диск > 0 ? (-b + Math.sqrt(диск)) / (2 * a) : 1;
+    const выход = { x: r.from.x + dx * t, z: r.from.z + dz * t };
+    if (t > 0.01) buildSingleRoad(scene, r.from, выход, r.w, MAT.street);
+    buildSingleRoad(scene, выход, r.to, r.w, материалМир);
   }
 
   // Караваны уехали в roadTraffic.ts.
@@ -2305,7 +2348,7 @@ function buildQuarters(
   canopies: THREE.MeshStandardMaterial[],
   lights: { x: number; z: number; y?: number }[],
 ): void {
-  const streetMat = new THREE.MeshStandardMaterial({ color: 0x9a8a68, roughness: 1 });
+  const streetMat = MAT.street;
   const QUARTERS = [
     { x: 84, z: 0, name: 'Базар' },
     { x: 11.7, z: -83.2, name: 'Ремесла' },
