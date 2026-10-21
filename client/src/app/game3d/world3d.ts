@@ -35,6 +35,7 @@ import { waterMaterials, followSeaToCamera, качающиеся } from './terra
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
+import { createBirds, type BirdsHandle } from './birds';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -194,6 +195,8 @@ export class World3D {
   private дым: { дым: Puffs; x: number; y: number; z: number; таймер: number }[] = [];
   /** Пыльные вихри в пустыне (§257). */
   private вихри!: DustDevilsHandle;
+  /** Птицы над пустыней и городом (§259). */
+  private птицы!: BirdsHandle;
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
   private currentWeather: WeatherKind = 'clear';
@@ -906,6 +909,8 @@ private roll = 0;
     this.roadTraffic = createRoadTraffic(this.scene);
     // Пыльные вихри в пустыне (§257): ветер поднимает песок сам по себе.
     this.вихри = createDustDevils(this.scene);
+    // Птицы над пустыней и городом (§259): небо не должно быть пустым.
+    this.птицы = createBirds(this.scene);
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
@@ -2214,6 +2219,8 @@ if (isMe && moving) {
     }
     // Пыльные вихри (§257): бродят по песку рядом с игроком.
     this.вихри.update(dt, now, me.pos.x, me.pos.z);
+    // Птицы (§259): стая облетает игрока по дуге.
+    this.птицы.update(dt, now, me.pos.x, me.pos.z);
     // Ветер качает зелень (§258): кусты, трава и кроны деревьев стояли
     // неподвижно, хотя ветер в мире есть. В буре качание вдвое сильнее.
     const ветер = this.currentWeather === 'sandstorm' ? 2 : 1;
@@ -2268,6 +2275,7 @@ if (isMe && moving) {
     this.npcs?.dispose();
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
+    this.птицы?.dispose();
     this.civilians?.dispose();
     this.townfolk?.dispose();
     this.weather?.dispose();
