@@ -2761,6 +2761,22 @@ function buildQuarters(
     const a = (i / 10) * Math.PI * 2;
     cypress(city, -31.5 + Math.cos(a) * 11, 77.9 + Math.sin(a) * 11, 0.3, 0.9 + (i % 3) * 0.2);
   }
+  // Фонари у пруда (§249): на весь квартал был один фонарь у дороги, а пруд,
+  // кувшинки и кольцо кипарисов стояли в темноте. Три фонаря: два у воды и
+  // один на дорожке.
+  for (const [lx, lz] of [[-38.5, 77.9], [-24.5, 77.9], [-31.5, 86.5]] as const) {
+    const земля = groundHeight(CITY.x + lx, CITY.z + lz) - city.position.y;
+    const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.4, 6), MAT.dark);
+    столб.position.set(lx, земля + 1.7, lz);
+    столб.castShadow = true;
+    const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.24, 0.42, 8), MAT.gold);
+    чаша.position.set(lx, земля + 3.6, lz);
+    const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), MAT.lampGlow);
+    огонь.position.set(lx, земля + 3.55, lz);
+    city.add(столб, чаша, огонь);
+    lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + земля + 3.55 });
+    addCollider(CITY.x + lx, CITY.z + lz, 0.35);
+  }
   // Пруд в садах (§242).
   //
   // БЫЛО: плоский диск воды, висящий НАД мостовой (0.5 при верхе плиты
