@@ -9744,6 +9744,10 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
     const коллайдер = (lx: number, lz: number, r: number): void => addCollider(t.x + lx, t.z + lz, r);
 
     // ── Стена по кольцу с проходом на юге ──────────────────────
+    //
+    // §292. БЫЛО: стена — брусок, башня — голый барабан. Город читался как
+    // забор из коробок. ТЕПЕРЬ: цоколь, тело, карниз и зубцы у стены; база,
+    // ствол, карниз, зубцы по ободу, бойницы и шатёр у башни.
     const сегментов = 14;
     const hСтены = t.kind === 'fortress' ? 6.5 : 3.6;
     for (let i = 0; i < сегментов; i++) {
@@ -9751,21 +9755,66 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
       const a = (i / сегментов) * Math.PI * 2;
       const wx = Math.cos(a) * t.radius;
       const wz = Math.sin(a) * t.radius;
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(t.radius * 0.44, hСтены, 1.6), MAT.stone);
-      wall.position.set(wx, hСтены / 2, wz);
-      wall.rotation.y = -a + Math.PI / 2;
-      wall.castShadow = true;
-      wall.receiveShadow = true;
-      g.add(wall);
+      const длина = t.radius * 0.44;
+      const стена = new THREE.Group();
+      стена.position.set(wx, 0, wz);
+      стена.rotation.y = -a + Math.PI / 2;
+      // Цоколь шире тела: стена не стоит прямо на земле.
+      const цоколь = new THREE.Mesh(new THREE.BoxGeometry(длина, 0.7, 2.0), MAT.stone);
+      цоколь.position.y = 0.35;
+      // Тело стены.
+      const корпус = new THREE.Mesh(new THREE.BoxGeometry(длина, hСтены - 0.9, 1.6), MAT.stone);
+      корпус.position.y = 0.7 + (hСтены - 0.9) / 2;
+      // Карниз — опора для глаза над зубцами.
+      const карниз = new THREE.Mesh(new THREE.BoxGeometry(длина, 0.22, 2.0), MAT.sandstoneDark);
+      карниз.position.y = hСтены - 0.22;
+      стена.add(цоколь, корпус, карниз);
+      // Зубцы: без них стена — ровная полоса.
+      const зубцов = Math.max(3, Math.round(длина / 1.6));
+      for (let j = 0; j < зубцов; j++) {
+        const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 1.6), MAT.stone);
+        зубец.position.set(-длина / 2 + (j + 0.5) * (длина / зубцов), hСтены + 0.37, 0);
+        стена.add(зубец);
+      }
+      стена.traverse((o) => {
+        const м = o as THREE.Mesh;
+        if (м.isMesh) { м.castShadow = true; м.receiveShadow = true; }
+      });
+      g.add(стена);
       коллайдер(wx, wz, 2.4);
     }
     for (const sgn of [-1, 1]) {
       const a = Math.PI / 2 + sgn * 0.16;
       const px = Math.cos(a) * t.radius;
       const pz = Math.sin(a) * t.radius;
-      const башня = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 7.4, 8), MAT.stone);
-      башня.position.set(px, 3.7, pz);
-      башня.castShadow = true;
+      // Башня: база, ствол, карниз, зубцы по ободу, бойницы.
+      const башня = new THREE.Group();
+      башня.position.set(px, 0, pz);
+      const база = new THREE.Mesh(new THREE.CylinderGeometry(2.25, 2.5, 1.2, 10), MAT.stone);
+      база.position.y = 0.6;
+      const ствол = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.1, 5.6, 10), MAT.stone);
+      ствол.position.y = 4.0;
+      const карниз = new THREE.Mesh(new THREE.CylinderGeometry(2.15, 2.0, 0.24, 10), MAT.sandstoneDark);
+      карниз.position.y = 6.9;
+      башня.add(база, ствол, карниз);
+      // Зубцы по ободу башни.
+      for (let j = 0; j < 8; j++) {
+        const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.34), MAT.stone);
+        const угол = (j / 8) * Math.PI * 2;
+        зубец.position.set(Math.cos(угол) * 2.0, 7.3, Math.sin(угол) * 2.0);
+        зубец.rotation.y = -угол;
+        башня.add(зубец);
+      }
+      // Бойницы: узкие щели в стволе.
+      for (let j = 0; j < 2; j++) {
+        const щель = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.9, 0.1), MAT.dark);
+        щель.position.set(0, 3.2 + j * 1.7, 1.95);
+        башня.add(щель);
+      }
+      башня.traverse((o) => {
+        const м = o as THREE.Mesh;
+        if (м.isMesh) { м.castShadow = true; м.receiveShadow = true; }
+      });
       g.add(башня);
       коллайдер(px, pz, 1.9);
     }
