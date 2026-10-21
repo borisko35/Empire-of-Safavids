@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // NPC всех поселений — Empire of Safavids
 // ============================================================
 // Исфахан (площадь), приозёрный порт, караван-сарай в пустыне,
@@ -84,7 +84,7 @@ function группаГорода(
         quest: false,
         dx: t.radius * 0.45,
         dz: 0,
-        look: { robe: 0x8a5a2b, robeDark: 0x5e3a1c, hat: 'cap', hatColor: 0x3a2a1c, weapon: 'none', scale: 1.02 },
+        look: { robe: 0x8a5a2b, robeDark: 0x5e3a1c, hat: 'cap', hatColor: 0x3a2a1c, weapon: 'none', scale: 1.02, предмет: 'весы' },
       },
     ],
   };
@@ -137,7 +137,7 @@ export const NPC_GROUPS: NpcGroup[] = [
   {
     origin: PORT,
     npcs: [
-      { id: 'npc_fisherman', nameRu: 'Рыбак Тигран', panel: 'panel-quests', quest: true, dx: -3, dz: 6, look: { robe: 0x3d6a8a, robeDark: 0x2a4c63, hat: 'cap', hatColor: 0x8a6a42, weapon: 'none', scale: 1 } },
+      { id: 'npc_fisherman', nameRu: 'Рыбак Тигран', panel: 'panel-quests', quest: true, dx: -3, dz: 6, look: { robe: 0x3d6a8a, robeDark: 0x2a4c63, hat: 'cap', hatColor: 0x8a6a42, weapon: 'none', scale: 1, предмет: 'удочка' } },
       { id: 'npc_harbor_master', nameRu: 'Хозяйка пристани Лейла', panel: 'panel-trade', quest: true, dx: 6, dz: 3, look: { robe: 0x2e8b8b, robeDark: 0x1f6161, hat: 'turban', hatColor: 0xe8e0d0, weapon: 'dagger', scale: 0.97 } },
       { id: 'npc_port_guard', nameRu: 'Дозорный моря', panel: 'panel-dungeons', quest: false, dx: -9, dz: -4, look: GUARD(0x2a4c63) },
       { id: 'npc_sailor', nameRu: 'Кок Салим', panel: 'panel-shop', quest: false, dx: 10, dz: -6, look: { robe: 0xb5763a, robeDark: 0x8a5628, hat: 'cap', hatColor: 0x4c3a22, weapon: 'none', scale: 1.02 } },
@@ -146,8 +146,8 @@ export const NPC_GROUPS: NpcGroup[] = [
       // Порт — место, где ловят рыбу, но ловли не было видно: берег пустой.
       // Стоят у своих сетей (места — в terrain.ts, список сетиРыбаков), чтобы
       // рыбак и сеть не разошлись по берегу.
-      { id: 'npc_fisherman_net_0', nameRu: 'Рыбак Омар', panel: 'panel-trade', quest: false, dx: -21.1, dz: 4.3, look: { robe: 0x4a6a78, robeDark: 0x334c56, hat: 'cap', hatColor: 0x8a7a54, weapon: 'none', scale: 1.01 } },
-      { id: 'npc_fisherman_net_1', nameRu: 'Рыбак Гасан', panel: 'panel-trade', quest: false, dx: -23.1, dz: -6.7, look: { robe: 0x6a7a4a, robeDark: 0x4a5634, hat: 'turban', hatColor: 0xc8b890, weapon: 'none', scale: 0.99 } },
+      { id: 'npc_fisherman_net_0', nameRu: 'Рыбак Омар', panel: 'panel-trade', quest: false, dx: -21.1, dz: 4.3, look: { robe: 0x4a6a78, robeDark: 0x334c56, hat: 'cap', hatColor: 0x8a7a54, weapon: 'none', scale: 1.01, предмет: 'удочка' } },
+      { id: 'npc_fisherman_net_1', nameRu: 'Рыбак Гасан', panel: 'panel-trade', quest: false, dx: -23.1, dz: -6.7, look: { robe: 0x6a7a4a, robeDark: 0x4a5634, hat: 'turban', hatColor: 0xc8b890, weapon: 'none', scale: 0.99, предмет: 'корзина' } },
     ],
   },
   // ── Караван-сарай в пустыне ──

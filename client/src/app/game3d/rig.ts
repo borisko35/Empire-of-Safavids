@@ -102,6 +102,14 @@ export interface HumanoidCfg {
   weapon: Weapon;
   shield?: boolean;
   scale?: number;
+  /**
+   * Предмет в руках (§293).
+   *
+   * БЫЛО: рыбак стоял с пустыми руками, торговец — тоже. Рыбак у сетей без
+   * удочки и корзины, торговец без весов: работа читалась только по подписи
+   * над NPC.
+   */
+  предмет?: 'удочка' | 'весы' | 'корзина';
 }
 
 function box(w: number, h: number, d: number, m: THREE.Material): THREE.Mesh {
@@ -366,6 +374,57 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
     shieldRef = buildShield();
     armL.add(shieldRef);
   }
+
+  // ── Предмет в руках (§293) ────────────────────────────────────
+  //
+  // Удочка, весы или корзина — по роду занятия. Без них NPC читался как
+  // манекен: рыбак без удочки, торговец без весов.
+  let предметRef: THREE.Group | null = null;
+  if (cfg.предмет === 'удочка') {
+    const удочка = new THREE.Group();
+    const древко = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.032, 1.9, 6), MAT.wood);
+    древко.position.y = 0.95;
+    const леска = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.78, 4), MAT.steelDark);
+    леска.position.set(0.07, -0.36, 0.02);
+    const крючок = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.007, 4, 8), MAT.steel);
+    крючок.position.set(0.07, -0.75, 0.02);
+    крючок.rotation.x = Math.PI / 2;
+    удочка.add(древко, леска, крючок);
+    удочка.position.set(0.03, -0.46, 0.14);
+    удочка.rotation.set(-0.3, 0, 0.55);
+    предметRef = удочка;
+  } else if (cfg.предмет === 'весы') {
+    const весы = new THREE.Group();
+    const коромысло = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.028, 0.028), MAT.wood);
+    const чашаЛ = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.055, 0.035, 10), MAT.steel);
+    чашаЛ.position.set(-0.24, -0.11, 0);
+    const чашаП = чашаЛ.clone();
+    чашаП.position.x = 0.24;
+    // Нити чаш: весы висят на них, а не висят в воздухе.
+    for (const сторона of [-1, 1]) {
+      const нить = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.11, 4), MAT.steelDark);
+      нить.position.set(сторона * 0.24, -0.05, 0);
+      весы.add(нить);
+    }
+    весы.add(коромысло, чашаЛ, чашаП);
+    весы.position.set(0.02, -0.52, 0.16);
+    весы.rotation.set(0.15, 0, 0);
+    предметRef = весы;
+  } else if (cfg.предмет === 'корзина') {
+    const корзина = new THREE.Group();
+    const тело = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.13, 0.26, 10), MAT.wood);
+    const ободок = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.022, 5, 12), MAT.steelDark);
+    ободок.position.y = 0.13;
+    ободок.rotation.x = Math.PI / 2;
+    const дужка = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.014, 5, 12, Math.PI), MAT.wood);
+    дужка.position.y = 0.13;
+    дужка.rotation.set(0, Math.PI / 2, 0);
+    корзина.add(тело, ободок, дужка);
+    // Корзина висит на левой руке — на правой может быть удочка.
+    корзина.position.set(0, -0.66, 0.02);
+    armL.add(корзина);
+  }
+  if (предметRef) armR.add(предметRef);
 
   let weaponOn = !!weaponRef;
   let shieldOn = !!shieldRef;
