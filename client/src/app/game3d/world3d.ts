@@ -33,6 +33,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
 } from './terrain';
 import { waterMaterials, followSeaToCamera } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
+import { createPuffs, type Puffs } from './puffs';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -182,6 +183,8 @@ export class World3D {
    */
   private lamps: { light: THREE.PointLight; base: number }[] = [];
   private flames: THREE.Mesh[] = [];
+  /** Дым над большими огнями (§255): костёр в лагере и факелы караван-сарая. */
+  private дым: { дым: Puffs; x: number; y: number; z: number; таймер: number }[] = [];
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
   private currentWeather: WeatherKind = 'clear';
@@ -759,6 +762,24 @@ private roll = 0;
       // Фаза своя у каждого: два факела в двух шагах друг от друга, мигающие
       // в такт, читаются как одна лампа, а не как два огня.
       this.torches.push({ light, base: ТОРЧ_СВЕТ_ЯРКОСТЬ, phase: 1.1 + i * 3.7 });
+      // Дым над факелом (§255): огонь без дыма читается как нарисованный.
+      this.дым.push({
+        дым: createPuffs(this.scene, {
+          количество: 12,
+          цвет: 0x82796f,
+          размер: 0.5,
+          рост: 2.4,
+          жизнь: 3.2,
+          подъём: 1.0,
+          разброс: 0.22,
+          непрозрачность: 0.46,
+          затухание: 0.8,
+        }),
+        x: огонь.x,
+        y: огонь.y + 0.2,
+        z: огонь.z,
+        таймер: 0,
+      });
     }
     // Факелы в проёмах (21 октября 2026, §226): ворота дворца и вход в
     // гробницу читались чёрными провалами. Свет в проёме нужен и ДНЁМ —
@@ -844,6 +865,24 @@ private roll = 0;
       fireLight.position.set(CAMP.x, groundHeight(CAMP.x, CAMP.z) + 1.6, CAMP.z);
       this.scene.add(fireLight);
       this.torches.push({ light: fireLight, base: 3.2, phase: 5.5 });
+      // Дым над костром (§255): огонь без дыма читается как нарисованный.
+      this.дым.push({
+        дым: createPuffs(this.scene, {
+          количество: 20,
+          цвет: 0x82796f,
+          размер: 1.2,
+          рост: 3.8,
+          жизнь: 4.4,
+          подъём: 1.3,
+          разброс: 0.3,
+          непрозрачность: 0.6,
+          затухание: 0.8,
+        }),
+        x: CAMP.x,
+        y: groundHeight(CAMP.x, CAMP.z) + 1.4,
+        z: CAMP.z,
+        таймер: 0,
+      });
     }
 
     // Небо, фауна и NPC города
@@ -2135,6 +2174,15 @@ if (isMe && moving) {
     for (const f of this.flames) {
       f.scale.y = 1 + Math.sin(now / 70) * 0.18;
     }
+    // Дым над огнями (§255): клуб выходит из огня и уходит вверх.
+    for (const д of this.дым) {
+      д.таймер += dt;
+      if (д.таймер >= 0.14) {
+        д.таймер = 0;
+        д.дым.всплеск(д.x, д.y, д.z);
+      }
+      д.дым.update(dt);
+    }
 
     if (this.attackCd > 0) this.attackCd -= dt;
     // Новые материалы (монстры, лошади, караваны) прошиваем пачкой раз в
@@ -2169,6 +2217,7 @@ if (isMe && moving) {
     this.env?.dispose();
     this.fauna?.dispose();
     this.npcs?.dispose();
+    for (const д of this.дым) д.дым.dispose();
     this.civilians?.dispose();
     this.townfolk?.dispose();
     this.weather?.dispose();

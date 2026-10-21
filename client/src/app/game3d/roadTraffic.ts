@@ -19,6 +19,7 @@ import { camelTexture, camelNormalTexture, skinTexture, skinNormalTexture, cloth
 import * as THREE from 'three';
 import { ROAD_PATHS, CITY, groundHeight } from './terrain';
 import { spriteVisible } from './spriteClamp';
+import { createPuffs, type Puffs } from './puffs';
 
 export interface RoadTrafficHandle {
   /**
@@ -338,6 +339,8 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
     локX: number;
     локZ: number;
   }[] = [];
+  // Пыль из-под копыт (§255): караван шёл по песку и не поднимал пыли.
+  const караваны: { верблюды: Walker[]; пыль: Puffs; таймер: number }[] = [];
 
   // ── Караваны ───────────────────────────────────────────────
   // Идут по дальним дорогам, чтобы не резать игроку путь в город. Три штуки
@@ -391,6 +394,18 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       локX: 0.34,
       локZ: 0.22,
     });
+    // Пыль из-под копыт (§255): клуб поднимается там, где верблюд ступил.
+    const пыль = createPuffs(scene, {
+      количество: 16,
+      цвет: 0xd9c69e,
+      размер: 0.5,
+      рост: 1.9,
+      жизнь: 1.5,
+      подъём: 0.45,
+      разброс: 0.4,
+      непрозрачность: 0.4,
+    });
+    караваны.push({ верблюды: column.filter(w => w.legs.length === 4), пыль, таймер: 0 });
   });
 
   // ── Путники с заданиями ────────────────────────────────────
@@ -452,6 +467,20 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       );
       ф.свет.intensity = 1.6 * (0.35 + night * 0.65);
     }
+    // Пыль из-под копыт (§255): клуб там, где верблюд ступил, и он уходит
+    // сам через полторы секунды.
+    for (const к of караваны) {
+      к.таймер += dt;
+      if (к.таймер >= 0.4) {
+        к.таймер = 0;
+        for (const в of к.верблюды) {
+          const p = в.group.position;
+          if (Math.hypot(p.x - px, p.z - pz) > VISIBLE_DIST) continue;
+          к.пыль.всплеск(p.x, p.y + 0.12, p.z);
+        }
+      }
+      к.пыль.update(dt);
+    }
     for (const w of travellers) {
       const road = w.road;
       if (!road) continue;
@@ -496,6 +525,7 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
   }
 
   function dispose(): void {
+    for (const к of караваны) к.пыль.dispose();
     group.traverse(o => {
       if (o instanceof THREE.Mesh || o instanceof THREE.Sprite) {
         const g = o.geometry;
