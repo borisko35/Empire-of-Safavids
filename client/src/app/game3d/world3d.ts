@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира, чайкиНаПричале, hash2 } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира, чайкиНаПричале, hash2, огниФонарей } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -2462,6 +2462,20 @@ if (isMe && moving) {
         к.база.y,
         к.база.z + Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
       );
+    }
+    // Огни фонарей наклоняются по ветру (§282): в бурю огонь в фонаре
+    // колышется, и ночной город выдаёт погоду.
+    for (const о of огниФонарей) {
+      const фаза = о.base.x * 0.7 + о.base.z * 1.3;
+      const наклон = Math.sin(now / 620 + фаза) * 0.55 + Math.sin(now / 260 + фаза * 2.1) * 0.45;
+      const сдвиг = наклон * ветер * 0.06;
+      о.mesh.position.set(
+        о.base.x + Math.sin(НАПРАВЛЕНИЕ_ВЕТРА) * сдвиг,
+        о.base.y,
+        о.base.z + Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * сдвиг,
+      );
+      о.mesh.rotation.z = -Math.sin(НАПРАВЛЕНИЕ_ВЕТРА) * наклон * ветер * 0.09;
+      о.mesh.rotation.x = Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * наклон * ветер * 0.09;
     }
 
     if (this.attackCd > 0) this.attackCd -= dt;
