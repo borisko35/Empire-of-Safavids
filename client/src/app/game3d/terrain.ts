@@ -2075,8 +2075,8 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   const sc = new THREE.Vector3();
   const color = new THREE.Color();
   const flowerColors = [0xe85a6a, 0xe8c94a, 0xd07ae8, 0xf0f0e0, 0xe88a4a];
-  const put = (mesh: THREE.InstancedMesh, idx: number, x: number, y: number, z: number, k: number, rotY = 0, sy = k) => {
-    m.compose(v.set(x, y, z), q.setFromEuler(new THREE.Euler(0, rotY, 0)), sc.set(k, sy, k));
+  const put = (mesh: THREE.InstancedMesh, idx: number, x: number, y: number, z: number, k: number, rotY = 0, sy = k, tilt = 0) => {
+    m.compose(v.set(x, y, z), q.setFromEuler(new THREE.Euler(tilt, rotY, tilt * 0.7)), sc.set(k, sy, k));
     mesh.setMatrixAt(idx, m);
   };
 
@@ -2089,28 +2089,79 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   const pines = spots.filter(s => s.biome === 'mountain' && s.h < 40 && rng() < 0.5);
 
   // Стволы + кроны (платан/кипарис по случаю)
-  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.34, 3.2, 6);
+  //
+  // §287. БЫЛО: ствол — ровный цилиндр, крона — один конус или один шар.
+  // Дерево читалось как палка с шариком на конце: шапка одинаковой формы,
+  // ствол без корней, все деревья строго вертикальные и одного оттенка.
+  //
+  // ТЕПЕРЬ: ствол сужается кверху и имеет корневой наплыв, дерево наклонено
+  // (ровные вертикальные стволы читаются как колонны), крона собрана из двух
+  // объёмов (слой у кипариса, гроздь у платана), и у каждого дерева свой
+  // оттенок листвы.
+  const trunkGeo = new THREE.CylinderGeometry(0.19, 0.34, 3.2, 6);
   const trunks = new THREE.InstancedMesh(trunkGeo, MAT.trunk, trees.length);
   trunks.castShadow = true;
+  // Корневой наплыв: без него ствол начинается из земли ровно, как палка.
+  const flareGeo = new THREE.CylinderGeometry(0.3, 0.62, 0.75, 7);
+  const flares = new THREE.InstancedMesh(flareGeo, MAT.trunk, trees.length);
+  flares.castShadow = true;
   const crownGeo = new THREE.ConeGeometry(1.7, 3.4, 7);
   const crowns = new THREE.InstancedMesh(crownGeo, MAT.foliage, trees.length);
   crowns.castShadow = true;
+  // Нижний слой кроны кипариса — конус меньше и ниже.
+  const crownLowGeo = new THREE.ConeGeometry(1.22, 2.2, 7);
+  const crownsLow = new THREE.InstancedMesh(crownLowGeo, MAT.foliage, trees.length);
+  crownsLow.castShadow = true;
   const crown2Geo = new THREE.SphereGeometry(1.9, 8, 6);
   const crowns2 = new THREE.InstancedMesh(crown2Geo, MAT.foliageLight, trees.length);
   crowns2.castShadow = true;
+  // Второй шар в кроне платана: крона-гроздь, а не один шар.
+  const crown2bGeo = new THREE.SphereGeometry(1.24, 7, 5);
+  const crowns2b = new THREE.InstancedMesh(crown2bGeo, MAT.foliageLight, trees.length);
+  crowns2b.castShadow = true;
   trees.forEach((s, idx) => {
     const k = 0.8 + rng() * 1.2;
-    put(trunks, idx, s.x, s.h + 1.6 * k, s.z, k);
+    // Наклон: деревья не растут отвесно.
+    const наклон = (rng() - 0.5) * 0.13;
+    const высота = 3.2 * k;
+    put(trunks, idx, s.x, s.h + высота / 2, s.z, k, 0, k, наклон);
+    put(flares, idx, s.x, s.h + 0.3 * k, s.z, k, rng() * Math.PI, k, наклон);
+    // Крона следует за наклоном ствола, иначе ствол с кроной разъезжаются.
+    const над = 1.9 * k;
+    const кронаY = s.h + высота + над * Math.cos(наклон);
+    const кронаZ = s.z + над * Math.sin(наклон);
     const cypress = s.biome !== 'field' && rng() < 0.7 || rng() < 0.4;
     if (cypress) {
-      put(crowns, idx, s.x, s.h + 3.9 * k, s.z, k * 0.8, rng() * Math.PI, k * 1.25);
+      put(crowns, idx, s.x, кронаY, кронаZ, k * 0.8, rng() * Math.PI, k * 1.25, наклон);
+      put(crownsLow, idx, s.x, кронаY - 1.5 * k, кронаZ, k * 0.85, rng() * Math.PI, k * 1.15, наклон);
       put(crowns2, idx, s.x, -9999, s.z, 0.001);
+      put(crowns2b, idx, s.x, -9999, s.z, 0.001);
     } else {
       put(crowns, idx, s.x, -9999, s.z, 0.001);
-      put(crowns2, idx, s.x, s.h + 3.7 * k, s.z, k * 1.05, 0, k);
+      put(crownsLow, idx, s.x, -9999, s.z, 0.001);
+      put(crowns2, idx, s.x, кронаY, кронаZ, k * 1.05, 0, k, наклон);
+      // Второй шар — сбоку и ниже: крона становится гроздью.
+      put(crowns2b, idx, s.x + (rng() - 0.5) * 2.6 * k, кронаY - 0.8 * k, кронаZ + (rng() - 0.5) * 2.6 * k, k * 0.95, rng() * Math.PI, k, наклон);
     }
+    // Оттенок листвы у каждого дерева свой: одно зелёное на всех читалось бы
+    // как покрашенное.
+    color.setHSL(0.22 + rng() * 0.07, 0.3 + rng() * 0.18, 0.22 + rng() * 0.09);
+    crowns.setColorAt(idx, color);
+    crownsLow.setColorAt(idx, color);
+    color.offsetHSL(0.01, 0.04, 0.03);
+    crowns2.setColorAt(idx, color);
+    crowns2b.setColorAt(idx, color);
   });
-  trunks.count = trees.length; crowns.count = trees.length; crowns2.count = trees.length;
+  trunks.count = trees.length;
+  flares.count = trees.length;
+  crowns.count = trees.length;
+  crownsLow.count = trees.length;
+  crowns2.count = trees.length;
+  crowns2b.count = trees.length;
+  if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
+  if (crownsLow.instanceColor) crownsLow.instanceColor.needsUpdate = true;
+  if (crowns2.instanceColor) crowns2.instanceColor.needsUpdate = true;
+  if (crowns2b.instanceColor) crowns2b.instanceColor.needsUpdate = true;
 
   // Коллайдеры деревьев (стволы)
   for (const s of trees) {
@@ -2133,12 +2184,37 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     addCollider(s.x, s.z, big ? 1.4 : 0.9);
   }
 
-  // Трава
-  const tuftGeo = new THREE.ConeGeometry(0.5, 1.1, 5);
+  // Трава: пучок из нескольких blades (§287).
+  //
+  // БЫЛО: конус. На земле стояли маленькие шишки, а не трава. ТЕПЕРЬ: пучок
+  // из четырёх наклонённых blades — как у травы в поле. Лист двусторонний:
+  // клин без обратной стороны гас с одной стороны.
+  const tuftGeo = new THREE.BufferGeometry();
+  {
+    const вершины: number[] = [];
+    const индексы: number[] = [];
+    for (let b = 0; b < 4; b++) {
+      const a = (b / 4) * Math.PI * 2 + 0.4;
+      const наклон = 0.22 + (b % 2) * 0.13;
+      const w = 0.055, h = 1.05;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const base = вершины.length / 3;
+      вершины.push(
+        -dz * w, 0, dx * w,
+        dz * w, 0, -dx * w,
+        dx * h * наклон, h, dz * h * наклон,
+      );
+      индексы.push(base, base + 1, base + 2);
+      индексы.push(base + 2, base + 1, base); // обратная сторона
+    }
+    tuftGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
+    tuftGeo.setIndex(индексы);
+    tuftGeo.computeVertexNormals();
+  }
   const tuftsMesh = new THREE.InstancedMesh(tuftGeo, MAT.foliageLight, tufts.length);
   tufts.forEach((s, idx) => {
     const k = 0.7 + rng() * 0.9;
-    put(tuftsMesh, idx, s.x, s.h + 0.4 * k, s.z, k);
+    put(tuftsMesh, idx, s.x, s.h, s.z, k, rng() * Math.PI);
   });
   tuftsMesh.count = tufts.length;
 
@@ -2157,29 +2233,40 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   flowersMesh.count = flowers.length; stemsMesh.count = flowers.length;
   if (flowersMesh.instanceColor) flowersMesh.instanceColor.needsUpdate = true;
 
-  // Пустынный кустарник (саксаул): короткий ствол + оливковый шар
+  // Пустынный кустарник (саксаул): короткий ствол + гроздь листвы (§287).
+  //
+  // БЫЛО: ствол и один шар — шарик на палочке. ТЕПЕРЬ: два шара разного
+  // размера, сбитых вбок, — кустарник ветвится.
   const brushTrunkGeo = new THREE.CylinderGeometry(0.08, 0.14, 0.9, 5);
   const brushTrunks = new THREE.InstancedMesh(brushTrunkGeo, MAT.trunk, brushes.length);
   const brushGeo = new THREE.SphereGeometry(0.8, 7, 5);
   const brushesMesh = new THREE.InstancedMesh(brushGeo, MAT.brush, brushes.length);
+  const brush2Geo = new THREE.SphereGeometry(0.52, 6, 5);
+  const brushesMesh2 = new THREE.InstancedMesh(brush2Geo, MAT.brush, brushes.length);
   brushes.forEach((s, idx) => {
     const k = 0.7 + rng() * 1.1;
     put(brushTrunks, idx, s.x, s.h + 0.45 * k, s.z, k);
     put(brushesMesh, idx, s.x, s.h + 1.1 * k, s.z, k, 0, k * 0.8);
+    // Второй шар сбоку и ниже.
+    put(brushesMesh2, idx, s.x + (rng() - 0.5) * 0.9 * k, s.h + 0.78 * k, s.z + (rng() - 0.5) * 0.9 * k, k, rng() * Math.PI, k * 0.8);
   });
-  brushTrunks.count = brushes.length; brushesMesh.count = brushes.length;
+  brushTrunks.count = brushes.length; brushesMesh.count = brushes.length; brushesMesh2.count = brushes.length;
 
-  // Горная хвоя: тёмные узкие конусы
+  // Горная хвоя: тёмные узкие конусы (§287 — в два слоя, как у ёлки).
   const pineGeo = new THREE.ConeGeometry(1.2, 4.4, 6);
   const pinesMesh = new THREE.InstancedMesh(pineGeo, MAT.foliageDark, pines.length);
+  const pineLowGeo = new THREE.ConeGeometry(0.92, 3.0, 6);
+  const pinesLow = new THREE.InstancedMesh(pineLowGeo, MAT.foliageDark, pines.length);
   const pineTrunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 1.4, 5);
   const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, MAT.trunk, pines.length);
   pines.forEach((s, idx) => {
     const k = 0.9 + rng() * 0.9;
     put(pineTrunks, idx, s.x, s.h + 0.7 * k, s.z, k);
     put(pinesMesh, idx, s.x, s.h + 3.1 * k, s.z, k);
+    // Нижний слой шире и ниже — силуэт ёлки, а не шишки.
+    put(pinesLow, idx, s.x, s.h + 1.9 * k, s.z, k * 1.08);
   });
-  pinesMesh.count = pines.length; pineTrunks.count = pines.length;
+  pinesMesh.count = pines.length; pinesLow.count = pines.length; pineTrunks.count = pines.length;
   // Коллайдеры горной хвои (стволы)
   for (const s of pines) {
     addCollider(s.x, s.z, 0.5);
@@ -2191,8 +2278,8 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     return wm > 0.005 && wm < 0.09 && (s.biome === 'desert' || rng() < 0.5);
   }).slice(0, 46);
 
-  scene.add(trunks, crowns, crowns2, rocksMesh, tuftsMesh, flowersMesh, stemsMesh,
-    brushTrunks, brushesMesh, pinesMesh, pineTrunks);
+  scene.add(trunks, flares, crowns, crownsLow, crowns2, crowns2b, rocksMesh, tuftsMesh, flowersMesh, stemsMesh,
+    brushTrunks, brushesMesh, brushesMesh2, pinesMesh, pinesLow, pineTrunks);
 
   // Пальмы строятся группами (не инстансами — их немного)
   for (const s of oasis) addPalm(scene, s.x, s.z, 0.8 + rng() * 0.6);
