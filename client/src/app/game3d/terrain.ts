@@ -2409,14 +2409,46 @@ function buildQuarters(
     ave.receiveShadow = true;
     city.add(ave);
     const nx = -q.x / len, nz = -q.z / len;
+
+    // ── Ворота квартала (§235) ──
+    //
+    // Проспект упирался в пустое место: квартал был группами домов на
+    // площади, и входа в него не было. Теперь на конце проспекта — ворота:
+    // два столба, перекладина с зубцами, и табличка квартала под перемычкой.
+    // Квартал читается как квартал, а не как дома, разбросанные по площади.
+    const ux = q.x / len, uz = q.z / len;   // вдоль проспекта, от центра
+    const px = -uz, pz = ux;                 // поперёк проспекта
+    const gx = ux * r1, gz = uz * r1;        // конец проспекта
+    const поворотВорот = -Math.atan2(uz, ux) - Math.PI / 2;
+    for (const s of [-1, 1] as const) {
+      const столб = new THREE.Mesh(new THREE.BoxGeometry(1.2, 4.4, 1.2), MAT.sandstone);
+      столб.position.set(gx + px * s * 3.4, 2.2, gz + pz * s * 3.4);
+      столб.rotation.y = поворотВорот;
+      столб.castShadow = true;
+      столб.receiveShadow = true;
+      city.add(столб);
+      addCollider(CITY.x + столб.position.x, CITY.z + столб.position.z, 0.9);
+    }
+    const перемычка = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.8, 1.3), MAT.sandstoneDark);
+    перемычка.position.set(gx, 4.7, gz);
+    перемычка.rotation.y = поворотВорот;
+    перемычка.castShadow = true;
+    city.add(перемычка);
+    // Зубцы по перемычке: ворота читаются как крепостные.
+    for (let i = 0; i < 5; i++) {
+      const смещение = (i - 2) * 1.6;
+      const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.2), MAT.sandstoneDark);
+      зубец.position.set(gx + px * смещение, 5.45, gz + pz * смещение);
+      зубец.rotation.y = поворотВорот;
+      зубец.castShadow = true;
+      city.add(зубец);
+    }
+    // Табличка квартала — под перемычкой, в проёме ворот. Раньше она стояла
+    // на столбе посреди проспекта, прямо в проходе.
     const sign = quarterSign(q.name);
-    sign.position.set(q.x + nx * 13, 3.2, q.z + nz * 13);
+    sign.position.set(gx, 3.85, gz);
     sign.rotation.y = Math.atan2(nx, nz);
     city.add(sign);
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, 3.2, 0.25), MAT.wood);
-    post.position.set(q.x + nx * 13, 1.6, q.z + nz * 13);
-    city.add(post);
-    addCollider(CITY.x + q.x + nx * 13, CITY.z + q.z + nz * 13, 0.5);
   }
 
   // Базар: два ряда лавок
