@@ -4111,8 +4111,19 @@ export function buildCamp(scene: THREE.Scene): void {
 }
 
 // ── Поселения: порт, караван-сарай, деревня, форт ────────────
-export function buildSettlements(scene: THREE.Scene): void {
+export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z: number }[] {
   const rng = (() => { let s = 99; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+
+  // Огни поселений (§251).
+  //
+  // БЫЛО: у порта горел маяк и стоял маячок-фонарь, в деревне был поленница
+  // и стог, у форта — ворота с айваном, и НИ У ОДНОГО из этих мест не было
+  // источника света. Ночью порт, деревня и форт стояли чёрными силуэтами.
+  //
+  // ТЕПЕРЬ: у маяка и маячка, у поленницы и у ворот форта — свои огни.
+  // Возвращаются мировые координаты: источники создаёт world3d, потому что
+  // свет и ночное правило — его дело (как и у городов регионов, §250).
+  const огни: { x: number; y: number; z: number }[] = [];
 
   // Приозёрный порт: пирс с лодками, домики, бочки
   {
@@ -4222,6 +4233,8 @@ export function buildSettlements(scene: THREE.Scene): void {
     lamp.position.set(-10, 5.6, -4);
     g.add(lampPost, lamp);
     addCollider(PORT.x - 10, PORT.z - 4, 0.6);
+    // Свет от маячка (§251): горел только нарисованный шар, источника не было.
+    огни.push({ x: PORT.x - 10, y: g.position.y + 5.6, z: PORT.z - 4 });
 
     // Маяк на конце пирса + склады у берега
     const lightTower = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.5, 9, 10), MAT.white);
@@ -4238,6 +4251,8 @@ export function buildSettlements(scene: THREE.Scene): void {
     lightCap.position.set(-2.2, 10.6, -12.5);
     g.add(lightTower, lampRoom, lampGlow, lightCap);
     addCollider(PORT.x - 2.2, PORT.z - 12.5, 1.6);
+    // Свет от маяка (§251): маяк горит, а пирс под ним — чёрный.
+    огни.push({ x: PORT.x - 2.2, y: g.position.y + 9.6, z: PORT.z - 12.5 });
     for (const [wx, wz, ww] of [[-14, 6, 7], [-15, -2, 5.5]] as const) {
       const store = new THREE.Mesh(new THREE.BoxGeometry(ww, 3.2, 5), MAT.sandstoneDark);
       store.position.set(wx, 1.6, wz);
@@ -4402,6 +4417,18 @@ export function buildSettlements(scene: THREE.Scene): void {
       g.add(log);
     }
     addCollider(VILLAGE.x - 6, VILLAGE.z + 8, 1.4);
+    // Фонарь у поленницы (§251): деревня стояла в темноте — дома, поленница и
+    // стог были, а света не было ни одного.
+    const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.6, 5), MAT.wood);
+    lanternPost.position.set(-5, 1.3, 5);
+    lanternPost.castShadow = true;
+    const lanternBox = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.42), MAT.gold);
+    lanternBox.position.set(-5, 2.8, 5);
+    const lanternFire = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), MAT.lampGlow);
+    lanternFire.position.set(-5, 2.8, 5);
+    g.add(lanternPost, lanternBox, lanternFire);
+    addCollider(VILLAGE.x - 5, VILLAGE.z + 5, 0.4);
+    огни.push({ x: VILLAGE.x - 5, y: g.position.y + 2.8, z: VILLAGE.z + 5 });
     // стог сена
     const hay = new THREE.Mesh(new THREE.ConeGeometry(1.6, 2.6, 8), new THREE.MeshStandardMaterial({ color: 0xc8a84c, roughness: 1 }));
     hay.position.set(8, 1.3, 7);
@@ -4477,6 +4504,13 @@ export function buildSettlements(scene: THREE.Scene): void {
     }
     // Айван ворот с юга
     tiledIwan(g, 0, 9, 7, 6, 0);
+    // Два фонаря по краям ворот (§251): форт стоял в темноте — ворота, башни и
+    // знамёна были, а света не было ни одного. Фонарь тот же, что и в городе.
+    for (const fx of [-4.2, 4.2]) {
+      const высотаОгня = фонарь(g, fx, 9.5);
+      огни.push({ x: FORT.x + fx, y: g.position.y + высотаОгня, z: FORT.z + 9.5 });
+      addCollider(FORT.x + fx, FORT.z + 9.5, 0.5);
+    }
     // Коллайдер в воротах УБРАН: он стоял в проёме и не давал войти. Куртины
     // строятся только с трёх сторон, и южный проём - это и есть ворота.
     const vorotaFort = new THREE.Mesh(new THREE.BoxGeometry(5.0, 3.4, 0.3), MAT.wood);
@@ -7069,6 +7103,9 @@ export function buildSettlements(scene: THREE.Scene): void {
   }
 
   scene.add(g);
+
+  // Огни поселений (§251) — мировые координаты: источники создаёт world3d.
+  return огни;
 }
 // ── Багдадская цитадель ─────────────────────────────────────────────
 //

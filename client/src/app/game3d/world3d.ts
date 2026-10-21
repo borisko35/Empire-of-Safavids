@@ -712,7 +712,17 @@ private roll = 0;
     for (const d of buildTownBuildings(this.scene)) this.doorTargets.push(d);
     buildCamp(this.scene);
     buildWater(this.scene);
-    buildSettlements(this.scene);
+    // Поселения: порт, караван-сарай, деревня, форт.
+    const огниПоселений = buildSettlements(this.scene);
+    // Свет в поселениях (§251): маяк, маячок, фонарь у поленницы и фонари у
+    // ворот форта горели нарисованными шарами, а источников не было — ночью
+    // порт, деревня и форт стояли чёрными силуэтами.
+    for (const [i, огонь] of огниПоселений.entries()) {
+      const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
+      light.position.set(огонь.x, огонь.y, огонь.z);
+      this.scene.add(light);
+      this.torches.push({ light, base: 1.6, phase: i * 2.4 + 1.3 });
+    }
     // Города регионов: поселения в шести регионах, где их не было.
     // Стоят на своих якорях, поэтому игрок, выбравший регион, возрождается
     // у ворот города, а не в пустом поле.
