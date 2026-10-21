@@ -1518,6 +1518,45 @@ let снегЗемли = -1;
 /** Цвет, в который уходит земля под снегом. */
 const ЦВЕТ_СНЕГА = new THREE.Color(0xeef3f8);
 
+/**
+ * Рыболовные сети на порту (§274).
+ *
+ * БЫЛО: на порту есть рыбак, лодки и озеро, а промысла не видно — берег
+ * пустой, и порт читался как место, где лодки стоят просто так.
+ *
+ * ТЕПЕРЬ: у кромки воды стоят сети (жерди и полотнище с ячейками) и куча
+ * улова. Рыбаки стоят у них — список мест тут же, чтобы NPC и сеть стояли
+ * рядом, а не по разным углам.
+ */
+export const сетиРыбаков: { x: number; z: number }[] = [];
+
+/** Текстура сети: тонкие нити квадратом по холсту. */
+function netTexture(): THREE.CanvasTexture {
+  const канва = document.createElement('canvas');
+  канва.width = 64;
+  канва.height = 64;
+  const g = канва.getContext('2d')!;
+  g.clearRect(0, 0, 64, 64);
+  g.strokeStyle = 'rgba(216, 204, 174, 0.9)';
+  g.lineWidth = 1.4;
+  for (let i = 0; i <= 64; i += 8) {
+    g.beginPath();
+    g.moveTo(i, 0);
+    g.lineTo(i, 64);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(0, i);
+    g.lineTo(64, i);
+    g.stroke();
+  }
+  const текстура = new THREE.CanvasTexture(канва);
+  текстура.wrapS = THREE.RepeatWrapping;
+  текстура.wrapT = THREE.RepeatWrapping;
+  текстура.repeat.set(3, 2.4);
+  текстура.colorSpace = THREE.SRGBColorSpace;
+  return текстура;
+}
+
 export function setGroundState(wet: number, snow: number): void {
   if (!материалЗемли) return;
   const м = Math.max(0, Math.min(1, wet));
@@ -1690,6 +1729,10 @@ const MAT = {
   }),
   snow: new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.9, map: snowTexture('#eef2f6', 4), normalMap: snowNormalTexture(4), normalScale: new THREE.Vector2(0.5, 0.5) }),
   flower: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, map: flowerTexture('#ffffff', 1), normalMap: flowerNormalTexture(1), normalScale: new THREE.Vector2(0.4, 0.4) }),
+  // Рыболовная сеть (§274): полотнище с ячейками, просвечивает.
+  net: new THREE.MeshStandardMaterial({
+    color: 0xd8ccae, roughness: 0.95, map: netTexture(), transparent: true, side: THREE.DoubleSide,
+  }),
 };
 
 // Материалы, на которые ложится снег (§263): зелень, ткань (навесы, кровли),
@@ -4415,6 +4458,27 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
   {
     const g = new THREE.Group();
     g.position.set(PORT.x, groundHeight(PORT.x, PORT.z), PORT.z);
+    // Сети рыбаков у кромки воды (§274): на порту есть рыбак, лодки и озеро,
+    // а промысла не видно — берег пустой. Сеть стоит наклонно: жерди и
+    // полотнище с ячейками.
+    for (const [nx, nz] of [[-247, -146], [-249, -157]] as const) {
+      const земля = groundHeight(nx, nz) - g.position.y;
+      const жердь = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 3.4, 5), MAT.wood);
+      жердь.position.set(nx, земля + 1.7, nz);
+      жердь.rotation.z = 0.26;
+      жердь.castShadow = true;
+      const полотно = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 2.2), MAT.net);
+      полотно.position.set(nx + 0.55, земля + 1.25, nz);
+      полотно.rotation.set(-1.24, 0.5, 0.2);
+      g.add(жердь, полотно);
+      // Куча улова у сети: сеть без улова — просто сетка.
+      const куча = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.5, 9), MAT.white);
+      куча.position.set(nx + 1.3, земля + 0.25, nz + 0.6);
+      куча.scale.y = 0.7;
+      куча.castShadow = true;
+      g.add(куча);
+      сетиРыбаков.push({ x: nx + 0.9, z: nz + 0.3 });
+    }
     for (let i = 0; i < 3; i++) {
       const house = new THREE.Group();
       const w = 4 + rng() * 2, h = 3 + rng();
