@@ -2663,6 +2663,42 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   city.add(fountain);
   addCollider(CITY.x + 6, CITY.z + 6, 4.2);
 
+  // ── Сквер в середине площади (§239) ──
+  //
+  // Середина площади была пустой: 232 метра плиты, на ней только фонтан в
+  // стороне, а весь город жил по краю. Пустая плита в центре читалась как зал,
+  // а не как площадь. Теперь здесь сквер: клумба с кустами и кипарисами,
+  // каменный венец и скамейки лицом к городу.
+  const скверX = -12, скверZ = 4;
+  const венецСквера = new THREE.Mesh(new THREE.TorusGeometry(6, 0.2, 8, 28), MAT.sandstone);
+  венецСквера.position.set(скверX, 0.5, скверZ);
+  венецСквера.rotation.x = Math.PI / 2;
+  венецСквера.castShadow = true;
+  const земля = new THREE.Mesh(new THREE.CylinderGeometry(5.8, 5.8, 0.16, 24), MAT.sand);
+  земля.position.set(скверX, 0.38, скверZ);
+  земля.receiveShadow = true;
+  city.add(венецСквера, земля);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + 0.3;
+    куст(city, скверX + Math.cos(a) * 4.2, скверZ + Math.sin(a) * 4.2, 0.46, 1.2);
+  }
+  for (const [dx, dz, s] of [[-1.8, 1.4, 0.85], [2.2, -1.6, 0.7]] as const) {
+    кронаКипариса(city, скверX + dx, 0.46, скверZ + dz, s, MAT.foliageDark);
+  }
+  // Скамейки лицом к городу: сидеть можно.
+  for (const [bx, bz, ry] of [[-12, 11.4, 0], [-12, -3.4, 0], [-3.4, 4, Math.PI / 2]] as const) {
+    const скамья = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.42, 0.6), MAT.wood);
+    скамья.position.set(bx, 0.65, bz);
+    скамья.rotation.y = ry;
+    скамья.castShadow = true;
+    const спинка = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.12), MAT.wood);
+    спинка.position.set(bx, 1.0, bz + (ry === 0 ? -0.26 : 0));
+    спинка.rotation.y = ry;
+    city.add(скамья, спинка);
+    addCollider(CITY.x + bx, CITY.z + bz, 1.2);
+  }
+  addCollider(CITY.x + скверX, CITY.z + скверZ, 6.2);
+
   // Городские ворота: обзорные башни по бокам, арка, створки и зубцы
   {
     const gx = Math.cos(gateAngle) * CITY.radius, gz = Math.sin(gateAngle) * CITY.radius;
