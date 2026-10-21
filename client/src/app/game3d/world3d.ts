@@ -2111,6 +2111,18 @@ if (isMe && moving) {
     // Время у всех одно и то же - иначе волны на стыке тел разошлись бы фазой.
     this.waterTime += dt;
     const chop = chopFor(this.currentWeather);
+    // Фонари на воде (§256): вода не знала про точечные источники, и пруд рядом
+    // с горящим фонарём оставался чёрным. Ближние к камере лампы (восемь) идут
+    // в шейдер равномерками: до шейдера доходит только то, что видно.
+    const лампыУВоды: { d: number; light: THREE.PointLight }[] = [];
+    for (const t of this.torches) {
+      лампыУВоды.push({ d: t.light.position.distanceTo(this.camera.position), light: t.light });
+    }
+    for (const l of this.lamps) {
+      лампыУВоды.push({ d: l.light.position.distanceTo(this.camera.position), light: l.light });
+    }
+    лампыУВоды.sort((a, b) => a.d - b.d);
+    const ближние = лампыУВоды.slice(0, 8);
     for (const mat of waterMaterials) {
       const u = mat.uniforms;
       u.uTime.value = this.waterTime;
@@ -2119,6 +2131,13 @@ if (isMe && moving) {
       u.uSunColor.value.copy(this.sun.color);
       u.uSkyColor.value.copy(this.sky.horizonColor);
       u.uFogColor.value.copy(this.sky.horizonColor);
+      u.uLampCount.value = ближние.length;
+      for (let i = 0; i < ближние.length; i++) {
+        u.uLampPos.value[i].copy(ближние[i].light.position);
+        u.uLampColor.value[i]
+          .copy(ближние[i].light.color)
+          .multiplyScalar(Math.max(ближние[i].light.intensity, 0) * 0.6);
+      }
     }
     // Сетка моря едет за камерой: мелкая область обязана быть под игроком, а не
     // в мировом нуле, - иначе, отойдя на лодке вдоль берега, он оказывается в

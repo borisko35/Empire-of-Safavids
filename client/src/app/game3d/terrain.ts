@@ -1293,6 +1293,13 @@ const waterFragmentShader = `
   uniform vec3 uShoreCenter;
   uniform float uShoreRadius;
   uniform float uIsSea;
+  // Фонари на воде (§256). Вода была своя: своё небо, своё солнце, свой туман.
+  // Точечных источников она не знала вовсе, и пруд в садах рядом с горящим
+  // фонарём оставался чёрной дырой. Свет nearby-фонарей приходит отдельными
+  // равномерками: их немного, и до шейдера доходит только ближние.
+  uniform vec3 uLampPos[8];
+  uniform vec3 uLampColor[8];
+  uniform float uLampCount;
   varying vec3 vBase;
   varying vec3 vWorld;
   varying vec3 vNormal;
@@ -1346,6 +1353,22 @@ const waterFragmentShader = `
                   + sin((q.x + q.y) * 0.4 + uTime) * 0.2;
     caustic = smoothstep(0.5, 1.0, caustic) * (1.0 - smoothstep(0.2, 2.5, depth)) * 0.3;
     color += caustic * uSunColor;
+
+    // Фонари на воде (§256): блик от лампы и её отсвет на поверхности.
+    //
+    // Затухание здесь мягче, чем у точечного источника в three.js: свет
+    // лампы должен ПРОЧИТЫВАТЬСЯ на воде, а не быть физически честной
+    // величиной в сотую долю яркости. Ближе — отсвет шире, дальше — гаснет.
+    for (int i = 0; i < 8; i++) {
+      if (float(i) >= uLampCount) break;
+      vec3 toLamp = uLampPos[i] - vWorld;
+      float d = length(toLamp);
+      vec3 l = toLamp / max(d, 0.001);
+      float att = 1.0 / (1.0 + d * d * 0.15);
+      vec3 halfL = normalize(l + viewDir);
+      float s = pow(max(dot(mapped, halfL), 0.0), 90.0);
+      color += uLampColor[i] * (s * 2.4 + 0.35) * att;
+    }
 
     float foamTex = texture2D(uFoamMap, q * inv * 1.5 + vec2(uTime * 0.008, uTime * 0.005)).r;
     color += uFoamColor * vFoam * smoothstep(0.2, 0.85, foamTex) * uFoamOpacity;
@@ -1437,6 +1460,10 @@ function makeWaterMaterial(
     uShoreCenter: { value: new THREE.Vector3(центр[0], 0, центр[1]) },
     uShoreRadius: { value: радиус },
     uIsSea: { value: isSea ? 1 : 0 },
+    // Фонари на воде (§256): ближние к камере точечные источники.
+    uLampPos: { value: Array.from({ length: 8 }, () => new THREE.Vector3()) },
+    uLampColor: { value: Array.from({ length: 8 }, () => new THREE.Color()) },
+    uLampCount: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
