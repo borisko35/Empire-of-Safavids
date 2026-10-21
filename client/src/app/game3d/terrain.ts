@@ -2761,6 +2761,54 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       city.add(wing);
       addCollider(CITY.x + (ax + bx) / 2, CITY.z + (az + bz) / 2, segLen / 2 + 0.6);
     }
+    // ── Ступени и тумбы у ворот (§236) ──
+    //
+    // ЗАМЕР ПЕРЕПАДА: земля снаружи на 0.4 м ниже порога ворот (снаружи
+    // y=1.08, у ворот y=1.48). Без ступеней в ворота приходилось запрыгивать,
+    // а тумб, которые должны были держать караван от стены, не было вовсе.
+    //
+    // ВЫСОТА СЧИТАЕТСЯ ОТ РЕАЛЬНОЙ ЗЕМЛИ (localY), А НЕ ЗАШИТА: перепад
+    // зависит от склона, и зашитое число разъехалось бы с землёй.
+    const outX = Math.cos(gateAngle), outZ = Math.sin(gateAngle);
+    const низ = localY(CITY.x + gx + outX * 7, CITY.z + gz + outZ * 7);
+    const порог = localY(CITY.x + gx, CITY.z + gz);
+    if (порог > низ + 0.05) {
+      const ступеней = 3;
+      const шаг = (порог - низ) / ступеней;
+      for (let i = 0; i < ступеней; i++) {
+        const верх = низ + шаг * (i + 1);
+        const высота = верх - низ;
+        const d = 0.5 + i * 1.1;
+        const ступень = new THREE.Mesh(
+          new THREE.BoxGeometry(8.4, высота, 1.1),
+          MAT.sandstone,
+        );
+        ступень.position.set(gx + outX * d, низ + высота / 2, gz + outZ * d);
+        ступень.rotation.y = -(gateAngle + Math.PI / 2);
+        ступень.castShadow = true;
+        ступень.receiveShadow = true;
+        city.add(ступень);
+      }
+    }
+    // Тумбы по краям проезда: караван не должен подъезжать вплотную к стене.
+    const земляУТумб = localY(CITY.x + gx + outX * 2.6, CITY.z + gz + outZ * 2.6);
+    for (const s of [-1, 1] as const) {
+      for (const отступ of [3.6, 5.2]) {
+        const тумба = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.28, 0.34, 0.95, 8),
+          MAT.sandstoneDark,
+        );
+        тумба.position.set(
+          gx + outX * 2.6 + dirX * s * отступ,
+          земляУТумб + 0.475,
+          gz + outZ * 2.6 + dirZ * s * отступ,
+        );
+        тумба.castShadow = true;
+        city.add(тумба);
+        addCollider(CITY.x + тумба.position.x, CITY.z + тумба.position.z, 0.4);
+      }
+    }
+
     // фонарь над проходом — висит на стержне под балкой (низ балки 9.6)
     const gateRod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 6), MAT.dark);
     gateRod.position.set(gx, 9.75, gz);
