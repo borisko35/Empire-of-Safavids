@@ -42,6 +42,7 @@ import { createCaravanTracks, type CaravanTracksHandle } from './caravanTracks';
 import { createBirds, type BirdsHandle } from './birds';
 import { createGlints, type GlintsHandle } from './wetGlints';
 import { createRipples, type RipplesHandle } from './boatRipples';
+import { createPuddleRipples, type PuddleRipplesHandle } from './puddleRipples';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -225,6 +226,8 @@ export class World3D {
   private отблески!: GlintsHandle;
   /** Рябь от лодок у причала (§280). */
   private рябь!: RipplesHandle;
+  /** Рябь от дождя в лужах (§285). */
+  private рябьЛуж!: PuddleRipplesHandle;
   /** Марево над горизонтом в жару (§265). */
   private марево!: MirageHandle;
   /** Пыль над дорогой в жару (§268). */
@@ -986,6 +989,8 @@ private roll = 0;
     this.отблески = createGlints(this.scene);
     // Рябь от лодок у причала (§280).
     this.рябь = createRipples(this.scene);
+    // Рябь от дождя в лужах (§285): вода в луже не зеркало, а живая поверхность.
+    this.рябьЛуж = createPuddleRipples(this.scene);
     // Марево над горизонтом в жару (§265).
     this.марево = createMirage(this.scene);
     // Пыль над дорогой в жару (§268).
@@ -2428,7 +2433,11 @@ if (isMe && moving) {
     else this.пыль = Math.max(0, this.пыль - dt * 0.25);
     setGroundState(this.мокрота, this.снег, this.пыль);
     // Лужи на площади (§264) и вода в колеях дороги, лужи в пригороде (§269).
-    setPuddles(this.мокрота);
+    // Дождь идёт — по лужам идут круги от капель (§285), а поверхность воды
+    // перестаёт быть зеркалом.
+    const дождь = this.currentWeather === 'rain' ? 1 : this.currentWeather === 'storm' ? 0.75 : 0;
+    setPuddles(this.мокрота, дождь);
+    this.рябьЛуж.update(dt, дождь, this.мокрота, me.pos.x, me.pos.z);
     this.водаДороги.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
     // Отблески фонарей на мокрой земле (§276): лампы рядом с игроком.
     const лампыДляБлеска: { x: number; y: number; z: number }[] = [];
