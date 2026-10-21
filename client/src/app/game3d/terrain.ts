@@ -3047,6 +3047,8 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     материалПлощади,
   );
   plaza.position.y = 0.05;
+  // Лужи на площади (§264): после ливня вода собирается в лужи.
+  buildPuddles(city);
   plaza.receiveShadow = true;
   city.add(plaza);
 
@@ -4218,6 +4220,58 @@ function записатьКачание(obj: THREE.Object3D, амплитуда:
     амплитуда,
     база: obj.rotation.clone(),
   });
+}
+
+/**
+ * Лужи на площади после ливня (§264).
+ *
+ * БЫЛО: земля в дождь темнела (§261), но стоячей воды на мостовой не было.
+ * Дождь выглядел как притирка: капли падают, темно — и всё.
+ *
+ * ТЕПЕРЬ: после ливня вода собирается в лужи. Лужа тёмная и гладкая: она
+ * ловит небо и отражает фонари, и на площади город после дождя читается как
+ * мокрый, а не просто тёмный.
+ *
+ * Места луж — по детерминированному генератору: после перезагрузки страницы
+ * они должны стоять там же, иначе игрок сравнивал бы город с тем, что видел
+ * в прошлый раз. И появляются лужи не все сразу, а порциями: у каждой свой
+ * порог, по которому она проступает.
+ */
+const лужи: { mesh: THREE.Mesh; материал: THREE.MeshStandardMaterial; порог: number }[] = [];
+
+export function setPuddles(wet: number): void {
+  const мокрота = Math.max(0, Math.min(1, wet));
+  for (const л of лужи) {
+    const доля = Math.max(0, Math.min(1, (мокрота - л.порог) / 0.35));
+    л.материал.opacity = доля * 0.62;
+    л.mesh.visible = доля > 0.01;
+  }
+}
+
+function buildPuddles(city: THREE.Group): void {
+  const сколько = 46;
+  for (let i = 0; i < сколько; i++) {
+    const материал = new THREE.MeshStandardMaterial({
+      color: 0x2b3644,
+      roughness: 0.06,
+      metalness: 0.15,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    const a = hash2(i * 3.7, 11.3) * Math.PI * 2;
+    const r = 12 + hash2(i * 1.9, 5.1) * (CITY.radius * 0.78);
+    const размер = 1.1 + hash2(i * 7.3, 2.7) * 2.6;
+    const лужа = new THREE.Mesh(new THREE.CircleGeometry(размер, 14), материал);
+    лужа.rotation.x = -Math.PI / 2;
+    лужа.rotation.z = hash2(i, 9) * Math.PI;
+    // Приплюснутая капля: круглая лужа читается как круглый кусок плитки.
+    лужа.scale.set(1, 0.55 + hash2(i + 1, 3) * 0.6, 1);
+    лужа.position.set(CITY.x + Math.cos(a) * r, 0.31, CITY.z + Math.sin(a) * r);
+    лужа.renderOrder = 2;
+    city.add(лужа);
+    лужи.push({ mesh: лужа, материал, порог: hash2(i * 2.3, 6.1) * 0.55 });
+  }
 }
 
 function куст(parent: THREE.Object3D, x: number, z: number, основание: number, s = 1): void {
