@@ -38,6 +38,7 @@ import { createDustDevils, type DustDevilsHandle } from './dustDevil';
 import { createMirage, type MirageHandle } from './mirage';
 import { createRoadDust, type RoadDustHandle } from './roadDust';
 import { createRoadWater, type RoadWaterHandle } from './roadWater';
+import { createCaravanTracks, type CaravanTracksHandle } from './caravanTracks';
 import { createBirds, type BirdsHandle } from './birds';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
@@ -204,6 +205,8 @@ export class World3D {
   private пыльДороги!: RoadDustHandle;
   /** Вода в колеях дороги и лужи в пригороде (§269). */
   private водаДороги!: RoadWaterHandle;
+  /** Следы караванов на дороге (§270). */
+  private следыКараванов!: CaravanTracksHandle;
   /** Дым из печных труб города (§266). */
   private дымТруб!: Puffs;
   /** Тень от костра в лагере (§267). */
@@ -957,6 +960,8 @@ private roll = 0;
     this.пыльДороги = createRoadDust(this.scene);
     // Вода в колеях дороги и лужи в пригороде (§269).
     this.водаДороги = createRoadWater(this.scene);
+    // Следы караванов на дороге (§270).
+    this.следыКараванов = createCaravanTracks(this.scene);
     // Дым из печных труб (§266): город из жары выглядел выключенным.
     this.дымТруб = createPuffs(this.scene, {
       количество: 16,
@@ -2332,6 +2337,8 @@ if (isMe && moving) {
     // Лужи на площади (§264) и вода в колеях дороги, лужи в пригороде (§269).
     setPuddles(this.мокрота);
     this.водаДороги.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
+    // Следы караванов (§270): на мокром песке проступают, на сухом — едва.
+    this.следыКараванов.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
     // Снег на зелени и крышах (§263): земля белая, а кроны и черепица ещё
     // летние — так снегопад читается наполовину декорацией.
     setSnowOnSurfaces(this.снег);
@@ -2392,6 +2399,7 @@ if (isMe && moving) {
     this.марево?.dispose();
     this.пыльДороги?.dispose();
     this.водаДороги?.dispose();
+    this.следыКараванов?.dispose();
     this.дымТруб?.dispose();
     this.птицы?.dispose();
     this.civilians?.dispose();
