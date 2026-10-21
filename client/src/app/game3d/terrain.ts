@@ -1497,6 +1497,34 @@ export const decorWaterMaterial = makeWaterMaterial(
 decorWaterMaterial.uniforms.uChop.value = 0.45;
 
 // ── Материалы (с процедурными текстурами) ────────────────────
+/**
+ * Мокрая земля (§261).
+ *
+ * БЫЛО: дождь шёл полосами, а земля под ногами оставалась сухой и светлой.
+ * Погода была декорацией поверх сухого мира: капли падают, а песок тот же.
+ *
+ * ТЕПЕРЬ: в дождь земля и городская мостовая темнеют и блестят, а после дождя
+ * ещё некоторое время мокрые (земля сохнет медленно, чем набирает воду).
+ *
+ * Материал земли создаётся в buildTerrain, а меняется здесь — поэтому он и
+ * хранится отдельно: иначе править пришлось бы из другой половины мира.
+ */
+let материалЗемли: THREE.MeshStandardMaterial | null = null;
+let мокротаЗемли = -1;
+
+export function setGroundWet(wet: number): void {
+  if (!материалЗемли) return;
+  const м = Math.max(0, Math.min(1, wet));
+  if (Math.abs(мокротаЗемли - м) < 0.004) return;
+  мокротаЗемли = м;
+  // Темнее и глянцеве: мокрая земля отражает небо, а не рассеивает свет.
+  материалЗемли.roughness = 1 - 0.5 * м;
+  материалЗемли.color.setScalar(1 - 0.32 * м);
+  // Городская мостовая: блестит сильнее земли — она гладкая.
+  MAT.street.roughness = 1 - 0.62 * м;
+  MAT.street.color.setHex(0x9a8a68).multiplyScalar(1 - 0.26 * м);
+}
+
 const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
   stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4), displacementMap: stoneDisplacementTexture(4), displacementScale: 0.15, displacementBias: -0.07 }),
@@ -1651,6 +1679,7 @@ export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
     normalScale: new THREE.Vector2(0.6, 0.6),
   });
   addMacroLayer(материал, macroTexture(), 0.3, 6);
+  материалЗемли = материал;
   const mesh = new THREE.Mesh(geo, материал);
   mesh.receiveShadow = true;
   scene.add(mesh);
