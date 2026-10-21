@@ -41,6 +41,7 @@ import { createRoadWater, type RoadWaterHandle } from './roadWater';
 import { createCaravanTracks, type CaravanTracksHandle } from './caravanTracks';
 import { createBirds, type BirdsHandle } from './birds';
 import { createGlints, type GlintsHandle } from './wetGlints';
+import { createRipples, type RipplesHandle } from './boatRipples';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -202,6 +203,8 @@ export class World3D {
   private вихри!: DustDevilsHandle;
   /** Отблески фонарей на мокрой земле (§276). */
   private отблески!: GlintsHandle;
+  /** Рябь от лодок у причала (§280). */
+  private рябь!: RipplesHandle;
   /** Марево над горизонтом в жару (§265). */
   private марево!: MirageHandle;
   /** Пыль над дорогой в жару (§268). */
@@ -959,6 +962,8 @@ private roll = 0;
     this.вихри = createDustDevils(this.scene);
     // Отблески фонарей на мокрой земле (§276).
     this.отблески = createGlints(this.scene);
+    // Рябь от лодок у причала (§280).
+    this.рябь = createRipples(this.scene);
     // Марево над горизонтом в жару (§265).
     this.марево = createMirage(this.scene);
     // Пыль над дорогой в жару (§268).
@@ -2370,11 +2375,17 @@ if (isMe && moving) {
       }
     }
     // Лодки у причала качаются вместе с водой (§277).
+    const лодкиНаВоде: { x: number; y: number; z: number }[] = [];
     for (const л of лодкиУПира) {
       л.группа.position.y = л.y + Math.sin(now * 0.85 + л.фаза) * 0.09;
       л.группа.rotation.z = Math.sin(now * 0.62 + л.фаза) * 0.035;
       л.группа.rotation.x = Math.sin(now * 0.47 + л.фаза * 1.7) * 0.02;
+      // Мировая точка лодки — для ряби (§280).
+      const мир = л.группа.getWorldPosition(new THREE.Vector3());
+      лодкиНаВоде.push({ x: мир.x, y: мир.y - 0.2, z: мир.z });
     }
+    // Рябь от лодок (§280): от борта расходятся круги.
+    this.рябь.update(dt, now, лодкиНаВоде);
     // Пыльные вихри (§257): бродят по песку рядом с игроком.
     this.вихри.update(dt, now, me.pos.x, me.pos.z);
     // Птицы (§259): стая облетает игрока по дуге.
@@ -2461,6 +2472,7 @@ if (isMe && moving) {
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
     this.отблески?.dispose();
+    this.рябь?.dispose();
     this.марево?.dispose();
     this.пыльДороги?.dispose();
     this.водаДороги?.dispose();
