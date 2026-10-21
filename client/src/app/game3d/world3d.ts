@@ -22,6 +22,7 @@ import {
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
   buildSignposts, buildGameTable, buildCows, updateCows, buildBazaarStatue,
 buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
+  buildPassageTorches, ФОНАРИ_ГРОБНИЦЫ,
   ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ, buildMosqueCourtyard,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
   buildRuinBridge, buildPassRocks, buildDesertTower, buildChurchRuin,
@@ -172,6 +173,14 @@ export class World3D {
   private sun!: THREE.DirectionalLight;
   private hemi!: THREE.HemisphereLight;
   private torches: { light: THREE.PointLight; base: number; phase: number }[] = [];
+  /**
+   * Источники, которые горят постоянно: свет в проёмах и фонари.
+   *
+   * Отдельным списком от torches, потому что уличный факел днём горит в
+   * четверть силы (0.35 + night * 0.65), а в проёме и под фонарём темно
+   * всегда: солнце туда не доходит.
+   */
+  private lamps: { light: THREE.PointLight; base: number }[] = [];
   private flames: THREE.Mesh[] = [];
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
@@ -731,6 +740,30 @@ private roll = 0;
       // Фаза своя у каждого: два факела в двух шагах друг от друга, мигающие
       // в такт, читаются как одна лампа, а не как два огня.
       this.torches.push({ light, base: ТОРЧ_СВЕТ_ЯРКОСТЬ, phase: 1.1 + i * 3.7 });
+    }
+    // Факелы в проёмах (21 октября 2026, §226): ворота дворца и вход в
+    // гробницу читались чёрными провалами. Свет в проёме нужен и ДНЁМ —
+    // проход закрыт от солнца, — поэтому эти источники не гаснут, как
+    // уличные факелы, а горят постоянно.
+    for (const огонь of buildPassageTorches(this.scene)) {
+      const light = new THREE.PointLight(
+        ТОРЧ_СВЕТ_ЦВЕТ,
+        0,
+        ТОРЧ_СВЕТ_ДАЛЬНОСТЬ,
+        1.8,
+      );
+      light.position.set(огонь.x, огонь.y, огонь.z);
+      this.scene.add(light);
+      // Ярче уличного факела вдвое: проход закрыт от солнца, и при городской
+      // яркости он оставался чёрным провалом даже с двумя огнями.
+      this.lamps.push({ light, base: ТОРЧ_СВЕТ_ЯРКОСТЬ * 2 });
+    }
+    // Фонари гробницы: золотые фонари на столбах стояли, а света не давали.
+    for (const фонарь of ФОНАРИ_ГРОБНИЦЫ) {
+      const light = new THREE.PointLight(0xffb45a, 0, 16, 1.8);
+      light.position.set(фонарь.x, фонарь.y, фонарь.z);
+      this.scene.add(light);
+      this.lamps.push({ light, base: 2.6 });
     }
     // Два меча у кузницы деревни, воткнутые остриём в землю.
     buildVillageSwords(this.scene);
@@ -2066,6 +2099,11 @@ if (isMe && moving) {
     const torchOn = 0.35 + night * 0.65;
     for (const t of this.torches) {
       t.light.intensity = t.base * torchOn * (0.86 + Math.sin(now / 90 + t.phase) * 0.14);
+    }
+    // Свет в проёмах и фонари горят постоянно: проход закрыт от солнца, и
+    // днём там темно так же, как ночью.
+    for (const l of this.lamps) {
+      l.light.intensity = l.base;
     }
     for (const f of this.flames) {
       f.scale.y = 1 + Math.sin(now / 70) * 0.18;

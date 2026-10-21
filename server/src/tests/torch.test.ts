@@ -135,7 +135,10 @@ function место(): { x: number; z: number; ry: number }[] {
 function утоплен(): number {
   const блок = ТЕРРЕЙН.slice(
     ТЕРРЕЙН.indexOf('export function buildCaravanseraiTorches'),
-    ТЕРРЕЙН.indexOf('// ── Стол с доской'),
+    // Конец куска — ПЕРЕД следующей функцией с факелами: с §226 в файле
+    // появился buildPassageTorches, и при старой границе в кусок попадал он,
+    // а вызовов placeDecor становилось два вместо одного.
+    ТЕРРЕЙН.indexOf('// ── Свет в проёмах (§226)'),
   );
   const м = /placeDecor\([\s\S]{0,200}?,\s*т\.x,\s*т\.z,\s*(-?ТОРЧ_УТОПЛЕН|-?[\d.]+)/.exec(блок);
   must(м !== null, 'не разобрался подъём факела');
@@ -472,7 +475,10 @@ describe('Факел: у ворот караван-сарая', () => {
   it('по одному коллайдеру на факел, и он не шире пламени втрое', () => {
     const блок = ТЕРРЕЙН.slice(
       ТЕРРЕЙН.indexOf('export function buildCaravanseraiTorches'),
-      ТЕРРЕЙН.indexOf('// ── Стол с доской'),
+      // Конец куска — ПЕРЕД следующей функцией с факелами: с §226 в файле
+      // появился buildPassageTorches, и при старой границе в кусок попадал он,
+      // а вызовов placeDecor становилось два вместо одного.
+      ТЕРРЕЙН.indexOf('// ── Свет в проёмах (§226)'),
     );
     const коллайдеры = (блок.match(/addCollider\(/g) || []).length;
     const вызовы = (блок.match(/placeDecor\(/g) || []).length;
