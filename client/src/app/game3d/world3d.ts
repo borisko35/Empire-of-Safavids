@@ -40,6 +40,7 @@ import { createRoadDust, type RoadDustHandle } from './roadDust';
 import { createRoadWater, type RoadWaterHandle } from './roadWater';
 import { createCaravanTracks, type CaravanTracksHandle } from './caravanTracks';
 import { createBirds, type BirdsHandle } from './birds';
+import { createGlints, type GlintsHandle } from './wetGlints';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
 import { createNpcs, NpcsHandle } from './npc';
@@ -199,6 +200,8 @@ export class World3D {
   private дым: { дым: Puffs; x: number; y: number; z: number; таймер: number }[] = [];
   /** Пыльные вихри в пустыне (§257). */
   private вихри!: DustDevilsHandle;
+  /** Отблески фонарей на мокрой земле (§276). */
+  private отблески!: GlintsHandle;
   /** Марево над горизонтом в жару (§265). */
   private марево!: MirageHandle;
   /** Пыль над дорогой в жару (§268). */
@@ -954,6 +957,8 @@ private roll = 0;
     this.roadTraffic = createRoadTraffic(this.scene);
     // Пыльные вихри в пустыне (§257): ветер поднимает песок сам по себе.
     this.вихри = createDustDevils(this.scene);
+    // Отблески фонарей на мокрой земле (§276).
+    this.отблески = createGlints(this.scene);
     // Марево над горизонтом в жару (§265).
     this.марево = createMirage(this.scene);
     // Пыль над дорогой в жару (§268).
@@ -2337,6 +2342,15 @@ if (isMe && moving) {
     // Лужи на площади (§264) и вода в колеях дороги, лужи в пригороде (§269).
     setPuddles(this.мокрота);
     this.водаДороги.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
+    // Отблески фонарей на мокрой земле (§276): лампы рядом с игроком.
+    const лампыДляБлеска: { x: number; y: number; z: number }[] = [];
+    for (const t of this.torches) {
+      лампыДляБлеска.push({ x: t.light.position.x, y: t.light.position.y, z: t.light.position.z });
+    }
+    for (const l of this.lamps) {
+      лампыДляБлеска.push({ x: l.light.position.x, y: l.light.position.y, z: l.light.position.z });
+    }
+    this.отблески.update(dt, now, me.pos.x, me.pos.z, this.мокрота, лампыДляБлеска);
     // Следы караванов (§270): на мокром песке проступают, на сухом — едва.
     this.следыКараванов.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
     // Снег на зелени и крышах (§263): земля белая, а кроны и черепица ещё
@@ -2396,6 +2410,7 @@ if (isMe && moving) {
     this.npcs?.dispose();
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
+    this.отблески?.dispose();
     this.марево?.dispose();
     this.пыльДороги?.dispose();
     this.водаДороги?.dispose();
