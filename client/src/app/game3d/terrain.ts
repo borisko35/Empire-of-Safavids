@@ -2526,6 +2526,63 @@ function buildQuarters(
     }
   });
 
+  // ── Жилой квартал: двор между домами (§240) ──
+  //
+  // Семь домов стоят кольцом и смотрят в центр, а внутри кольца было пусто:
+  // ни дорожек, ни колодца, ни зелени. Двор без хозяйства читается как пустырь
+  // между домами.
+  {
+    const центрX = 59.4, центрZ = 59.4;
+    // Дорожки от колодца к каждому дому: по ним и входят в дом.
+    for (const [ox, oz] of homeOffsets) {
+      const len = Math.hypot(ox, oz);
+      const длина = Math.max(0, len - 3.6);
+      if (длина < 1) continue;
+      const ux = ox / len, uz = oz / len;
+      const дорожка = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, длина), streetMat);
+      дорожка.position.set(
+        центрX + ux * (длина / 2 + 1.5),
+        0.42,
+        центрZ + uz * (длина / 2 + 1.5),
+      );
+      дорожка.rotation.y = Math.atan2(ux, uz);
+      дорожка.receiveShadow = true;
+      city.add(дорожка);
+    }
+    // Колодец в середине кольца: двор без воды — пустырь.
+    const колодец = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.9, 12), MAT.sandstone);
+    колодец.position.set(центрX, 0.75, центрZ);
+    колодец.castShadow = true;
+    колодец.receiveShadow = true;
+    const обод = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.12, 6, 16), MAT.sandstoneDark);
+    обод.position.set(центрX, 1.2, центрZ);
+    обод.rotation.x = Math.PI / 2;
+    // Стойки, перекладина и вал с ведром: без них это просто каменное кольцо.
+    for (const s of [-1, 1] as const) {
+      const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.0, 0.16), MAT.wood);
+      стойка.position.set(центрX + s * 1.0, 1.0, центрZ);
+      стойка.castShadow = true;
+      city.add(стойка);
+    }
+    const перекладина = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.16, 0.16), MAT.wood);
+    перекладина.position.set(центрX, 1.95, центрZ);
+    перекладина.castShadow = true;
+    const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.8, 8), MAT.wood);
+    вал.rotation.z = Math.PI / 2;
+    вал.position.set(центрX, 1.7, центрZ);
+    const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.3, 8), MAT.trunk);
+    ведро.position.set(центрX, 1.35, центрZ);
+    ведро.castShadow = true;
+    city.add(колодец, обод, перекладина, вал, ведро);
+    addCollider(CITY.x + центрX, CITY.z + центрZ, 1.3);
+    // Кусты между домами — в промежутках, где домов нет.
+    for (let i = 0; i < homeOffsets.length; i++) {
+      const a = homeOffsets[i];
+      const b = homeOffsets[(i + 1) % homeOffsets.length];
+      куст(city, центрX + (a[0] + b[0]) / 2, центрZ + (a[1] + b[1]) / 2, 0.3, 1.0);
+    }
+  }
+
   // Сады: кипарисы, пруд, скамейки
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2;
