@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Фауна по биомам — Empire of Safavids
 // ============================================================
 // Атмосферные существа без серверной логики. Точка спавна выбирает
@@ -10,14 +10,34 @@ import * as THREE from 'three';
 import { CITY, CAMP, LAKE, POND, RIVER_A, RIVER_B, groundHeight, biomeAt, waterMask, waterSurfaceY, FAUNA_COLLIDERS, COLLIDERS } from './terrain';
 import { furTexture, furNormalTexture } from './textures';
 
-const mat = (color: number, rough = 0.9) => {
-  const hex = '#' + color.toString(16).padStart(6, '0');
-  return new THREE.MeshStandardMaterial({ color, roughness: rough, map: furTexture(hex, 2), normalMap: furNormalTexture(2), normalScale: new THREE.Vector2(0.5, 0.5) });
+/**
+ * Материалы зверей — с шерстью.
+ *
+ * Материал на каждую часть тела — это десятки материалов на зверя и мусор в
+ * памяти. Материалы кэшируются по цвету и шероховатости: их десятки, а не
+ * сотни.
+ */
+const МАТЕРИАЛЫ = new Map<string, THREE.MeshStandardMaterial>();
+const mat = (color: number, rough = 0.9): THREE.MeshStandardMaterial => {
+  const ключ = `${color}:${rough}`;
+  let м = МАТЕРИАЛЫ.get(ключ);
+  if (!м) {
+    const hex = '#' + color.toString(16).padStart(6, '0');
+    м = new THREE.MeshStandardMaterial({
+      color,
+      roughness: rough,
+      map: furTexture(hex, 2),
+      normalMap: furNormalTexture(2),
+      normalScale: new THREE.Vector2(0.5, 0.5),
+    });
+    МАТЕРИАЛЫ.set(ключ, м);
+  }
+  return м;
 };
 
 interface Walker {
   group: THREE.Group;
-  legs: THREE.Mesh[];
+  legs: THREE.Object3D[];
   home: { x: number; z: number; r: number };
   target: { x: number; z: number };
   speed: number;
@@ -41,7 +61,7 @@ interface FishSchool {
   radius: number;
   speed: number;
   level: number;
-  fish: THREE.Mesh[];
+  fish: THREE.Group[];
 }
 
 interface Splash {
@@ -49,90 +69,216 @@ interface Splash {
   born: number;
 }
 
+/**
+ * Четвероногий зверь (§286).
+ *
+ * БЫЛО: тело — ящик 0.9×0.5×0.45, голова — куб, ноги — тонкие бруски, уши и
+ * рога — конусы. В кадре это читалось как картонная коробка на палочках: на
+ * кадре §286 горный козёл выглядел именно так.
+ *
+ * ТЕПЕРЬ: тело — капсула (грудь, спина, сужение к шее), шея и голова — тоже
+ * капсулы, морда — сужающийся цилиндр, глаза и копыта — тёмные, ноги — из
+ * двух сужающихся звеньев с копытом и коленом, хвост — сужающийся цилиндр,
+ * рога — изогнутые дуги. Нога качается от бедра, а не от середины.
+ *
+ * Ось тела — X, голова в +X (так же, как было): от этого зависит разбег по
+ * миру.
+ */
 function makeQuadruped(
   bodyColor: number, headColor: number, scale = 1, opts?: { hump?: boolean; tall?: boolean; fluffy?: boolean; antlers?: boolean },
-): { group: THREE.Group; legs: THREE.Mesh[] } {
+): { group: THREE.Group; legs: THREE.Object3D[] } {
   const g = new THREE.Group();
-  const legH = opts?.tall ? 0.55 : 0.4;
+  const legH = opts?.tall ? 0.42 : 0.32;
+  const мех = mat(bodyColor);
+  const мехГоловы = mat(headColor);
+  const тёмный = mat(0x2b2521, 0.7);
+  const рогМатериал = mat(0x6e563a, 0.65);
+
+  // ТЕЛО. Капсула: у зверя есть грудь и круп, а ящик был угловатым ящиком.
   const body = new THREE.Mesh(
-    opts?.fluffy ? new THREE.SphereGeometry(0.5, 8, 6) : new THREE.BoxGeometry(0.9, 0.5, 0.45),
-    mat(bodyColor),
+    new THREE.CapsuleGeometry(opts?.fluffy ? 0.32 : 0.27, opts?.fluffy ? 0.38 : 0.56, 4, 12),
+    мех,
   );
-  if (opts?.fluffy) body.scale.set(1.1, 0.9, 0.85);
-  body.position.y = legH + 0.32;
+  body.rotation.z = Math.PI / 2; // ось капсулы вдоль X
+  body.position.set(0, legH + 0.3, 0);
+  body.scale.set(1, 1, opts?.fluffy ? 0.94 : 0.84); // тело уже, чем в высоту
   body.castShadow = true;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.32, 0.3), mat(headColor));
-  head.position.set(0.55, legH + 0.55, 0);
+  g.add(body);
+
+  // ШЕЯ. Тянется вверх-вперёд из плеча.
+  const neck = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.16, 3, 8), мех);
+  neck.position.set(0.33, legH + 0.56, 0);
+  neck.rotation.z = -0.75;
+  neck.castShadow = true;
+  g.add(neck);
+
+  // ГОЛОВА — капсула вдоль X, морда — сужающийся цилиндр.
+  const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.11, 3, 10), мехГоловы);
+  head.rotation.z = Math.PI / 2;
+  head.position.set(0.5, legH + 0.68, 0);
   head.castShadow = true;
-  g.add(body, head);
+  g.add(head);
+  const морда = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.09, 0.22, 8), тёмный);
+  морда.rotation.z = -Math.PI / 2;
+  морда.position.set(0.68, legH + 0.62, 0);
+  g.add(морда);
+
+  // ГЛАЗА: тёмные точки по бокам головы — без них голова читается как кусок.
+  for (const side of [-1, 1]) {
+    const глаз = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 5), тёмный);
+    глаз.position.set(0.55, legH + 0.73, side * 0.105);
+    g.add(глаз);
+  }
+
+  // УШИ: конусы, но загнутые назад.
+  for (const side of [-1, 1]) {
+    const ухо = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.15, 6), мехГоловы);
+    ухо.position.set(0.45, legH + 0.82, side * 0.09);
+    ухо.rotation.set(side * 0.35, 0, -0.3);
+    g.add(ухо);
+  }
 
   if (opts?.hump) {
     // У верблюда ДВА горба, а не один: первый над лопатками, второй над
-    // крестцом. Тело вытянуто вдоль оси X (голова на +0.55), поэтому второй
+    // крестцом. Тело вытянуто вдоль оси X (голова на +0.5), поэтому второй
     // горб смещается по X, а не по Z. Раньше второй горб клонировали,
     // ставили ему z = 0 — то есть ровно туда же, где стоит первый, — и
     // НЕ добавляли в группу: он создавался, двигался и молча терялся.
     // В итоге верблюд оставался с одним горбом.
-    for (const [gx, sc] of [[-0.05, 1.3], [-0.42, 1.15]] as const) {
-      const hump = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), mat(bodyColor));
-      hump.scale.set(sc, 0.9, 0.9);
-      hump.position.set(gx, legH + 0.72, 0);
+    for (const [gx, sc] of [[0.02, 1.35], [-0.38, 1.2]] as const) {
+      const hump = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), мех);
+      hump.scale.set(sc, 0.95, 0.9);
+      hump.position.set(gx, legH + 0.68, 0);
       hump.castShadow = true;
       g.add(hump);
     }
   }
   if (opts?.antlers) {
+    // Рога — изогнутые дуги, а не конусы: у козла и оленя рог загнут назад.
     for (const side of [-1, 1]) {
-      const antler = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.4, 4), mat(0x6e563a));
-      antler.position.set(0.5, legH + 0.86, side * 0.12);
-      antler.rotation.z = -0.5;
-      g.add(antler);
+      const рог = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.028, 6, 14, Math.PI * 0.95), рогМатериал);
+      // Дуга лежит в плоскости головы (XY) и загнута назад: без поворота
+      // тор лежал плашмя и читался как тёмный блинок на черепе.
+      рог.position.set(0.4, legH + 0.84, side * 0.08);
+      рог.rotation.set(0, 0, -0.6);
+      рог.castShadow = true;
+      g.add(рог);
     }
   }
-  // ушки
-  const earL = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 4), mat(headColor));
-  earL.position.set(0.55, legH + 0.77, 0.08);
-  const earR = earL.clone(); earR.position.z = -0.08;
-  g.add(earL, earR);
+  if (opts?.tall && !opts?.fluffy) {
+    // ГРИВА: у оленя и козла она есть, и без неё шея читается как палка.
+    const грива = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.2, 3, 6), mat(headColor));
+    грива.position.set(0.29, legH + 0.63, 0);
+    грива.rotation.z = -0.75;
+    грива.scale.set(1, 1, 2.1); // грива — пластина по бокам шеи
+    g.add(грива);
+  }
 
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.08), mat(bodyColor));
-  tail.position.set(-0.6, legH + 0.4, 0);
-  tail.rotation.z = 0.5;
+  // НОГИ: два сужающихся звена и копыто. Нога качается от бедра — группа
+  // стоит в бедре, звенья — её дети.
+  const legs: THREE.Object3D[] = [];
+  const бедроГео = new THREE.CylinderGeometry(0.075, 0.055, legH * 0.5, 6);
+  const голеньГео = new THREE.CylinderGeometry(0.05, 0.038, legH * 0.5, 6);
+  const копытоГео = new THREE.CylinderGeometry(0.046, 0.055, 0.06, 6);
+  for (const [lx, lz] of [[0.29, 0.13], [0.29, -0.13], [-0.29, 0.13], [-0.29, -0.13]]) {
+    const нога = new THREE.Group();
+    нога.position.set(lx, legH, lz);
+    const бедро = new THREE.Mesh(бедроГео, мех);
+    бедро.position.y = -legH * 0.25;
+    бедро.castShadow = true;
+    const колено = new THREE.Group();
+    колено.position.y = -legH * 0.5;
+    const голень = new THREE.Mesh(голеньГео, мех);
+    голень.position.y = -legH * 0.25;
+    голень.rotation.x = 0.14; // небольшой изгиб в суставе
+    голень.castShadow = true;
+    const копыто = new THREE.Mesh(копытоГео, тёмный);
+    копыто.position.y = -(legH * 0.5 - 0.03);
+    колено.add(голень, копыто);
+    нога.add(бедро, колено);
+    g.add(нога);
+    legs.push(нога);
+  }
+
+  // ХВОСТ: сужающийся конус, у коровы — с кисточкой.
+  const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.045, 0.28, 6), мех);
+  tail.position.set(-0.52, legH + 0.4, 0);
+  tail.rotation.z = 0.55;
   g.add(tail);
 
-  const legs: THREE.Mesh[] = [];
-  const legGeo = new THREE.BoxGeometry(0.1, legH, 0.1);
-  for (const [lx, lz] of [[0.3, 0.14], [0.3, -0.14], [-0.3, 0.14], [-0.3, -0.14]]) {
-    const leg = new THREE.Mesh(legGeo, mat(bodyColor));
-    leg.position.set(lx, legH / 2, lz);
-    leg.castShadow = true;
-    g.add(leg);
-    legs.push(leg);
-  }
   g.scale.setScalar(scale);
   return { group: g, legs };
 }
 
-function makeBird(wingColor: number): { group: THREE.Group; wingL: THREE.Mesh; wingR: THREE.Mesh } {
+/**
+ * Птица (§286).
+ *
+ * БЫЛО: тело — конус с четырьмя гранями, крылья — треугольник из трёх
+ * вершин, материал без освещения (птица светилась сама, даже в сумерках).
+ *
+ * ТЕПЕРЬ: тело — капсула, есть голова, клюв и хвост, крыло — изогнутая
+ * пластина, материал освещаемый.
+ */
+function makeBird(wingColor: number, opts?: { flatBeak?: boolean }): { group: THREE.Group; wingL: THREE.Mesh; wingR: THREE.Mesh } {
   const g = new THREE.Group();
+  // Крыло: изогнутая пластина. Треугольник из трёх вершин читался как
+  // обрывок бумаги, а не как крыло.
   const wingGeo = new THREE.BufferGeometry();
   wingGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    0, 0, 0, -0.55, 0, 0.16, -0.55, 0, -0.16,
+    0, 0, 0,
+    -0.3, 0.04, 0.17,
+    -0.58, 0.02, 0.06,
+    -0.26, -0.01, -0.2,
   ]), 3));
+  wingGeo.setIndex([0, 1, 2, 0, 2, 3]);
   wingGeo.computeVertexNormals();
-  const wingMat = new THREE.MeshBasicMaterial({ color: wingColor, side: THREE.DoubleSide });
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.5, 4), wingMat);
+  const wingMat = new THREE.MeshStandardMaterial({
+    color: wingColor, roughness: 0.85, side: THREE.DoubleSide,
+  });
+  // Тело: капсула вдоль Z (птица летит носом в -Z).
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.26, 3, 8), wingMat);
   body.rotation.x = Math.PI / 2;
+  body.castShadow = true;
+  // Голова и клюв.
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.062, 8, 6), wingMat);
+  head.position.set(0, 0.03, -0.2);
+  const beak = new THREE.Mesh(
+    new THREE.ConeGeometry(0.028, opts?.flatBeak ? 0.1 : 0.13, 5),
+    mat(0xc8a45c, 0.6),
+  );
+  beak.rotation.x = -Math.PI / 2;
+  beak.position.set(0, 0.02, -0.3);
+  // Хвост: веер из плоскости.
+  const tailGeo = new THREE.BufferGeometry();
+  tailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    0, 0, 0.1, 0.07, 0, 0.28, -0.07, 0, 0.28,
+  ]), 3));
+  tailGeo.setIndex([0, 1, 2]);
+  tailGeo.computeVertexNormals();
+  const tail = new THREE.Mesh(tailGeo, wingMat);
   const wingL = new THREE.Mesh(wingGeo, wingMat);
   const wingR = new THREE.Mesh(wingGeo, wingMat);
   wingR.scale.x = -1;
-  g.add(body, wingL, wingR);
+  g.add(body, head, beak, tail, wingL, wingR);
   return { group: g, wingL, wingR };
 }
 
-function makeFish(color: number, scale = 1): THREE.Mesh {
-  const g = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.6, 5), mat(color, 0.5));
-  g.rotation.x = Math.PI / 2;   // носит по -Z? повернём вдоль движения
+/**
+ * Рыба (§286).
+ *
+ * БЫЛО: конус. ТЕПЕРЬ: сплюснутое тело и плавник-хвост.
+ */
+function makeFish(color: number, scale = 1): THREE.Group {
+  const g = new THREE.Group();
+  const материал = mat(color, 0.45);
+  const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.3, 3, 8), материал);
+  тело.rotation.x = Math.PI / 2;
+  тело.scale.set(1, 0.65, 1);
+  const хвост = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.12, 4), материал);
+  хвост.rotation.x = Math.PI / 2;
+  хвост.position.z = 0.24;
+  хвост.scale.set(1, 1, 0.4);
+  g.add(тело, хвост);
   g.scale.setScalar(scale);
   return g;
 }
@@ -150,7 +296,7 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
   const schools: FishSchool[] = [];
   const splashes: Splash[] = [];
 
-  const addWalker = (g: THREE.Group, legs: THREE.Mesh[], x: number, z: number, speed: number, homeR: number, radius: number, home = { x, z }) => {
+  const addWalker = (g: THREE.Group, legs: THREE.Object3D[], x: number, z: number, speed: number, homeR: number, radius: number, home = { x, z }) => {
     g.position.set(x, groundHeight(x, z), z);
     g.rotation.y = Math.random() * Math.PI * 2;
     all.add(g);
@@ -231,7 +377,7 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
   const addSchool = (cx: number, cz: number, level: number, radius: number, count: number) => {
     const pivot = new THREE.Group();
     pivot.position.set(cx, level - 0.5, cz);
-    const fish: THREE.Mesh[] = [];
+    const fish: THREE.Group[] = [];
     for (let i = 0; i < count; i++) {
       const f = makeFish(fishColors[i % fishColors.length], 0.8 + Math.random() * 0.6);
       const a = (i / count) * Math.PI * 2;
@@ -250,7 +396,7 @@ export function createFauna(scene: THREE.Scene): FaunaHandle {
 
   // ── Утки на озере (плавают, не ныряют) ──
   for (let i = 0; i < 4; i++) {
-    const duck = makeQuadruped(0x54493a, 0x3a3630, 0.35);
+    const duck = makeBird(0x54493a, { flatBeak: true });
     const a = (i / 4) * Math.PI * 2;
     const x = LAKE.x + Math.cos(a) * (LAKE.r * 0.5), z = LAKE.z + Math.sin(a) * (LAKE.r * 0.5);
     duck.group.position.set(x, LAKE.level + 0.1, z);
