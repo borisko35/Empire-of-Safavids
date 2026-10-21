@@ -2652,11 +2652,42 @@ function buildQuarters(
     const a = (i / 10) * Math.PI * 2;
     cypress(city, -31.5 + Math.cos(a) * 11, 77.9 + Math.sin(a) * 11, 0.3, 0.9 + (i % 3) * 0.2);
   }
-  const pond = new THREE.Mesh(new THREE.CircleGeometry(5.5, 24), MAT.water);
-  pond.rotation.x = -Math.PI / 2;
-  pond.position.set(-31.5, 0.5, 77.9);
-  city.add(pond);
+  // Пруд в садах (§242).
+  //
+  // БЫЛО: плоский диск воды, висящий НАД мостовой (0.5 при верхе плиты
+  // 0.3) — ни берега, ни ямки, ни жизни. ТЕПЕРЬ: каменный берег-кольцо,
+  // вода вровень с плитой, кувшинки на воде и камыш по берегу.
+  const ПРУД_Y = 0.3;
+  const берег = new THREE.Mesh(new THREE.TorusGeometry(5.6, 0.4, 8, 28), MAT.sandstone);
+  берег.position.set(-31.5, ПРУД_Y + 0.1, 77.9);
+  берег.rotation.x = Math.PI / 2;
+  берег.castShadow = true;
+  берег.receiveShadow = true;
+  const вода = new THREE.Mesh(new THREE.CircleGeometry(5.25, 28), MAT.water);
+  вода.rotation.x = -Math.PI / 2;
+  вода.position.set(-31.5, ПРУД_Y + 0.05, 77.9);
+  city.add(берег, вода);
   addCollider(CITY.x - 31.5, CITY.z + 77.9, 6);
+  // Кувшинки: зелёные круги на воде.
+  for (let i = 0; i < 7; i++) {
+    const a = hash2(i, 3) * Math.PI * 2;
+    const r = 1.2 + hash2(i, 5) * 3.4;
+    const кувшинка = new THREE.Mesh(
+      new THREE.CircleGeometry(0.28 + hash2(i, 7) * 0.2, 10),
+      MAT.foliage,
+    );
+    кувшинка.rotation.x = -Math.PI / 2;
+    кувшинка.position.set(-31.5 + Math.cos(a) * r, ПРУД_Y + 0.08, 77.9 + Math.sin(a) * r);
+    city.add(кувшинка);
+  }
+  // Камыш по берегу: стык воды и камня не должен быть пустым.
+  for (let i = 0; i < 10; i++) {
+    const a = hash2(i, 11) * Math.PI * 2;
+    const камыш = new THREE.Mesh(new THREE.ConeGeometry(0.08, 1.5, 4), MAT.foliageDark);
+    камыш.position.set(-31.5 + Math.cos(a) * 5.9, ПРУД_Y + 0.75, 77.9 + Math.sin(a) * 5.9);
+    камыш.rotation.z = (hash2(i, 13) - 0.5) * 0.3;
+    city.add(камыш);
+  }
   for (const [bx, bz, ry] of [[-38, 77.9, 0.3], [-25, 77.9, -0.3], [-31.5, 71, 0], [-31.5, 84.8, Math.PI]] as const) {
     const bench = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 0.6), MAT.wood);
     bench.position.set(bx, 0.65, bz);
