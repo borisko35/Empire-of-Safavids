@@ -1514,6 +1514,9 @@ decorWaterMaterial.uniforms.uChop.value = 0.45;
 let материалЗемли: THREE.MeshStandardMaterial | null = null;
 let цветаЗемли: Float32Array | null = null;
 let мокротаЗемли = -1;
+let пыльЗемли = -1;
+/** Цвет пыли от бури: тёплый рыжий (§283). */
+const ЦВЕТ_ПЫЛИ = new THREE.Color(0xc9a06a);
 let снегЗемли = -1;
 /** Цвет, в который уходит земля под снегом. */
 const ЦВЕТ_СНЕГА = new THREE.Color(0xeef3f8);
@@ -1599,18 +1602,26 @@ function netTexture(): THREE.CanvasTexture {
   return текстура;
 }
 
-export function setGroundState(wet: number, snow: number): void {
+export function setGroundState(wet: number, snow: number, dust = 0): void {
   if (!материалЗемли) return;
   const м = Math.max(0, Math.min(1, wet));
   const с = Math.max(0, Math.min(1, snow));
-  if (Math.abs(мокротаЗемли - м) >= 0.004) {
+  // Пыль от бури (§283): земля в песчаной буре не своя, а рыжая от пыли.
+  const п = Math.max(0, Math.min(1, dust));
+  if (Math.abs(мокротаЗемли - м) >= 0.004 || Math.abs(пыльЗемли - п) >= 0.004) {
     мокротаЗемли = м;
+    пыльЗемли = п;
     // Темнее и глянцеве: мокрая земля отражает небо, а не рассеивает свет.
     материалЗемли.roughness = 1 - 0.5 * м;
-    материалЗемли.color.setScalar(1 - 0.32 * м);
+    // Пыль — тёплый рыжий оттенок, и от неё земля ещё и матовее.
+    материалЗемли.color.setRGB(
+      (1 - 0.32 * м) * (1 - 0.05 * п),
+      (1 - 0.32 * м) * (1 - 0.22 * п),
+      (1 - 0.32 * м) * (1 - 0.38 * п),
+    );
     // Городская мостовая: блестит сильнее земли — она гладкая.
     MAT.street.roughness = 1 - 0.62 * м;
-    MAT.street.color.setHex(0x9a8a68).multiplyScalar(1 - 0.26 * м);
+    MAT.street.color.setHex(0x9a8a68).multiplyScalar(1 - 0.26 * м).lerp(ЦВЕТ_ПЫЛИ, п * 0.55);
   }
   if (Math.abs(снегЗемли - с) < 0.02) return;
   снегЗемли = с;

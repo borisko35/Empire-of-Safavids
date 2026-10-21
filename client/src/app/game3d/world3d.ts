@@ -245,6 +245,8 @@ export class World3D {
   private мокрота = 0;
   /** Насколько земля заснежена, 0..1 (§262). */
   private снег = 0;
+  /** Насколько земля запылена бурей, 0..1 (§283). */
+  private пыль = 0;
   private sky!: SkyHandle;
   /** Текущая погода (для env-интенсивности). */
   private currentWeather: WeatherKind = 'clear';
@@ -2419,7 +2421,12 @@ if (isMe && moving) {
     const идётСнег = this.currentWeather === 'snow';
     if (идётСнег) this.снег = Math.min(1, this.снег + dt * 0.25);
     else this.снег = Math.max(0, this.снег - dt * 0.02);
-    setGroundState(this.мокрота, this.снег);
+    // Пыль от бури ложится на землю (§283): в песчаной буре земля не своя, а
+    // рыжая от пыли. Пыль набирается не мгновенно и сходит не сразу.
+    const пылит = this.currentWeather === 'sandstorm';
+    if (пылит) this.пыль = Math.min(1, this.пыль + dt * 0.5);
+    else this.пыль = Math.max(0, this.пыль - dt * 0.25);
+    setGroundState(this.мокрота, this.снег, this.пыль);
     // Лужи на площади (§264) и вода в колеях дороги, лужи в пригороде (§269).
     setPuddles(this.мокрота);
     this.водаДороги.update(dt, now, me.pos.x, me.pos.z, this.мокрота);
