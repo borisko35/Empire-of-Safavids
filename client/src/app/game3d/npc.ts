@@ -58,6 +58,14 @@ export const NPC_GROUPS: NpcGroup[] = [
   { id: 'npc_gate_archer_r', nameRu: 'Лучник Данияр', panel: 'panel-party', quest: false, dx: GATE_LX - 5.7, dz: GATE_LZ + 0.8, look: { robe: 0x605040, robeDark: 0x40362c, hat: 'hood', hatColor: 0x4c3a22, weapon: 'bow', scale: 1 } },
       { id: 'npc_mystic', nameRu: 'Суфий Мевлана', panel: 'panel-quests', quest: true, dx: 2, dz: -26, look: { robe: 0xd9c27a, robeDark: 0xa8954f, hat: 'hood', hatColor: 0x7a5f3c, weapon: 'staff', scale: 0.98 } },
       { id: 'npc_stable_master', nameRu: 'Конюх Фархад', panel: 'panel-mount-stable', quest: false, dx: -18.6, dz: -69.5, look: { robe: 0x5a4430, robeDark: 0x3d3020, hat: 'cap', hatColor: 0x8a6a42, weapon: 'none', scale: 1.02 } },
+      // ── Жители новых мест (§244) ──
+      //
+      // Сквер, двор жилого квартала, пригород и сад §239–§243 стояли пустыми:
+      // без людей место читается как декорация, а не как место, где кто-то живёт.
+      { id: 'npc_flower_woman', nameRu: 'Цветочница Мадина', panel: 'panel-shop', quest: false, dx: -8.5, dz: 6.5, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'hood', hatColor: 0xc9a84c, weapon: 'none', scale: 0.97 } },
+      { id: 'npc_well_woman', nameRu: 'Водоносчица Багира', panel: 'panel-quests', quest: false, dx: 56.5, dz: 62.5, look: { robe: 0x2e8b8b, robeDark: 0x1f6161, hat: 'hood', hatColor: 0xe8e0d0, weapon: 'none', scale: 0.98 } },
+      { id: 'npc_suburb_master', nameRu: 'Мастер Лейла', panel: 'panel-craft', quest: false, dx: 120, dz: 114, look: { robe: 0x6e563a, robeDark: 0x4c3a22, hat: 'cap', hatColor: 0x2a2a30, weapon: 'none', scale: 1.04 } },
+      { id: 'npc_gardener', nameRu: 'Садовник Рустем', panel: 'panel-quests', quest: false, dx: -27, dz: 81, look: { robe: 0x4a6a38, robeDark: 0x334a27, hat: 'cap', hatColor: 0x7a6244, weapon: 'none', scale: 1.01 } },
     ],
   },
   // ── Приозёрный порт ──
