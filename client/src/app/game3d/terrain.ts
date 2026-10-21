@@ -2851,31 +2851,17 @@ function buildQuarters(
     { x: 95, z: 113, w: 6.5, d: 5.5, h: 3.2, труба: false },
   ] as const) {
     const земля = groundHeight(CITY.x + п.x, CITY.z + п.z) - city.position.y;
-    const корпус = new THREE.Mesh(
-      new THREE.BoxGeometry(п.w, п.h, п.d),
-      MAT.sandstone,
-    );
-    корпус.position.set(п.x, земля + п.h / 2, п.z);
-    корпус.castShadow = true;
-    корпус.receiveShadow = true;
-    const крыша = new THREE.Mesh(
-      new THREE.BoxGeometry(п.w + 0.6, 0.34, п.d + 0.6),
-      MAT.sandstoneDark,
-    );
-    крыша.position.set(п.x, земля + п.h + 0.17, п.z);
-    крыша.castShadow = true;
-    // Ворота складов: широкие проёмы, из которых выезжают повозки.
-    const ворота = new THREE.Mesh(
-      new THREE.BoxGeometry(п.w * 0.42, п.h * 0.6, 0.2),
-      MAT.wood,
-    );
-    ворота.position.set(п.x, земля + п.h * 0.3, п.z + п.d / 2 + 0.02);
-    city.add(корпус, крыша, ворота);
+    // Склад или мастерская: цоколь, свод, контрфорсы (§291).
+    склад(city, п.x, п.z, земля, п.w, п.d, п.h);
     if (п.труба) {
-      const труба = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3.4, 1.0), MAT.sandstoneDark);
+      // Труба сужается кверху и с колпаком — брусок читался как пень.
+      const труба = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.62, 3.4, 8), MAT.sandstoneDark);
       труба.position.set(п.x + п.w * 0.3, земля + п.h + 1.7, п.z);
       труба.castShadow = true;
       city.add(труба);
+      const колпак = new THREE.Mesh(new THREE.CylinderGeometry(0.56, 0.44, 0.18, 8), MAT.sandstone);
+      колпак.position.set(п.x + п.w * 0.3, земля + п.h + 3.42, п.z);
+      city.add(колпак);
       // Труба дымит (§266): без дыма город из жары выглядит выключенным.
       дымныеТрубы.push({
         x: CITY.x + п.x + п.w * 0.3,
@@ -3182,6 +3168,90 @@ function buildQuarters(
     const высотаОгня = фонарь(city, lx, lz);
     lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + высотаОгня });
     addCollider(CITY.x + lx, CITY.z + lz, 0.5);
+  }
+}
+
+/**
+ * Бочка-свод: полуцилиндр вдоль здания (§291).
+ *
+ * Геометрия строится сразу в нужном положении — ось вдоль X, дуга вверх.
+ * Поворотами цилиндра дуга вставала боком (та же история с навесом прилавка).
+ */
+function свод(длина: number, радиус: number, сегментов = 8): THREE.BufferGeometry {
+  const вершины: number[] = [];
+  const индексы: number[] = [];
+  for (let i = 0; i <= сегментов; i++) {
+    const a = -Math.PI / 2 + (Math.PI * i) / сегментов;
+    const y = Math.cos(a) * радиус;
+    const z = Math.sin(a) * радиус;
+    вершины.push(-длина / 2, y, z);
+    вершины.push(длина / 2, y, z);
+  }
+  for (let i = 0; i < сегментов; i++) {
+    const a = i * 2;
+    индексы.push(a, a + 1, a + 3, a, a + 3, a + 2);
+  }
+  const геометрия = new THREE.BufferGeometry();
+  геометрия.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
+  геометрия.setIndex(индексы);
+  геометрия.computeVertexNormals();
+  return геометрия;
+}
+
+/**
+ * Склад или мастерская пригорода (§291).
+ *
+ * БЫЛО: корпус — ящик, крыша — плоская плита сверху, труба — брусок, ворота —
+ * доска. Здание читалось как коробка на крыше.
+ *
+ * ТЕПЕРЬ: цоколь из тёмного камня, каменный пояс под кровлей, **бочка-свод**
+ * вместо плоской крыши, контрфорсы у стен, ворота из досок с iron-обвязкой и
+ * сужающаяся труба с колпаком.
+ */
+function склад(
+  parent: THREE.Group, x: number, z: number, земля: number,
+  w: number, d: number, h: number,
+): void {
+  // Цоколь: тёмный камень под стеной — дом не стоит прямо на земле.
+  const цоколь = new THREE.Mesh(new THREE.BoxGeometry(w + 0.16, 0.5, d + 0.16), MAT.sandstoneDark);
+  цоколь.position.set(x, земля + 0.25, z);
+  цоколь.castShadow = true;
+  цоколь.receiveShadow = true;
+  parent.add(цоколь);
+
+  const корпус = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), MAT.sandstone);
+  корпус.position.set(x, земля + 0.5 + h / 2, z);
+  корпус.castShadow = true;
+  корпус.receiveShadow = true;
+  parent.add(корпус);
+
+  // Каменный пояс под кровлей — опора для глаза, стена перестаёт быть плоскостью.
+  const пояс = new THREE.Mesh(new THREE.BoxGeometry(w + 0.14, 0.22, d + 0.14), MAT.sandstoneDark);
+  пояс.position.set(x, земля + 0.5 + h - 0.11, z);
+  parent.add(пояс);
+
+  // Бочка-свод: половина цилиндра вдоль ширины здания.
+  const крыша = new THREE.Mesh(свод(w + 0.4, d / 2 + 0.25), MAT.sandstoneDark);
+  крыша.position.set(x, земля + 0.5 + h, z);
+  крыша.castShadow = true;
+  parent.add(крыша);
+
+  // Контрфорсы: стены без них выглядят как картон.
+  for (const сторона of [-1, 1]) {
+    const контрфорс = new THREE.Mesh(new THREE.BoxGeometry(0.45, h * 0.82, 0.7), MAT.sandstone);
+    контрфорс.position.set(x + сторона * (w / 2 + 0.1), земля + 0.5 + (h * 0.82) / 2, z);
+    контрфорс.castShadow = true;
+    parent.add(контрфорс);
+  }
+
+  // Ворота: доски и iron-обвязка.
+  const ворота = new THREE.Mesh(new THREE.BoxGeometry(w * 0.42, h * 0.6, 0.16), MAT.wood);
+  ворота.position.set(x, земля + 0.5 + h * 0.3, z + d / 2 + 0.02);
+  parent.add(ворота);
+  for (const yy of [0.22, 0.78]) {
+    const обвязка = new THREE.Mesh(new THREE.BoxGeometry(w * 0.44, 0.09, 0.07), MAT.dark);
+    обвязка.position.set(x, земля + 0.5 + h * 0.6 * yy, z + d / 2 + 0.11);
+    parent.add(обвязка);
   }
 }
 
