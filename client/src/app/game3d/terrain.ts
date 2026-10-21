@@ -4565,19 +4565,121 @@ function cypress(parent: THREE.Group, x: number, z: number, baseY: number, s: nu
   addCollider(CITY.x + x, CITY.z + z, 0.55);
 }
 
+/**
+ * Шатёр полевого лагеря (§289).
+ *
+ * БЫЛО: конус. Четыре конуса в ряд читались как палатки из картона, а
+ * большой шатёр вождя — как вулкан.
+ *
+ * ТЕПЕРЬ: настоящий шатёр-полотнище — два ската от конька к земле с провисом,
+ * задняя стенка-треугольник, откидной передний клапан, конёк, шесты, верёвки
+ * с кольями и коврик у входа. Полотнище двустороннее: внутри шатра видно из
+ * прохода.
+ */
+function шатёр(
+  parent: THREE.Object3D, x: number, z: number, s: number,
+  материал: THREE.Material, поворот: number,
+): THREE.Group {
+  const г = new THREE.Group();
+  г.position.set(x, 0, z);
+  г.rotation.y = поворот;
+  const h = 2.5 * s, d = 3.6 * s, w = 2.6 * s;
+
+  // Полотнище: два ската от конька к земле, с провисом книзу.
+  const вершины: number[] = [];
+  const индексы: number[] = [];
+  const шагов = 6;
+  for (let i = 0; i <= шагов; i++) {
+    const t = i / шагов;
+    const zz = -d / 2 + d * t;
+    // Провис: полотно провисает книзу к середине.
+    const провис = Math.sin(t * Math.PI) * 0.14 * s;
+    вершины.push(-w / 2, 0, zz);
+    вершины.push(0, h - провис, zz);
+    вершины.push(w / 2, 0, zz);
+  }
+  for (let i = 0; i < шагов; i++) {
+    const a = i * 3, b = (i + 1) * 3;
+    индексы.push(a, a + 1, b + 1, a, b + 1, b);         // левый скат
+    индексы.push(a + 1, a + 2, b + 2, a + 1, b + 2, b + 1); // правый скат
+  }
+  // Задняя стенка.
+  const зад = вершины.length / 3;
+  вершины.push(-w / 2, 0, -d / 2, 0, h, -d / 2, w / 2, 0, -d / 2);
+  индексы.push(зад, зад + 1, зад + 2);
+  const геометрия = new THREE.BufferGeometry();
+  геометрия.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
+  геометрия.setIndex(индексы);
+  геометрия.computeVertexNormals();
+  const полотно = new THREE.Mesh(геометрия, материал);
+  полотно.castShadow = true;
+  г.add(полотно);
+
+  // Клапан у входа: откинут вбок.
+  const клапан = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.55, h * 0.8), материал);
+  клапан.position.set(w * 0.32, h * 0.38, d / 2 + 0.03);
+  клапан.rotation.set(0, -0.9, 0.12);
+  г.add(клапан);
+
+  // Конёк и шесты.
+  const конёк = new THREE.Mesh(new THREE.CylinderGeometry(0.05 * s, 0.05 * s, d + 0.4 * s, 6), MAT.trunk);
+  конёк.rotation.x = Math.PI / 2;
+  конёк.position.y = h + 0.02 * s;
+  г.add(конёк);
+  for (const zz of [-d / 2 + 0.06, d / 2 - 0.06]) {
+    const шест = new THREE.Mesh(new THREE.CylinderGeometry(0.045 * s, 0.055 * s, h, 6), MAT.trunk);
+    шест.position.set(0, h / 2, zz);
+    шест.castShadow = true;
+    г.add(шест);
+  }
+
+  // Верёвки от конька к кольям — шатёр стоит, а не висит.
+  for (const сторона of [-1, 1]) {
+    for (const конец of [-1, 1]) {
+      const от = new THREE.Vector3(0, h * 0.92, конец * d * 0.42);
+      const до = new THREE.Vector3(сторона * w * 0.85, 0.02, конец * d * 0.72);
+      const длина = от.distanceTo(до);
+      const верёвка = new THREE.Mesh(new THREE.CylinderGeometry(0.012 * s, 0.012 * s, длина, 4), MAT.dark);
+      верёвка.position.copy(от).lerp(до, 0.5);
+      верёвка.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        до.clone().sub(от).normalize(),
+      );
+      г.add(верёвка);
+      const кол = new THREE.Mesh(new THREE.CylinderGeometry(0.04 * s, 0.05 * s, 0.3 * s, 5), MAT.trunk);
+      кол.position.copy(до);
+      кол.position.y = 0.12 * s;
+      г.add(кол);
+    }
+  }
+
+  // Коврик у входа.
+  const ковёр = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.03, 1.1 * s), MAT.clothRed);
+  ковёр.position.set(0, 0.02, d / 2 + 0.55 * s);
+  г.add(ковёр);
+
+  parent.add(г);
+  return г;
+}
+
 export function buildCamp(scene: THREE.Scene): void {
   const camp = new THREE.Group();
   const baseY = groundHeight(CAMP.x, CAMP.z);
   camp.position.set(CAMP.x, baseY, CAMP.z);
+  // Полотнище двустороннее: из прохода видно изнутри шатра.
+  const парус = (материал: THREE.Material): THREE.Material => {
+    const копия = (материал as THREE.MeshStandardMaterial).clone();
+    копия.side = THREE.DoubleSide;
+    return копия;
+  };
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + 0.5;
-    const tent = new THREE.Mesh(new THREE.ConeGeometry(2.6, 3.4, 7), i % 2 ? MAT.clothRed : MAT.dark);
     const x = Math.cos(a) * 10, z = Math.sin(a) * 10;
-    tent.position.set(x, 1.7, z);
-    tent.castShadow = true;
+    // Шатёр стоит входом к костру.
+    шатёр(camp, x, z, 1, парус(i % 2 ? MAT.clothRed : MAT.dark), -a + Math.PI / 2);
     const flag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.4, 0.9), MAT.clothRed);
-    flag.position.set(x, 4.2, z);
-    camp.add(tent, flag);
+    flag.position.set(x, 3.4, z);
+    camp.add(flag);
     addCollider(CAMP.x + x, CAMP.z + z, 2.5);
   }
   // Частокол кольцом (с юга — проход) и большой шатёр вождя
@@ -4585,25 +4687,61 @@ export function buildCamp(scene: THREE.Scene): void {
     const a = (i / 26) * Math.PI * 2;
     if (Math.abs(a - Math.PI / 2) < 0.28) continue;
     const px = Math.cos(a) * 15, pz = Math.sin(a) * 15;
-    const stake = new THREE.Mesh(new THREE.BoxGeometry(0.35, 2.6, 0.35), MAT.trunk);
-    stake.position.set(px, 1.3, pz);
+    // Кол из заострённого бревна, а не из бруска.
+    const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.19, 2.6, 6), MAT.trunk);
+    stake.position.set(px, 1.25, pz);
     stake.rotation.z = i % 2 ? 0.04 : -0.04;
     stake.castShadow = true;
     camp.add(stake);
+  }
+  // Перекладина, связывающая колья: без неё частокол — просто палки.
+  for (const высота of [0.9, 1.9]) {
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      if (Math.abs(a - Math.PI / 2) < 0.28) continue;
+      const a2 = ((i + 1) / 26) * Math.PI * 2;
+      if (Math.abs(a2 - Math.PI / 2) < 0.28) continue;
+      const x1 = Math.cos(a) * 15, z1 = Math.sin(a) * 15;
+      const x2 = Math.cos(a2) * 15, z2 = Math.sin(a2) * 15;
+      const перекладина = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 5), MAT.trunk);
+      const mid = new THREE.Vector3((x1 + x2) / 2, высота, (z1 + z2) / 2);
+      перекладина.position.copy(mid);
+      перекладина.scale.y = Math.hypot(x2 - x1, z2 - z1);
+      перекладина.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(x2 - x1, 0, z2 - z1).normalize(),
+      );
+      camp.add(перекладина);
+    }
   }
   addCollider(CAMP.x + 15, CAMP.z, 1.6);
   addCollider(CAMP.x - 15, CAMP.z, 1.6);
   addCollider(CAMP.x, CAMP.z - 15, 1.6);
   addCollider(CAMP.x, CAMP.z + 15, 1.6);
-  const bigTent = new THREE.Mesh(new THREE.ConeGeometry(3.6, 4.6, 8), MAT.clothPurple);
-  bigTent.position.set(0, 2.3, -6.5);
-  bigTent.castShadow = true;
+  // Большой шатёр вождя — тот же шатёр, но крупнее и с богатым полотном.
+  шатёр(camp, 0, -6.5, 1.35, парус(MAT.clothPurple), 0);
   const bigFlag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.6, 1.1), MAT.gold);
   bigFlag.position.set(0, 5.6, -6.5);
-  camp.add(bigTent, bigFlag);
+  camp.add(bigFlag);
   addCollider(CAMP.x, CAMP.z - 6.5, 3.4);
+  // Костёр: очаг из камней, поленья крест-накрест и пламя.
   const fire = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 0.4, 9), MAT.dark);
   fire.position.set(0, 0.2, 0);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const камень = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22, 0), MAT.stone);
+    камень.position.set(Math.cos(a) * 1.05, 0.16, Math.sin(a) * 1.05);
+    камень.rotation.set(a, a * 1.7, 0);
+    камень.castShadow = true;
+    camp.add(камень);
+  }
+  for (const поворот of [0.5, -0.5]) {
+    const полено = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.5, 6), MAT.trunk);
+    полено.rotation.set(Math.PI / 2, поворот, 0);
+    полено.position.set(0, 0.36, 0);
+    полено.castShadow = true;
+    camp.add(полено);
+  }
   addCollider(CAMP.x, CAMP.z, 1.4);
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 7), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.6 }));
   flame.position.set(0, 1, 0);
