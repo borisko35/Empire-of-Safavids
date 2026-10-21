@@ -36,6 +36,7 @@ import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
 import { createMirage, type MirageHandle } from './mirage';
+import { createRoadDust, type RoadDustHandle } from './roadDust';
 import { createBirds, type BirdsHandle } from './birds';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
@@ -198,6 +199,8 @@ export class World3D {
   private вихри!: DustDevilsHandle;
   /** Марево над горизонтом в жару (§265). */
   private марево!: MirageHandle;
+  /** Пыль над дорогой в жару (§268). */
+  private пыльДороги!: RoadDustHandle;
   /** Дым из печных труб города (§266). */
   private дымТруб!: Puffs;
   /** Тень от костра в лагере (§267). */
@@ -947,6 +950,8 @@ private roll = 0;
     this.вихри = createDustDevils(this.scene);
     // Марево над горизонтом в жару (§265).
     this.марево = createMirage(this.scene);
+    // Пыль над дорогой в жару (§268).
+    this.пыльДороги = createRoadDust(this.scene);
     // Дым из печных труб (§266): город из жары выглядел выключенным.
     this.дымТруб = createPuffs(this.scene, {
       количество: 16,
@@ -2168,6 +2173,9 @@ if (isMe && moving) {
       ? 0
       : Math.max(0, Math.min(1, (sunDir.y - 0.12) / 0.45)) * (1 - night) * (1 - this.sky.overcast);
     this.марево.update(dt, now, me.pos.x, me.pos.z, жар);
+    // Пыль над дорогой (§268): она стоит только над полотном, а не над всей
+    // пустыней, и появляется в тот же жар, что и марево.
+    this.пыльДороги.update(dt, now, me.pos.x, me.pos.z, жар);
     // Дым из труб (§266): клуб из случайной трубы, и не чаще раза в полсекунды.
     if (дымныеТрубы.length) {
       this.дымТрубТаймер += dt;
@@ -2376,6 +2384,7 @@ if (isMe && moving) {
     for (const д of this.дым) д.дым.dispose();
     this.вихри?.dispose();
     this.марево?.dispose();
+    this.пыльДороги?.dispose();
     this.дымТруб?.dispose();
     this.птицы?.dispose();
     this.civilians?.dispose();
