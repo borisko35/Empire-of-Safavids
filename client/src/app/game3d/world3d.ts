@@ -176,6 +176,26 @@ interface BoundRig {
  */
 const НАПРАВЛЕНИЕ_ВЕТРА = 0.7;
 
+/**
+ * Сила ветра по погоде (§281).
+ *
+ * В мире ветер один, но зелень его чувствует по-разному: в буре ветку рвёт,
+ * в штиль она еле шевелится. Числа — по ощущению, а не по measurement: важно,
+ * чтобы разница читалась, а не была точной.
+ */
+export function ветерСилы(weather: string): number {
+  switch (weather) {
+    case 'storm': return 2.3;
+    case 'sandstorm': return 1.7;
+    case 'wind': return 1.5;
+    case 'rain': return 1.15;
+    case 'cloudy': return 0.85;
+    case 'snow': return 0.5;
+    case 'fog': return 0.4;
+    default: return 0.7;
+  }
+}
+
 export class World3D {
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
@@ -2418,15 +2438,23 @@ if (isMe && moving) {
     // летние — так снегопад читается наполовину декорацией.
     setSnowOnSurfaces(this.снег);
     // Ветер качает зелень (§258): кусты, трава и кроны деревьев стояли
-    // неподвижно, хотя ветер в мире есть. В буре качание вдвое сильнее.
-    const ветер = this.currentWeather === 'sandstorm' ? 2 : 1;
+    // неподвижно, хотя ветер в мире есть.
+    //
+    // СИЛА ВЕТРА ЗАВИСИТ ОТ ПОГОДЫ (§281). Раньше в буре зелень качалась
+    // вдвое сильнее, а в штиль — так же, как в буре: ветер в мире один, и
+    // зелень его не чувствовала. Теперь в буре зелень мечется, в штиль еле
+    // заметно, а порывы идут чаще.
+    const ветер = ветерСилы(this.currentWeather);
     for (const к of качающиеся) {
       // Только рядом с камерой: за горизонтом качание не видно, а список
       // растений — на весь мир.
       const dx = к.x - this.camera.position.x;
       const dz = к.z - this.camera.position.z;
       if (dx * dx + dz * dz > 4900) continue;
-      const порыв = Math.sin(now / 900 + к.фаза) * 0.6 + Math.sin(now / 430 + к.фаза * 2.3) * 0.4;
+      // Чем сильнее ветер, тем чаще порывы.
+      const быстро = 900 / ветер;
+      const порыв = Math.sin(now / быстро + к.фаза) * 0.6
+        + Math.sin(now / (быстро * 0.48) + к.фаза * 2.3) * 0.4;
       const сила = к.амплитуда * ветер * (0.45 + 0.55 * порыв);
       // Наклон по ветру: ось поворота поперёк ветра.
       к.obj.rotation.set(
