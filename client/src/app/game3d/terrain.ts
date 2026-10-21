@@ -1978,9 +1978,14 @@ function roadMaterial(stone: boolean): THREE.MeshStandardMaterial {
   const g = c.getContext('2d')!;
 
   // Основа: поперёк полотна светлее к центру, темнее к обочинам
+  //
+  // ЦВЕТА ПЕСКА, А НЕ ПЕСКА ПОСВЕТЛЕЕ (§248). Дорога была светлее земли
+  // вокруг, и на песке читалась как вырезанная из мира белая лента. Теперь
+  // полотно — тот же тёплый песок, чуть темнее и с колеями, а не белая
+  // полоса поверх песка.
   const base = g.createLinearGradient(0, 0, 128, 0);
-  const light = stone ? '#a8a294' : '#d9b87e';
-  const dark = stone ? '#6f6a5e' : '#a5824f';
+  const light = stone ? '#a8a294' : '#c6a670';
+  const dark = stone ? '#6f6a5e' : '#947342';
   base.addColorStop(0, dark);
   base.addColorStop(0.5, light);
   base.addColorStop(1, dark);
