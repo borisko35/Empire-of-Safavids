@@ -31,7 +31,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildMillPlough, buildVillageGrindstone,
   bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
 } from './terrain';
-import { waterMaterials, followSeaToCamera } from './terrain';
+import { waterMaterials, followSeaToCamera, качающиеся } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
 import { createPuffs, type Puffs } from './puffs';
 import { createDustDevils, type DustDevilsHandle } from './dustDevil';
@@ -162,6 +162,12 @@ interface BoundRig {
   /** Насколько тело поднято над водой (спина торчит) */
   aquaticLift?: number;
 }
+
+/**
+ * Куда дует ветер, в радианах (§258). Зелень наклоняется по этому вектору.
+ * Одно направление на весь мир: ветер в мире один, а не свой в каждом кусте.
+ */
+const НАПРАВЛЕНИЕ_ВЕТРА = 0.7;
 
 export class World3D {
   private renderer!: THREE.WebGLRenderer;
@@ -2208,6 +2214,24 @@ if (isMe && moving) {
     }
     // Пыльные вихри (§257): бродят по песку рядом с игроком.
     this.вихри.update(dt, now, me.pos.x, me.pos.z);
+    // Ветер качает зелень (§258): кусты, трава и кроны деревьев стояли
+    // неподвижно, хотя ветер в мире есть. В буре качание вдвое сильнее.
+    const ветер = this.currentWeather === 'sandstorm' ? 2 : 1;
+    for (const к of качающиеся) {
+      // Только рядом с камерой: за горизонтом качание не видно, а список
+      // растений — на весь мир.
+      const dx = к.x - this.camera.position.x;
+      const dz = к.z - this.camera.position.z;
+      if (dx * dx + dz * dz > 4900) continue;
+      const порыв = Math.sin(now / 900 + к.фаза) * 0.6 + Math.sin(now / 430 + к.фаза * 2.3) * 0.4;
+      const сила = к.амплитуда * ветер * (0.45 + 0.55 * порыв);
+      // Наклон по ветру: ось поворота поперёк ветра.
+      к.obj.rotation.set(
+        к.база.x + Math.sin(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
+        к.база.y,
+        к.база.z + Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
+      );
+    }
 
     if (this.attackCd > 0) this.attackCd -= dt;
     // Новые материалы (монстры, лошади, караваны) прошиваем пачкой раз в
