@@ -1530,6 +1530,17 @@ const ЦВЕТ_СНЕГА = new THREE.Color(0xeef3f8);
  */
 export const сетиРыбаков: { x: number; z: number }[] = [];
 
+/**
+ * Чайки на причале (§275).
+ *
+ * БЫЛО: над водой уже садятся птицы (§273), а сам причал стоял пустым: ни
+ * одной чайки на перилах у рыбацкой лодки.
+ *
+ * ТЕПЕРЬ: три чайки на досках причала, и места их записываются — сторож
+ * проверяет, что чайки стоят на причале, а не в поле.
+ */
+export const чайкиНаПричале: { x: number; z: number }[] = [];
+
 /** Текстура сети: тонкие нити квадратом по холсту. */
 function netTexture(): THREE.CanvasTexture {
   const канва = document.createElement('canvas');
@@ -4458,6 +4469,32 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
   {
     const g = new THREE.Group();
     g.position.set(PORT.x, groundHeight(PORT.x, PORT.z), PORT.z);
+    // Чайки на причале (§275): над водой уже садятся птицы (§273), а сам
+    // причал пуст — ни одной чайки на перилах. Чайки стоят на досках и смотрят
+    // на озеро.
+    for (const [сдвиг, бок] of [[2.4, 0.5], [4.6, -0.45], [7.1, 0.2]] as const) {
+      // Направление на озеро — то же, что у причала (toLake считается ниже).
+      const кОзеру = Math.atan2(LAKE.x - PORT.x, LAKE.z - PORT.z);
+      // Точка на причале: вдоль пирса (сдвиг) и вбок от его оси (бок).
+      const бокX = бок * Math.cos(кОзеру);
+      const бокZ = -бок * Math.sin(кОзеру);
+      const lx = Math.sin(кОзеру) * 12 - сдвиг * Math.sin(кОзеру) + бокX;
+      const lz = Math.cos(кОзеру) * 12 - сдвиг * Math.cos(кОзеру) + бокZ;
+      const земля = groundHeight(PORT.x + lx, PORT.z + lz) - g.position.y;
+      const чайка = new THREE.Group();
+      const тело = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6), MAT.white);
+      тело.scale.set(0.8, 0.8, 1.35);
+      тело.position.y = земля + 0.78;
+      const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.28), MAT.white);
+      хвост.position.set(0, земля + 0.76, 0.2);
+      const клюв = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.13, 4), MAT.clothRed);
+      клюв.rotation.x = -Math.PI / 2;
+      клюв.position.set(0, земля + 0.78, -0.26);
+      чайка.add(тело, хвост, клюв);
+      чайка.rotation.y = кОзеру + Math.PI;
+      g.add(чайка);
+      чайкиНаПричале.push({ x: PORT.x + lx, z: PORT.z + lz });
+    }
     // Сети рыбаков у кромки воды (§274): на порту есть рыбак, лодки и озеро,
     // а промысла не видно — берег пустой. Сеть стоит наклонно: жерди и
     // полотнище с ячейками.
