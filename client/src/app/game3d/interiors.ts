@@ -1530,7 +1530,29 @@ export function buildTownBuildings(scene: THREE.Scene): THREE.Object3D[] {
     // Пояс под кровлей: без него стена в четыре с половиной метра — просто
     // коробка, и дом не отличается от сарая.
     const пояс = box(8.2, 0.2, 6.2, M.wallDark, 0, 4.2, 0);
-    g.add(body, roof, frame, door, sign, lamp, win1, win2, пояс);
+    // ── Крыльцо и забор (§238) ──
+    //
+    // Дома кварталов стояли прямо на мостовой: ни ступеньки, ни забора, ни
+    // двора. Крыльцо со ступенькой отделяет вход от улицы, а забор по бокам
+    // фасада очерчивает двор — без него дом стоит на площади как ящик.
+    const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 1.2), M.stone);
+    крыльцо.position.set(0, 0.11, 3.5);
+    крыльцо.castShadow = true;
+    крыльцо.receiveShadow = true;
+    const ступенька = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.12, 0.5), M.stone);
+    ступенька.position.set(0, 0.06, 4.25);
+    ступенька.receiveShadow = true;
+    g.add(body, roof, frame, door, sign, lamp, win1, win2, пояс, крыльцо, ступенька);
+    // Забор по бокам фасада: два столба и рейка между ними.
+    for (const s of [-1, 1] as const) {
+      const столб = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.0, 0.26), M.woodDark);
+      столб.position.set(s * 3.5, 0.5, 6.1);
+      столб.castShadow = true;
+      const рейка = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 3.0), M.woodDark);
+      рейка.position.set(s * 3.5, 0.62, 4.5);
+      рейка.castShadow = true;
+      g.add(столб, рейка);
+    }
     g.position.set(wx, 0.4, wz);
     g.rotation.y = faceRy;
     scene.add(g);
