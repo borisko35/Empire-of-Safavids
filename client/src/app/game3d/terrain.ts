@@ -1932,6 +1932,19 @@ const MAT = {
   // Озеро, пруд, река и море собираются в buildWater каждое со своим
   // материалом - у них разный уровень, глубина и мера расстояния до берега.
   water: decorWaterMaterial,
+  // Струи фонтана (§318). Отдельный материал, а не MAT.water.
+  //
+  // В шейдере воды солнечный блик прибавляется с множителем 1.8: на широкой
+  // глади это искра, а на тонкой струе — белая полоса во всю её ширину.
+  // Bloom (§…) подхватывает её и превращает струю в светящуюся трубку:
+  // вода выглядит неоновой лампой, а не водой. Здесь блик даёт обычный
+  // PBR-материал, струя полупрозрачна, а свечение слабое — только чтобы
+  // струя не пропадала в тени чаши.
+  fountainWater: new THREE.MeshStandardMaterial({
+    color: 0xa9d8e6, roughness: 0.3, metalness: 0,
+    transparent: true, opacity: 0.6, depthWrite: false,
+    emissive: 0x16323c, emissiveIntensity: 0.25,
+  }),
   waterfall: new THREE.MeshBasicMaterial({
     color: 0xdff0f8, transparent: true, opacity: 0.75, side: THREE.DoubleSide, map: waterfallTexture(2),
   }),
@@ -4237,12 +4250,12 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   const bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.1, 0.35, 10), MAT.tealDome);
   bowl.position.y = 3.6;
   // Струя: тонкая колонна от чаши к воде, а не конус в воздухе.
-  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 1.7, 8), MAT.water);
+  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, 1.7, 8), MAT.fountainWater);
   jet.position.y = 2.95;
   // Падающие капли: четыре точки на разной высоте, чтобы струя читалась
   // движущейся, а не гладкой палочкой.
   for (let i = 0; i < 4; i++) {
-    const капля = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), MAT.water);
+    const капля = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 5), MAT.fountainWater);
     const a = i * 1.3;
     капля.position.set(Math.cos(a) * 0.18, 2.5 - i * 0.38, Math.sin(a) * 0.18);
     fountain.add(капля);
@@ -4252,7 +4265,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const a = (i / 4) * Math.PI * 2 + 0.4;
     const струя = new THREE.Mesh(
       new THREE.CylinderGeometry(0.05, 0.07, 2.1, 5),
-      MAT.water,
+      MAT.fountainWater,
     );
     струя.position.set(Math.cos(a) * 1.28, 2.6, Math.sin(a) * 1.28);
     струя.rotation.z = Math.cos(a) * 0.12;
