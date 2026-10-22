@@ -10003,12 +10003,30 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
           col.position.set(s * 3.4, 3, -t.radius * 0.4);
           col.castShadow = true;
           g.add(col);
+          // База колонны: колонна из одного цилиндра стояла на земле, а не на
+          // постаменте (§299).
+          const база = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 0.4, 8), MAT.sandstone);
+          база.position.set(s * 3.4, 0.2, -t.radius * 0.4);
+          база.castShadow = true;
+          g.add(база);
+          // Капитель.
+          const капитель = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 0.72, 0.35, 8), MAT.sandstone);
+          капитель.position.set(s * 3.4, 6.15, -t.radius * 0.4);
+          g.add(капитель);
           коллайдер(s * 3.4, -t.radius * 0.4, 0.8);
         }
-        const перемычка = new THREE.Mesh(new THREE.BoxGeometry(8.4, 1, 1.2), MAT.wood);
-        перемычка.position.set(0, 6.2, -t.radius * 0.4);
+        // Перемычка: брусок превращается в балку с карнизом и резьбой.
+        const перемычка = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.75, 1.2), MAT.wood);
+        перемычка.position.set(0, 6.5, -t.radius * 0.4);
         перемычка.castShadow = true;
         g.add(перемычка);
+        const карниз = new THREE.Mesh(new THREE.BoxGeometry(8.8, 0.22, 1.45), MAT.sandstone);
+        карниз.position.set(0, 6.95, -t.radius * 0.4);
+        g.add(карниз);
+        // Ремень резьбы по балке.
+        const резьба = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.16, 1.26), MAT.sandstoneDark);
+        резьба.position.set(0, 6.32, -t.radius * 0.4);
+        g.add(резьба);
         break;
       }
       case 'walls': {
@@ -10016,11 +10034,31 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
         for (let i = 0; i < 5; i++) {
           деревоКипарис(g, -14 + i * 7, -t.radius * 0.45, 1.1, коллайдер);
         }
-        const кладка = new THREE.Mesh(new THREE.BoxGeometry(34, 2.2, 0.9), MAT.stone);
-        кладка.position.set(0, 1.1, -t.radius * 0.45);
-        кладка.castShadow = true;
-        кладка.receiveShadow = true;
-        g.add(кладка);
+        // Кладка: длинный ящик превращается в стену с courses, зубцами и
+        // пилястрами (§299). Стена в 34 м была ровным бруском.
+        const длинаКладки = 34;
+        const рядКладки = new THREE.Mesh(new THREE.BoxGeometry(длинаКладки, 1.7, 0.9), MAT.stone);
+        рядКладки.position.set(0, 0.85, -t.radius * 0.45);
+        рядКладки.castShadow = true;
+        g.add(рядКладки);
+        // Второй ряд — кладка в два венца, а не в один.
+        const верхКладки = new THREE.Mesh(new THREE.BoxGeometry(длинаКладки - 1.2, 0.5, 0.75), MAT.stone);
+        верхКладки.position.set(0, 1.95, -t.radius * 0.45);
+        верхКладки.castShadow = true;
+        g.add(верхКладки);
+        // Зубцы по верху.
+        for (let j = 0; j < 12; j++) {
+          const зубец = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.55, 0.75), MAT.stone);
+          зубец.position.set(-длинаКладки / 2 + 1.4 + j * 2.8, 2.45, -t.radius * 0.45);
+          g.add(зубец);
+        }
+        // Пилястры через каждые 8 м: стена перестаёт быть плитой.
+        for (const px of [-10, 0, 10]) {
+          const пилястр = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.3, 1.15), MAT.sandstone);
+          пилястр.position.set(px, 1.15, -t.radius * 0.45);
+          пилястр.castShadow = true;
+          g.add(пилястр);
+        }
         коллайдер(0, -t.radius * 0.45, 1.6);
         break;
       }
