@@ -3300,6 +3300,64 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
     г.add(ряд);
   }
 
+  // Плетень по кромке виноградника и калитка (§312).
+  //
+  // БЫЛО: виноградник стоял открытым, а двор был обнесён двумя столбиками с
+  // одной жердью — это не забор, а заготовка.
+  //
+  // ТЕПЕРЬ: плетень из кольев с горизонтальными прутьями, а в нём — калитка на
+  // столбах с петлями.
+  {
+    const полу = ширина / 2 + 0.5;
+    const глубинаПлетня = глубина + 0.7;
+    for (const сторона of [-1, 1]) {
+      for (let i = 0; i <= 9; i++) {
+        const t = -1 + (2 * i) / 9;
+        const колье = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1.35, 5), MAT.trunk);
+        колье.position.set(t * полу, 0.65, сторона * глубинаПлетня);
+        колье.rotation.z = (i % 2 ? 1 : -1) * 0.05;
+        колье.castShadow = true;
+        г.add(колье);
+      }
+      for (const yy of [0.45, 0.95]) {
+        const прут = new THREE.Mesh(new THREE.BoxGeometry(полу * 2, 0.07, 0.07), MAT.trunk);
+        прут.position.set(0, yy, сторона * глубинаПлетня);
+        г.add(прут);
+      }
+    }
+    // Боковые плетни с прорезанной калиткой.
+    for (const сторона of [-1, 1]) {
+      for (let i = 0; i <= 5; i++) {
+        const t = -1 + (2 * i) / 5;
+        if (Math.abs(t) < 0.22) continue; // проход для калитки
+        const колье = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 1.35, 5), MAT.trunk);
+        колье.position.set(сторона * полу, 0.65, t * глубинаПлетня);
+        колье.castShadow = true;
+        г.add(колье);
+      }
+      for (const yy of [0.45, 0.95]) {
+        const прут = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, глубинаПлетня * 2), MAT.trunk);
+        прут.position.set(сторона * полу, yy, 0);
+        г.add(прут);
+      }
+      // Калитка: створка на петлях, приоткрыта.
+      const створка = new THREE.Group();
+      for (const yy of [0.35, 0.85]) {
+        const жердь = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 1.1), MAT.trunk);
+        жердь.position.set(0, yy, 0.5);
+        створка.add(жердь);
+      }
+      for (const zz of [0.1, 0.55, 0.95]) {
+        const стойка = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 5), MAT.trunk);
+        стойка.position.set(0, 0.6, zz);
+        створка.add(стойка);
+      }
+      створка.position.set(сторона * полу, 0, -0.5);
+      створка.rotation.y = сторона * 0.6;
+      г.add(створка);
+    }
+  }
+
   parent.add(г);
 }
 
