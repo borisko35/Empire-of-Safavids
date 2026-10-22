@@ -5161,8 +5161,8 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
       { x: -5, z: -6 },   // стол у кок-Салима
     ];
     for (const tp of tablePositions) {
-      const table = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.9, 1.0), MAT.wood);
-      table.position.set(tp.x, 0.45, tp.z);
+      const table = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.08, 1.0), MAT.wood);
+      table.position.set(tp.x, 0.9, tp.z);
       table.castShadow = true;
       g.add(table);
       // Ножки стола
@@ -5171,6 +5171,28 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
         leg.position.set(tp.x + lx, 0, tp.z + lz);
         g.add(leg);
       }
+      // Полка с товаром под столом (§298): стол без полки — ящик на палках.
+      const полка = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.8), MAT.wood);
+      полка.position.set(tp.x, 0.3, tp.z);
+      g.add(полка);
+      // Ткань, свисающая с края: прилавок с полотном виден издали.
+      const ткань = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.5, 0.04), MAT.clothTeal);
+      ткань.position.set(tp.x, 0.68, tp.z + 0.5);
+      g.add(ткань);
+      // Товар на столе: горшок и корзина.
+      const горшок = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.36, 8), MAT.sandstone);
+      горшок.position.set(tp.x - 0.45, 1.12, tp.z - 0.1);
+      горшок.castShadow = true;
+      g.add(горшок);
+      const корзина = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.19, 0.3, 10), MAT.sand);
+      корзина.position.set(tp.x + 0.42, 1.09, tp.z + 0.05);
+      корзина.castShadow = true;
+      g.add(корзина);
+      // Мешок на полке.
+      const мешок = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), MAT.sand);
+      мешок.scale.set(1, 1.2, 0.9);
+      мешок.position.set(tp.x + 0.3, 0.45, tp.z);
+      g.add(мешок);
       addCollider(PORT.x + tp.x, PORT.z + tp.z, 1.1);
     }
 
@@ -9931,10 +9953,44 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
       stall.rotation.y = -a;
       g.add(stall);
     }
+    // Колодец на площади (§298): каменный ворот, вал с перекладиной, верёвка и
+    // ведро. Раньше это был ровный цилиндр — бак без намёка.
     const колодец = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.4, 1.5, 10), MAT.stone);
     колодец.position.set(0, 0.75, 0);
     колодец.castShadow = true;
     g.add(колодец);
+    // Ворот: каменный обод с зубцами.
+    const ворот = new THREE.Mesh(new THREE.TorusGeometry(1.28, 0.16, 6, 14), MAT.sandstoneDark);
+    ворот.position.set(0, 1.5, 0);
+    ворот.rotation.x = Math.PI / 2;
+    ворот.castShadow = true;
+    g.add(ворот);
+    for (let j = 0; j < 6; j++) {
+      const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.4), MAT.sandstoneDark);
+      const угол = (j / 6) * Math.PI * 2;
+      зубец.position.set(Math.cos(угол) * 1.28, 1.62, Math.sin(угол) * 1.28);
+      зубец.rotation.y = -угол;
+      g.add(зубец);
+    }
+    // Стойки и перекладина вала.
+    for (const side of [-1, 1]) {
+      const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.5, 0.16), MAT.trunk);
+      стойка.position.set(side * 1.1, 2.25, 0);
+      стойка.castShadow = true;
+      g.add(стойка);
+    }
+    const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.3, 6), MAT.trunk);
+    вал.rotation.z = Math.PI / 2;
+    вал.position.set(0, 2.9, 0);
+    g.add(вал);
+    // Верёвка и ведро на краю.
+    const верёвка = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.9, 4), MAT.dark);
+    верёвка.position.set(0.35, 1.95, 0);
+    g.add(верёвка);
+    const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.16, 0.28, 9), MAT.wood);
+    ведро.position.set(0.35, 0.9, 0);
+    ведро.castShadow = true;
+    g.add(ведро);
     коллайдер(0, 0, 1.4);
 
     // ── Памятник региона ───────────────────────────────────────
