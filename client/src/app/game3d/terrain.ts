@@ -2021,6 +2021,57 @@ function челн(): THREE.Group {
   return г;
 }
 
+/**
+ * Цапля у воды (§305).
+ *
+ * БЫЛО: у воды не было ни одной водоплавающей птицы — только утки (капсулы,
+ * §286) и чайки на сваях (§303). Болотистая кромка была пустой.
+ *
+ * ТЕПЕРЬ: цапля — тело-капсула, длинная шея из двух звеньев, голова с длинным
+ * клювом, длинные тонкие ноги и сложенный хвост. Стоит по колено в воде.
+ */
+function цапля(): THREE.Group {
+  const г = new THREE.Group();
+  const перья = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.9 });
+  const тёмные = new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.9 });
+  const клювМатериал = new THREE.MeshStandardMaterial({ color: 0xd8a13a, roughness: 0.55 });
+  // Тело.
+  const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.4, 3, 10), перья);
+  тело.rotation.x = Math.PI / 2;
+  тело.position.set(0, 0.95, 0);
+  тело.castShadow = true;
+  г.add(тело);
+  // Шея: два звена, чтобы изгибалась.
+  const шея = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 3, 7), перья);
+  шея.position.set(0, 1.22, -0.12);
+  шея.rotation.x = -0.35;
+  г.add(шея);
+  const шея2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.26, 3, 7), перья);
+  шея2.position.set(0, 1.5, -0.26);
+  шея2.rotation.x = -0.9;
+  г.add(шея2);
+  // Голова и длинный клюв.
+  const голова = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), перья);
+  голова.position.set(0, 1.63, -0.4);
+  г.add(голова);
+  const клюв = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.26, 5), клювМатериал);
+  клюв.rotation.x = -Math.PI / 2;
+  клюв.position.set(0, 1.61, -0.55);
+  г.add(клюв);
+  // Сложенный хвост.
+  const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.22), тёмные);
+  хвост.position.set(0, 0.95, 0.26);
+  г.add(хвост);
+  // Длинные ноги — цапля на них тонет в камыше.
+  for (const side of [-1, 1]) {
+    const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.9, 5), клювМатериал);
+    нога.position.set(side * 0.05, 0.45, 0.02);
+    нога.castShadow = true;
+    г.add(нога);
+  }
+  return г;
+}
+
 export function buildWater(scene: THREE.Scene): void {
   const group = new THREE.Group();
   group.name = 'water';
@@ -2166,6 +2217,13 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     const wm = waterMask(x, z);
     if (wm <= 0.002 || wm > 0.16) continue;
     камыш.push({ x, z, h: groundHeight(x, z) });
+    // Цапли на кромке (§305): стоят по колено в воде, где камыш.
+    if (i % 5 === 0) {
+      const цапляПтица = цапля();
+      цапляПтица.position.set(x, LAKE.level - 0.05, z);
+      цапляПтица.rotation.y = hash2(i, 11) * Math.PI * 2;
+      scene.add(цапляПтица);
+    }
   }
 
   // Стволы + кроны (платан/кипарис по случаю)
