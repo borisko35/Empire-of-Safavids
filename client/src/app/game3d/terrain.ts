@@ -3362,6 +3362,147 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
     // заборе, но пустой читался как недоделанная стройка.
     огород(city, д.x + Math.cos(д.поворот) * 5.2 - Math.sin(д.поворот) * 3.2,
       д.z - Math.sin(д.поворот) * 5.2 - Math.cos(д.поворот) * 3.2, 1, д.поворот);
+
+    // ── Пригород оживает (§310) ──────────────────────────────────
+    //
+    // БЫЛО: за стеной стояли два дома, склады и мастерская — и больше
+    // ничего. Место было обжитым, но пустым: ни наковальни, ни бочек, ни
+    // колодца, ни дров.
+    //
+    // ТЕПЕРЬ: кузница с наковальней, горном и углями, колодец с воротами и
+    // ведром, бочки, мешки, поленница и телега у склада.
+    const поленница = (px: number, pz: number, поворот: number, рядов: number) => {
+      for (let ряд = 0; ряд < рядов; ряд++) {
+        for (let i = 0; i < 5 - ряд; i++) {
+          const полено = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 1.5, 6), MAT.trunk);
+          полено.rotation.z = Math.PI / 2;
+          полено.rotation.y = поворот;
+          const off = (i - (4 - ряд) / 2) * 0.28;
+          полено.position.set(
+            px + Math.cos(поворот) * off,
+            groundHeight(px, pz) + 0.14 + ряд * 0.26,
+            pz - Math.sin(поворот) * off,
+          );
+          полено.castShadow = true;
+          city.add(полено);
+        }
+      }
+    };
+    const бочка = (px: number, pz: number, k: number) => {
+      const б = new THREE.Mesh(new THREE.CylinderGeometry(0.36 * k, 0.32 * k, 0.85 * k, 10), MAT.wood);
+      б.position.set(px, groundHeight(px, pz) + 0.42 * k, pz);
+      б.castShadow = true;
+      city.add(б);
+      for (const yy of [0.28, 0.58]) {
+        const обруч = new THREE.Mesh(new THREE.TorusGeometry(0.355 * k, 0.028, 4, 12), MAT.dark);
+        обруч.position.set(px, groundHeight(px, pz) + yy * k, pz);
+        обруч.rotation.x = Math.PI / 2;
+        city.add(обруч);
+      }
+    };
+    // КУЗНИЦА: горн с углями, наковальня, пень с топором.
+    {
+      const px = 120, pz = 111;
+      const горн = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.1, 1.4), MAT.sandstone);
+      горн.position.set(px, groundHeight(px, pz) + 0.55, pz);
+      горн.castShadow = true;
+      city.add(горн);
+      // Угли в горне: тлеют и светятся.
+      const угли = new THREE.Mesh(
+        new THREE.BoxGeometry(1.3, 0.2, 0.9),
+        new THREE.MeshStandardMaterial({ color: 0x3a1a10, emissive: 0xc4400a, emissiveIntensity: 0.9, roughness: 0.9 }),
+      );
+      угли.position.set(px, groundHeight(px, pz) + 1.15, pz);
+      city.add(угли);
+      // НАКОВАЛЬНЯ: туловище, рог и шапка.
+      const np = px + 2.6, npz = pz + 1.2;
+      const пень = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.4, 0.55, 9), MAT.trunk);
+      пень.position.set(np, groundHeight(np, npz) + 0.28, npz);
+      пень.castShadow = true;
+      city.add(пень);
+      const наковальня = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.26, 0.34), MAT.dark);
+      наковальня.position.set(np, groundHeight(np, npz) + 0.68, npz);
+      наковальня.castShadow = true;
+      city.add(наковальня);
+      const рог = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.5, 7), MAT.dark);
+      рог.rotation.z = -Math.PI / 2;
+      рог.position.set(np + 0.62, groundHeight(np, npz) + 0.68, npz);
+      city.add(рог);
+      // Пень с топором.
+      const чурбан = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.6, 9), MAT.trunk);
+      чурбан.position.set(px - 2.4, groundHeight(px - 2.4, pz - 1.6) + 0.3, pz - 1.6);
+      чурбан.castShadow = true;
+      city.add(чурбан);
+      const топор = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.75, 0.04), MAT.wood);
+      топор.position.set(px - 2.4, groundHeight(px - 2.4, pz - 1.6) + 0.9, pz - 1.6);
+      топор.rotation.z = 0.35;
+      city.add(топор);
+    }
+    // КОЛОДЕЦ с воротами и ведром.
+    {
+      const px = 112, pz = 82;
+      const круг = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.0, 0.9, 12), MAT.sandstone);
+      круг.position.set(px, groundHeight(px, pz) + 0.45, pz);
+      круг.castShadow = true;
+      city.add(круг);
+      const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.5, 6), MAT.trunk);
+      вал.rotation.z = Math.PI / 2;
+      вал.position.set(px, groundHeight(px, pz) + 1.5, pz);
+      city.add(вал);
+      for (const side of [-1, 1]) {
+        const стойка = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.6, 6), MAT.trunk);
+        стойка.position.set(px + side * 0.8, groundHeight(px, pz) + 0.8, pz);
+        стойка.castShadow = true;
+        city.add(стойка);
+      }
+      const верёвка = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 4), MAT.dark);
+      верёвка.position.set(px, groundHeight(px, pz) + 0.95, pz);
+      city.add(верёвка);
+      const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.16, 0.28, 9), MAT.wood);
+      ведро.position.set(px, groundHeight(px, pz) + 0.25, pz);
+      ведро.castShadow = true;
+      city.add(ведро);
+    }
+    // СКЛАД: телега, бочки, мешки и поленница.
+    {
+      const px = 106, pz = 98;
+      // Телега: кузов на бортах и два колеса со спицами.
+      const кузов = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.7, 2.2), MAT.wood);
+      кузов.position.set(px, groundHeight(px, pz) + 0.85, pz);
+      кузов.castShadow = true;
+      city.add(кузов);
+      for (const side of [-1, 1]) {
+        const борт = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 2.2), MAT.wood);
+        борт.position.set(px + side * 0.62, groundHeight(px, pz) + 1.2, pz);
+        city.add(борт);
+      }
+      for (const side of [-1, 1]) {
+        const колесо = new THREE.Group();
+        колесо.position.set(px + side * 0.78, groundHeight(px, pz) + 0.5, pz);
+        const обод = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.05, 5, 14), MAT.trunk);
+        обод.rotation.y = Math.PI / 2;
+        колесо.add(обод);
+        for (let i = 0; i < 6; i++) {
+          const спица = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), MAT.wood);
+          спица.rotation.x = (i / 6) * Math.PI;
+          колесо.add(спица);
+        }
+        city.add(колесо);
+      }
+      // Оглобель от телеги.
+      const оглобель = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1.8), MAT.trunk);
+      оглобель.position.set(px, groundHeight(px, pz) + 0.7, pz + 1.9);
+      city.add(оглобель);
+      бочка(px + 2.4, pz - 1.6, 1);
+      бочка(px + 3.1, pz - 2.1, 0.85);
+      // Мешок.
+      const мешок = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), MAT.sand);
+      мешок.scale.set(1, 1.25, 0.9);
+      мешок.position.set(px - 2.2, groundHeight(px - 2.2, pz + 1.4) + 0.42, pz + 1.4);
+      мешок.castShadow = true;
+      city.add(мешок);
+      поленница(px - 3.2, pz + 3.4, 0.2, 3);
+    }
   }
 
   // ── Свет в пригороде (§247) ──
