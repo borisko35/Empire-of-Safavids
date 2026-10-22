@@ -8,6 +8,7 @@ import { Request, Response, NextFunction } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       userId?: string;
