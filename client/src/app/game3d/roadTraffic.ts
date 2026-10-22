@@ -242,37 +242,65 @@ function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
 function makeCamel(packColor: THREE.Material): Walker {
   const g = new THREE.Group();
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 1.9), M.camel);
+  // ТЕЛО: капсула вдоль Z (верблюд идёт по +Z), уже, чем в высоту (§294).
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.05, 4, 12), M.camel);
+  body.rotation.x = Math.PI / 2;
   body.position.y = 1.35;
+  body.scale.set(1, 1, 0.92);
   body.castShadow = true;
   g.add(body);
 
-  // Горбы
-  for (const z of [-0.4, 0.35]) {
-    const hump = new THREE.Mesh(new THREE.SphereGeometry(0.36, 7, 6), M.camelDark);
-    hump.position.set(0, 1.85, z);
+  // Горбы: два, над лопатками и над крестцом.
+  for (const z of [-0.42, 0.32]) {
+    const hump = new THREE.Mesh(new THREE.SphereGeometry(0.36, 9, 7), M.camelDark);
+    hump.position.set(0, 1.82, z);
+    hump.scale.set(1.05, 0.95, 1.25);
     hump.castShadow = true;
     g.add(hump);
   }
 
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.9, 6), M.camel);
-  neck.position.set(0, 1.85, 0.85);
-  neck.rotation.x = 0.5;
+  // Шея и голова — капсулы, морда сужается к носу.
+  const neck = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.62, 3, 9), M.camel);
+  neck.position.set(0, 1.86, 0.78);
+  neck.rotation.x = 0.52;
+  neck.castShadow = true;
   g.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.55), M.camelDark);
-  head.position.set(0, 2.2, 1.2);
+  const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.28, 3, 9), M.camelDark);
+  head.rotation.x = Math.PI / 2;
+  head.position.set(0, 2.2, 1.12);
   head.castShadow = true;
   g.add(head);
-
-  // Тюки по бокам: караван видно издалека именно по ним
+  const морда = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.3, 7), M.camel);
+  морда.rotation.x = Math.PI / 2;
+  морда.position.set(0, 2.12, 1.42);
+  g.add(морда);
   for (const side of [-1, 1]) {
-    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.7), packColor);
-    pack.position.set(side * 0.62, 1.5, -0.1);
+    const ухо = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 5), M.camelDark);
+    ухо.position.set(side * 0.11, 2.33, 1.03);
+    ухо.rotation.set(side * 0.3, 0, -0.2);
+    g.add(ухо);
+  }
+
+  // СЕДЛО, ПОПОНА И ТЮКИ. Караван видно издалека именно по гружёным верблюдам.
+  const попона = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.1, 1.35), M.camelDark);
+  попона.position.set(0, 1.78, -0.05);
+  g.add(попона);
+  const седло = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.16, 0.5), M.wood);
+  седло.position.set(0, 1.88, -0.05);
+  g.add(седло);
+  for (const side of [-1, 1]) {
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.62, 0.78), packColor);
+    pack.position.set(side * 0.6, 1.48, -0.05);
     pack.castShadow = true;
     g.add(pack);
+    // Верёвка, стягивающая тюк: без неё тюк выглядит приклеенным.
+    const верёвка = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.022, 4, 10), M.wood);
+    верёвка.position.set(side * 0.6, 1.5, -0.05);
+    верёвка.rotation.set(0, Math.PI / 2, 0);
+    g.add(верёвка);
   }
-  const top = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.9), M.wood);
-  top.position.set(0, 2.25, -0.3);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.44, 0.92), M.wood);
+  top.position.set(0, 2.24, -0.32);
   top.castShadow = true;
   g.add(top);
 
@@ -281,10 +309,13 @@ function makeCamel(packColor: THREE.Material): Walker {
     for (const z of [-0.62, 0.62]) {
       const pivot = new THREE.Group();
       pivot.position.set(x, 0.95, z);
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.08, 0.95, 5), M.camelDark);
-      leg.position.y = -0.47;
+      // Нога сужается к копыту (§294): ровный цилиндр читался как палка.
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.065, 0.88, 6), M.camel);
+      leg.position.y = -0.44;
       leg.castShadow = true;
-      pivot.add(leg);
+      const копыто = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.09, 6), M.camelDark);
+      копыто.position.y = -0.9;
+      pivot.add(leg, копыто);
       g.add(pivot);
       legs.push(pivot);
     }
