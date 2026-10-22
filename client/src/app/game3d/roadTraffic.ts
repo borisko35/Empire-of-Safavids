@@ -201,28 +201,73 @@ interface Walker {
  * Один человек. Примитивы, как у горожан: у них нет текстур, зато дешево и
  * выглядит уместно рядом с остальным миром.
  */
+/**
+ * Дорожный путник (§296).
+ *
+ * БЫЛО: тело — цилиндр, голова — шар, шапка — цилиндр, ноги — цилиндры, и
+ * **рук не было вовсе**. Человек без рук читался как столб с шаром наверху.
+ *
+ * ТЕПЕРЬ: халат-капсула с плечами и перевязью, руки в рукавах (качаются в
+ * противофазе с ногами), голова с бородой и носом, тюрбан намотан, а шапка —
+ * купол с козырьком.
+ */
 function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
   const g = new THREE.Group();
   const robe = new THREE.MeshStandardMaterial({ color: robeColor, roughness: 1 });
+  const ткань = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(robeColor).multiplyScalar(0.72).getHex(),
+    roughness: 1,
+  });
 
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.36, 1.0, 8), robe);
+  // Халат: капсула, а не цилиндр — у человека есть грудь и плечи.
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.62, 4, 12), robe);
   body.position.y = 1.05;
+  body.scale.set(1, 1, 0.88);
   body.castShadow = true;
   g.add(body);
+  // Плечи.
+  const плечи = new THREE.Mesh(new THREE.SphereGeometry(0.25, 10, 8), robe);
+  плечи.position.y = 1.32;
+  плечи.scale.set(1.15, 0.5, 0.9);
+  g.add(плечи);
+  // Перевязь через грудь.
+  const перевязь = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.9, 0.44), ткань);
+  перевязь.position.set(0.02, 1.12, 0.02);
+  перевязь.rotation.z = 0.4;
+  g.add(перевязь);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 7), M.skin);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 8), M.skin);
   head.position.y = 1.72;
   head.castShadow = true;
   g.add(head);
+  // Нос и борода: без них голова — шар.
+  const нос = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 5), M.skin);
+  нос.position.set(0, 1.7, 0.2);
+  нос.rotation.x = Math.PI / 2;
+  g.add(нос);
+  const борода = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), M.dark);
+  борода.scale.set(1.1, 0.9, 0.7);
+  борода.position.set(0, 1.6, 0.13);
+  g.add(борода);
 
   if (hat === 'turban') {
-    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.16, 8), M.skin);
-    t.position.y = 1.9;
-    g.add(t);
+    // Тюрбан: намотка (тор) и шапка сверху.
+    const намотка = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.07, 6, 12), M.skin);
+    намотка.position.y = 1.9;
+    намотка.rotation.x = Math.PI / 2;
+    g.add(намотка);
+    const верх = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), M.skin);
+    верх.scale.set(1, 0.55, 1);
+    верх.position.y = 1.94;
+    g.add(верх);
   } else if (hat === 'cap') {
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.24, 0.14, 8), M.dark);
-    c.position.y = 1.88;
-    g.add(c);
+    const купол = new THREE.Mesh(new THREE.SphereGeometry(0.21, 10, 7), M.dark);
+    купол.scale.set(1, 0.5, 1);
+    купол.position.y = 1.87;
+    g.add(купол);
+    const козырёк = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.16), M.dark);
+    козырёк.position.set(0, 1.78, 0.19);
+    g.add(козырёк);
   }
 
   const legs: THREE.Object3D[] = [];
@@ -235,6 +280,19 @@ function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
     pivot.add(leg);
     g.add(pivot);
     legs.push(pivot);
+  }
+  // РУКИ в рукавах — их не было вовсе (§296). Качаются в противофазе с ногами.
+  for (const side of [-1, 1]) {
+    const пивот = new THREE.Group();
+    пивот.position.set(side * 0.28, 1.3, 0);
+    const рука = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.62, 6), robe);
+    рука.position.y = -0.31;
+    рука.castShadow = true;
+    const кисть = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 5), M.skin);
+    кисть.position.y = -0.64;
+    пивот.add(рука, кисть);
+    g.add(пивот);
+    legs.push(пивот);
   }
 
   return { group: g, legs, t: 0, dir: 1, speed: WALKER_SPEED, phase: 0, lag: 0, len: 0, tMin: 0, tMax: 1 };
