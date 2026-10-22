@@ -127,10 +127,10 @@ export const NPC_GROUPS: NpcGroup[] = [
       // Позиции — по тем же рядам, что и в terrain.ts: прилавок стоит на
       // радиусе 20 от центра базара, а продавец — за ним, на 21.8. Ряд i из
       // семи, так что берём каждый второй: 0, 2, 4 и 6.
-      { id: 'npc_bazaar_trader_0', nameRu: 'Торговец Абдуллах', panel: 'panel-shop', quest: false, dx: -6.7, dz: 12.7, look: { robe: 0x8b5a2b, robeDark: 0x5e3a1c, hat: 'turban', hatColor: 0xe8dcc0, weapon: 'none', scale: 1.02 } },
-      { id: 'npc_bazaar_trader_2', nameRu: 'Торговка Фатима', panel: 'panel-shop', quest: false, dx: -18.7, dz: 3.2, look: { robe: 0x6a4a5a, robeDark: 0x483040, hat: 'turban', hatColor: 0xd8c8a8, weapon: 'none', scale: 0.98 } },
-      { id: 'npc_bazaar_trader_4', nameRu: 'Торговец Махмуд', panel: 'panel-shop', quest: false, dx: -21.4, dz: -11.9, look: { robe: 0x4a5a6a, robeDark: 0x2e3a46, hat: 'cap', hatColor: 0x2a2a30, weapon: 'none', scale: 1.03 } },
-      { id: 'npc_bazaar_trader_6', nameRu: 'Купец Ибрагим', panel: 'panel-shop', quest: false, dx: -13.6, dz: -25.0, look: { robe: 0x7a5f30, robeDark: 0x50401c, hat: 'turban', hatColor: 0xc8b890, weapon: 'none', scale: 1.05 } },
+      { id: 'npc_bazaar_trader_0', nameRu: 'Торговец Абдуллах', panel: 'panel-shop', quest: false, dx: -6.7, dz: 12.7, look: { robe: 0x8b5a2b, robeDark: 0x5e3a1c, hat: 'turban', hatColor: 0xe8dcc0, weapon: 'none', scale: 1.02 , предмет: 'лоток' } },
+      { id: 'npc_bazaar_trader_2', nameRu: 'Торговка Фатима', panel: 'panel-shop', quest: false, dx: -18.7, dz: 3.2, look: { robe: 0x6a4a5a, robeDark: 0x483040, hat: 'turban', hatColor: 0xd8c8a8, weapon: 'none', scale: 0.98 , предмет: 'лоток' } },
+      { id: 'npc_bazaar_trader_4', nameRu: 'Торговец Махмуд', panel: 'panel-shop', quest: false, dx: -21.4, dz: -11.9, look: { robe: 0x4a5a6a, robeDark: 0x2e3a46, hat: 'cap', hatColor: 0x2a2a30, weapon: 'none', scale: 1.03 , предмет: 'лоток' } },
+      { id: 'npc_bazaar_trader_6', nameRu: 'Купец Ибрагим', panel: 'panel-shop', quest: false, dx: -13.6, dz: -25.0, look: { robe: 0x7a5f30, robeDark: 0x50401c, hat: 'turban', hatColor: 0xc8b890, weapon: 'none', scale: 1.05 , предмет: 'лоток' } },
     ],
   },
   // ── Приозёрный порт ──

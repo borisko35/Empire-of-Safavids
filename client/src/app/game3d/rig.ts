@@ -109,7 +109,7 @@ export interface HumanoidCfg {
    * удочки и корзины, торговец без весов: работа читалась только по подписи
    * над NPC.
    */
-  предмет?: 'удочка' | 'весы' | 'корзина';
+  предмет?: 'удочка' | 'весы' | 'корзина' | 'лоток';
 }
 
 function box(w: number, h: number, d: number, m: THREE.Material): THREE.Mesh {
@@ -423,6 +423,30 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
     // Корзина висит на левой руке — на правой может быть удочка.
     корзина.position.set(0, -0.66, 0.02);
     armL.add(корзина);
+  } else if (cfg.предмет === 'лоток') {
+    // Лоток с товаром (§306): продавец базара стоял с пустыми руками, и
+    // торговый ряд выглядел нерабочим. Лоток в левой руке, на нём — товар.
+    const лоток = new THREE.Group();
+    const поднос = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.22, 0.035, 12), MAT.wood);
+    поднос.castShadow = true;
+    лоток.add(поднос);
+    // Товар: плоды и свёртки, разного цвета.
+    const цвета = [0xc8483a, 0xd8a13a, 0x6a8a3a, 0x8a4a7a, 0xc8b06a];
+    for (let i = 0; i < 5; i++) {
+      const товар = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05 + (i % 2) * 0.012, 7, 6),
+        mat(цвета[i % цвета.length], 0.7),
+      );
+      const a = (i / 5) * Math.PI * 2;
+      товар.position.set(Math.cos(a) * 0.11, 0.05, Math.sin(a) * 0.11);
+      товар.scale.y = 0.85;
+      товар.castShadow = true;
+      лоток.add(товар);
+    }
+    // Лоток держат на вытянутой руке.
+    лоток.position.set(0, -0.72, 0.16);
+    лоток.rotation.x = -0.15;
+    armL.add(лоток);
   }
   if (предметRef) armR.add(предметRef);
 
