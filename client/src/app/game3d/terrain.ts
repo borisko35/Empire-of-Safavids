@@ -1973,6 +1973,54 @@ export function followSeaToCamera(x: number): void {
   seaMesh.position.x = Math.round(x / WATER_GRIDS.sea.step) * WATER_GRIDS.sea.step;
 }
 
+/**
+ * Лодка-челн для рек (§304).
+ *
+ * БЫЛО: на реках не было ни одной лодки — вода была пустой, и читалась как
+ * пустая лента. Лодка у причала появилась в §297, но река мимо причала шла
+ * пустая.
+ *
+ * ТЕПЕРЬ: вытянутый корпус с сужающимися носом и кормой, две поперечные
+ * планки, вёсла по бортам и шест у борта — лодку ведут шестом.
+ */
+function челн(): THREE.Group {
+  const г = new THREE.Group();
+  const корпус = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.42, 3.4), MAT.wood);
+  корпус.position.y = 0.1;
+  корпус.castShadow = true;
+  г.add(корпус);
+  // Нос и корма сужаются — лодка не ящик.
+  const нос = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 6), MAT.wood);
+  нос.rotation.x = -Math.PI / 2;
+  нос.position.set(0, 0.1, 2.2);
+  г.add(нос);
+  const корма = нос.clone();
+  корма.rotation.x = Math.PI / 2;
+  корма.position.z = -2.2;
+  г.add(корма);
+  // Планки-поперечины: в них сидят.
+  for (const z of [-0.8, 0.4]) {
+    const планка = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.06, 0.2), MAT.trunk);
+    планка.position.set(0, 0.3, z);
+    г.add(планка);
+  }
+  // Вёсла по бортам.
+  for (const side of [-1, 1]) {
+    const древко = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 2.2, 5), MAT.trunk);
+    древко.rotation.z = Math.PI / 2;
+    древко.rotation.y = side * 0.5;
+    древко.position.set(side * 0.5, 0.35, 0.3);
+    древко.castShadow = true;
+    г.add(древко);
+  }
+  // Шест: лодку ведут шестом, приглубив в дно.
+  const шест = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 3.2, 5), MAT.trunk);
+  шест.position.set(0.3, 1.2, -0.6);
+  шест.rotation.z = 0.25;
+  г.add(шест);
+  return г;
+}
+
 export function buildWater(scene: THREE.Scene): void {
   const group = new THREE.Group();
   group.name = 'water';
@@ -2012,6 +2060,21 @@ export function buildWater(scene: THREE.Scene): void {
   // сушу: вода рисовалась прямо на траве.
   const riverMat = makeWaterMaterial(WATER_LOOKS.river, [0, 0], 1e6, false);
   const riverGeo = discGeometry(WATER_GRIDS.river.radius, WATER_GRIDS.river.step, WATER_GRIDS.river.sectors);
+  // Лодки-челны на реках (§304): вода была пустой, читалась как пустая лента.
+  for (const [река, доли] of [[RIVER_A, [0.22, 0.58]], [RIVER_B, [0.16, 0.52, 0.86]]] as const) {
+    for (const d of доли) {
+      const i = Math.min(река.length - 2, Math.floor(d * (река.length - 1)));
+      const t = d * (река.length - 1) - i;
+      const x = река[i].x + (река[i + 1].x - река[i].x) * t;
+      const z = река[i].z + (река[i + 1].z - река[i].z) * t;
+      const лодка = челн();
+      лодка.position.set(x, LAKE.level + 0.04, z);
+      // Лодка стоит по течению: нос вниз по реке.
+      лодка.rotation.y = Math.atan2(река[i + 1].x - река[i].x, река[i + 1].z - река[i].z);
+      scene.add(лодка);
+    }
+  }
+
   for (const river of [RIVER_A, RIVER_B]) {
     for (let i = 0; i < river.length - 1; i++) {
       const a = river[i], b = river[i + 1];
