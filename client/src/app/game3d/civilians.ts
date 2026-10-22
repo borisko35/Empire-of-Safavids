@@ -107,6 +107,66 @@ const CIV_CLIP_WALK = 'walking';
 
 
 /**
+ * Одежда поверх модели горожанина (§300).
+ *
+ * БЫЛО: горожанин — это модель из GLB: халат есть, а перевязи, пояса и головного
+ * убора нет. На улице человек выглядит как персонаж из каталога, а не как
+ * горожанин: силуэт без деталей читается «слепо» — ткань без пояса, голова без
+ * убора.
+ *
+ * ТЕПЕРЬ: перевязь через грудь и тюрбан на голове. Одежда крепится к КОСТЯМ
+ * модели, а не к её корню, — иначе при ходьбе она висела бы в воздухе.
+ *
+ * Костя ищутся по имени на ходу: «Spine» и «Head» у mixamo-моделей, но имена
+ * костей в разных моделях различаются, и жёстко прописанное имя однажды
+ * сломало бы всю одежду разом.
+ */
+function одетьГорожанина(модель: THREE.Group, ткань: THREE.Color): void {
+  const кость = (фрагмент: string): THREE.Object3D | null => {
+    let найдено: THREE.Object3D | null = null;
+    модель.traverse((o) => {
+      if (!найдено && (o as THREE.Bone).isBone && o.name.toLowerCase().includes(фрагмент)) найдено = o;
+    });
+    return найдено;
+  };
+  const спина = кость('spine');
+  const голова = кость('head');
+  if (!спина || !голова) return;
+
+  const цветТкани = ткань.clone().multiplyScalar(0.72);
+  const тканьМатериал = new THREE.MeshStandardMaterial({ color: цветТкани, roughness: 0.95 });
+  const тканьСветлая = new THREE.MeshStandardMaterial({
+    color: ткань.clone().lerp(new THREE.Color(0xe8dcc0), 0.45),
+    roughness: 0.95,
+  });
+
+  // Перевязь через грудь: полоса с лёгким изгибом, повторяющим торс.
+  const перевязь = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.045, 6, 14), тканьМатериал);
+  перевязь.rotation.set(Math.PI / 2, 0, 0.42);
+  перевязь.scale.set(1, 0.72, 1);
+  перевязь.castShadow = true;
+  спина.add(перевязь);
+
+  // Пояс: тонкий круг на талии.
+  const пояс = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.028, 5, 12), тканьСветлая);
+  пояс.rotation.x = Math.PI / 2;
+  пояс.scale.set(1, 0.7, 1);
+  пояс.position.y = -0.1;
+  пояс.castShadow = true;
+  спина.add(пояс);
+
+  // Тюрбан: намотка и шапка сверху.
+  const намотка = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 12), тканьСветлая);
+  намотка.rotation.x = Math.PI / 2;
+  намотка.position.y = 0.12;
+  намотка.castShadow = true;
+  const верх = new THREE.Mesh(new THREE.SphereGeometry(0.085, 8, 6), тканьСветлая);
+  верх.scale.set(1, 0.55, 1);
+  верх.position.y = 0.15;
+  голова.add(намотка, верх);
+}
+
+/**
  * Загружает GLB-модель горожанина и применяет её.
  *
  * Модель загружается асинхронно: пока она едет, горожанин остаётся на
@@ -117,7 +177,7 @@ const CIV_CLIP_WALK = 'walking';
  * горожанин остаётся на процедурном риге навсегда. Это не ошибка, а
  * штатное поведение: игра работает с тем, что есть.
  */
-function loadCivModel(c: Civilian, modelName: string): void {
+function loadCivModel(c: Civilian, modelName: string, ткань: THREE.Color): void {
   void загрузитьСцену(modelName).then((scene) => {
     if (!scene) return;
     try {
@@ -145,6 +205,9 @@ function loadCivModel(c: Civilian, modelName: string): void {
           });
           // Добавляем модель в группу горожанина
           c.group.add(cloned);
+          // Одежда поверх модели (§300): перевязь, пояс и тюрбан — на костях,
+          // чтобы при ходьбе они ходили вместе с телом.
+          одетьГорожанина(cloned, ткань);
           // Включаем idle-анимацию по умолчанию
           const idleAction = c.миксер.clipAction(cleanIdle);
           idleAction.play();
@@ -667,7 +730,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
       клипы: { idle: null, walk: null },
       примитивы: [],
     };
-    loadCivModel(civilian, civModel);
+    loadCivModel(civilian, civModel, new THREE.Color(tunic));
     civs.push(civilian);
   }
 
