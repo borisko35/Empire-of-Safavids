@@ -2087,6 +2087,23 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   const flowers = spots.filter(s => s.biome === 'field' && rng() < 0.45);
   const brushes = spots.filter(s => s.biome === 'desert' && rng() < 0.3);
   const pines = spots.filter(s => s.biome === 'mountain' && s.h < 40 && rng() < 0.5);
+  // Камыш у самой кромки воды (§301). Раньше берег кончался стеклянной полосой
+  // песка: вода подходила вплотную к голой земле, и озеро читалось как зеркало,
+  // а не как место, где что-то растёт.
+  //
+  // Ставим не по общему рассеву (полоса у воды слишком узкая, из неё выходило
+  // три пучка на весь мир), а кольцом вокруг озера: ищем точки, где земля уже
+  // уходит под воду, но ещё не в глубь.
+  const камыш: { x: number; z: number; h: number }[] = [];
+  for (let i = 0; i < 1400 && камыш.length < 260; i++) {
+    const t = (i / 1400) * Math.PI * 2 * 9;
+    const r = LAKE.r * (0.86 + hash2(i, 3) * 0.34);
+    const x = LAKE.x + Math.cos(t) * r;
+    const z = LAKE.z + Math.sin(t) * r;
+    const wm = waterMask(x, z);
+    if (wm <= 0.002 || wm > 0.16) continue;
+    камыш.push({ x, z, h: groundHeight(x, z) });
+  }
 
   // Стволы + кроны (платан/кипарис по случаю)
   //
@@ -2167,6 +2184,41 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   for (const s of trees) {
     addCollider(s.x, s.z, 0.5);
   }
+
+  // Камыш у воды (§301): пучок длинных узких листьев, растущих из воды.
+  const камышГео = new THREE.BufferGeometry();
+  {
+    const вершины: number[] = [];
+    const индексы: number[] = [];
+    for (let b = 0; b < 6; b++) {
+      const a = (b / 6) * Math.PI * 2 + 0.7;
+      const наклон = 0.16 + (b % 3) * 0.07;
+      const w = 0.035, h = 1.5 + (b % 2) * 0.55;
+      const dx = Math.cos(a), dz = Math.sin(a);
+      const base = вершины.length / 3;
+      вершины.push(-dz * w, 0, dx * w);
+      вершины.push(dz * w, 0, -dx * w);
+      // Остриё листа уходит в сторону и наклоняется — листья не стоят столбом.
+      вершины.push(dx * h * наклон, h, dz * h * наклон);
+      индексы.push(base, base + 1, base + 2);
+      // Двусторонний лист: односторонний гас с обратной стороны.
+      индексы.push(base + 2, base + 1, base);
+    }
+    камышГео.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
+    камышГео.setIndex(индексы);
+    камышГео.computeVertexNormals();
+  }
+  const камышMesh = new THREE.InstancedMesh(камышГео, MAT.foliageDark, камыш.length);
+  камыш.forEach((s, idx) => {
+    const k = 0.75 + rng() * 0.6;
+    put(камышMesh, idx, s.x, s.h - 0.12, s.z, k, rng() * Math.PI, k);
+    // Оттенок: камыш у воды тёмный, но не чёрный — иначе пучки читаются
+    // шипами, воткнутыми в землю.
+    color.setHSL(0.25 + rng() * 0.06, 0.3 + rng() * 0.14, 0.3 + rng() * 0.1);
+    камышMesh.setColorAt(idx, color);
+  });
+  камышMesh.count = камыш.length;
+  if (камышMesh.instanceColor) камышMesh.instanceColor.needsUpdate = true;
 
   // Камни
   const rockGeo = new THREE.IcosahedronGeometry(1, 0);
@@ -2278,7 +2330,7 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     return wm > 0.005 && wm < 0.09 && (s.biome === 'desert' || rng() < 0.5);
   }).slice(0, 46);
 
-  scene.add(trunks, flares, crowns, crownsLow, crowns2, crowns2b, rocksMesh, tuftsMesh, flowersMesh, stemsMesh,
+  scene.add(trunks, flares, crowns, crownsLow, crowns2, crowns2b, rocksMesh, tuftsMesh, flowersMesh, stemsMesh, камышMesh,
     brushTrunks, brushesMesh, brushesMesh2, pinesMesh, pinesLow, pineTrunks);
 
   // Пальмы строятся группами (не инстансами — их немного)
