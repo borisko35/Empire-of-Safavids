@@ -2945,7 +2945,77 @@ function buildQuarters(
     addCollider(CITY.x + мx, CITY.z + мз, 2.6);
   }
 
-  // ── Жильё в пригороде (§246) ──
+  /**
+ * Виноградник и грядки за городской стеной (§302).
+ *
+ * БЫЛО: дворы за стеной — пустые участки, обнесённые забором. Земля в заборе,
+ * но пустая, читалась как недоделанная стройка, а не как огород.
+ *
+ * ТЕПЕРЬ: виноградник на решётке (столбы, поперечины, лоза с гроздьями) и
+ * грядки с рядами посадок.
+ */
+function огород(parent: THREE.Object3D, x: number, z: number, s: number, поворот: number): void {
+  const г = new THREE.Group();
+  г.position.set(x, 0, z);
+  г.rotation.y = поворот;
+
+  // Виноградник: решётка из столбов и поперечин.
+  const ширина = 5.5 * s, глубина = 2.4 * s, высота = 2.1 * s;
+  for (const zz of [-глубина / 2, 0, глубина / 2]) {
+    const столб = new THREE.Mesh(new THREE.BoxGeometry(0.14, высота, 0.14), MAT.trunk);
+    столб.position.set(-ширина / 2, высота / 2, zz);
+    столб.castShadow = true;
+    г.add(столб);
+    const второй = столб.clone();
+    второй.position.x = ширина / 2;
+    г.add(второй);
+  }
+  for (const yy of [высота * 0.45, высота * 0.85]) {
+    const перекладина = new THREE.Mesh(new THREE.BoxGeometry(ширина, 0.08, 0.08), MAT.trunk);
+    перекладина.position.set(0, yy, -глубина / 2);
+    г.add(перекладина);
+    const вторая = перекладина.clone();
+    вторая.position.z = глубина / 2;
+    г.add(вторая);
+  }
+  // Лоза: зелёная масса вдоль решётки.
+  const лоза = new THREE.Mesh(new THREE.BoxGeometry(ширина, 0.36, 0.44), MAT.foliage);
+  лоза.position.set(0, высота * 0.72, 0);
+  лоза.castShadow = true;
+  г.add(лоза);
+  // Грозди: тёмные ягоды кистями под лозой.
+  const цветЯгод = new THREE.MeshStandardMaterial({ color: 0x3a2440, roughness: 0.6 });
+  for (let i = 0; i < 8; i++) {
+    const гроздь = new THREE.Mesh(new THREE.SphereGeometry(0.12, 7, 6), цветЯгод);
+    гроздь.scale.set(1, 1.4, 1);
+    гроздь.position.set(-ширина / 2 + 0.5 + i * ((ширина - 1) / 7), высота * 0.44, 0.1);
+    гроздь.castShadow = true;
+    г.add(гроздь);
+  }
+
+  // Грядки: дощатый борт, земля внутри и ряды посадок.
+  const длина = 3.2 * s, ширинаГрядки = 1.2 * s;
+  const земля = new THREE.Mesh(new THREE.BoxGeometry(длина, 0.22, ширинаГрядки), MAT.sand);
+  земля.position.set(0, 0.11, глубина + 1.1 * s);
+  земля.receiveShadow = true;
+  г.add(земля);
+  for (const side of [-1, 1]) {
+    const борт = new THREE.Mesh(new THREE.BoxGeometry(длина, 0.3, 0.09), MAT.wood);
+    борт.position.set(0, 0.15, глубина + 1.1 * s + (side * ширинаГрядки) / 2);
+    борт.castShadow = true;
+    г.add(борт);
+  }
+  for (let i = 0; i < 3; i++) {
+    const ряд = new THREE.Mesh(new THREE.BoxGeometry(длина - 0.4, 0.16, 0.2), MAT.foliageLight);
+    ряд.position.set(0, 0.26, глубина + 0.75 * s + i * 0.32 * s);
+    ряд.castShadow = true;
+    г.add(ряд);
+  }
+
+  parent.add(г);
+}
+
+// ── Жильё в пригороде (§246) ──
   //
   // БЫЛО: в пригороде стояли только склады и мастерская — жить рядом было
   // нечем, и место читалось как товарная станция, а не как окраина города.
@@ -3000,6 +3070,10 @@ function buildQuarters(
     дом.rotation.y = д.поворот;
     city.add(дом);
     addCollider(CITY.x + д.x, CITY.z + д.z, Math.max(д.w, д.d) / 2 + 0.4);
+    // Огород рядом с домом: виноградник на решётке и грядки (§302). Двор в
+    // заборе, но пустой читался как недоделанная стройка.
+    огород(city, д.x + Math.cos(д.поворот) * 5.2 - Math.sin(д.поворот) * 3.2,
+      д.z - Math.sin(д.поворот) * 5.2 - Math.cos(д.поворот) * 3.2, 1, д.поворот);
   }
 
   // ── Свет в пригороде (§247) ──
