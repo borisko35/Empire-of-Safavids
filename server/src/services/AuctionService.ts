@@ -6,6 +6,7 @@ import { DatabaseService } from './DatabaseService';
 import { RedisService } from './RedisService';
 import { NotificationService } from './NotificationService';
 import { grantReputation } from '../systems/ReputationGrants';
+import { KarmaSystem, isAuctionBanned } from '../systems/KarmaSystem';
 import { logger } from '../utils/logger';
 import { camelizeRow, camelizeRows } from '../utils/camelize';
 import { auctionListingFee } from '../utils/economy';
@@ -159,6 +160,7 @@ export class AuctionService {
   private db = DatabaseService.getInstance();
   private redis = RedisService.getInstance();
   private notifications = new NotificationService();
+  private karmaSystem = new KarmaSystem();
 
   /**
    * Репутация у «Торговцев Шёлкового пути» — от неё растёт пошлина за лот.
@@ -204,6 +206,12 @@ export class AuctionService {
     // Репутация читается один раз перед транзакцией: пошлина зависит от
     // ранга, а ранга нет в объекте персонажа, как и кармы.
     const репутация = await this.merchantsReputation(sellerId);
+
+    // isAuctionBanned: «изгой» (outlaw) не может пользоваться аукционом.
+    const sellerKarma = await this.karmaSystem.getKarma(sellerId);
+    if (isAuctionBanned(sellerKarma)) {
+      throw new Error('Аукцион недоступен: ваш статус кармы запрещает торговлю');
+    }
 
     await this.db.transaction(async (client) => {
       // Эскроу: предмет списывается с продавца при выставлении лота.

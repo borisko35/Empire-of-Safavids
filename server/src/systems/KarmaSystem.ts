@@ -93,6 +93,23 @@ export function isGuardTarget(karma: number): boolean {
   return KARMA_PENALTIES[getKarmaStatus(karma)].guardAttack;
 }
 
+/**
+ * Может ли этого персонажа атаковать другие игроки (PvP).
+ *
+ * false у saint/good/neutral — они под защитой закона.
+ * true у chaotic/red/outlaw — их можно атаковать без кармического штрафа.
+ */
+export function canBeAttacked(karma: number): boolean {
+  return KARMA_PENALTIES[getKarmaStatus(karma)].canBeAttacked;
+}
+
+/**
+ * Запрещён ли аукцион для данного статуса кармы.
+ */
+export function isAuctionBanned(karma: number): boolean {
+  return KARMA_PENALTIES[getKarmaStatus(karma)].auctionBan;
+}
+
 
 export const PVP_ZONES: Record<string, { type: PvPZoneType; nameRu: string; karmaOnKill: boolean }> = {
   tabriz:       { type: 'safe',      nameRu: 'Тебриз',          karmaOnKill: true  },

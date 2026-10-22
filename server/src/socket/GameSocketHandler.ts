@@ -16,7 +16,7 @@ import { CombatService } from '../services/CombatService';
 import { EquipmentCache, DEFAULT_WEAPON, type WeaponProfile } from '../services/EquipmentCache';
 import { getBuffService } from '../services/BuffService';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
-import { KarmaSystem, PVP_ZONES, karmaDeathDrop } from '../systems/KarmaSystem';
+import { KarmaSystem, PVP_ZONES, karmaDeathDrop, canBeAttacked } from '../systems/KarmaSystem';
 import { QuestService } from '../services/QuestService';
 import { DailyTaskService } from '../services/DailyTaskService';
 import { PvPService } from '../services/PvPService';
@@ -2025,11 +2025,26 @@ private territory = TerritoryBonuses.getInstance();
     // профессии означал бы, что о нём забывают в одной из двух ветвей боя.
     damageScale = 1,
   ): Promise<void> {
-    // Мёртвая цель не принимает урон. Без проверки добавленный по сети удар
-    // снова «убивал» бы труп, заново ставил состояние смерти и перезапускал
-    // таймер автореспавна — игрок, зашедший на PvP, мог бесконечно
-    // продлевать себе смерть.
     if (this.deadPlayers.has(target.id)) return;
+
+    // canBeAttacked: saint/good/neutral не могут быть атакованы (защита закона).
+    // Лечение разрешено — проверка только для уронящих действий.
+    const isHeal = action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId);
+    if (!isHeal) {
+      const targetKarma = await this.karmaSystem.getKarma(target.id);
+      if (!canBeAttacked(targetKarma)) {
+        socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
+          attackerId: attacker.id,
+          targetId: target.id,
+          damage: 0,
+          isCritical: false,
+          isBlocked: false,
+          isDodged: false,
+          reason: 'protected',
+        });
+        return;
+      }
+    }
 
     // Лечащий навык: восстанавливает HP цели (масштаб от интеллекта мистика)
     if (action.skillId && this.combatService.isHealSkill(attacker.class, action.skillId)) {
