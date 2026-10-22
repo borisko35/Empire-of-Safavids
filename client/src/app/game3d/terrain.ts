@@ -2522,6 +2522,107 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
       куст(scene, px, pz, groundHeight(px, pz), 1 + (i % 3) * 0.2);
     }
   }
+
+  // ── Загон для скота у лесной деревни (§308) ───────────────────
+  //
+  // БЫЛО: коровы и овцы стояли по лесу открыто и разбрелись, а деревня без
+  // загона выглядела так, будто скота не держат — просто лишние животные в
+  // лесу.
+  //
+  // ТЕПЕРЬ: огороженный загон из жердей с воротами, кормушка с сеном, поилка
+  // и навес от дождя.
+  {
+    const bx = VILLAGE.x - 26;
+    const bz = VILLAGE.z + 14;
+    const полу = 9; // половина стороны, м
+    // Жерди: столбы и между ними — просветник.
+    const стойки = 4;
+    for (const сторона of [-1, 1]) {
+      for (let i = 0; i <= стойки; i++) {
+        const t = -1 + (2 * i) / стойки;
+        for (const px of [t * полу, t * полу + сторона * 0]) { void px; }
+        const postX = bx + t * полу;
+        const postZ = bz + сторона * полу;
+        const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.5, 6), MAT.trunk);
+        столб.position.set(postX, groundHeight(postX, postZ) + 0.75, postZ);
+        столб.castShadow = true;
+        scene.add(столб);
+        const столб2 = столб.clone();
+        столб2.position.set(bx + сторона * полу, groundHeight(bx + сторона * полу, postZ) + 0.75, postZ);
+        scene.add(столб2);
+      }
+      // Продольные жерди.
+      for (const высота of [0.55, 1.05]) {
+        const рейка = new THREE.Mesh(new THREE.BoxGeometry(полу * 2, 0.08, 0.08), MAT.trunk);
+        рейка.position.set(bx, groundHeight(bx, bz + сторона * полу) + высота, bz + сторона * полу);
+        scene.add(рейка);
+      }
+    }
+    // Поперечные жерди — у ворот их нет, там проход.
+    for (const сторона of [-1, 1]) {
+      for (const высота of [0.55, 1.05]) {
+        const рейка = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, полу * 2), MAT.trunk);
+        const rz = bz + сторона * полу;
+        const rx = bx + (сторона < 0 ? -полу : полу);
+        рейка.position.set(rx, groundHeight(rx, rz) + высота, rz);
+        scene.add(рейка);
+      }
+    }
+    // ВОРОТА: створка из жердей на петлях, приоткрыта.
+    const створка = new THREE.Group();
+    for (const высота of [0.55, 1.05]) {
+      const жердь = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.08, 0.08), MAT.trunk);
+      жердь.position.set(1.3, высота, 0);
+      створка.add(жердь);
+    }
+    for (const dx of [0.3, 1.3, 2.3]) {
+      const стойка = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.3, 5), MAT.trunk);
+      стойка.position.set(dx, 0.7, 0);
+      створка.add(стойка);
+    }
+    створка.position.set(bx - полу, groundHeight(bx - полу, bz) + 0, bz);
+    створка.rotation.y = -0.7;
+    scene.add(створка);
+    // КОРМУШКА с сеном.
+    const кормушка = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 0.9), MAT.wood);
+    кормушка.position.set(bx - 3, groundHeight(bx - 3, bz - 3) + 0.25, bz - 3);
+    кормушка.castShadow = true;
+    scene.add(кормушка);
+    const сено = new THREE.Mesh(new THREE.SphereGeometry(1.0, 8, 6), MAT.sand);
+    сено.scale.set(1.5, 0.55, 0.8);
+    сено.position.set(bx - 3, groundHeight(bx - 3, bz - 3) + 0.62, bz - 3);
+    сено.castShadow = true;
+    scene.add(сено);
+    // ПОИЛКА: корыто с водой.
+    const поилка = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.55, 0.45, 10), MAT.wood);
+    поилка.position.set(bx + 3, groundHeight(bx + 3, bz - 3) + 0.22, bz - 3);
+    поилка.castShadow = true;
+    scene.add(поилка);
+    const вода = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.52, 0.52, 0.06, 10),
+      new THREE.MeshStandardMaterial({ color: 0x3a6a72, roughness: 0.2, metalness: 0.1 }),
+    );
+    вода.position.set(bx + 3, groundHeight(bx + 3, bz - 3) + 0.42, bz - 3);
+    scene.add(вода);
+    // НАВЕС от дождя: четыре столба и наклонная крыша.
+    const nx = bx + 4.5, nz = bz + 4.5;
+    for (const [dx, dz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]] as const) {
+      const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 2.2, 6), MAT.trunk);
+      столб.position.set(nx + dx, groundHeight(nx + dx, nz + dz) + 1.1, nz + dz);
+      столб.castShadow = true;
+      scene.add(столб);
+    }
+    const крыша = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.12, 4.0), MAT.clothRed);
+    крыша.position.set(nx, groundHeight(nx, nz) + 2.2, nz);
+    крыша.rotation.z = 0.16;
+    крыша.castShadow = true;
+    scene.add(крыша);
+    // СЕНО навеса: стог у кормушки.
+    const стог = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.6, 9), MAT.sand);
+    стог.position.set(bx + 6, groundHeight(bx + 6, bz + 2) + 0.8, bz + 2);
+    стог.castShadow = true;
+    scene.add(стог);
+  }
 }
 
 // ── Дороги: грунтовые и каменные + караванные пути ─────────
