@@ -3551,6 +3551,64 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       const оглобель = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1.8), MAT.trunk);
       оглобель.position.set(px, groundHeight(px, pz) + 0.7, pz + 1.9);
       city.add(оглобель);
+      // ПАРУС на мачте: полотнище с провисом, как на лодке (§297).
+      const мачта = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.0, 6), MAT.trunk);
+      мачта.position.set(px, groundHeight(px, pz) + 2.2, pz + 0.3);
+      мачта.castShadow = true;
+      city.add(мачта);
+      const парус = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 0.8, 1.7, 10, 1, true, -Math.PI / 2, Math.PI),
+        MAT.clothTeal,
+      );
+      парус.rotation.set(0, 0, Math.PI / 2);
+      парус.position.set(px, groundHeight(px, pz) + 2.5, pz + 0.3);
+      (парус.material as THREE.Material).side = THREE.DoubleSide;
+      city.add(парус);
+      // ГРУЗ в телеге: мешки и свёртки ткани.
+      for (let i = 0; i < 3; i++) {
+        const груз = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), MAT.sand);
+        груз.scale.set(1, 1.1, 0.9);
+        груз.position.set(px - 0.25 + (i % 2) * 0.5, groundHeight(px, pz) + 1.4, pz - 0.6 + i * 0.55);
+        груз.castShadow = true;
+        city.add(груз);
+      }
+      for (let i = 0; i < 2; i++) {
+        const свёрток = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.0, 8), i ? MAT.clothRed : MAT.clothTeal);
+        свёрток.rotation.z = Math.PI / 2;
+        свёрток.position.set(px + 0.2, groundHeight(px, pz) + 1.35, pz + 0.5 - i * 0.4);
+        свёрток.castShadow = true;
+        city.add(свёрток);
+      }
+      // ВОЛЪ в оглобле: без него телега стоит сама по себе.
+      {
+        const ox = px, oz = pz + 3.1;
+        const шерсть = new THREE.MeshStandardMaterial({ color: 0x6a5240, roughness: 0.95 });
+        const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.1, 4, 12), шерсть);
+        тело.rotation.x = Math.PI / 2;
+        тело.position.set(ox, groundHeight(ox, oz) + 1.05, oz);
+        тело.castShadow = true;
+        city.add(тело);
+        // Голова с рогами.
+        const голова = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.34, 3, 10), шерсть);
+        голова.rotation.x = Math.PI / 2;
+        голова.position.set(ox, groundHeight(ox, oz) + 1.0, oz + 0.85);
+        city.add(голова);
+        for (const side of [-1, 1]) {
+          const рог = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.42, 6), MAT.sandstone);
+          рог.position.set(ox + side * 0.18, groundHeight(ox, oz) + 1.2, oz + 0.78);
+          рог.rotation.set(0.9, 0, side * 0.4);
+          city.add(рог);
+        }
+        // Ноги.
+        for (const lx of [-0.32, 0.32]) {
+          for (const lz of [-0.55, 0.55]) {
+            const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.95, 6), шерсть);
+            нога.position.set(ox + lx, groundHeight(ox, oz) + 0.48, oz + lz);
+            нога.castShadow = true;
+            city.add(нога);
+          }
+        }
+      }
       бочка(px + 2.4, pz - 1.6, 1);
       бочка(px + 3.1, pz - 2.1, 0.85);
       // Мешок.
