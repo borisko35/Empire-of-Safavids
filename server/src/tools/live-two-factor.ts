@@ -82,7 +82,7 @@ if (строк2фа > 0) {
 // включение что-то изменило.
 const доВключения = await api('POST', '/api/auth/login', { email: ПОЧТА, password: ПАРОЛЬ, rememberMe: false });
 check('вход работает до включения', доВключения.status === 200, `HTTP ${доВключения.status}`);
-let token = доВключения.json?.data?.token ?? доВключения.json?.token;
+const token = доВключения.json?.data?.token ?? доВключения.json?.token;
 must(token, 'токен не получен');
 
 console.log('\n=== 1. СХЕМА ===');

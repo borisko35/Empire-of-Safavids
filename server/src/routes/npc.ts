@@ -80,7 +80,7 @@ npcRouter.get('/:npcId/dialog', authMiddleware, async (req: Request, res: Respon
     inventory,
   } as unknown as NpcContext;
 
-  let lineId = req.query.line as string ?? dialogue.helloLine;
+  const lineId = req.query.line as string ?? dialogue.helloLine;
 
   // Первое знакомство
   if (chatCount === 0 && memory.firstMeetingPhrases?.length) {

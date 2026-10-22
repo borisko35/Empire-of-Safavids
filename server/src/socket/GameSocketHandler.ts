@@ -1924,7 +1924,7 @@ private territory = TerritoryBonuses.getInstance();
 
     const грузЖертвы = (await this.characterService.getInventory(цель.id).catch(() => []))
       .filter((з) => з.quantity > 0);
-    let добыча = boardLoot(исход, {
+    const добыча = boardLoot(исход, {
       mode: 'pvp',
       baseGold: Math.max(0, Number(жертва.gold ?? 0)),
       targetItems: грузЖертвы.map((з) => з.itemId),
