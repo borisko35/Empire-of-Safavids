@@ -2456,6 +2456,72 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
 
   // Пальмы строятся группами (не инстансами — их немного)
   for (const s of oasis) addPalm(scene, s.x, s.z, 0.8 + rng() * 0.6);
+
+  // ── Оазис (§307) ──────────────────────────────────────────────
+  //
+  // БЫЛО: оазис был пустым местом — пальмы у пруда в пустыне. Жить тут было
+  // нечем: ни источника, ни горшков, ни стенки цистерны, ни кустарника.
+  //
+  // ТЕПЕРЬ: каменный источник, из которого бьёт вода, глиняные горшки у
+  // берега, низкая стенка цистерны и кустарник по кромке.
+  {
+    const ox = POND.x + POND.r * 0.72;
+    const oz = POND.z + POND.r * 0.1;
+    const ой = groundHeight(ox, oz);
+    // ИСТОЧНИК: каменный круг, жёлоб и струя.
+    const круг = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.7, 0.5, 12), MAT.sandstone);
+    круг.position.set(ox, ой + 0.25, oz);
+    круг.castShadow = true;
+    scene.add(круг);
+    const жёлоб = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.7), MAT.sandstoneDark);
+    жёлоб.position.set(ox, ой + 0.7, oz - 0.2);
+    scene.add(жёлоб);
+    const струя = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.07, 0.1, 0.85, 7),
+      new THREE.MeshStandardMaterial({ color: 0x9fd4e0, roughness: 0.15, transparent: true, opacity: 0.75 }),
+    );
+    струя.position.set(ox, ой + 0.42, oz - 0.5);
+    scene.add(струя);
+    // ГЛИНЯНЫЕ ГОРШКИ у берега: в них держат воду.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.7;
+      const r = 2.2 + (i % 3) * 0.55;
+      const px = ox + Math.cos(a) * r;
+      const pz = oz + Math.sin(a) * r;
+      const k = 0.7 + (i % 4) * 0.16;
+      const горшок = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24 * k, 0.34 * k, 0.72 * k, 9),
+        i % 2 ? MAT.sandstone : MAT.sandstoneDark,
+      );
+      горшок.position.set(px, groundHeight(px, pz) + 0.36 * k, pz);
+      горшок.rotation.z = (i % 3) * 0.05;
+      горшок.castShadow = true;
+      scene.add(горшок);
+      const горло = new THREE.Mesh(new THREE.CylinderGeometry(0.14 * k, 0.2 * k, 0.14 * k, 9), MAT.sandstoneDark);
+      горло.position.set(px, groundHeight(px, pz) + 0.76 * k, pz);
+      scene.add(горло);
+    }
+    // СТЕНКА ЦИСТЕРНЫ: круглая каменная ограда у воды.
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * Math.PI * 2;
+      const px = POND.x + Math.cos(a) * (POND.r * 0.86);
+      const pz = POND.z + Math.sin(a) * (POND.r * 0.86);
+      const камень = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.1, 0.7), MAT.sandstone);
+      камень.position.set(px, groundHeight(px, pz) + 0.45, pz);
+      камень.rotation.y = -a;
+      камень.castShadow = true;
+      камень.receiveShadow = true;
+      scene.add(камень);
+    }
+    // КУСТАРНИК по кромке оазиса: оазис должен зеленеть.
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + 0.3;
+      const r = POND.r * (0.9 + (i % 3) * 0.04);
+      const px = POND.x + Math.cos(a) * r;
+      const pz = POND.z + Math.sin(a) * r;
+      куст(scene, px, pz, groundHeight(px, pz), 1 + (i % 3) * 0.2);
+    }
+  }
 }
 
 // ── Дороги: грунтовые и каменные + караванные пути ─────────
