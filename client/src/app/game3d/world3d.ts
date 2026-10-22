@@ -52,6 +52,7 @@ import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
 import { setTextureAnisotropy } from './textures';
+import { setSurfaceAnisotropy } from './surfaces';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { chopFor } from './waterWaves';
 import { audio } from '../audio';
@@ -677,6 +678,9 @@ private roll = 0;
     // игрок смотрит. Ставим ДО buildTerrain: текстуры создаются там и
     // берут это значение при создании.
     setTextureAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
+    // §317: то же для настоящих PBR-поверхностей (surfaces.ts). Модуль
+    // держит свои текстуры отдельно от процедурных.
+    setSurfaceAnisotropy(this.renderer.capabilities.getMaxAnisotropy());
     this.renderer.domElement.className = 'gl-canvas';
     container.appendChild(this.renderer.domElement);
 
