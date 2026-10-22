@@ -142,6 +142,8 @@ function pointOn(path: { from: { x: number; z: number }; to: { x: number; z: num
 interface Walker {
   group: THREE.Group;
   legs: THREE.Object3D[];
+  /** Колёса телеги (§295): крутятся по дороге, а не стоят. */
+  колёса?: THREE.Object3D[];
   /** 0..1 — где он на дороге. Уходит за 1 и начинает с 0, либо наоборот. */
   t: number;
   dir: 1 | -1;
@@ -239,6 +241,138 @@ function makePerson(robeColor: number, hat: 'turban' | 'cap' | 'none'): Walker {
 }
 
 /** Верблюд с тюком. Ноги — четыре отдельные, чтобы шаг читался. */
+/**
+ * Телега с лошадью (§295).
+ *
+ * БЫЛО: по дорогам ездили люди и верблюды караванов — телег не было вовсе, и
+ * груз в мире возили как-то незаметно.
+ *
+ * ТЕПЕРЬ: телега с дощатым кузовом и бортами, колёсами с ободом и спицами,
+ * оглоблем и купцом на козлах; лошадь с капсульным телом, шеей, гривой и
+ * хвостом. Колёса крутятся по дороге, лошадь шагает.
+ */
+function makeCart(robeColor: number): Walker & { колёса: THREE.Object3D[] } {
+  const г = new THREE.Group();
+  const колёса: THREE.Object3D[] = [];
+  const дерево = new THREE.MeshStandardMaterial({ color: 0x8a6a44, roughness: 0.95 });
+  const деревоТ = new THREE.MeshStandardMaterial({ color: 0x6b4f31, roughness: 0.95 });
+
+  // Кузов: настил и борта из досок.
+  const кузов = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.12, 2.1), дерево);
+  кузов.position.y = 0.78;
+  г.add(кузов);
+  for (const сторона of [-1, 1]) {
+    const борт = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 2.1), дерево);
+    борт.position.set(сторона * 0.62, 1.06, 0);
+    г.add(борт);
+  }
+  const передок = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.55, 0.08), дерево);
+  передок.position.set(0, 1.06, -1.02);
+  г.add(передок);
+  const задок = передок.clone();
+  задок.position.z = 1.02;
+  г.add(задок);
+
+  // Колёса: обод, шесть спиц, ступица. Обод — тор, спицы — тонкие бруски.
+  const колесо = (x: number, z: number, r: number) => {
+    const вращение = new THREE.Group();
+    вращение.position.set(x, r, z);
+    const обод = new THREE.Mesh(new THREE.TorusGeometry(r, 0.055, 5, 16), деревоТ);
+    обод.rotation.y = Math.PI / 2;
+    вращение.add(обод);
+    for (let i = 0; i < 6; i++) {
+      const спица = new THREE.Mesh(new THREE.BoxGeometry(0.05, r * 1.8, 0.05), дерево);
+      спица.rotation.x = (i / 6) * Math.PI;
+      вращение.add(спица);
+    }
+    const ступица = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 8), деревоТ);
+    ступица.rotation.z = Math.PI / 2;
+    вращение.add(ступица);
+    г.add(вращение);
+    колёса.push(вращение);
+  };
+  колесо(-0.72, -0.72, 0.52);
+  колесо(0.72, -0.72, 0.52);
+  колесо(-0.72, 0.72, 0.4);
+  колесо(0.72, 0.72, 0.4);
+
+  // Оглобель: два бруска от передка к лошади.
+  for (const сторона of [-1, 1]) {
+    const оглобель = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1.5), деревоТ);
+    оглобель.position.set(сторона * 0.34, 0.66, 1.55);
+    г.add(оглобель);
+  }
+  // Козлы: сиденье купца.
+  const козлы = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.1, 0.45), дерево);
+  козлы.position.set(0, 0.98, -0.25);
+  г.add(козлы);
+
+  // КУПЕЦ на козлах.
+  const купец = new THREE.Group();
+  const халат = new THREE.MeshStandardMaterial({ color: robeColor, roughness: 1 });
+  const корпус = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 0.85, 8), халат);
+  корпус.position.y = 0.42;
+  купец.add(корпус);
+  const голова = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 7), M.skin);
+  голова.position.y = 1.0;
+  купец.add(голова);
+  const тюрбан = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 8), M.skin);
+  тюрбан.position.y = 1.14;
+  купец.add(тюрбан);
+  купец.position.set(0, 1.0, -0.25);
+  г.add(купец);
+
+  // ЛОШАДЬ перед оглоблем.
+  const лошадь = new THREE.Group();
+  const шерсть = new THREE.MeshStandardMaterial({ color: 0x5a4432, roughness: 0.95 });
+  const телоЛ = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.05, 4, 12), шерсть);
+  телоЛ.rotation.x = Math.PI / 2;
+  телоЛ.position.y = 1.05;
+  телоЛ.castShadow = true;
+  лошадь.add(телоЛ);
+  const шея = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.5, 3, 9), шерсть);
+  шея.position.set(0, 1.42, 0.78);
+  шея.rotation.x = 0.6;
+  лошадь.add(шея);
+  const головаЛ = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.3, 3, 9), шерсть);
+  головаЛ.rotation.x = Math.PI / 2;
+  головаЛ.position.set(0, 1.72, 1.08);
+  лошадь.add(головаЛ);
+  const мордаЛ = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.26, 7), шерсть);
+  мордаЛ.rotation.x = Math.PI / 2;
+  мордаЛ.position.set(0, 1.66, 1.36);
+  лошадь.add(мордаЛ);
+  // Грива и хвост.
+  const грива = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.6), M.dark);
+  грива.position.set(0, 1.62, 0.78);
+  грива.rotation.x = 0.5;
+  лошадь.add(грива);
+  const хвост = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.11, 0.6, 6), M.dark);
+  хвост.position.set(0, 1.05, -0.78);
+  хвост.rotation.x = -0.6;
+  лошадь.add(хвост);
+
+  const ноги: THREE.Object3D[] = [];
+  for (const x of [-0.26, 0.26]) {
+    for (const z of [-0.62, 0.62]) {
+      const пивот = new THREE.Group();
+      пивот.position.set(x, 0.92, z);
+      const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.055, 0.86, 6), шерсть);
+      нога.position.y = -0.43;
+      нога.castShadow = true;
+      const копыто = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.09, 6), M.dark);
+      копыто.position.y = -0.87;
+      пивот.add(нога, копыто);
+      лошадь.add(пивот);
+      ноги.push(пивот);
+    }
+  }
+  лошадь.position.set(0, 0, 2.3);
+  г.add(лошадь);
+
+  return { group: г, legs: ноги, колёса, t: 0, dir: 1, speed: CARAVAN_SPEED * 0.8, phase: 0, lag: 0, len: 0, tMin: 0, tMax: 1 };
+}
+
 function makeCamel(packColor: THREE.Material): Walker {
   const g = new THREE.Group();
 
@@ -478,6 +612,25 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
     travellers.push(w);
   }
 
+  // ── Телеги с лошадьми (§295) ───────────────────────────────────
+  //
+  // По дорогам ездили только люди и верблюды караванов: телег не было
+  // вовсе, и груз в мире возили как-то незаметно. Две телеги на дорогах —
+  // кузов, колёса со спицами, оглобель, купец на козлах и лошадь в оглобле.
+  for (let i = 0; i < 2 && walkerRoads.length > 0; i++) {
+    const { road, range } = walkerRoads[(i + 1) % walkerRoads.length];
+    const телега = makeCart(i === 0 ? 0x6a4a7a : 0x4a6a5a);
+    телега.tMin = range.t0;
+    телега.tMax = range.t1;
+    const span = range.t1 - range.t0;
+    телега.t = range.t0 + span * (0.35 + i * 0.25);
+    телега.dir = i % 2 === 0 ? 1 : -1;
+    телега.len = roadLength(road);
+    телега.road = road;
+    group.add(телега.group);
+    travellers.push(телега);
+  }
+
   function update(dt: number, now: number, px: number,pz: number, night = 0): void {
     // Фонари караванов (§254): едут вместе с колонной и горят по ночному
     // правилу — днём тише, ночью в полную силу. Вдали гаснут: каравана не
@@ -541,6 +694,11 @@ export function createRoadTraffic(scene: THREE.Scene): RoadTrafficHandle {
       const swing = Math.sin(w.phase) * 0.55;
       for (let i = 0; i < w.legs.length; i++) {
         w.legs[i].rotation.x = (i % 2 === 0) ? swing : -swing;
+      }
+      // Колёса телеги (§295): крутятся по пройденному пути.
+      if (w.колёса) {
+        const оборот = (dt * w.speed) / 0.52;
+        for (const к of w.колёса) к.rotation.x += оборот * w.dir;
       }
       // Метка над головой чуть покачивается, чтобы её было видно издалека
       const marker = w.group.children.find(c => c instanceof THREE.Sprite);
