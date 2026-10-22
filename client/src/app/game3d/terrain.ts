@@ -4172,6 +4172,56 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     city.add(fillBox);
   };
 
+  // ── Вороны на парапете стены (§309) ───────────────────────────
+  //
+  // БЫЛО: стена стояла пустой в вышине. Город с высоты читался как каменное
+  // кольцо без жизни, а вороны в мире каркали только зимой (§262).
+  //
+  // ТЕПЕРЬ: по парапету сидят вороны — чёрные, с клювом, хвостом и тонкими
+  // ногами. Места — по детерминированному генератору: после перезагрузки
+  // страницы вороны должны сидеть там же.
+  {
+    const ворона = (x: number, y: number, z: number, поворот: number): THREE.Group => {
+      const г = new THREE.Group();
+      const перо = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.95 });
+      const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.26, 3, 8), перо);
+      тело.rotation.x = Math.PI / 2;
+      тело.position.y = 0.18;
+      тело.castShadow = true;
+      г.add(тело);
+      const голова = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), перо);
+      голова.position.set(0, 0.28, -0.14);
+      г.add(голова);
+      const клюв = new THREE.Mesh(
+        new THREE.ConeGeometry(0.022, 0.11, 5),
+        new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.7 }),
+      );
+      клюв.rotation.x = -Math.PI / 2;
+      клюв.position.set(0, 0.27, -0.23);
+      г.add(клюв);
+      const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.22), перо);
+      хвост.position.set(0, 0.16, 0.24);
+      хвост.rotation.x = -0.25;
+      г.add(хвост);
+      for (const side of [-1, 1]) {
+        const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.09, 4), перо);
+        нога.position.set(side * 0.04, 0.045, 0);
+        г.add(нога);
+      }
+      г.position.set(x, y, z);
+      г.rotation.y = поворот;
+      return г;
+    };
+    for (let i = 0; i < 14; i++) {
+      const phi = (i / 14) * Math.PI * 2 + hash2(i, 31) * 0.35;
+      const r = CITY.radius + 1.4 + hash2(i, 17) * 1.3;
+      const x = Math.cos(phi) * r;
+      const z = Math.sin(phi) * r;
+      const y = земляПод(phi) + WALL_TOP + 0.05;
+      city.add(ворона(x, y, z, phi + Math.PI / 2));
+    }
+  }
+
   void loadDecorModel(СТЕНА_МОДЕЛЬ).then((модель) => {
     if (!модель) return;
     // Основные сегменты: по одному на шаг, центрами между стыками.
