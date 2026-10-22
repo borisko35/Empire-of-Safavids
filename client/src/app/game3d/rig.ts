@@ -109,7 +109,7 @@ export interface HumanoidCfg {
    * удочки и корзины, торговец без весов: работа читалась только по подписи
    * над NPC.
    */
-  предмет?: 'удочка' | 'весы' | 'корзина' | 'лоток';
+  предмет?: 'удочка' | 'весы' | 'корзина' | 'лоток' | 'молот' | 'вёдра';
 }
 
 function box(w: number, h: number, d: number, m: THREE.Material): THREE.Mesh {
@@ -447,6 +447,30 @@ export function buildHumanoid(cfg: HumanoidCfg): Rig {
     лоток.position.set(0, -0.72, 0.16);
     лоток.rotation.x = -0.15;
     armL.add(лоток);
+  } else if (cfg.предмет === 'молот') {
+    // Молот кузнеца (§311): рукоять и набойная головка.
+    const молот = new THREE.Group();
+    const рукоять = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 0.6, 6), MAT.wood);
+    рукоять.position.y = -0.3;
+    const набой = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.24), MAT.steelDark);
+    набой.position.y = -0.6;
+    молот.add(рукоять, набой);
+    молот.position.set(0.02, -0.5, 0.12);
+    молот.rotation.set(0.2, 0, 0.35);
+    armR.add(молот);
+  } else if (cfg.предмет === 'вёдра') {
+    // Вёдра на коромысле (§311): так воду носят от колодца.
+    const коромысло = new THREE.Group();
+    const брус = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 5), MAT.wood);
+    брус.rotation.z = Math.PI / 2;
+    for (const side of [-1, 1]) {
+      const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.22, 9), MAT.wood);
+      ведро.position.set(side * 0.5, -0.16, 0);
+      коромысло.add(ведро);
+    }
+    коромысло.add(брус);
+    коромысло.position.set(0, -0.52, 0.06);
+    armL.add(коромысло);
   }
   if (предметRef) armR.add(предметRef);
 

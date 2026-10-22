@@ -118,6 +118,16 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_flower_woman', nameRu: 'Цветочница Мадина', panel: 'panel-shop', quest: false, dx: -8.5, dz: 6.5, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'hood', hatColor: 0xc9a84c, weapon: 'none', scale: 0.97 } },
       { id: 'npc_well_woman', nameRu: 'Водоносчица Багира', panel: 'panel-quests', quest: false, dx: 56.5, dz: 62.5, look: { robe: 0x2e8b8b, robeDark: 0x1f6161, hat: 'hood', hatColor: 0xe8e0d0, weapon: 'none', scale: 0.98 } },
       { id: 'npc_suburb_master', nameRu: 'Мастер Лейла', panel: 'panel-craft', quest: false, dx: 120, dz: 114, look: { robe: 0x6e563a, robeDark: 0x4c3a22, hat: 'cap', hatColor: 0x2a2a30, weapon: 'none', scale: 1.04 } },
+      // ── Люди в пригороде (§311) ─────────────────────────────────
+      //
+      // БЫЛО: пригород был обставлен (§310: кузница, колодец, склад, телега),
+      // но пуст — никого. Постройки без людей читаются как выставка.
+      //
+      // ТЕПЕРЬ: кузнец у горна с молотом, носильщик у склада с корзиной и
+      // водонос у колодца с вёдрами на коромысле.
+      { id: 'npc_suburb_blacksmith', nameRu: 'Кузнец Рустам', panel: 'panel-craft', quest: false, dx: 122.5, dz: 112.5, look: { robe: 0x4a3a2a, robeDark: 0x30261a, hat: 'none', hatColor: 0x2a2a30, weapon: 'none', scale: 1.05, предмет: 'молот' } },
+      { id: 'npc_suburb_carrier', nameRu: 'Носильщик Омар', panel: 'panel-trade', quest: false, dx: 103.4, dz: 96.2, look: { robe: 0x6a5a3a, robeDark: 0x4a3c26, hat: 'cap', hatColor: 0x3a2a1c, weapon: 'none', scale: 1.02, предмет: 'корзина' } },
+      { id: 'npc_suburb_water', nameRu: 'Водонос Ибрагим', panel: 'panel-trade', quest: false, dx: 113.4, dz: 80.6, look: { robe: 0x4a6a72, robeDark: 0x33484e, hat: 'turban', hatColor: 0xc8b890, weapon: 'none', scale: 1.01, предмет: 'вёдра' } },
       { id: 'npc_gardener', nameRu: 'Садовник Рустем', panel: 'panel-quests', quest: false, dx: -27, dz: 81, look: { robe: 0x4a6a38, robeDark: 0x334a27, hat: 'cap', hatColor: 0x7a6244, weapon: 'none', scale: 1.01 } },
       // ── Продавцы за базарными прилавками (§272) ──
       //
