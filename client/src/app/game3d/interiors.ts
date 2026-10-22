@@ -26,7 +26,7 @@ import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
 // глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
 // постом в shared/stealth.ts, а не отдельно от него.
-import { buildHumanoid } from './rig';
+import { buildHumanoid, HumanoidCfg, ПРЕДМЕТ } from './rig';
 // Фигура стража внутри крепости. Без неё пост в правиле был бы невидимым глазом:
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
@@ -539,6 +539,11 @@ function furnishWeaver(g: THREE.Group, cx: number, cz: number): { x: number; z: 
     g.add(mot);
   }
   cols.push({ x: cx + 3, z: cz + 1, r: 2.2 });
+  // ТКАЧ у среднего станка: корзина с пряжей в руке.
+  мастер(g, cx, cz, 0, -5.6, Math.PI, {
+    robe: 0x6a3a72, robeDark: 0x4a284f, hat: 'none', hatColor: 0x3a2038,
+    weapon: 'none', предмет: ПРЕДМЕТ.корзина, scale: 1.02,
+  });
   return cols;
 }
 
@@ -1570,6 +1575,33 @@ function brazier(parent: THREE.Group, x: number, z: number, baseY: number): void
   parent.add(fire);
 }
 
+// Мастер в интерьере (§316).
+//
+// ЧТО БЫЛО. Интерьеры были обставлены, но пусты: станок стоял без ткача,
+// наковальня без кузнеца, конюшня без конюха. Мастерская читалась как витрина
+// после ухода мастера, а не как место, где идёт работа.
+//
+// ЧТО ТЕПЕРЬ. В четырёх интерьерах стоят люди, у каждого своё дело и своя
+// поза: кузнец бьёт по наковальне, ткач стоит у станка, конюх таскает воду,
+// астроном смотрит на карту, исследователь — на колбы.
+//
+// Человек смотрит в +Z (нос и глаза вынесены вперёд), поэтому поворот задаётся
+// прямо: -π/2 — влево, π — в спину у стены.
+function мастер(
+  g: THREE.Group,
+  cx: number,
+  cz: number,
+  x: number,
+  z: number,
+  поворот: number,
+  cfg: HumanoidCfg,
+): void {
+  const фигура = buildHumanoid(cfg);
+  фигура.group.position.set(cx + x, FLOOR_Y, cz + z);
+  фигура.group.rotation.y = поворот;
+  g.add(фигура.group);
+}
+
 function furnishStable(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
   for (const sx of [-6, 0, 6]) {
@@ -1584,6 +1616,11 @@ function furnishStable(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   g.add(box(3.2, 0.9, 1.2, M.woodDark, cx + 5, FLOOR_Y + 0.45, cz - 5.5));
   g.add(box(2.8, 0.2, 0.9, M.water, cx + 5, FLOOR_Y + 0.95, cz - 5.5));
   cols.push({ x: cx + 5, z: cz - 5.5, r: 1.9 });
+  // КОНЮХ: вёдра на коромысле у стойла — лошадей поят и кормят.
+  мастер(g, cx, cz, -3.4, 2.2, -Math.PI / 2, {
+    robe: 0x4a5a3a, robeDark: 0x33422a, hat: 'cap', hatColor: 0x2b3320,
+    weapon: 'none', предмет: ПРЕДМЕТ.вёдра, scale: 1.03,
+  });
   return cols;
 }
 
@@ -1672,6 +1709,15 @@ function furnishWorkshop(g: THREE.Group, cx: number, cz: number): { x: number; z
     tool.rotation.z = 0.15;
     g.add(tool);
   }
+  // ГОРН у дальней стены: каменная очаговая с раскалённым зевом.
+  g.add(box(1.8, 1.2, 1.4, M.stone, cx - 7.5, FLOOR_Y + 0.6, cz - 5.5));
+  g.add(box(0.9, 0.5, 0.3, M.gold, cx - 7.5, FLOOR_Y + 0.55, cz - 4.9));
+  cols.push({ x: cx - 7.5, z: cz - 5.5, r: 1.3 });
+  // КУЗНЕЦ у наковальни: молот в руке, фартук — кожа.
+  мастер(g, cx, cz, 1.5, -1.8, -Math.PI / 2, {
+    robe: 0x5a3b22, robeDark: 0x3c2716, hat: 'cap', hatColor: 0x2f2117,
+    weapon: 'none', предмет: ПРЕДМЕТ.молот, scale: 1.05,
+  });
   return cols;
 }
 
@@ -1703,6 +1749,11 @@ function furnishObservatory(g: THREE.Group, cx: number, cz: number): { x: number
     g.add(dot);
   }
   cols.push({ x: cx - 5.5, z: cz + 3.5, r: 1.5 });
+  // АСТРОНОМ у стола с картой: смотрит на небесный чертеж.
+  мастер(g, cx, cz, -5.4, 2.0, 0, {
+    robe: 0x2f3f6e, robeDark: 0x1e2946, hat: 'turban', hatColor: 0xb08d3a,
+    weapon: 'none', scale: 1.03,
+  });
   return cols;
 }
 
@@ -1736,6 +1787,11 @@ function furnishScience(g: THREE.Group, cx: number, cz: number): { x: number; z:
   ring.rotation.y = 0.5;
   g.add(ring);
   cols.push({ x: cx + 5.5, z: cz + 4.5, r: 0.9 });
+  // ИССЛЕДОВАТЕЛЬ у стола с колбами: смотрит на опыты.
+  мастер(g, cx, cz, -2.2, 2.6, Math.PI / 2, {
+    robe: 0x8a5a2b, robeDark: 0x5e3a1c, hat: 'hood', hatColor: 0x3a2a1c,
+    weapon: 'none', scale: 1.02,
+  });
   return cols;
 }
 
