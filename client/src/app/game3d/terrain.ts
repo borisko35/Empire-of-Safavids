@@ -3609,6 +3609,37 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
           }
         }
       }
+      // САРАЙ: навес на столбах с наклонной крышей, сено под ним и вилы в стене (§314).
+      {
+        const sx = px + 7.5, sz = pz - 4.5;
+        const земля = groundHeight(sx, sz);
+        // Четыре столба.
+        for (const [dx, dz] of [[-1.7, -1.4], [1.7, -1.4], [-1.7, 1.4], [1.7, 1.4]] as const) {
+          const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 2.3, 6), MAT.trunk);
+          столб.position.set(sx + dx, земля + 1.15, sz + dz);
+          столб.castShadow = true;
+          city.add(столб);
+        }
+        // Крыша с наклоном: в стог сена она идёт от свеса к стене.
+        const крышаСарая = new THREE.Mesh(new THREE.BoxGeometry(4.2, 0.14, 3.6), MAT.clothRed);
+        крышаСарая.position.set(sx, земля + 2.4, sz);
+        крышаСарая.rotation.x = 0.14;
+        крышаСарая.castShadow = true;
+        city.add(крышаСарая);
+        // Стог сена под навесом.
+        const стогСарая = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 1.05, 1.7, 10), MAT.sand);
+        стогСарая.position.set(sx - 0.6, земля + 0.85, sz);
+        стогСарая.castShadow = true;
+        city.add(стогСарая);
+        // Вилы в стене: на сарае видно, что сюда возят сено.
+        const древко = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 1.7, 5), MAT.trunk);
+        древко.position.set(sx + 1.4, земля + 1.1, sz + 1.2);
+        древко.rotation.z = 0.3;
+        city.add(древко);
+        const зубья = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.12), MAT.dark);
+        зубья.position.set(sx + 1.62, земля + 1.85, sz + 1.2);
+        city.add(зубья);
+      }
       бочка(px + 2.4, pz - 1.6, 1);
       бочка(px + 3.1, pz - 2.1, 0.85);
       // Мешок.
