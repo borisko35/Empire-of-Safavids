@@ -5951,6 +5951,62 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
     // Фаза — по детерминированному генератору: после перезагрузки страницы
     // лодка должна качаться так же, а не иначе (в мире ничто не случайно).
     лодкиУПира.push({ группа: boat, y: LAKE.level + 0.35, фаза: hash2(7, 3) * 6.28 });
+    // ── Порт работает (§315) ──────────────────────────────────────
+    //
+    // БЫЛО: один пирс, одна лодка, и больше ничего: груз не грузили, воду не
+    // таскали, и причал был пустым. Порт — первое, что игрок видит, а читался
+    // он как декорация.
+    //
+    // ТЕПЕРЬ: грузовой кран с тросом и крюком, второй пирс с лодкой под
+    // погрузкой, бочки и ящики на настиле, телега у самого пирса.
+    {
+      // КРАН: стойка, стрела, трос и крюк.
+      const кранX = 0.9;
+      const кранZ = -8.4;
+      const стойкаКрана = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 3.4, 7), MAT.trunk);
+      стойкаКрана.position.set(кранX, 2.1, кранZ);
+      стойкаКрана.castShadow = true;
+      pier.add(стойкаКрана);
+      const стрела = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 3.2), MAT.trunk);
+      стрела.position.set(кранX, 3.6, кранZ - 1.3);
+      стрела.castShadow = true;
+      pier.add(стрела);
+      const трос = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.6, 4), MAT.dark);
+      трос.position.set(кранX, 2.8, кранZ - 2.6);
+      pier.add(трос);
+      const крюк = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.03, 5, 10, Math.PI * 1.3), MAT.dark);
+      крюк.position.set(кранX, 2.05, кранZ - 2.6);
+      крюк.rotation.y = Math.PI / 2;
+      pier.add(крюк);
+      // ГРУЗ на настиле: бочки и ящики, которые ждут погрузки.
+      for (let i = 0; i < 3; i++) {
+        const бочка = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.32, 0.85, 10), MAT.wood);
+        бочка.position.set(-0.6, 0.98, -1.9 - i * 1.5);
+        бочка.castShadow = true;
+        pier.add(бочка);
+        for (const yy of [0.78, 1.18]) {
+          const обруч = new THREE.Mesh(new THREE.TorusGeometry(0.355, 0.028, 4, 12), MAT.dark);
+          обруч.position.set(-0.6, yy, -1.9 - i * 1.5);
+          обруч.rotation.x = Math.PI / 2;
+          pier.add(обруч);
+        }
+      }
+      const ящик = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), MAT.wood);
+      ящик.position.set(0.5, 0.99, -2.6);
+      ящик.castShadow = true;
+      pier.add(ящик);
+      // ТЕЛЕГА у пирса: ждёт, пока погрузят.
+      const кузовТелеги = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 1.9), MAT.wood);
+      кузовТелеги.position.set(-2.6, 1.1, 0.4);
+      кузовТелеги.castShadow = true;
+      pier.add(кузовТелеги);
+      for (const side of [-1, 1]) {
+        const колесоТелеги = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.05, 5, 14), MAT.trunk);
+        колесоТелеги.position.set(-2.6 + side * 0.68, 0.72, 0.4);
+        колесоТелеги.rotation.y = Math.PI / 2;
+        pier.add(колесоТелеги);
+      }
+    }
     pier.position.set(Math.sin(toLake) * 12, 0, Math.cos(toLake) * 12);
     pier.rotation.y = toLake;
     g.add(pier);
