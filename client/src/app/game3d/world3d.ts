@@ -68,6 +68,8 @@ export interface World3DCallbacks {
   onNpc?: (panel: string, nameRu: string, npcId: string) => void;
   /** Клик по двери здания: войти/выйти (мир уже телепортирован, нужен только тост). */
   onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string, entranceId?: string) => void;
+  /** Клик по интерактивному объекту: ящик, кувшин, навес. */
+  onInteractive?: (kind: string, state: string, obj: THREE.Object3D) => void;
 }
 
 /** Экипировка своего персонажа, видимая на 3D-аватаре */
@@ -272,6 +274,7 @@ export class World3D {
   private weather!: WeatherHandle;
   private interiors!: InteriorsHandle;
   private doorTargets: THREE.Object3D[] = [];
+  private interactiveTargets: THREE.Object3D[] = [];
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
@@ -1020,6 +1023,11 @@ private roll = 0;
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
+    // Интерактивные объекты (ящики, кувшины, навесы) — отдельный список
+    // с более строгой дистанцией (3.5 м вместо 22 м для дверей).
+    for (const r of this.interiors.rooms.values()) {
+      for (const obj of r.interactiveTargets) this.interactiveTargets.push(obj);
+    }
     buildPocketGround(this.scene);
     this.navigator = createNavigator(this.scene);
     // SSR включаем только там, где отражение и правда нужно. Время вызова
@@ -1465,6 +1473,8 @@ private roll = 0;
 
     if (this.pickDoor()) return;
 
+    if (this.pickInteractive()) return;
+
     // Мягкое прицеливание: конус от камеры, затем близость
     const id = this.acquireTarget();
     if (id && this.entities) {
@@ -1494,6 +1504,25 @@ private roll = 0;
     const npcId = hits[0].object.userData.npcId as string | undefined;
     if (!panel) return false;
     this.callbacks?.onNpc?.(panel, name ?? '', npcId ?? '');
+    return true;
+  }
+
+  /** Клик по интерактивному объекту: ящик, кувшин, навес. */
+  private pickInteractive(): boolean {
+    if (!this.me || !this.interactiveTargets.length) return false;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hits = ray.intersectObjects(this.interactiveTargets, true);
+    if (!hits.length || hits[0].distance > 22) return false;
+    const obj = hits[0].object;
+    const ud = obj.userData as { interactiveKind?: string; interactiveState?: string };
+    if (!ud.interactiveKind) return false;
+    const objPos = obj.getWorldPosition(new THREE.Vector3());
+    const dx = this.me.pos.x - objPos.x;
+    const dz = this.me.pos.z - objPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 3.5) return false;
+    this.callbacks?.onInteractive?.(ud.interactiveKind, ud.interactiveState ?? 'intact', obj);
     return true;
   }
 
@@ -1542,6 +1571,7 @@ private roll = 0;
     if (!def) return false;
     this.interiors.exit();
     this.weather?.setInside(false);
+    this.interactiveTargets.length = 0;
     this.me.pos.x = target.x;
     this.me.pos.y = target.y;
     this.me.pos.z = target.z;
@@ -1559,6 +1589,7 @@ private roll = 0;
     this.interiors.exit();
     // Восстановить погоду при выходе локально (без сервера)
     if (!this.interiors.isInside()) this.weather?.setInside(false);
+    this.interactiveTargets.length = 0;
     this.me.pos.x = def.exitX;
     this.me.pos.z = def.exitZ;
     this.me.pos.y = groundHeight(def.exitX, def.exitZ);

@@ -18,6 +18,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
 import { CITY, addCollider, windowPane } from './terrain';
+import { createCrate, createOilJug, createAwning, registerInteractive, InteractiveKind } from './interactive';
 // Модели закрыты входом: заголовок ставится при создании загрузчика
 // (см. modelAccess.ts).
 import { сВходом } from './modelAccess';
@@ -1431,7 +1432,7 @@ export const BUILDINGS: BuildingDef[] = SPOTS.map((s, i) => {
 export const INTERIOR_COLLIDERS: { x: number; z: number; r: number }[] = [];
 
 // ── Материалы ────────────────────────────────────────────────
-const M = {
+export const M = {
   wall: new THREE.MeshStandardMaterial({ color: 0xc9ab7c, roughness: 0.9, map: plasterTexture('#c9ab7c', 2) }),
   wallDark: new THREE.MeshStandardMaterial({ color: 0xa89061, roughness: 0.95, map: wallDarkTexture('#a89061', 2), normalMap: wallDarkNormalTexture(2), normalScale: new THREE.Vector2(0.4, 0.4) }),
   roof: new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.9, map: roofTileTexture('#8a6a42', 2), normalMap: roofTileNormalTexture(2), normalScale: new THREE.Vector2(0.8, 0.8) }),
@@ -1914,6 +1915,8 @@ interface Room {
   exitDoors: THREE.Object3D[];
   /** Столы с документами: по ним кликают так же, как по двери. */
   documentTargets: THREE.Object3D[];
+  /** Интерактивные объекты: ящики, кувшины, навесы. */
+  interactiveTargets: THREE.Object3D[];
 }
 
 // ── Зал таверны из диорамы ────────────────────────────────────
@@ -2044,8 +2047,9 @@ function buildTavernRoom(scene: THREE.Scene, def: BuildingDef): Room {
     documentTargets.push(hit);
     colliders.push({ x: place.x, z: place.z, r: 1.2 });
   }
+  const interactiveTargets: THREE.Object3D[] = [];
   scene.add(g);
-  return { def, group: g, colliders, exitDoors, documentTargets };
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets };
 }
 
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
@@ -2187,8 +2191,65 @@ caravanserai: furnishCaravanserai,
     { x: cx + hw - 1.6, z: cz - hd + 1.6, r: 0.9 },
   );
 
+  // ── Интерактивные объекты (ящики, кувшины, навесы) ─────────────
+  // Размещаем по типу здания: конюшня/казарма/мастерская/таверна/форт/подземелья.
+  const interactiveTargets: THREE.Object3D[] = [];
+  {
+    // Карта типа здания -> {kind, count}
+    const interactiveMap: Record<string, { kind: InteractiveKind; count: number }> = {
+      stable:      { kind: 'crate',      count: 3 },
+      barracks:    { kind: 'crate',      count: 4 },
+      workshop:    { kind: 'oil_jug',    count: 2 },
+      tavern:      { kind: 'crate',      count: 2 },
+      fortress:    { kind: 'awning',     count: 2 },
+      caravanserai:{ kind: 'crate',      count: 3 },
+      catacombs:   { kind: 'crate',      count: 2 },
+      palace_dungeon:{ kind: 'crate',    count: 2 },
+      khorasan_caves: { kind: 'oil_jug', count: 2 },
+      caucasus_fort:  { kind: 'awning',  count: 2 },
+      baghdad_citadel:{ kind: 'crate',   count: 2 },
+      simurgh_temple: { kind: 'oil_jug', count: 1 },
+    };
+    const entry = interactiveMap[def.kind as string];
+    if (entry) {
+      const { kind, count } = entry;
+      for (let i = 0; i < count; i++) {
+        // Детерминированное размещение по хэшу от id + i
+        let seed = def.id.length * 7919 + i * 1103515245 + 12345;
+        const rnd = (): number => {
+          seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+          return seed / 0x7fffffff;
+        };
+        // Размещаем в пределах комнаты (22x16, стены на ±11/±8)
+        const margin = 2.5;
+        const x = cx + (rnd() - 0.5) * (22 - margin * 2);
+        const z = cz + (rnd() - 0.5) * (16 - margin * 2);
+        const ry = rnd() * Math.PI * 2;
+        let obj: THREE.Object3D;
+        switch (kind) {
+          case 'crate':
+            obj = createCrate(x, FLOOR_Y + 0.4, z, 0.7, 0.7, 0.7, ry);
+            break;
+          case 'oil_jug':
+            obj = createOilJug(x, FLOOR_Y, z, ry);
+            break;
+          case 'awning':
+            obj = createAwning(x, FLOOR_Y, z, 3.5, 2, ry);
+            break;
+        }
+        if (obj) {
+          registerInteractive(obj, kind);
+          g.add(obj);
+          interactiveTargets.push(obj);
+          // Коллайдер для физики
+          const r = kind === 'awning' ? 2.0 : 0.6;
+          colliders.push({ x, z, r });
+        }
+      }
+    }
+  }
+
   // ── Стол с тайными документами ──
-  // Только для своей комнаты: у остальных десяти зданий таких мест нет.
   const documentTargets: THREE.Object3D[] = [];
   for (const place of DOCUMENT_SPOTS) {
     if (place.buildingId !== def.id) continue;
@@ -2212,13 +2273,15 @@ caravanserai: furnishCaravanserai,
   }
 
   scene.add(g);
-  return { def, group: g, colliders, exitDoors, documentTargets };
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets };
 }
 
 // ── Хендл ────────────────────────────────────────────────────
 export interface InteriorsHandle {
   /** Все кликабельные двери (снаружи + выходы внутри). */
   clickTargets: THREE.Object3D[];
+  /** Комнаты по id здания. */
+  rooms: Map<string, Room>;
   def(id: string): BuildingDef | null;
   enter(id: string): BuildingDef | null;
   exit(): BuildingDef | null;
@@ -2237,12 +2300,14 @@ export function createInteriors(scene: THREE.Scene): InteriorsHandle {
     rooms.set(def.id, room);
     clickTargets.push(...room.exitDoors);
     clickTargets.push(...room.documentTargets);
+    clickTargets.push(...room.interactiveTargets);
   }
   // Двери экстерьеров добавляются через buildTownBuildings (возвращает свои цели).
   let inside: BuildingDef | null = null;
 
   return {
     clickTargets,
+    rooms,
     def(id: string): BuildingDef | null {
       return rooms.get(id)?.def ?? null;
     },
