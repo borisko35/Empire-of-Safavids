@@ -50,7 +50,7 @@ import { createCivilians, CiviliansHandle } from './civilians';
 import { createTownfolk, TownfolkHandle } from './townfolk';
 import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
-import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS } from './interiors';
+import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS, M } from './interiors';
 import { setTextureAnisotropy } from './textures';
 import { setSurfaceAnisotropy } from './surfaces';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
@@ -1522,8 +1522,168 @@ private roll = 0;
     const dz = this.me.pos.z - objPos.z;
     const dist = Math.hypot(dx, dz);
     if (dist > 3.5) return false;
+
+    // Геймплейные механики интерактивных объектов
+    this.handleInteractiveMechanic(obj, ud);
+
     this.callbacks?.onInteractive?.(ud.interactiveKind, ud.interactiveState ?? 'intact', obj);
     return true;
+  }
+
+  /** Геймплейная механика интерактивного объекта при клике. */
+  private handleInteractiveMechanic(obj: THREE.Object3D, ud: { interactiveKind?: string; interactiveState?: string }): void {
+    const kind = ud.interactiveKind;
+    const state = ud.interactiveState ?? 'intact';
+    if (state !== 'intact') return; // уже сломано/горит/обрушилось
+
+    if (kind === 'crate') {
+      // Толкание ящика: сдвигаем в направлении взгляда игрока
+      this.pushCrate(obj);
+    } else if (kind === 'oil_jug') {
+      // Поджог кувшина: если у игрока есть огненный навык/предмет — поджигаем
+      this.igniteOilJug(obj);
+    } else if (kind === 'awning') {
+      // Обрушение навеса: если удар достаточно сильный — рушится
+      this.collapseAwning(obj);
+    }
+  }
+
+  /** Толкнуть ящик в направлении взгляда игрока. */
+  private pushCrate(obj: THREE.Object3D): void {
+    const pushDist = 1.2; // метров за клик
+    const yaw = this.yaw;
+    const newX = obj.position.x + Math.sin(yaw) * pushDist;
+    const newZ = obj.position.z + Math.cos(yaw) * pushDist;
+    // Проверка коллизий: не толкать сквозь стены
+    if (!this.checkCrateCollision(newX, newZ, obj)) {
+      obj.position.x = newX;
+      obj.position.z = newZ;
+      // Обновить коллайдеры в COLLIDERS
+      this.updateCrateCollider(obj, newX, newZ);
+    }
+  }
+
+  /** Проверить, не всталкивает ли ящик в стену/объект. */
+  private checkCrateCollision(x: number, z: number, ignoreObj: THREE.Object3D): boolean {
+    const crateR = 0.6;
+    for (const c of COLLIDERS) {
+      // игнорировать собственный коллайдер
+      if (Math.abs(c.x - ignoreObj.position.x) < 0.1 && Math.abs(c.z - ignoreObj.position.z) < 0.1) continue;
+      if (Math.hypot(x - c.x, z - c.z) < crateR + c.r) return true;
+    }
+    return false;
+  }
+
+  /** Обновить позицию коллайдера ящика. */
+  private updateCrateCollider(obj: THREE.Object3D, x: number, z: number): void {
+    for (const c of COLLIDERS) {
+      if (Math.abs(c.x - obj.position.x) < 0.1 && Math.abs(c.z - obj.position.z) < 0.1) {
+        c.x = x; c.z = z; break;
+      }
+    }
+  }
+
+  /** Поджечь кувшин с маслом. */
+  private igniteOilJug(obj: THREE.Object3D): void {
+    // Проверка: есть ли у игрока огненный навык/предмет (упрощённо: всегда поджигаем при клике)
+    obj.userData.state = 'burning';
+    // Визуал горения: добавить пламя/дым
+    this.addBurningEffect(obj);
+    // Через burnTime секунд — превратить в сгоревшее
+    const burnTime = (obj.userData as any).burnTime ?? 10;
+    setTimeout(() => {
+      obj.userData.state = 'broken';
+      this.removeBurningEffect(obj);
+      this.addBrokenEffect(obj);
+    }, burnTime * 1000);
+  }
+
+  /** Добавить эффект горения к кувшину. */
+  private addBurningEffect(obj: THREE.Object3D): void {
+    const fire = new THREE.Mesh(
+      new THREE.ConeGeometry(0.3, 0.8, 8),
+      M.fire
+    );
+    fire.position.y = 1.2;
+    fire.userData = { isBurningEffect: true };
+    obj.add(fire);
+    // Дым: простой материал вместо M.smoke (нет в M)
+    const smokeMat = new THREE.MeshStandardMaterial({
+      color: 0x444444, transparent: true, opacity: 0.6, depthWrite: false
+    });
+    const smoke = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.4, 1.5, 8),
+      smokeMat
+    );
+    smoke.position.y = 2.0;
+    smoke.userData = { isBurningEffect: true };
+    obj.add(smoke);
+    // Сохранить материал для dispose
+    (smoke as any)._smokeMat = smokeMat;
+  }
+
+  /** Убрать эффект горения. */
+  private removeBurningEffect(obj: THREE.Object3D): void {
+    obj.traverse(child => {
+      if ((child as THREE.Mesh).userData?.isBurningEffect) {
+        obj.remove(child);
+        const mesh = child as THREE.Mesh;
+        mesh.geometry?.dispose();
+        const mat = mesh.material as THREE.Material | THREE.Material[];
+        if (Array.isArray(mat)) {
+          mat.forEach(m => m.dispose());
+        } else if (mat) {
+          mat.dispose();
+        }
+        // Удалить кастомный материал дыма
+        const smokeMat = (mesh as any)._smokeMat;
+        if (smokeMat) smokeMat.dispose();
+      }
+    });
+  }
+
+  /** Добавить эффект сгоревшего кувшина. */
+  private addBrokenEffect(obj: THREE.Object3D): void {
+    // Можно добавить обугленный вид или оставить как есть
+    obj.traverse(child => {
+      if (child instanceof THREE.Mesh && child.material) {
+        (child.material as THREE.MeshStandardMaterial).emissive.setHex(0x000000);
+      }
+    });
+  }
+
+  /** Обрушить навес. */
+  private collapseAwning(obj: THREE.Object3D): void {
+    obj.userData.state = 'collapsed';
+    // Анимация обрушения: наклонить стойки и уронить крышу
+    this.animateAwningCollapse(obj);
+  }
+
+  /** Анимация обрушения навеса. */
+  private animateAwningCollapse(obj: THREE.Object3D): void {
+    const posts: THREE.Mesh[] = [];
+    const roofRef: { current: THREE.Mesh | null } = { current: null };
+    obj.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        const geo = child.geometry as THREE.BufferGeometry;
+        if (geo && geo.type === 'CylinderGeometry') posts.push(child);
+        else if (geo && geo.type === 'BoxGeometry' && child.position.y > 2) roofRef.current = child;
+      }
+    });
+    // Наклонить стойки
+    posts.forEach((post, i) => {
+      const targetRot = (i % 2 === 0) ? -0.8 : 0.8;
+      // Простая анимация без tween: сразу наклоняем
+      post.rotation.x = targetRot;
+      post.position.y *= 0.5;
+    });
+    // Уронить крышу
+    const roof = roofRef.current;
+    if (roof) {
+      roof.position.y = 0.8;
+      roof.rotation.x = 0.3;
+      roof.rotation.z = 0.2;
+    }
   }
 
   /** Клик по двери здания: только детект. Телепорт — лишь после ACK
