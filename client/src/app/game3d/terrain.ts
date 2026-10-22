@@ -5049,15 +5049,101 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
       const leg2 = leg1.clone(); leg2.position.x = 1;
       pier.add(leg1, leg2);
     }
-    // лодка у пирса
+    // Лодка у пирса (§297).
+    //
+    // БЫЛО: корпус — конус, парус — плоская плита на мачте. Лодка читалась
+    // как воронка с фантиком на палке.
+    // ТЕПЕРЬ: корпус с выгнутым днищем, острым носом и круглой кормой;
+    // борта, поперечные планки, киль; мачта с поперечиной; парус с провисом
+    // на верёвочных штагах; вёсла у борта.
     const boat = new THREE.Group();
-    const hull = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.5, 3.4, 7), MAT.wood);
-    hull.rotation.x = Math.PI / 2; hull.scale.y = 0.45;
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.6, 5), MAT.trunk);
+    const длина = 3.6;
+    const секций = 8;
+    const дуги = 6;
+    const вершины: number[] = [];
+    const индексы: number[] = [];
+    for (let i = 0; i <= секций; i++) {
+      const t = i / секций;
+      const z = -длина / 2 + длина * t;
+      // Ширина: у носа сходит на конус, у кормы широкая.
+      const ширина = 0.44 * Math.sin(Math.min(1, t * 1.2) * Math.PI * 0.86 + 0.1);
+      const высота = 0.36 * (0.68 + 0.32 * Math.sin(t * Math.PI));
+      for (let j = 0; j <= дуги; j++) {
+        const a = (j / дуги) * Math.PI;
+        // От левого борта через днище к правому.
+        вершины.push(-Math.cos(a) * ширина, -Math.sin(a) * высота, z);
+      }
+    }
+    for (let i = 0; i < секций; i++) {
+      for (let j = 0; j < дуги; j++) {
+        const a = i * (дуги + 1) + j;
+        const b = (i + 1) * (дуги + 1) + j;
+        индексы.push(a, b, b + 1, a, b + 1, a + 1);
+      }
+    }
+    const корпусГео = new THREE.BufferGeometry();
+    корпусГео.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
+    корпусГео.setIndex(индексы);
+    корпусГео.computeVertexNormals();
+    const доски = (MAT.wood as THREE.MeshStandardMaterial).clone();
+    доски.side = THREE.DoubleSide; // из лодки видно и внутренний борт
+    const корпус = new THREE.Mesh(корпусГео, доски);
+    корпус.position.y = 0.42;
+    корпус.castShadow = true;
+    boat.add(корпус);
+    // Киль: доска вдоль днища.
+    const киль = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, длина * 0.9), MAT.trunk);
+    киль.position.y = 0.12;
+    boat.add(киль);
+    // Поперечные планки — сиденья.
+    for (const z of [-0.9, 0.2, 1.1]) {
+      const планка = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.07, 0.2), MAT.wood);
+      планка.position.set(0, 0.38, z);
+      boat.add(планка);
+    }
+    // Борта: ободок по краю.
+    for (const side of [-1, 1]) {
+      const борт = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, длина * 0.86), MAT.wood);
+      борт.position.set(side * 0.4, 0.4, 0.05);
+      boat.add(борт);
+    }
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.6, 6), MAT.trunk);
     mast.position.y = 1.4;
-    const sail = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.3, 0.05), MAT.clothTeal);
-    sail.position.set(0, 1.5, 0.1);
-    boat.add(hull, mast, sail);
+    mast.castShadow = true;
+    boat.add(mast);
+    // Поперечина, на которой висит парус.
+    const поперечина = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.8, 5), MAT.trunk);
+    поперечина.rotation.z = Math.PI / 2;
+    поперечина.position.set(0, 2.2, 0.05);
+    boat.add(поперечина);
+    // Парус с провисом: плоская плита выглядела бы фантиком.
+    const парус = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.66, 0.66, 1.5, 10, 1, true, -Math.PI / 2, Math.PI),
+      MAT.clothTeal,
+    );
+    парус.rotation.set(0, 0, Math.PI / 2);
+    парус.position.set(0, 1.5, 0.12);
+    парус.material = (MAT.clothTeal as THREE.MeshStandardMaterial).clone();
+    (парус.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+    boat.add(парус);
+    // Штаги: верёвочные растяжки от мачты к бортам.
+    for (const side of [-1, 1]) {
+      const штаг = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 2.1, 4), MAT.dark);
+      штаг.position.set(side * 0.3, 1.5, 0.35);
+      штаг.rotation.set(0.32, 0, side * 0.42);
+      boat.add(штаг);
+    }
+    // Вёсла у борта.
+    for (const side of [-1, 1]) {
+      const весло = new THREE.Group();
+      const древко = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.8, 5), MAT.trunk);
+      древко.rotation.z = Math.PI / 2;
+      древко.position.set(side * 0.85, 0.42, 0.3);
+      const лопасть = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.18), MAT.wood);
+      лопасть.position.set(side * 1.65, 0.42, 0.3);
+      весло.add(древко, лопасть);
+      boat.add(весло);
+    }
     boat.position.set(1.8, LAKE.level + 0.35, -13);
     pier.add(boat);
     // Лодка качается вместе с водой (§277): движку нужен доступ к ней.
