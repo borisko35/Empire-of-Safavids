@@ -5175,6 +5175,55 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
       const leg2 = leg1.clone(); leg2.position.x = 1;
       pier.add(leg1, leg2);
     }
+    // Чайки на сваях у причала (§303).
+    //
+    // БЫЛО: причал был пустым, а чайки в этом мире летали только в небе
+    // (§273, §279): вблизи воды не было ни одной птицы, и озеро читалось как
+    // зеркало без живности.
+    //
+    // ТЕПЕРЬ: чайки стоят на сваях — туловище, голова, клюв, хвост и тонкие
+    // ноги; одна сидит на перилах, две стоят.
+    const чайкаМатериал = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.9 });
+    const чайкаТёмная = new THREE.MeshStandardMaterial({ color: 0x8a8e96, roughness: 0.9 });
+    const клювМатериал = new THREE.MeshStandardMaterial({ color: 0xd8a13a, roughness: 0.6 });
+    const поставитьЧайку = (x: number, z: number, поворот: number, наПерилах: boolean) => {
+      const чайка = new THREE.Group();
+      const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.2, 3, 8), чайкаМатериал);
+      тело.rotation.x = Math.PI / 2;
+      тело.position.y = 0.16;
+      тело.castShadow = true;
+      чайка.add(тело);
+      const голова = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), чайкаМатериал);
+      голова.position.set(0, 0.3, -0.16);
+      чайка.add(голова);
+      // Клюв — оранжевый, по нему чайку и узнают.
+      const клюв = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.12, 5), клювМатериал);
+      клюв.rotation.x = -Math.PI / 2;
+      клюв.position.set(0, 0.29, -0.27);
+      чайка.add(клюв);
+      // Крылья вдоль тела.
+      for (const side of [-1, 1]) {
+        const крыло = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.3), чайкаТёмная);
+        крыло.position.set(side * 0.1, 0.17, 0.02);
+        чайка.add(крыло);
+      }
+      // Хвост.
+      const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.16), чайкаТёмная);
+      хвост.position.set(0, 0.15, 0.2);
+      чайка.add(хвост);
+      // Тонкие ноги — чайка на свае держится двумя пальцами.
+      for (const side of [-1, 1]) {
+        const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.16, 4), клювМатериал);
+        нога.position.set(side * 0.04, 0.08, 0);
+        чайка.add(нога);
+      }
+      чайка.position.set(x, наПерилах ? 0.64 : 0.5, z);
+      чайка.rotation.y = поворот;
+      pier.add(чайка);
+    };
+    поставитьЧайку(-1, -1.9, 0.6, true);
+    поставитьЧайку(1, -5.7, -0.4, false);
+    поставитьЧайку(-1, -9.5, 2.1, false);
     // Лодка у пирса (§297).
     //
     // БЫЛО: корпус — конус, парус — плоская плита на мачте. Лодка читалась
