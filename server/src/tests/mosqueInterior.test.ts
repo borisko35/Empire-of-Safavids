@@ -165,19 +165,21 @@ describe('Мечеть: зал обставлен тем, что просили'
     // как цилиндр с балконом, конусом и шпилем.
     //
     // Поэтому здесь проверяется геометрия: ствол, балкон, вершина и шпиль —
-    // четыре обязательные детали минарета.
+    // четыре обязательные детали минарета. §317 добавил к ним цоколь, пояса
+    // и ограду, а ствол перевёл на метрический UV и луковичную главку:
+    // проверки идут по нынешним числам, иначе сторож запрещал бы развитие.
     const земля = читать('client/src/app/game3d/terrain.ts');
     must(
-      /const shaft = new THREE\.Mesh\(new THREE\.CylinderGeometry\(1\.1, 1\.4, 22, 10\)/.test(земля),
+      /const ствол = metricCylinderUV\(\s*new THREE\.CylinderGeometry\(1\.1, 1\.45, 22, 14\)/.test(земля),
       'в terrain.ts нет ствола минарета: минарет не построен'
     );
-    must(/const balcony = new THREE\.Mesh\(new THREE\.CylinderGeometry\(1\.9/.test(земля),
+    must(/const балкон = new THREE\.Mesh\(new THREE\.CylinderGeometry\(2\.0, 2\.35, 0\.55, 14\)/.test(земля),
       'у минарета нет балкона');
-    must(/const top = new THREE\.Mesh\(new THREE\.ConeGeometry\(1\.5, 4, 10\)/.test(земля),
+    must(/const top = new THREE\.Mesh\(onionDomeGeometry\(1\.65, 2\.7, 12\)/.test(земля),
       'у минарета нет вершины');
-    must(/const finial = new THREE\.Mesh\(new THREE\.SphereGeometry\(0\.5/.test(земля),
+    must(/const finial = new THREE\.Mesh\(new THREE\.SphereGeometry\(0\.45/.test(земля),
       'у минарета нет шпиля');
-    must(/const dome = new THREE\.Mesh\(new THREE\.SphereGeometry\(7\.5/.test(земля),
+    must(/const dome = new THREE\.Mesh\(onionDomeGeometry\(7\.4, 10\.8, 22\)/.test(земля),
       'в terrain.ts нет купола мечети');
     must(/mosque\.position\.set\(/.test(земля), 'мечеть не поставлена на площадь');
   });
