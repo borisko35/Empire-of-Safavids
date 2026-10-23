@@ -11,6 +11,7 @@ import { buildHumanoid, HumanoidCfg, type Rig } from './rig';
 import { spriteVisible } from './spriteClamp';
 import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight, REGION_TOWNS } from './terrain';
 import { GATE } from './terrain';
+import { loadCharacterModel, loadAnimationClips } from './characterModels';
 
 // Стража ворот стоит относительно ворот (а не на захардкоженных точках),
 // поэтому переживает смену радиуса города. GATE — мировые координаты.
@@ -297,6 +298,113 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   // патруль не требует правок клиента - модель найдётся по id NPC.
   const walkers: { post: GuardPost; group: THREE.Group }[] = [];
 
+  // ── Хранилище для реальных моделей NPC: ключ = npcId ──
+  const realModels = new Map<string, {
+    group: THREE.Group;
+    mixer: THREE.AnimationMixer;
+    clips: Map<string, THREE.AnimationClip | null>;
+    currentAction: THREE.AnimationAction | null;
+    proceduralGroup: THREE.Group; // старый процедурный риг для фолбэка
+  }>();
+
+  // Определить тип модели по NPC definition
+  function getModelTypeFromDef(def: NpcDef): string {
+    const id = def.id;
+    if (id.includes('guard') || id.includes('warden') || id.includes('sentry') || id.includes('watch')) return 'guard';
+    if (id.includes('merchant') || id.includes('trader') || id.includes('vendor') || id.includes('shopkeeper') || id.includes('blacksmith') || id.includes('artisan')) return 'merchant';
+    if (id.includes('crier') || id.includes('herald') || id.includes('diplomat') || id.includes('noble') || id.includes('official')) return 'diplomat';
+    if (id.includes('archer') || id.includes('scout') || id.includes('ranger')) return 'archer';
+    if (id.includes('bandit') || id.includes('raider') || id.includes('reaver') || id.includes('highwayman') || id.includes('outlaw') || id.includes('corsair') || id.includes('caravan_raider')) return 'bandit';
+    if (id.includes('janissary') || id.includes('ottoman') || id.includes('pasha')) return 'janissary';
+    if (id.includes('mongol') || id.includes('steppe')) return 'mongol';
+    if (id.includes('undead') || id.includes('skeleton') || id.includes('zombie') || id.includes('ghost')) return 'undead';
+    if (id.includes('spirit') || id.includes('elemental') || id.includes('djinn') || id.includes('div') || id.includes('demon') || id.includes('dust_lord') || id.includes('horizon_terror') || id.includes('limit_stalker')) return 'demon';
+    if (id.includes('assassin') || id.includes('acolyte')) return 'assassin';
+    if (id.includes('knight') || id.includes('warrior') || id.includes('champion') || id.includes('veteran') || id.includes('paladin')) return 'paladin';
+    if (id.includes('mystic') || id.includes('sufi') || id.includes('scholar')) return 'mystic';
+    if (id.includes('herat_gate_guard') || id.includes('ridge_watch') || id.includes('border_warden') || id.includes('caucasus_guard')) return 'guard';
+    if (id.includes('herat_road_reaver') || id.includes('east_road_reaver') || id.includes('west_plain_stalker')) return 'bandit';
+    if (id.includes('harbor_brute') || id.includes('west_border_warden')) return 'guard';
+    if (id.includes('king') || id.includes('boss') || id.includes('rustam') || id.includes('simurgh') || id.includes('arzhang')) return 'paladin';
+    if (id.includes('road_bandit')) return 'bandit';
+    // По умолчанию — обычный житель
+    return 'citizen';
+  }
+
+  // Загрузить и применить реальную модель для NPC
+  async function applyRealModel(npcId: string, modelType: string, proceduralGroup: THREE.Group, position: THREE.Vector3, rotation: THREE.Euler): Promise<void> {
+    try {
+      const modelGroup = await loadCharacterModel(modelType);
+      if (!modelGroup) return; // фолбэк на процедурный
+
+      // Клонируем модель для этого NPC
+      const cloned = modelGroup.clone(true);
+      cloned.position.copy(position);
+      cloned.rotation.copy(rotation);
+
+      // Настроить масштаб под TARGET_HEIGHT (как в realRig)
+      const box = new THREE.Box3().setFromObject(cloned);
+      const height = box.max.y - box.min.y;
+      const scale = height > 0 ? 1.9 / height : 1;
+      cloned.scale.multiplyScalar(scale);
+
+      cloned.traverse((obj) => {
+        if (obj instanceof THREE.SkinnedMesh) {
+          // Включить тени
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+          // Материалы будут перекрашиваться через модель tint если нужно
+        }
+      });
+
+      // Создать AnimationMixer и загрузить базовые клипы
+      const mixer = new THREE.AnimationMixer(cloned);
+      const clips = await loadAnimationClips(['idle', 'walk', 'run', 'attack', 'death', 'hurt']);
+      
+      // Запустить idle анимацию
+      let currentAction: THREE.AnimationAction | null = null;
+      if (clips.get('idle')) {
+        currentAction = mixer.clipAction(clips.get('idle')!);
+        currentAction.loop = THREE.LoopRepeat;
+        currentAction.clampWhenFinished = false;
+        currentAction.play();
+      }
+
+      // Переместить userData с процедурного рига на реальный
+      cloned.traverse(o => {
+        o.userData.npcPanel = proceduralGroup.userData.npcPanel;
+        o.userData.npcName = proceduralGroup.userData.npcName;
+        o.userData.npcId = proceduralGroup.userData.npcId;
+      });
+
+      // Заменить процедурный риг на реальный в сцене
+      const parent = proceduralGroup.parent;
+      if (parent) {
+        parent.remove(proceduralGroup);
+        parent.add(cloned);
+      }
+
+      // Сохранить ссылку на реальную модель
+      realModels.set(npcId, {
+        group: cloned,
+        mixer,
+        clips,
+        currentAction,
+        proceduralGroup,
+      });
+
+      // Обновить clickTargets: убрать старый, добавить новый
+      const idx = clickTargets.indexOf(proceduralGroup);
+      if (idx >= 0) {
+        clickTargets[idx] = cloned;
+      }
+
+    } catch (e) {
+      console.warn(`[npc] Failed to load real model for ${npcId}:`, e);
+      // Остаёмся на процедурном риге
+    }
+  }
+
   // ── Фигуры переходных зон ──
   // Появляются и исчезают по расписанию из shared/stealth.ts. Ни одна из них
   // не кликабельна и не пишется в COLLIDERS: это проходящие по тропе, а не
@@ -326,10 +434,12 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
     group.add(rig.group);
     переходные.push({ kind: событие.kind, group: rig.group, rig });
   }
+
   const rigs: {
     update: (dt: number, p: { moving: boolean; speed: number; grounded: boolean; crouch: boolean; block: boolean; dead: boolean; swimming: boolean }) => void;
     x: number;
     z: number;
+    npcId: string;
   }[] = [];
 
   for (const { origin, npcs } of NPC_GROUPS) {
@@ -338,14 +448,11 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       const z = origin.z + def.dz;
       const y = groundHeight(x, z);
 
+      // Создаём процедурный риг сразу (для click targets, colliders, имен)
       const rig = buildHumanoid(def.look);
       rig.group.position.set(x, y, z);
-      // Если этот NPC - сторожевой пост с маршрутом, передаём его тело в
-      // список патрульных. Связь по id: координаты поста и координаты NPC
-      // сверяет проверка постов, поэтому рассинхронизации тут не будет.
-      const пост = GUARD_POSTS.find((p) => p.id === def.id && p.patrol);
-      if (пост) walkers.push({ post: пост, group: rig.group });
-      // Лицом к центру поселения
+      const post = GUARD_POSTS.find((p) => p.id === def.id && p.patrol);
+      if (post) walkers.push({ post, group: rig.group });
       rig.group.rotation.y = Math.atan2(origin.x - x, origin.z - z) + Math.PI;
       rig.group.traverse(o => {
         o.userData.npcPanel = def.panel;
@@ -353,7 +460,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
         o.userData.npcId = def.id;
       });
       group.add(rig.group);
-      rigs.push({ update: (dt, p) => rig.update(dt, p), x, z });
+      rigs.push({ update: (dt, p) => rig.update(dt, p), x, z, npcId: def.id });
       clickTargets.push(rig.group);
       COLLIDERS.push({ x, z, r: 0.55 });
 
@@ -361,16 +468,9 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       const name = textSprite(def.nameRu);
       name.position.set(x, y + 2.35, z);
       group.add(name);
-      // ТУТ БЫЛА ГИГАНТСКАЯ НАДПИСЬ. Имя — спрайт мирового размера, а у
-      // спрайтов sizeAttenuation по умолчанию включён: они не только
-      // удаляются с расстоянием, но и РАСТУТ при приближении, без предела.
-      // Подойдя к стражнику вплотную, игрок получал «Стражник Фарид»
-      // во весь экран поверх мира. Здесь не размер меряется, а близость:
-      // в упор имя читать не нужно, там и так видно, кто перед тобой.
       names.push({ sprite: name, worldSize: 0.78, x, y: y + 2.35, z });
 
-      // Маркер квеста «!». Он тоже спрайт мирового размера, а значит тоже
-      // разрастается в упор — в список надписей он входит по той же причине.
+      // Маркер квеста «!»
       if (def.quest) {
         const marker = questMarker();
         marker.position.set(x, y + 3.15, z);
@@ -378,12 +478,25 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
         markers.push({ sprite: marker, phase: Math.random() * Math.PI * 2, baseY: y + 3.15 });
         names.push({ sprite: marker, worldSize: 0.85, x, y: y + 3.15, z });
       }
+
+      // Асинхронно загрузить реальную модель
+      const modelType = getModelTypeFromDef(def);
+      const pos = new THREE.Vector3(x, y, z);
+      const rot = new THREE.Euler(0, rig.group.rotation.y, 0);
+      applyRealModel(def.id, modelType, rig.group, pos, rot);
     }
   }
 
   scene.add(group);
 
   function update(dt: number, now: number, камера?: THREE.Vector3): void {
+    // Обновляем AnimationMixer для реальных моделей (близкие NPC)
+    for (const [npcId, realModel] of realModels) {
+      const rigEntry = rigs.find(r => r.npcId === npcId);
+      if (!rigEntry) continue;
+      if (камера && Math.hypot(rigEntry.x - камера.x, rigEntry.z - камера.z) > 70) continue;
+      realModel.mixer.update(dt);
+    }
     for (const r of rigs) {
       // ДАЛЬНИЕ ЖИТЕЛИ НЕ ПЕРЕСЧИТЫВАЮТСЯ (§253). Поза камерой анимацию
       // никто не видит, а пересчёт позы стоит процессора: из-за этого в мире
@@ -449,11 +562,34 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   }
 
   function dispose(): void {
+    // Очистить реальные модели
+    for (const [, realModel] of realModels) {
+      realModel.group.traverse(o => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material as THREE.Material | THREE.Material[];
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
+        }
+      });
+      realModel.proceduralGroup.traverse(o => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          const mat = o.material as THREE.Material | THREE.Material[];
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
+        }
+      });
+    }
+    realModels.clear();
+
     for (const t of clickTargets) {
       t.traverse(o => {
         if (o instanceof THREE.Mesh) {
           o.geometry.dispose();
-          (o.material as THREE.Material).dispose();
+          const mat = o.material as THREE.Material | THREE.Material[];
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat.dispose();
         }
       });
     }
