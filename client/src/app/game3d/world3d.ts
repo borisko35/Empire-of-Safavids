@@ -51,6 +51,7 @@ import { createTownfolk, TownfolkHandle } from './townfolk';
 import { createRoadTraffic, RoadTrafficHandle } from './roadTraffic';
 import { createWeather, WeatherHandle, type WeatherKind } from './weather';
 import { buildTownBuildings, createInteriors, InteriorsHandle, INTERIOR_COLLIDERS, POCKET_COLLIDERS, buildPocketGround, pocketGroundY, BUILDINGS, M } from './interiors';
+import { DestructibleData, damageDestructible, applyDestructibleVisuals, createBreakEffect } from './destructible';
 import { setTextureAnisotropy } from './textures';
 import { setSurfaceAnisotropy } from './surfaces';
 import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
@@ -275,6 +276,8 @@ export class World3D {
   private interiors!: InteriorsHandle;
   private doorTargets: THREE.Object3D[] = [];
   private interactiveTargets: THREE.Object3D[] = [];
+  private climbTargets: THREE.Object3D[] = [];
+  private destructibleTargets: THREE.Object3D[] = [];
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
@@ -1027,6 +1030,8 @@ private roll = 0;
     // с более строгой дистанцией (3.5 м вместо 22 м для дверей).
     for (const r of this.interiors.rooms.values()) {
       for (const obj of r.interactiveTargets) this.interactiveTargets.push(obj);
+      for (const obj of r.climbTargets) this.climbTargets.push(obj);
+      for (const obj of r.destructibleTargets) this.destructibleTargets.push(obj);
     }
     buildPocketGround(this.scene);
     this.navigator = createNavigator(this.scene);
@@ -1475,6 +1480,8 @@ private roll = 0;
 
     if (this.pickInteractive()) return;
 
+    if (this.pickDestructible()) return;
+
     // Мягкое прицеливание: конус от камеры, затем близость
     const id = this.acquireTarget();
     if (id && this.entities) {
@@ -1530,7 +1537,48 @@ private roll = 0;
     return true;
   }
 
-  /** Геймплейная механика интерактивного объекта при клике. */
+  /** Клик по разрушаемому декору: ящик, бочка, ваза, мебель, окно. */
+  private pickDestructible(): boolean {
+    if (!this.me || !this.destructibleTargets.length) return false;
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const hits = ray.intersectObjects(this.destructibleTargets, true);
+    if (!hits.length || hits[0].distance > 22) return false;
+    const obj = hits[0].object;
+    const ud = obj.userData as DestructibleData;
+    if (!ud || !ud.kind) return false;
+    const objPos = obj.getWorldPosition(new THREE.Vector3());
+    const dx = this.me.pos.x - objPos.x;
+    const dz = this.me.pos.z - objPos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 3.5) return false;
+
+    // Нанести урон разрушаемому объекту
+    const { broken, newState } = damageDestructible(obj, 25, 'physical');
+    if (newState !== 'intact') {
+      applyDestructibleVisuals(obj);
+    }
+    if (broken) {
+      // Эффект разрушения
+      const breakEffect = createBreakEffect(obj, obj.getWorldPosition(new THREE.Vector3()));
+      this.scene.add(breakEffect);
+      // Удалить через 3 сек
+      setTimeout(() => {
+        this.scene.remove(breakEffect);
+        breakEffect.traverse(child => {
+          const mesh = child as THREE.Mesh;
+          mesh.geometry?.dispose();
+          const mat = mesh.material as THREE.Material | THREE.Material[];
+          if (Array.isArray(mat)) mat.forEach(m => m.dispose());
+          else mat?.dispose();
+        });
+      }, 3000);
+    }
+    // Уведомить UI
+    this.callbacks?.onInteractive?.(ud.kind, newState, obj);
+    return true;
+  }
+
   private handleInteractiveMechanic(obj: THREE.Object3D, ud: { interactiveKind?: string; interactiveState?: string }): void {
     const kind = ud.interactiveKind;
     const state = ud.interactiveState ?? 'intact';
@@ -1732,6 +1780,7 @@ private roll = 0;
     this.interiors.exit();
     this.weather?.setInside(false);
     this.interactiveTargets.length = 0;
+    this.destructibleTargets.length = 0;
     this.me.pos.x = target.x;
     this.me.pos.y = target.y;
     this.me.pos.z = target.z;
@@ -1750,6 +1799,7 @@ private roll = 0;
     // Восстановить погоду при выходе локально (без сервера)
     if (!this.interiors.isInside()) this.weather?.setInside(false);
     this.interactiveTargets.length = 0;
+    this.destructibleTargets.length = 0;
     this.me.pos.x = def.exitX;
     this.me.pos.z = def.exitZ;
     this.me.pos.y = groundHeight(def.exitX, def.exitZ);
@@ -2745,7 +2795,7 @@ if (isMe && moving) {
     this.roadTraffic?.dispose();
     // Миксеры анимации коров — двухуровневые ссылки на загруженные клипы;
     // без stop() анимации продолжают крутиться для снятых сцены моделей.
-    for (const mx of this.cowMixers ?? []) mx.stopAllAction();
+    for (const mx of this.cowMixers) mx.stopAllAction();
     // SSAO: освобождаем рендер-таргеты композитора
     this.composer?.dispose();
     this.deferred?.dispose();

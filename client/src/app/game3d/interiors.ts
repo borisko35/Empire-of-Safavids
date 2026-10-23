@@ -1917,6 +1917,10 @@ interface Room {
   documentTargets: THREE.Object3D[];
   /** Интерактивные объекты: ящики, кувшины, навесы. */
   interactiveTargets: THREE.Object3D[];
+  /** Подъемные лестницы: можно лазить вверх-вниз. */
+  climbTargets: THREE.Object3D[];
+  /** Разрушаемые объекты: ящики, бочки, вазы, мебель, окна. */
+  destructibleTargets: THREE.Object3D[];
 }
 
 // ── Зал таверны из диорамы ────────────────────────────────────
@@ -2048,8 +2052,10 @@ function buildTavernRoom(scene: THREE.Scene, def: BuildingDef): Room {
     colliders.push({ x: place.x, z: place.z, r: 1.2 });
   }
   const interactiveTargets: THREE.Object3D[] = [];
+  const climbTargets: THREE.Object3D[] = [];
+  const destructibleTargets: THREE.Object3D[] = [];
   scene.add(g);
-  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets };
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets };
 }
 
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
@@ -2273,7 +2279,9 @@ caravanserai: furnishCaravanserai,
   }
 
   scene.add(g);
-  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets };
+  const climbTargets: THREE.Object3D[] = [];
+  const destructibleTargets: THREE.Object3D[] = [];
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets };
 }
 
 // ── Хендл ────────────────────────────────────────────────────
