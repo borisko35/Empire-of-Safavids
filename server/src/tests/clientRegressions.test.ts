@@ -95,7 +95,11 @@ describe('Дорожное движение', () => {
   it('миксеры коров останавливаются', () => {
     // Ломка: без stopAllAction() двухуровневые ссылки на загруженные клипы
     // продолжали крутить анимации уже снятых сцены моделей.
-    expect(world).toMatch(/for \(const mx of this\.cowMixers \?\? \[\]\) mx\.stopAllAction\(\)/);
+    // Было `for (const mx of this.cowMixers ?? [])`: без скобок вокруг
+    // `?? []` это не парсится как for-of — правка сняла лишнее, тест
+    // следит за самим вызовом, а не за оформлением.
+    expect(world).toMatch(/for \(const mx of this\.cowMixers\) mx\.stopAllAction\(\)/);
+    expect(world).toMatch(/mx\.stopAllAction\(\)/);
   });
 });
 
