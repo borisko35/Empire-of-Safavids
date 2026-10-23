@@ -11,6 +11,8 @@
 // телепорта и не верит клиентским координатам (защита от абьюза).
 
 import * as THREE from 'three';
+import type { DestructibleKind } from './destructible';
+import { createDestructibleCrate, createDestructibleBarrel, createDestructibleVase } from './destructible';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // Столы с документами берём из правила: сервер проверяет по тем же
@@ -1470,6 +1472,26 @@ function cyl(rt: number, rb: number, h: number, mat: THREE.Material, x: number, 
   return m;
 }
 
+/**
+ * Лестница в интерьере (§324): две тетивы и перекладины.
+ * groupId в userData несёт ladderTop - до какой высоты (в мировых координатах)
+ * ведёт подъем; world3d по нему заканчивает технику и ставит игрока на плату.
+ */
+function createInteriorLadder(x: number, baseY: number, z: number, h: number, ry = 0): THREE.Group {
+  const g = new THREE.Group();
+  g.position.set(x, baseY, z);
+  g.rotation.y = ry;
+  for (const бок of [-0.34, 0.34]) {
+    g.add(box(0.09, h, 0.09, M.woodDark, бок, h / 2, 0));
+  }
+  const перекладин = Math.max(1, Math.round(h / 0.38) - 1);
+  for (let i = 1; i <= перекладин; i++) {
+    g.add(box(0.6, 0.07, 0.07, M.wood, 0, (h * i) / (перекладин + 1), 0));
+  }
+  g.userData = { ladderHeight: h, ladderTop: baseY + h };
+  return g;
+}
+
 /** Табличка с названием над дверью. */
 function signMesh(text: string): THREE.Mesh {
   const c = document.createElement('canvas');
@@ -1921,7 +1943,66 @@ interface Room {
   climbTargets: THREE.Object3D[];
   /** Разрушаемые объекты: ящики, бочки, вазы, мебель, окна. */
   destructibleTargets: THREE.Object3D[];
+  /** Мезонины: площадки, на которые ведут лестницы. y = верхняя поверхность. */
+  platforms: PlatformBox[];
 }
+
+/** Площадка мезонина: AABB по мировым XZ, y - верхняя поверхность. */
+export interface PlatformBox {
+  x: number;
+  z: number;
+  w: number;
+  d: number;
+  y: number;
+}
+
+/** План мезонина: смещения от центра комнаты, ry - куда смотрит лестница. */
+interface MezzaninePlan {
+  px: number;
+  pz: number;
+  w: number;
+  d: number;
+  /** Высота подъема: и высота лестницы, и верх платформы над полом. */
+  h: number;
+  lx: number;
+  lz: number;
+  ry: number;
+}
+
+// Мезонины по комнатам. Лестница прислонена к стене и стоит ПОД платформой:
+// сход с вершины происходит ровно на плату, без полушага в пустоту.
+// Свободные северные (казарма, конюшня, катакомбы) и южные (крепость) полосы
+// сняты с обстановки: стойки мезонина не врезаются в мебель.
+// Крепость: арсенал занимает север (cx-6..cx+6), клетки темницы - юг до cx+3;
+// свободный юго-восток вмещает платформу 5 м. Лестница на lx=4.8, а не по
+// центру плиты (6.5): южная стена несёт три проёма (x=-7, 0, +7, шириной
+// 3.2 м), и лестница с телом шириной 0.68 в проёме x=+7 (5.4..8.6) закрыла
+// бы сам выход. Порог сторожа - 2.0 м от центра проёма.
+const VERTICAL_MAP: Record<string, MezzaninePlan[] | undefined> = {
+  stable: [{ px: 6.5, pz: -6.5, w: 5, d: 2.5, h: 2.6, lx: 6.5, lz: -7.45, ry: 0 }],
+  barracks: [{ px: 6.2, pz: -6.5, w: 5, d: 2.5, h: 2.6, lx: 6.2, lz: -7.45, ry: 0 }],
+  catacombs: [{ px: 13.2, pz: -12.2, w: 4.8, d: 2.6, h: 2.6, lx: 15.45, lz: -12.2, ry: Math.PI / 2 }],
+  fortress: [{ px: 6.5, pz: 6.55, w: 5, d: 2.4, h: 2.6, lx: 4.8, lz: 7.45, ry: Math.PI }],
+};
+
+// Разрушаемый декор по комнатам (§323): что и сколько поставить.
+// Ваза разбивается с одного удара, ящик держит два (HP 50 при уроне 25),
+// бочка взрывается при сломе — но поджога механикой мира она еще не
+// достигает: поджог приходит из клиентского клика позже.
+const DESTRUCTIBLE_MAP: Record<string, { kind: DestructibleKind; count: number }[] | undefined> = {
+  stable: [{ kind: 'crate', count: 2 }],
+  barracks: [{ kind: 'barrel', count: 2 }],
+  catacombs: [{ kind: 'crate', count: 3 }, { kind: 'barrel', count: 1 }],
+  fortress: [{ kind: 'crate', count: 1 }, { kind: 'barrel', count: 1 }],
+  hanza: [{ kind: 'crate', count: 2 }, { kind: 'barrel', count: 2 }],
+  khorasan_caves: [{ kind: 'barrel', count: 1 }],
+  caucasus_fort: [{ kind: 'crate', count: 2 }],
+  baghdad_citadel: [{ kind: 'barrel', count: 2 }],
+  palace: [{ kind: 'vase', count: 2 }],
+  auction_house: [{ kind: 'vase', count: 2 }],
+  shrine: [{ kind: 'vase', count: 1 }],
+  simurgh_temple: [{ kind: 'vase', count: 1 }],
+};
 
 // ── Зал таверны из диорамы ────────────────────────────────────
 // Габариты модели 30.92 x 16.34 x 58.77, пол на 0.40, стены до ±15.5/±29.4.
@@ -2054,8 +2135,11 @@ function buildTavernRoom(scene: THREE.Scene, def: BuildingDef): Room {
   const interactiveTargets: THREE.Object3D[] = [];
   const climbTargets: THREE.Object3D[] = [];
   const destructibleTargets: THREE.Object3D[] = [];
+  // Таверна - диорама: планировка замером модели, мезонин в ней не заводится,
+  // пока не начерчен на реальную модель.
+  const platforms: PlatformBox[] = [];
   scene.add(g);
-  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets };
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets, platforms };
 }
 
 function buildRoom(scene: THREE.Scene, def: BuildingDef): Room {
@@ -2255,6 +2339,61 @@ caravanserai: furnishCaravanserai,
     }
   }
 
+  // ── Разрушаемый декор (§323): ящики, бочки, вазы с HP ──────────
+  // Размещение детерминированное, как у интерактивных §320: при
+  // перезагрузке объекты стоят на тех же местах. Southern полоса у
+  // двери отрезана: ящик в проёме запер бы дверь.
+  const destructibleTargets: THREE.Object3D[] = [];
+  for (const план of DESTRUCTIBLE_MAP[def.kind as string] ?? []) {
+    for (let i = 0; i < план.count; i++) {
+      let seed = def.id.length * 7919 + i * 1103515245 + план.kind.length * 12011 + 31337;
+      const rnd = (): number => {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        return seed / 0x7fffffff;
+      };
+      const margin = 3;
+      const x = cx + (rnd() - 0.5) * (ширина - margin * 2);
+      // От южной стены отступ сверху: дверь - yверх комнаты (cz + hd),
+      // полоса 3 м перед ней свободна.
+      const z = cz + (rnd() - 0.5) * (глубина - margin * 2 - 3);
+      const ry = rnd() * Math.PI * 2;
+      let obj: THREE.Object3D | null = null;
+      if (план.kind === 'crate') obj = createDestructibleCrate(x, FLOOR_Y + 0.38, z, 0.75, 0.75, 0.75, ry);
+      else if (план.kind === 'barrel') obj = createDestructibleBarrel(x, FLOOR_Y, z, ry);
+      else if (план.kind === 'vase') obj = createDestructibleVase(x, FLOOR_Y, z, ry);
+      if (obj) {
+        g.add(obj);
+        destructibleTargets.push(obj);
+        colliders.push({ x, z, r: план.kind === 'vase' ? 0.4 : 0.6 });
+      }
+    }
+  }
+
+  // ── Мезонин (§324): платформа, на которую ведёт лестница ───────
+  // Лестница прислонена к стене и стоит ПОД платформой: сход с вершины
+  // приходит ровно на плату, а не в полушаге от края. Стойки у свободных
+  // краёв: у стены платформа держится сама, дальше - на опорах с пола.
+  const climbTargets: THREE.Object3D[] = [];
+  const platforms: PlatformBox[] = [];
+  for (const план of VERTICAL_MAP[def.kind as string] ?? []) {
+    const top = FLOOR_Y + план.h;
+    const плита = box(план.w, 0.22, план.d, M.woodDark, cx + план.px, top - 0.11, cz + план.pz);
+    плита.receiveShadow = true;
+    плита.castShadow = true;
+    g.add(плита);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+      const постX = cx + план.px + sx * (план.w / 2 - 0.12);
+      const постZ = cz + план.pz + sz * (план.d / 2 - 0.12);
+      g.add(box(0.18, план.h, 0.18, M.wood, постX, FLOOR_Y + план.h / 2, постZ));
+      colliders.push({ x: постX, z: постZ, r: 0.22 });
+    }
+    const лестница = createInteriorLadder(cx + план.lx, FLOOR_Y, cz + план.lz, план.h, план.ry);
+    g.add(лестница);
+    climbTargets.push(лестница);
+    colliders.push({ x: cx + план.lx, z: cz + план.lz, r: 0.42 });
+    platforms.push({ x: cx + план.px, z: cz + план.pz, w: план.w, d: план.d, y: top });
+  }
+
   // ── Стол с тайными документами ──
   const documentTargets: THREE.Object3D[] = [];
   for (const place of DOCUMENT_SPOTS) {
@@ -2279,9 +2418,7 @@ caravanserai: furnishCaravanserai,
   }
 
   scene.add(g);
-  const climbTargets: THREE.Object3D[] = [];
-  const destructibleTargets: THREE.Object3D[] = [];
-  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets };
+  return { def, group: g, colliders, exitDoors, documentTargets, interactiveTargets, climbTargets, destructibleTargets, platforms };
 }
 
 // ── Хендл ────────────────────────────────────────────────────

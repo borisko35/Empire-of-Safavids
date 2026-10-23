@@ -278,6 +278,8 @@ export class World3D {
   private interactiveTargets: THREE.Object3D[] = [];
   private climbTargets: THREE.Object3D[] = [];
   private destructibleTargets: THREE.Object3D[] = [];
+  /** Лестница, на которой сейчас стоим (§324). null - не лезем. */
+  private climb: THREE.Object3D | null = null;
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
@@ -1026,13 +1028,9 @@ private roll = 0;
     this.weather = createWeather(this.scene, audio);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
-    // Интерактивные объекты (ящики, кувшины, навесы) — отдельный список
-    // с более строгой дистанцией (3.5 м вместо 22 м для дверей).
-    for (const r of this.interiors.rooms.values()) {
-      for (const obj of r.interactiveTargets) this.interactiveTargets.push(obj);
-      for (const obj of r.climbTargets) this.climbTargets.push(obj);
-      for (const obj of r.destructibleTargets) this.destructibleTargets.push(obj);
-    }
+    // Интерьерные цели (интерактивы, разрушаемое, лестницы) больше не
+    // собираются здесь одним залпом: их держит refreshInteriorTargets()
+    // и обновляет на каждом входе/выходе из здания.
     buildPocketGround(this.scene);
     this.navigator = createNavigator(this.scene);
     // SSR включаем только там, где отражение и правда нужно. Время вызова
@@ -1544,9 +1542,17 @@ private roll = 0;
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
     const hits = ray.intersectObjects(this.destructibleTargets, true);
     if (!hits.length || hits[0].distance > 22) return false;
-    const obj = hits[0].object;
+    // userData лежит на ГРУППЕ разрушаемого объекта, а hits[0].object это
+    // mesh-потомок (крышка бочки, планка ящика). Поднимаемся от потомка к
+    // предку, который несёт деструкторное userData: раньше проверка стояла
+    // у hit-объекта напрямую, и все клики по разрушаемому молча глотались.
+    let target: THREE.Object3D | null = hits[0].object;
+    while (target && !(target.userData as DestructibleData)?.kind) {
+      target = target.parent;
+    }
+    if (!target) return false;
+    const obj = target;
     const ud = obj.userData as DestructibleData;
-    if (!ud || !ud.kind) return false;
     const objPos = obj.getWorldPosition(new THREE.Vector3());
     const dx = this.me.pos.x - objPos.x;
     const dz = this.me.pos.z - objPos.z;
@@ -1756,11 +1762,51 @@ private roll = 0;
   }
 
   /** Телепорт внутрь в точку от сервера (вызывать только по ack). */
+  /**
+   * Собрать интерьерные цели текущей комнаты заново. Раньше списки
+   * заполнялись один раз на init (§320): при выходе из здания они
+   * очищались и больше не возвращались - второй визит терял кликабельность
+   * ящиков, а вместе с ними и лестниц. Теперь источник истины - комнатные
+   * массивы, и цели пересобираются на каждом входе/выходе.
+   */
+  private refreshInteriorTargets(): void {
+    this.interactiveTargets.length = 0;
+    this.climbTargets.length = 0;
+    this.destructibleTargets.length = 0;
+    if (!this.interiors.isInside()) return;
+    const room = this.interiors.rooms.get(String(this.interiors.insideId() ?? ''));
+    if (!room) return;
+    this.interactiveTargets.push(...room.interactiveTargets);
+    this.climbTargets.push(...room.climbTargets);
+    this.destructibleTargets.push(...room.destructibleTargets);
+  }
+
+  /**
+   * Верхняя поверхность мезонина под ногами (§324), или null.
+   * feetY отсекает платформу, до которой далеко снизу: подпрыгнув с
+   * пола (1.44 м) до платы 2.6 м не долетаешь, ходить ПОД платформой
+   * можно свободно, а вот падение на плиту и шаг по ней засчитываются.
+   */
+  private platformTopAt(x: number, z: number, feetY: number): number | null {
+    if (!this.interiors.isInside()) return null;
+    const room = this.interiors.rooms.get(String(this.interiors.insideId() ?? ''));
+    if (!room || !room.platforms.length) return null;
+    let верх: number | null = null;
+    for (const p of room.platforms) {
+      if (Math.abs(x - p.x) <= p.w / 2 && Math.abs(z - p.z) <= p.d / 2 &&
+          feetY > p.y - 0.55) {
+        верх = верх !== null ? Math.max(верх, p.y) : p.y;
+      }
+    }
+    return верх;
+  }
+
   enterBuildingAt(id: string, target: { x: number; y: number; z: number }): boolean {
     if (!this.me) return false;
     const def = this.interiors.def(id);
     if (!def) return false;
     this.interiors.enter(id);
+    this.refreshInteriorTargets();
     this.weather?.setInside(true);
     this.me.pos.x = target.x;
     this.me.pos.y = target.y;
@@ -1779,8 +1825,8 @@ private roll = 0;
     if (!def) return false;
     this.interiors.exit();
     this.weather?.setInside(false);
-    this.interactiveTargets.length = 0;
-    this.destructibleTargets.length = 0;
+    this.refreshInteriorTargets();
+    this.climb = null;
     this.me.pos.x = target.x;
     this.me.pos.y = target.y;
     this.me.pos.z = target.z;
@@ -1798,8 +1844,8 @@ private roll = 0;
     this.interiors.exit();
     // Восстановить погоду при выходе локально (без сервера)
     if (!this.interiors.isInside()) this.weather?.setInside(false);
-    this.interactiveTargets.length = 0;
-    this.destructibleTargets.length = 0;
+    this.refreshInteriorTargets();
+    this.climb = null;
     this.me.pos.x = def.exitX;
     this.me.pos.z = def.exitZ;
     this.me.pos.y = groundHeight(def.exitX, def.exitZ);
@@ -1832,6 +1878,7 @@ private roll = 0;
       Math.abs(x - b.roomCx) <= 16 && Math.abs(z - b.roomCz) <= 16) ?? null;
     if (!def) return null;
     this.interiors.enter(def.id);
+    this.refreshInteriorTargets();
     return t(def.nameKey);
   }
 
@@ -2155,6 +2202,34 @@ private roll = 0;
     this.roll = Math.min(ROLL_LIMIT, Math.max(-ROLL_LIMIT, this.roll));
     this.crouch = !session.dead && (this.keys.has('KeyC') || this.keys.has('ControlLeft'));
 
+    // ── Лестницы (§324): удержание W рядом с лестницей в интерьере ──
+    // цепляет к ней. Дальше движение вертикальное: W вверх, S вниз.
+    // Сход - на платформе или на полу; лестница не сходит с уступа
+    // сама, чтобы случайное нажатие не сорвало игрока с высоты.
+    if (!this.climb && !session.dead && this.interiors.isInside() &&
+        (this.keys.has('KeyW') || this.keys.has('ArrowUp'))) {
+      let ближайшая: THREE.Object3D | null = null;
+      let дальность = 1.4;
+      const позы = new THREE.Vector3();
+      for (const цель of this.climbTargets) {
+        цель.getWorldPosition(позы);
+        const d = Math.hypot(позы.x - me.pos.x, позы.z - me.pos.z);
+        if (d < дальность) { дальность = d; ближайшая = цель; }
+      }
+      const вершина = (ближайшая?.userData as { ladderTop?: number } | undefined)?.ladderTop ?? 0;
+      // Вверх лезем с пола или с середины подъёма; на уровне вершины
+      // хватание уже не нужно - там стоят ноги, ходьба и так работает.
+      if (ближайшая && вершина > me.pos.y + 0.1) {
+        this.climb = ближайшая;
+        this.vy = 0;
+        this.grounded = false;
+      }
+    }
+    // На лестнице XZ заморожены: единственное движение - вертикальное
+    // (обрабатывается в блоке «Вертикаль» ниже по this.keys, поэтому
+    // обнуление ввода его не задевает).
+    if (this.climb) { ix = 0; iz = 0; }
+
     const len = Math.hypot(ix, iz);
     const onBridge = bridgeAt(me.pos.x, me.pos.z);
     const surfaceY = waterSurfaceY(me.pos.x, me.pos.z);
@@ -2249,15 +2324,57 @@ private roll = 0;
     // ── Вертикаль: прыжок / плавание / мост / земля ──
     // Внутри здания пол — пол комнаты; в кармане вне комнат — плато.
     const pocketY = pocketGroundY(me.pos.x, me.pos.z);
+    // Мезонин (§324): верхняя площадка под ногами, если ступни у неё или
+    // чуть ниже (падение на плиту). null - игрок под платформой и ходит
+    // по полу комнаты.
+    const платформа = this.platformTopAt(me.pos.x, me.pos.z, me.pos.y);
     const groundY = this.interiors.isInside()
       ? this.interiors.floorY()
       : pocketY ?? groundHeight(me.pos.x, me.pos.z);
+    // Платформа засчитывается, только пока она действительно выше пола
+    // комнаты: иначе она «пересекла» бы пол.
+    const подНогами = платформа !== null && this.interiors.isInside() && платформа > groundY
+      ? платформа
+      : groundY;
     const bridgeY = bridgeAt(me.pos.x, me.pos.z);
     // Невидимый пол у поверхности (wadeFloor) убран: в мелкой воде ступни
     // стоят на НАСТОЯЩЕМ дне, и игрок реально идёт по пояс в воде, а не
     // «гуляет» по поверхности.
-    const effectiveGroundY = bridgeY !== null ? bridgeY : groundY;
-    if (this.swimming) {
+    const effectiveGroundY = bridgeY !== null ? bridgeY : подНогами;
+    if (this.climb) {
+      // ── Лазание по лестнице (§324) ──
+      // XZ заморожены (ввод обнулён выше), двигается только высота:
+      // W вверх, S вниз. Space игнорируется сам собой: прыжок требует
+      // grounded, а на лестнице он снят. Вершина лестницы = верхняя
+      // поверхность платы мезонина (ladderTop из userData), поэтому сход
+      // сверху ставит игрока ровно на плату, без полушага в пустоту.
+      if (session.dead) {
+        // Мёртвый не держится за лестницу: отпускаем и даём упасть.
+        this.climb = null;
+        this.grounded = false;
+      } else {
+        const верх = (this.climb.userData as { ladderTop?: number }).ladderTop ?? me.pos.y;
+        let скорость = 0;
+        if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) скорость = 2.8;
+        else if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) скорость = -3.2;
+        me.pos.y += скорость * dt;
+        this.lastDir = { x: 0, y: 0, z: 0 };
+        if (me.pos.y >= верх) {
+          me.pos.y = верх;
+          this.vy = 0;
+          this.grounded = true;
+          this.climb = null;
+          audio.footstep(false);
+        } else if (me.pos.y <= this.interiors.floorY()) {
+          // Сошел до самого пола комнаты: лестница начинается с полу.
+          me.pos.y = this.interiors.floorY();
+          this.vy = 0;
+          this.grounded = true;
+          this.climb = null;
+          audio.footstep(false);
+        }
+      }
+    } else if (this.swimming) {
       // ... поверхность локального водоёма, а не всегда озера
       const swimLevel = surfaceY ?? LAKE.level;
       // Тело погружено: ноги под водой, голова над поверхностью.
@@ -2283,6 +2400,12 @@ private roll = 0;
         this.grounded = true;
         audio.footstep(true);
       }
+    } else if (me.pos.y > effectiveGroundY + 0.45) {
+      // Шаг с края мезонина/моста: опоры под ногами больше нет, и вместо
+      // мгновенного телепорта на землю ниже игрок уходит в падение.
+      // Порог 0.45 перекликается с допуском ступеней: обычный рельеф
+      // в этот предел не попадает, а падение с платы 2.6 м - да.
+      this.grounded = false;
     } else {
       me.pos.y = effectiveGroundY;
       // Шаги: по мелкой воде — журчание, по земле — обычный шаг
