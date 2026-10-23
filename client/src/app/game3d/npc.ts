@@ -12,6 +12,8 @@ import { spriteVisible } from './spriteClamp';
 import { CITY, PORT, CARAVANSERAI, VILLAGE, FORT, COLLIDERS, groundHeight, REGION_TOWNS } from './terrain';
 import { GATE } from './terrain';
 import { loadCharacterModel, loadAnimationClips } from './characterModels';
+import { подогнать, безМёртвыхДорожек } from './realRig';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 // Стража ворот стоит относительно ворот (а не на захардкоженных точках),
 // поэтому переживает смену радиуса города. GATE — мировые координаты.
@@ -337,16 +339,17 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       const modelGroup = await loadCharacterModel(modelType);
       if (!modelGroup) return; // фолбэк на процедурный
 
-      // Клонируем модель для этого NPC
-      const cloned = modelGroup.clone(true);
+      // Подгонка по позе костей, а не по Box3: setFromObject у скинированного
+      // меша читает геометрию позы покоя, и рост выходил не из модели, а из
+      // «случайного числа файла» (разбор в realRig.подогнать). Ноги ставятся
+      // на нуль той же функцией.
+      const fitted = подогнать(modelGroup, modelType);
+      // Скелет клонируется под каждого NPC: Object3D.clone оставлял кости
+      // общими с кешем — миксер одного NPC двигал скелет всех, у кого стоит
+      // та же модель, и толпа дёргалась как один человек.
+      const cloned = cloneSkeleton(fitted) as THREE.Group;
       cloned.position.copy(position);
       cloned.rotation.copy(rotation);
-
-      // Настроить масштаб под TARGET_HEIGHT (как в realRig)
-      const box = new THREE.Box3().setFromObject(cloned);
-      const height = box.max.y - box.min.y;
-      const scale = height > 0 ? 1.9 / height : 1;
-      cloned.scale.multiplyScalar(scale);
 
       cloned.traverse((obj) => {
         if (obj instanceof THREE.SkinnedMesh) {
@@ -357,14 +360,23 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
         }
       });
 
-      // Создать AnimationMixer и загрузить базовые клипы
+      // NPC не дерутся и не ходят (update всегда даёт moving:false), поэтому
+      // из всего набора клипов им нужен только покой — остальные шесть файлов
+      // грузить и декодировать незачем.
+      const clips = await loadAnimationClips(['idle']);
+
+      // Миксер есть у каждого NPC даже без клипа: update() мира дёргает его
+      // безусловно, и null там не ожидается.
       const mixer = new THREE.AnimationMixer(cloned);
-      const clips = await loadAnimationClips(['idle', 'walk', 'run', 'attack', 'death', 'hurt']);
-      
+
       // Запустить idle анимацию
       let currentAction: THREE.AnimationAction | null = null;
-      if (clips.get('idle')) {
-        currentAction = mixer.clipAction(clips.get('idle')!);
+      const idleClip = clips.get('idle');
+      if (idleClip) {
+        // Дорожки клипа, которым не на что лечь (кости глаз), выбрасываются:
+        // иначе консоль заполняют «No target node found» на каждого NPC.
+        const чистый = безМёртвыхДорожек(idleClip, cloned, modelType);
+        currentAction = mixer.clipAction(чистый);
         currentAction.loop = THREE.LoopRepeat;
         currentAction.clampWhenFinished = false;
         currentAction.play();

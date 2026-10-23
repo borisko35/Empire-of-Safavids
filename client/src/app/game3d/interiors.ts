@@ -30,9 +30,63 @@ import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // глазом: игрок не понял бы, откуда его заметили. Импорт добавлен вместе с
 // постом в shared/stealth.ts, а не отдельно от него.
 import { buildHumanoid, HumanoidCfg, ПРЕДМЕТ } from './rig';
+// Настоящие модели стражей: общий загрузчик realRig и клонирование скелета.
+import { загрузитьСцену, загрузитьКлип, подогнать, безМёртвыхДорожек } from './realRig';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 // Фигура стража внутри крепости. Без неё пост в правиле был бы невидимым глазом:
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
+
+// ── Стражи на настоящих моделях ─────────────────────────────
+//
+// Процедурный страж ставится сразу: коллайдер и вид появляются синхронно.
+// Настоящая модель едет следом и подменяет процедурную, когда доедет; нет
+// файла — стоит процедурная фигура, игра не падает. Миксеры собираются в
+// общий список: кадр двигает их world3d рядом с миксерами коров
+// (updateCows) — отдельного цикла у интерьеров нет.
+const СТРАЖИ_МИКСЕРЫ: THREE.AnimationMixer[] = [];
+
+export function обновитьСтражей(dt: number): void {
+  for (const м of СТРАЖИ_МИКСЕРЫ) м.update(dt);
+}
+
+/**
+ * Ставит стража на пост: процедурная фигура сразу, настоящая модель — когда
+ * приедет. y передаёт вызывающий: крепостной страж стоит на каменном
+ * помосте (FLOOR_Y + 0.7), дворцовый — на полу (FLOOR_Y): одна формула на
+ * оба поста ставила дворцового в воздух.
+ */
+function поставитьСтражаНаПост(
+  g: THREE.Group,
+  x: number,
+  y: number,
+  z: number,
+  вид: HumanoidCfg,
+): void {
+  const rig = buildHumanoid(вид);
+  rig.group.position.set(x, y, z);
+  g.add(rig.group);
+  void (async () => {
+    const [scene, idle] = await Promise.all([
+      загрузитьСцену('guard-qizilbash'),
+      загрузитьКлип('standing-idle'),
+    ]);
+    if (!scene || !idle) return;
+    try {
+      const подогнанная = подогнать(scene, 'guard-qizilbash');
+      const clone = cloneSkeleton(подогнанная) as THREE.Group;
+      clone.position.set(x, y, z);
+      const mixer = new THREE.AnimationMixer(clone);
+      const чистый = безМёртвыхДорожек(idle, clone, 'guard-qizilbash');
+      mixer.clipAction(чистый).reset().setLoop(THREE.LoopRepeat, Infinity).play();
+      СТРАЖИ_МИКСЕРЫ.push(mixer);
+      rig.group.visible = false;
+      g.add(clone);
+    } catch (e) {
+      console.warn('[interior] страж: модель не встала', e);
+    }
+  })();
+}
 
 export type BuildingKind = 'stable' | 'barracks' | 'workshop' | 'tavern' | 'observatory' | 'science' | 'arena' | 'auction_house' | 'circus' | 'caravanserai' | 'fortress' | 'palace' | 'mosque' | 'weaver' | 'customs' | 'shrine' | 'tomb' | 'hanza' | 'catacombs' | 'palace_dungeon' | 'khorasan_caves' | 'caucasus_fort' | 'baghdad_citadel' | 'simurgh_temple';
 
@@ -269,9 +323,8 @@ function furnishFortress(g: THREE.Group, cx: number, cz: number): { x: number; z
     // и сравнивает с постом, поэтому страж не может «отойти» от своего места
     // молча. В латах он не смотрит на точку схода - взгляд у постов круговой,
     // направление заведено только для торговца.
-    const guard = buildHumanoid({ robe: 0x6e4a20, robeDark: 0x4a3115, hat: 'helmet', hatColor: 0x8a7a5a, weapon: 'sword', shield: true, scale: 1.04 });
-    guard.group.position.set(cx - 8, FLOOR_Y + 0.7, cz + 6);
-    g.add(guard.group);
+    // Смотровая площадка на FLOOR_Y + 0.7 — страж стоит на ней, а не в воздухе.
+    поставитьСтражаНаПост(g, cx - 8, FLOOR_Y + 0.7, cz + 6, { robe: 0x6e4a20, robeDark: 0x4a3115, hat: 'helmet', hatColor: 0x8a7a5a, weapon: 'sword', shield: true, scale: 1.04 });
     cols.push({ x: cx - 8, z: cz + 6, r: 1.1 });
     return cols;
   }
@@ -435,9 +488,9 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   // Копья у гвардейца нет в наборе оружия (sword, staff, bow, dagger, rapier,
   // none), поэтому страж вооружён саблей — как и страж крепости. Выдумывать
   // «копьё» ради одного дворца значит расширять общий перечень из-за детали.
-  const guard = buildHumanoid({ robe: 0x2f3f6e, robeDark: 0x1e2946, hat: 'helmet', hatColor: 0xb08d3a, weapon: 'sword', shield: true, scale: 1.06 });
-  guard.group.position.set(cx - 8, FLOOR_Y + 0.7, cz + 6);
-  g.add(guard.group);
+  // Дворцовый страж стоит на полу тронного зала: прежняя формула держала
+  // FLOOR_Y + 0.7 от крепостного помоста, и фигура висела над ковром.
+  поставитьСтражаНаПост(g, cx - 8, FLOOR_Y, cz + 6, { robe: 0x2f3f6e, robeDark: 0x1e2946, hat: 'helmet', hatColor: 0xb08d3a, weapon: 'sword', shield: true, scale: 1.06 });
   cols.push({ x: cx - 8, z: cz + 6, r: 1.1 });
   return cols;
 }

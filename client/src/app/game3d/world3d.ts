@@ -17,6 +17,8 @@ import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig';
 import { loadRealPlayerRig, CLASS_WEAPON, ростПозы } from './realRig';
+import { loadRealMonsterRig } from './characterModels';
+import { обновитьСтражей } from './interiors';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
@@ -2001,6 +2003,10 @@ private roll = 0;
         b.rig.group.userData.monsterId = id;
         this.scene.add(b.rig.group);
         this.rigs.set(id, b);
+        // Процедурный риг стоит сразу, настоящая модель едет следом: пришла —
+        // подменяем, нет — остаётся процедурная. То же, что upgradeToRealModel
+        // у игрока, только по реестру монстров.
+        this.upgradeMonsterToRealModel(id, m.monsterId, b);
       }
       // Подводное ли? Флаг и высоту над водой шлёт сервер при спавне —
       // список существ меняется, клиенту о нём знать не нужно.
@@ -2041,6 +2047,30 @@ private roll = 0;
         this.rigs.delete(id);
       }
     }
+  }
+
+  /**
+   * Подменяет процедурный риг монстра настоящей моделью, когда та доехала.
+   *
+   * Синхронизация остаётся синхронной: ждать модель в проходе кадра нельзя —
+   * риг появлялся бы кадрами позже и мог задвоиться. Пока файл едет, монстр
+   * ходит на процедурной сборке; после подмены анимации (шаг, бег, смерть)
+   * ведёт уже RealRig с тем же интерфейсом. Оружие у модели ставится
+   * процедурным — тем же, что носил риг.
+   */
+  private upgradeMonsterToRealModel(id: string, monsterId: string, b: BoundRig): void {
+    b.realModelTried = true;
+    void loadRealMonsterRig(monsterId).then((real) => {
+      // Монстр мог умереть и вычиститься, пока модель грузилась: тогда
+      // подменять нечего, новый риг (если появился) уже запросит своё.
+      if (!real || this.rigs.get(id) !== b) return;
+      real.group.userData.monsterId = id;
+      real.equipWeapon(true);
+      const parent = b.rig.group.parent;
+      b.rig.dispose();
+      if (parent) parent.add(real.group);
+      b.rig = real;
+    });
   }
 
   // ── FX: плавающий урон и эффекты из entities.World ──────────
@@ -2565,6 +2595,9 @@ if (isMe && moving) {
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.
     this.townfolk.update(dt, me.pos.x, me.pos.z);
     updateCows(this.cowMixers, dt);
+    // Стражи интерьеров на настоящих моделях: их миксеры живут в interiors,
+    // кадр двигает их отсюда — тем же способом, что и коров.
+    обновитьСтражей(dt);
     this.roadTraffic.update(dt, now, me.pos.x, me.pos.z, night);
     this.navigator.update(now, { x: me.pos.x, z: me.pos.z });
 
