@@ -43,7 +43,7 @@ import { StealthStates } from '../systems/StealthStates';
 import { skillsService } from '../services/SkillsService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
 import { professionOf } from '../services/ProfessionService';
-import { STANCES, isCombatStance, type CombatStance } from '../systems/CombatStance';
+import { STANCES, isCombatStance, PARRY_STUN_MS, type CombatStance } from '../systems/CombatStance';
 import { DungeonService } from '../systems/DungeonService';
 import { WorldEventSystem } from '../systems/WorldEventSystem';
 import { SiegeSystem } from '../systems/SiegeSystem';
@@ -732,6 +732,13 @@ private territory = TerritoryBonuses.getInstance();
               damage: Number(msg.damage),
               isDodged: Boolean(msg.isDodged),
               isBlocked: Boolean(msg.isBlocked),
+              // Парирование против монстра: сервер гасит удар у себя в тике,
+              // и без этих полей клиент показал бы нулевой урон вместо
+              // «Парировано!» и не сыграл бы лязг. Нумбер с запасом на ноль:
+              // парирование сейчас без отражённого урона, поле — чтобы
+              // клиенту не понадобилось второе обновление моста.
+              isParried: Boolean(msg.isParried),
+              reflected: Number(msg.reflected ?? 0),
               hp: Number(msg.hp),
               maxHp: Number(msg.maxHp),
               // Удар стража. Без этих трёх полей клиент показал бы только
@@ -2108,6 +2115,24 @@ private territory = TerritoryBonuses.getInstance();
         .then(() => this.achievements.checkAll(target.id))
         .catch((e: unknown) => logger.warn('[Combat] счётчик парирований:', (e as Error).message));
       void appliedToAttacker;
+      // Оглушение (roadmap §412). Отражённой доли мало: «Танец серпа»
+      // отдаёт четверть урона, за которую атакующий спокойно кликает
+      // дальше. Поймавший удар в окно дополнительно оглушает бьющего -
+      // полторы секунды тот не может ни бить, ни уклоняться. apply сам
+      // глотает отказ базы: стан, как и всякий эффект, украшение удара,
+      // а не его условие, поэтому void, а не await.
+      void this.debuffs.apply(
+        attacker.id,
+        {
+          debuffId: 'parry_stun',
+          kind: 'stun',
+          durationMs: PARRY_STUN_MS,
+          magnitude: 0,
+          tickDamage: 0,
+          tickMs: 0,
+        },
+        null,
+      );
       return;
     }
 

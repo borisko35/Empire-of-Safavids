@@ -11,6 +11,7 @@ import { TargetPlayer } from './AISystem';
 import { KarmaSystem, isNpcHostile, isGuardTarget } from './KarmaSystem';
 import { WorldTimeSystem, WEATHER_EFFECTS } from './WorldTimeSystem';
 import { DefenseStates } from './DefenseStates';
+import { PARRY_STUN_MS } from './CombatStance';
 import { StealthStates } from './StealthStates';
 import { DungeonService } from './DungeonService';
 import { WorldEventSystem } from './WorldEventSystem';
@@ -353,6 +354,39 @@ private soldiers = soldiers;
       const equipStats = await this.equipment.getStats(target.id);
       const defense = victim.stats.endurance * 0.75 + equipStats.endurance * 0.75;
       let damage = this.monsterDamage(atk, defense);
+
+      // Парирование: удар в первые миллисекунды щита гасится полностью.
+      // Против монстров окно прежде не читалось вовсе - игрок, поймавший
+      // удар таймингом, получал то же, что и держащий щит постоянно, и
+      // умение не значило ничего. Reflect-урон монстру тут не идёт:
+      // награда за монстра живёт только в сокет-пути (rewardMonsterKill),
+      // а дублировать выдачу из тика означало бы убийство без награды.
+      // Взамен монстр оглушается (roadmap §412): полторы секунды стоит
+      // и не бьёт. Эффект самого удара тоже не должен примениться: если
+      // удара не было, отравления быть не должно - то же правило, что
+      // уже стоит для уклонения ниже по циклу.
+      const отражено = this.defenseStates.getParryReflect(target.id);
+      if (отражено > 0) {
+        this.spawnSystem.getAI().stun(atk.instanceId, PARRY_STUN_MS);
+        await this.redis.publish(
+          REDIS_CHANNELS.REGION_MONSTER_HIT(atk.shardId, atk.region),
+          {
+            characterId: target.id,
+            instanceId: atk.instanceId,
+            skillId: atk.skillId ?? null,
+            damage: 0,
+            hp: victim.hp,
+            maxHp: victim.maxHp,
+            isDodged: false,
+            isBlocked: true,
+            isParried: true,
+            reflected: 0,
+            died: false,
+            debuff: null,
+          },
+        ).catch(() => {});
+        continue;
+      }
 
       // Активная защита: уклонение (полный промах) или блок (−60%)
       const defenseMult = this.defenseStates.getIncomingMultiplier(target.id);

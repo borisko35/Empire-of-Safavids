@@ -50,6 +50,8 @@ export interface AIContext {
   /** Игровой сервер (шард), в котором живёт экземпляр */
   shardId: string;
   lastTickAt?: number;                    // для расчёта dt серверного движения
+  /** Оглушение (парирование игрока): до этого времени монстр не действует */
+  stunnedUntil?: number;
 }
 
 export interface AIAction {
@@ -114,6 +116,11 @@ export class AISystem {
     if (!ctx || ctx.state === 'dead') return { type: 'idle' };
 
     const now = Date.now();
+    // Оглушение (парирование игрока): монстр поймал удар в окно и временно
+    // выбит из боя. Раньше всего остального — и до оценки аггро тоже:
+    // оглушённый не может ни бить, ни звать помощь. Срок в поле: после него
+    // монстр просыпается сам, без отдельного события «конец оглушения».
+    if (ctx.stunnedUntil && ctx.stunnedUntil > now) return { type: 'idle' };
     const hpPercent = ctx.currentHp / ctx.maxHp;
     const aquatic = ctx.definition.aquatic === true;
 
@@ -414,6 +421,18 @@ export class AISystem {
       return true; // монстр погиб
     }
     return false;
+  }
+
+  /**
+   * Оглушить монстра на заданный срок (парирование игрока, roadmap §412).
+   * False для мёртвого или незнающего экземпляра и для нулевого срока:
+   * оглушать труп не нужно, а молчаливый отказ честнее записи в пустоту.
+   */
+  stun(instanceId: string, durationMs: number): boolean {
+    const ctx = this.contexts.get(instanceId);
+    if (!ctx || ctx.state === 'dead' || !(durationMs > 0)) return false;
+    ctx.stunnedUntil = Date.now() + durationMs;
+    return true;
   }
 
   private getTopThreatTarget(ctx: AIContext): string {
