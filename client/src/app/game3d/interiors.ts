@@ -19,7 +19,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // координатам, иначе игрок увидит одно, а проверят другое.
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
 import { t } from '../i18n';
-import { CITY, addCollider, windowPane } from './terrain';
+import { CITY, addCollider, windowPane, decorВещь } from './terrain';
 import { createCrate, createOilJug, createAwning, registerInteractive, InteractiveKind } from './interactive';
 // Модели закрыты входом: заголовок ставится при создании загрузчика
 // (см. modelAccess.ts).
@@ -431,8 +431,9 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
     for (const side of [-1, 1]) {
       const px = cx + side * (2.2 + i * 0.75);
       const pz = cz - 7 + i * 1.5;
-      g.add(cyl(0.34, 4.6, 0.34, M.stone, px, FLOOR_Y + 2.3, pz));
-      g.add(box(0.9, 0.3, 0.9, M.gold, px, FLOOR_Y + 4.55, pz));
+      // Колонна — готовая модель (Quaternius), база и капитель в ней же.
+      // БЫЛО: цилиндр с золотой шайбой наверху.
+      decorВещь(g, 'column-round-2', px, pz, { размер: 4.6, y: FLOOR_Y, ry: side * 0.4 + i * 0.3 });
       cols.push({ x: px, z: pz, r: 0.7 });
     }
   }
@@ -459,22 +460,20 @@ function furnishPalace(g: THREE.Group, cx: number, cz: number): { x: number; z: 
   cols.push({ x: cx, z: cz - 8, r: 1.4 });
   // ── Столы по сторонам ──
   for (const side of [-1, 1]) {
-    g.add(box(2.6, 0.16, 1.2, M.wood, cx + side * 8.2, FLOOR_Y + 0.92, cz + 1));
-    for (const b of [-1, 1]) {
-      g.add(cyl(0.12, 0.9, 0.12, M.woodDark, cx + side * 8.2 + b * 1, FLOOR_Y + 0.46, cz + 1));
-    }
+    // Стол — готовая модель (Quaternius). БЫЛО: доска на двух цилиндрах.
+    decorВещь(g, 'table-round-large', cx + side * 8.2, cz + 1, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y, ry: side * 0.5,
+    });
     cols.push({ x: cx + side * 8.2, z: cz + 1, r: 1.3 });
   }
   // ── Стеллажи с книгами у боковых стен ──
   for (const side of [-1, 1]) {
     const px = cx + side * 9.6;
-    g.add(box(1, 3.2, 7, M.woodDark, px, FLOOR_Y + 1.6, cz + 3));
-    for (let s = 0; s < 3; s++) {
-      g.add(box(0.9, 0.12, 6.4, M.wood, px, FLOOR_Y + 0.7 + s * 1.05, cz + 3));
-      // Книги: полки разной высоты, чтобы стеллаж не читался полосой.
-      g.add(box(0.8, 0.5, 3.2, M.hay, px, FLOOR_Y + 1 + s * 1.05, cz + 2.2));
-      g.add(box(0.8, 0.38, 2.4, M.red, px, FLOOR_Y + 0.92 + s * 1.05, cz + 5.2));
-    }
+    // Стеллаж — готовый шкаф с книгами (Quaternius), длинной стеной вдоль зала.
+    // БЫЛО: коробка с тремя полками и двумя брусками «книг».
+    decorВещь(g, 'bookshelf', px, cz + 3, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y, ry: side > 0 ? -Math.PI / 2 : Math.PI / 2,
+    });
     cols.push({ x: px, z: cz + 3, r: 1.5 });
   }
   // ── Жаровни у входа ──
@@ -823,11 +822,13 @@ function furnishHanza(g: THREE.Group, cx: number, cz: number): { x: number; z: n
   // ── Столы со свитками: читают, разбирают письма ──
   for (const side of [-1, 1]) {
     const px = cx + side * 7.5;
-    g.add(box(2.6, 0.16, 1.5, M.wood, px, FLOOR_Y + 0.92, cz + 3.5));
-    g.add(box(0.22, 0.9, 0.22, M.wood, px - 1.1, FLOOR_Y + 0.45, cz + 3.5));
-    g.add(box(0.22, 0.9, 0.22, M.wood, px + 1.1, FLOOR_Y + 0.45, cz + 3.5));
+    // Стол — готовая модель (Quaternius); свитки на нём остаются своими —
+    // это предмет истории: их разбирают, они лежат именно здесь.
+    decorВещь(g, 'table-round-small', px, cz + 3.5, {
+      размер: 1.9, по: 'horizontal', y: FLOOR_Y, ry: side * 0.7,
+    });
     for (let i = 0; i < 2; i++) {
-      const свиток = cyl(0.12, 0.9, 0.12, M.hay, px - 0.5 + i * 1, FLOOR_Y + 1.03, cz + 3.5, 8);
+      const свиток = cyl(0.12, 0.9, 0.12, M.hay, px - 0.5 + i * 1, FLOOR_Y + 0.85, cz + 3.5, 8);
       свиток.rotation.x = Math.PI / 2;
       g.add(свиток);
     }

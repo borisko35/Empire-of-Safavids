@@ -127,8 +127,12 @@ describe('По дорогам кто-то идёт', () => {
     expect(traffic).toMatch(/w\.group\.position\.set\(/);
   });
 
-  it('шаг читается: ноги в противофазе', () => {
-    expect(traffic).toMatch(/i % 2 === 0\) \? swing : -swing/);
+  it('шаг читается: клип у ригованных, качание у статичных', () => {
+    // Путники идут настоящей походкой (клип), верблюды и телеги — статичные
+    // модели, их корпус качается на ходу. Процедурных ног больше нет.
+    expect(/if \(w\.зверь\) w\.зверь\.update\(dt\);/.test(traffic)).toBe(true);
+    expect(/if \(w\.качание && w\.модель\) \{/.test(traffic)).toBe(true);
+    expect(/const swing = Math\.sin\(w\.phase\) \* 0\.55;/.test(traffic)).toBe(false);
   });
 
   it('идут туда-обратно, а не пропадают за концом дороги', () => {
