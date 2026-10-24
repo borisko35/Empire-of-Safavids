@@ -2568,8 +2568,8 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     // Коллайдеры деревьев (стволы)
     addCollider(s.x, s.z, 0.5);
   });
-  платаны.forEach((точки, i) => decorПоле(scene, `platan-${i + 1}`, точки));
-  decorПоле(scene, 'cypress', кипарисы);
+  платаны.forEach((точки, i) => decorПоле(scene, `platan-${i + 1}`, точки, { качание: { амплитуда: 0.02, фаза: hash2(точки[0]?.x ?? 0, точки[0]?.z ?? 0) * 6.28 } }));
+  decorПоле(scene, 'cypress', кипарисы, { качание: { амплитуда: 0.02, фаза: hash2(кипарисы[0]?.x ?? 0, кипарисы[0]?.z ?? 0) * 6.28 } });
 
   // Камыш у воды (§301): пучок длинных узких листьев, растущих из воды.
   const камышГео = new THREE.BufferGeometry();
@@ -5782,6 +5782,10 @@ export interface Качающееся {
   амплитуда: number;
   /** Исходный поворот: к нему добавляется качание. */
   база: THREE.Euler;
+  /** Инстансные поля (InstancedMesh): базовая матрица одного экземпляра. */
+  матрицы?: THREE.Matrix4[];
+  /** Индекс инстанса в поле. */
+  индекс?: number;
 }
 
 export const качающиеся: Качающееся[] = [];
@@ -9750,7 +9754,7 @@ export interface ТочкаПоля {
  */
 function decorПоле(
   родитель: THREE.Object3D, имя: string, точки: ТочкаПоля[],
-  opts?: { по?: 'height' | 'horizontal'; тени?: boolean },
+  opts?: { по?: 'height' | 'horizontal'; тени?: boolean; качание?: { амплитуда: number; фаза: number } },
 ): void {
   if (!точки.length) return;
   void частиМодели(имя, opts?.по ?? 'height').then((части) => {
@@ -9764,6 +9768,7 @@ function decorПоле(
     const sc = new THREE.Vector3();
     for (const ч of части) {
       const меш = new THREE.InstancedMesh(ч.гео, ч.материал, точки.length);
+      const матрики: THREE.Matrix4[] = [];
       точки.forEach((т, i) => {
         const наклон = т.наклон ?? 0;
         q.setFromEuler(new THREE.Euler(наклон, т.ry, наклон * 0.7));
@@ -9771,6 +9776,7 @@ function decorПоле(
         sc.set(т.k, т.k, т.k);
         m.compose(v, q, sc);
         меш.setMatrixAt(i, m);
+        матрики.push(m.clone());
         if (т.tint) меш.setColorAt(i, т.tint);
       });
       меш.instanceMatrix.needsUpdate = true;
@@ -9780,6 +9786,23 @@ function decorПоле(
       // о разбросе инстансов, а корректный общий bbox дорог.
       меш.frustumCulled = false;
       родитель.add(меш);
+      if (opts?.качание) {
+        // Инстансы поля — одно InstancedMesh, поэтому каждому экземпляру даём
+        // свою запись ветра: камера смотрит на отдельное дерево, а не на группу.
+        // Без этого деревья полей стояли неподвижно (недочёт §326).
+        for (let i = 0; i < точки.length; i++) {
+          качающиеся.push({
+            obj: меш,
+            x: точки[i].x,
+            z: точки[i].z,
+            фаза: opts.качание.фаза + i * 1.3,
+            амплитуда: opts.качание.амплитуда,
+            база: new THREE.Euler(точки[i].наклон ?? 0, точки[i].ry, (точки[i].наклон ?? 0) * 0.7),
+            матрицы: [матрики[i]],
+            индекс: i,
+          });
+        }
+      }
     }
   });
 }

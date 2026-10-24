@@ -2877,11 +2877,29 @@ if (isMe && moving) {
         + Math.sin(now / (быстро * 0.48) + к.фаза * 2.3) * 0.4;
       const сила = к.амплитуда * ветер * (0.45 + 0.55 * порыв);
       // Наклон по ветру: ось поворота поперёк ветра.
-      к.obj.rotation.set(
+      const наклон = new THREE.Euler(
         к.база.x + Math.sin(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
         к.база.y,
         к.база.z + Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
       );
+      if (к.матрицы) {
+        // Инстансное поле (InstancedMesh): наклон пишем в матрицу конкретного
+        // экземпляра — объект один на все, а трясётся надо каждое дерево.
+        const меш = к.obj as THREE.InstancedMesh;
+        const м = к.матрицы[0];
+        const позиция = new THREE.Vector3().setFromMatrixPosition(м);
+        const поворот = new THREE.Quaternion().setFromEuler(наклон);
+        const масштаб = new THREE.Vector3().setFromMatrixScale(м);
+        const индекс = к.индекс ?? 0;
+        меш.setMatrixAt(индекс, new THREE.Matrix4().compose(позиция, поворот, масштаб));
+        меш.instanceMatrix.needsUpdate = true;
+      } else {
+        к.obj.rotation.set(
+          к.база.x + Math.sin(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
+          к.база.y,
+          к.база.z + Math.cos(НАПРАВЛЕНИЕ_ВЕТРА) * сила,
+        );
+      }
     }
     // Огни фонарей наклоняются по ветру (§282): в бурю огонь в фонаре
     // колышется, и ночной город выдаёт погоду.
