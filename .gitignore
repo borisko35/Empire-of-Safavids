@@ -220,3 +220,6 @@ tools/publish-instructions.md
 # отчёты — здесь.
 client/src/app/public/models/decor/*.report.json
 client/src/app/public/models/animals/*.report.json
+
+tools/shots/
+tools/surface-thumbs/
