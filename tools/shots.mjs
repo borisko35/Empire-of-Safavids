@@ -16,7 +16,7 @@
 // Скрипт только водит браузер и слушает консоль — если страница упала,
 // причина будет видна здесь, а не в пустом чёрном кадре.
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer-core';
 
@@ -67,27 +67,33 @@ const браузер = await puppeteer.launch({
 
 let код = 0;
 try {
-  const страница = await браузер.newPage();
-  await страница.setViewport({ width: 1280, height: 720 });
-  await страница.bringToFront();
-  const журнал = [];
-  страница.on('console', (m) => журнал.push(`[${m.type()}] ${m.text()}`));
-  страница.on('pageerror', (e) => журнал.push(`[pageerror] ${e.message}`));
-  страница.on('requestfailed', (r) => {
-    if (!r.url().includes('favicon')) журнал.push(`[requestfailed] ${r.url()} — ${r.failure()?.errorText}`);
-  });
+  // ПОВТОР ПРИ ЧЁРНОМ КАДРЕ (§331). Софтверный GL в headless изредка рендерит
+  // целую страницу в чёрный: сцена построена, сводка «отправлено» есть,
+  // а JPEG — одна чёрная заливка (~8.5 КБ, нормальные кадры 130–200 КБ).
+  // Если файл подозрительно мал — страница переснимается целиком, до трёх
+  // попыток; если и это чёрное, оставляем кадр и выходим с кодом 1.
+  for (let попытка = 1; ; попытка++) {
+    const страница = await браузер.newPage();
+    await страница.setViewport({ width: 1280, height: 720 });
+    await страница.bringToFront();
+    const журнал = [];
+    страница.on('console', (m) => журнал.push(`[${m.type()}] ${m.text()}`));
+    страница.on('pageerror', (e) => журнал.push(`[pageerror] ${e.message}`));
+    страница.on('requestfailed', (r) => {
+      if (!r.url().includes('favicon')) журнал.push(`[requestfailed] ${r.url()} — ${r.failure()?.errorText}`);
+    });
 
-  await страница.goto(URL_СТЕНДА, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await страница.goto(URL_СТЕНДА, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-  const начало = Date.now();
-  let сводка = '';
-  while (Date.now() - начало < ТАЙМАУТ) {
-    сводка = await страница.evaluate(
-      () => document.getElementById('сводка')?.textContent ?? '',
-    );
-    if (сводка.includes('отправлено') || сводка.includes('приёмник не ответил')) break;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
+    const начало = Date.now();
+    let сводка = '';
+    while (Date.now() - начало < ТАЙМАУТ) {
+      сводка = await страница.evaluate(
+        () => document.getElementById('сводка')?.textContent ?? '',
+      );
+      if (сводка.includes('отправлено') || сводка.includes('приёмник не ответил')) break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
 
   const файл = join(ПАПКА, `${ИМЯ}.jpg`);
   // Сводка по сцене: сколько в мире мешей и у скольких материалов есть
@@ -114,7 +120,7 @@ try {
     console.log(`сцена: мешей ${сцена.мешей}, материалов ${сцена.материалов}, с картой ${сцена.сКартой}, без карты ${сцена.безКарты}`);
     console.log(`кадр: вызовов ${сцена.calls}, треугольников ${сцена.triangles}`);
   }
-  if (process.env.PROBE === '1') {
+if (process.env.PROBE === '1') {
     const проба = await страница.evaluate(() => {
       const с = window.__стенд;
       if (!с || !с.scene) return null;
@@ -166,7 +172,22 @@ try {
   console.log(`сводка: ${сводка || '(пусто)'}`);
   console.log(`файл: ${existsSync(файл) ? 'есть' : 'НЕТ'} — ${файл}`);
   for (const строка of журнал) console.log(строка);
-  if (!existsSync(файл) || !сводка.includes('отправлено')) код = 1;
+  if (!existsSync(файл) || !сводка.includes('отправлено')) {
+    код = 1;
+    break;
+  }
+  const байт = statSync(файл).size;
+  if (байт < 15000 && попытка < 3) {
+    console.log(`кадр ${байт} байт — чёрная заливка вместо мира; переснимаю (попытка ${попытка + 1}/3)`);
+    await страница.close();
+    continue;
+  }
+  if (байт < 15000) {
+    console.log(`кадр ${байт} байт и на третьей попытке чёрный — сдаваться`);
+    код = 1;
+  }
+  break;
+  }
 } catch (e) {
   console.error(`съёмка не удалась: ${String(e)}`);
   код = 1;
