@@ -16,9 +16,9 @@
 // ПРЕДУПРЕЖДЕНИЯ СЧИТАЮТСЯ ПЕРЕХВАТОМ console.warn: three пишет в него и больше
 // никуда. Подмена восстанавливается в finally, иначе сломанная проверка оставила
 // бы консоль молчащей на всё остальное время работы стенда.
+import { декодерDraco } from './game3d/draco';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { подогнать, безМёртвыхДорожек } from './game3d/realRig';
 // Модели закрыты входом (см. game3d/modelAccess.ts).
 import { сВходом } from './game3d/modelAccess';
@@ -47,9 +47,7 @@ function замерить(корень: THREE.Object3D, клип: THREE.Animatio
 export async function сравнитьФильтрНаЖителях(): Promise<string[]> {
   const строки: string[] = [];
   const загрузчик = сВходом(new GLTFLoader());
-  const draco = new DRACOLoader();
-  draco.setDecoderPath('/game/draco/');
-  загрузчик.setDRACOLoader(draco);
+    загрузчик.setDRACOLoader(декодерDraco());
 
   const взять = (путь: string): Promise<any> =>
     new Promise((ok) => загрузчик.load(`/game/models/${путь}.glb`, ok, undefined, () => ok(null)));

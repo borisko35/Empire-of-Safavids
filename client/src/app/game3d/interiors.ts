@@ -14,7 +14,6 @@ import * as THREE from 'three';
 import type { DestructibleKind } from './destructible';
 import { createDestructibleCrate, createDestructibleBarrel, createDestructibleVase } from './destructible';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // Столы с документами берём из правила: сервер проверяет по тем же
 // координатам, иначе игрок увидит одно, а проверят другое.
 import { DOCUMENT_SPOTS } from '../../../../shared/stealth';
@@ -24,6 +23,7 @@ import { createCrate, createOilJug, createAwning, registerInteractive, Interacti
 // Модели закрыты входом: заголовок ставится при создании загрузчика
 // (см. modelAccess.ts).
 import { сВходом } from './modelAccess';
+import { декодерDraco } from './draco';
 import { plasterTexture, stoneTexture, woodTexture, roofTileTexture, roofTileNormalTexture, hayTexture, hayNormalTexture, ironTexture, ironNormalTexture, woodDarkTexture, woodDarkNormalTexture, wallDarkTexture, wallDarkNormalTexture, clothTexture, waterNormalTexture, foliageTexture, foliageNormalTexture } from './textures';
 import { STELE, inscriptionFor, steleMesh } from './inscriptions';
 // Фигура стража внутри крепости. Без неё пост в правиле остался бы невидимым
@@ -349,10 +349,8 @@ function loadThroneModel(): Promise<THREE.Group | null> {
   if (throneCache) return throneCache;
   throneCache = new Promise<THREE.Group | null>((готово) => {
     try {
-      const draco = new DRACOLoader();
-      draco.setDecoderPath('/game/draco/');
       const l = сВходом(new GLTFLoader());
-      l.setDRACOLoader(draco);
+      l.setDRACOLoader(декодерDraco());
       l.load(
         `/game/models/${THRONE_MODEL}`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),
@@ -378,10 +376,8 @@ function loadTavernRoomModel(): Promise<THREE.Group | null> {
   if (tavernRoomCache) return tavernRoomCache;
   tavernRoomCache = new Promise<THREE.Group | null>((готово) => {
     try {
-      const draco = new DRACOLoader();
-      draco.setDecoderPath('/game/draco/');
       const l = сВходом(new GLTFLoader());
-      l.setDRACOLoader(draco);
+      l.setDRACOLoader(декодерDraco());
       l.load(
         `/game/models/${TAVERN_ROOM_MODEL}`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),
@@ -404,10 +400,8 @@ function loadDrawerModel(): Promise<THREE.Group | null> {
   if (drawerCache) return drawerCache;
   drawerCache = new Promise<THREE.Group | null>((готово) => {
     try {
-      const draco = new DRACOLoader();
-      draco.setDecoderPath('/game/draco/');
       const l = сВходом(new GLTFLoader());
-      l.setDRACOLoader(draco);
+      l.setDRACOLoader(декодерDraco());
       l.load(
         `/game/models/${DRAWER_MODEL}`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),

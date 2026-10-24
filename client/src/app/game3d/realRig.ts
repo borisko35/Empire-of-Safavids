@@ -16,17 +16,16 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { buildShield, buildWeapon, type Rig, type RigPose, type Weapon } from './rig';
 // Модели закрыты входом: заголовок ставится перед каждой загрузкой
 // (см. modelAccess.ts — почему не один раз при создании загрузчика).
 import { сВходом } from './modelAccess';
+import { декодерDraco } from './draco';
 
 /** Куда сложены модели. Тот же префикс, что у бандла игры. */
 const MODEL_BASE = '/game/models/';
 /** Декодер Draco лежит рядом: без него сжатая геометрия не грузится. */
-const DRACO_BASE = '/game/draco/';
 /** Во что должна вырасти любая загруженная модель, в единицах игрового мира. */
 const TARGET_HEIGHT = 1.9;
 /**
@@ -182,10 +181,8 @@ function загрузчик(): GLTFLoader | null {
   try {
     // DRACOLoader остаётся жив внутри загрузчика: он сам себя не выгружает, а без
     // него геометрия со сжатием не разбирается.
-    const draco = new DRACOLoader();
-    draco.setDecoderPath(DRACO_BASE);
     const l = new GLTFLoader();
-    l.setDRACOLoader(draco);
+    l.setDRACOLoader(декодерDraco());
     общийЗагрузчик = l;
     return l;
   } catch (e) {

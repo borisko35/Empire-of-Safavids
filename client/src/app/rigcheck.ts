@@ -12,9 +12,9 @@
 //
 // Страница нужна только для проверки и в сборку игры не входит.
 
+import { декодерDraco } from './game3d/draco';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { loadRealPlayerRig, CLASS_WEAPON, подогнать } from './game3d/realRig';
 import { сравнитьФильтрНаЖителях } from './rigcheckMix';
 // Модели закрыты входом (см. game3d/modelAccess.ts).
@@ -105,9 +105,7 @@ const сводка = document.getElementById('сводка')!;
 async function проверитьПодошвуЖителей(): Promise<string[]> {
   const строки: string[] = [];
   const загрузчик = сВходом(new GLTFLoader());
-  const draco = new DRACOLoader();
-  draco.setDecoderPath('/game/draco/');
-  загрузчик.setDRACOLoader(draco);
+    загрузчик.setDRACOLoader(декодерDraco());
 
   const низОбёртки = (корень: THREE.Object3D): number => {
     корень.updateMatrixWorld(true);
@@ -150,9 +148,7 @@ async function проверитьПодошвуЖителей(): Promise<string[
 async function проверитьПривязку(): Promise<string[]> {
   const строки: string[] = [];
   const загрузчик = сВходом(new GLTFLoader());
-  const draco = new DRACOLoader();
-  draco.setDecoderPath('/game/draco/');
-  загрузчик.setDRACOLoader(draco);
+    загрузчик.setDRACOLoader(декодерDraco());
 
   const читать = (путь: string): Promise<any> =>
     new Promise((готово) => загрузчик.load(`/game/models/${путь}.glb`, готово, undefined, () => готово(null)));

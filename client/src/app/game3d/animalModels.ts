@@ -27,21 +27,18 @@
 import * as THREE from 'three';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { сВходом } from './modelAccess';
+import { декодерDraco } from './draco';
 
 const MODEL_BASE = '/game/models/';
-const DRACO_BASE = '/game/draco/';
 
 let общийЗагрузчик: GLTFLoader | null = null;
 
 function загрузчик(): GLTFLoader | null {
   if (общийЗагрузчик) return общийЗагрузчик;
   try {
-    const draco = new DRACOLoader();
-    draco.setDecoderPath(DRACO_BASE);
     const l = new GLTFLoader();
-    l.setDRACOLoader(draco);
+    l.setDRACOLoader(декодерDraco());
     общийЗагрузчик = l;
     return l;
   } catch (e) {

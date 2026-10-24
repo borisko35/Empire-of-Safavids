@@ -10,10 +10,10 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // Модели закрыты входом: заголовок ставится перед загрузкой
 // (см. modelAccess.ts).
 import { сВходом } from './modelAccess';
+import { декодерDraco } from './draco';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
@@ -5549,6 +5549,31 @@ function жилыеУлицы(
       сторонаФонаря *= -1;
     }
 
+    // ── Платаны вдоль переулка (§330) ──
+    //
+    // Улица без деревьев в Исфахане — не улица: платан здесь главное
+    // дерево города, и его тень — то, ради чего вообще выходят на улицу
+    // днём. Ставим по одному через 19 м, на краю мостовой, в шахматном
+    // порядке с фонарями: иначе дерево стоит в фонаре.
+    //
+    // С §329 блок был снят: в кадре кроны не было. Проба §330 показала,
+    // что модель цела — в forward-рендере дерево видно; значит дело было в
+    // кадре и постановке, а не в файле. Вернули и проверили сверху.
+    let сторонаДерева = -1;
+    for (let т = НАЧАЛО + 15; т <= КОНЕЦ - 8; т += 19) {
+      const dx = ux * т + px * сторонаДерева * (ШИРИНА / 2 + 1.6);
+      const dz = uz * т + pz * сторонаДерева * (ШИРИНА / 2 + 1.6);
+      const имя = hash2(dx, dz) > 0.35 ? 'cypress' : `platan-${1 + Math.floor(hash2(dx, dz) * 4)}`;
+      decorВещь(city, имя, dx, dz, {
+        размер: имя === 'cypress' ? 7.5 : 6.0 + hash2(dz, dx) * 2.0,
+        y: 0.3,
+        ry: hash2(dx + 3, dz - 2) * Math.PI * 2,
+        colliderR: 0,
+        качание: { амплитуда: 0.02, фаза: hash2(dx, dz + 5) * 6.28 },
+      });
+      addCollider(CITY.x + dx, CITY.z + dz, 0.5);
+      сторонаДерева *= -1;
+    }
   }
   // Отчёт в консоль: сколько домов встало. Нужен, чтобы «улицы есть» было
   // числом, а не утверждением.
@@ -9469,10 +9494,11 @@ export function loadDecorModel(path: string): Promise<THREE.Group | null> {
   if (готовый) return готовый;
   const задача = new Promise<THREE.Group | null>((готово) => {
     try {
-      const draco = new DRACOLoader();
-      draco.setDecoderPath('/game/draco/');
+      // Декодер — общий на весь клиент (см. draco.ts): свой на каждую из
+      // 177 моделей упирался в потолок рабочих потоков, и модели молча
+      // не доезжали — ни ошибки, ни файла.
       const l = сВходом(new GLTFLoader());
-      l.setDRACOLoader(draco);
+      l.setDRACOLoader(декодерDraco());
       l.load(
         `/game/models/${path}`,
         (gltf) => готово((gltf.scene as THREE.Group) ?? null),
@@ -9583,6 +9609,9 @@ function частиМодели(имя: string, по: 'height' | 'horizontal'): 
       }
     }
     return части;
+  }).catch((e: unknown) => {
+    console.warn('[parts] fail ' + имя + ': ' + String(e));
+    return null;
   });
   частиCache.set(ключ, задача);
   return задача;
