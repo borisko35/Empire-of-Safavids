@@ -1,8 +1,10 @@
 // Интерактивные объекты: ящики, кувшины с маслом, навесы.
 // Объекты, с которыми игрок может взаимодействовать кликом по центру экрана.
+// §334: все три — готовые GLB-модели (crate, clay-jug, trade-tent).
 
 import * as THREE from 'three';
 import { M } from './interiors';
+import { loadDecorModel } from './terrain';
 
 /** Тип интерактивного объекта. */
 export type InteractiveKind =
@@ -19,7 +21,7 @@ export interface InteractiveData {
   collapseForce?: number;  // для навесов
 }
 
-/** Создать толкаемый ящик. */
+/** Создать толкаемый ящик (GLB). */
 export function createCrate(
   x: number, y: number, z: number,
   w = 0.8, h = 0.8, d = 0.8,
@@ -29,45 +31,29 @@ export function createCrate(
   g.position.set(x, y, z);
   g.rotation.y = ry;
 
-  const body = new THREE.Mesh(
+  // Плейсхолдер для мгновенного отображения: простой бокс
+  const placeholder = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
     M.wood
   );
-  body.castShadow = true;
-  body.receiveShadow = true;
-  g.add(body);
+  placeholder.castShadow = true;
+  placeholder.receiveShadow = true;
+  g.add(placeholder);
 
-  const edgeMat = M.woodDark;
-  const t = 0.04;
-  for (const [ex, ez] of [[-w/2, -d/2], [w/2, -d/2], [-w/2, d/2], [w/2, d/2]] as const) {
-    const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(t, h, t),
-      edgeMat
-    );
-    edge.position.set(ex, 0, ez);
-    edge.castShadow = true;
-    g.add(edge);
-  }
-  for (const [ex, ez] of [[-w/2, -d/2], [w/2, -d/2], [-w/2, d/2], [w/2, d/2]] as const) {
-    for (const ey of [h/2, -h/2] as const) {
-      const edge = new THREE.Mesh(
-        new THREE.BoxGeometry(w, t, t),
-        edgeMat
-      );
-      edge.position.set(ex, ey, ez);
-      edge.castShadow = true;
-      g.add(edge);
-    }
-    for (const ey of [h/2, -h/2] as const) {
-      const edge = new THREE.Mesh(
-        new THREE.BoxGeometry(t, t, d),
-        edgeMat
-      );
-      edge.position.set(ex, ey, ez);
-      edge.castShadow = true;
-      g.add(edge);
-    }
-  }
+  // Асинхронная подмена на GLB-модель
+  void loadDecorModel('models/decor/crate.glb').then((модель) => {
+    if (!модель) return;
+    g.remove(placeholder);
+    const вещь = модель.clone();
+    вещь.scale.setScalar(1);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(вещь);
+  });
 
   g.userData = {
     kind: 'crate',
@@ -78,7 +64,7 @@ export function createCrate(
   return g;
 }
 
-/** Создать кувшин с маслом (поджигается). */
+/** Создать кувшин с маслом (поджигается) — GLB. */
 export function createOilJug(
   x: number, y: number, z: number,
   ry = 0
@@ -87,39 +73,29 @@ export function createOilJug(
   g.position.set(x, y, z);
   g.rotation.y = ry;
 
-  const body = new THREE.Mesh(
+  // Плейсхолдер: цилиндр
+  const placeholder = new THREE.Mesh(
     new THREE.CylinderGeometry(0.25, 0.35, 0.7, 12),
     M.woodDark
   );
-  body.position.y = 0.35;
-  body.castShadow = true;
-  body.receiveShadow = true;
-  g.add(body);
+  placeholder.position.y = 0.35;
+  placeholder.castShadow = true;
+  placeholder.receiveShadow = true;
+  g.add(placeholder);
 
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.1, 0.12, 0.2, 12),
-    M.woodDark
-  );
-  neck.position.y = 0.8;
-  neck.castShadow = true;
-  g.add(neck);
-
-  const cork = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.14, 0.14, 0.08, 12),
-    M.red
-  );
-  cork.position.y = 0.92;
-  cork.castShadow = true;
-  g.add(cork);
-
-  const handle = new THREE.Mesh(
-    new THREE.TorusGeometry(0.18, 0.02, 6, 12),
-    M.iron
-  );
-  handle.position.set(0.25, 0.45, 0);
-  handle.rotation.x = Math.PI / 2;
-  handle.castShadow = true;
-  g.add(handle);
+  void loadDecorModel('models/decor/clay-jug.glb').then((модель) => {
+    if (!модель) return;
+    g.remove(placeholder);
+    const вещь = модель.clone();
+    вещь.scale.setScalar(1);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(вещь);
+  });
 
   g.userData = {
     kind: 'oil_jug',
@@ -130,7 +106,7 @@ export function createOilJug(
   return g;
 }
 
-/** Создать навес (рушится при ударе). */
+/** Создать навес (рушится при ударе) — GLB (trade-tent). */
 export function createAwning(
   x: number, y: number, z: number,
   w = 4, d = 2.5,
@@ -140,6 +116,7 @@ export function createAwning(
   g.position.set(x, y, z);
   g.rotation.y = ry;
 
+  // Плейсхолдер: четыре столба
   const postMat = M.woodDark;
   for (const [px, pz] of [[-w/2, -d/2], [w/2, -d/2], [-w/2, d/2], [w/2, d/2]] as const) {
     const post = new THREE.Mesh(
@@ -152,35 +129,20 @@ export function createAwning(
     g.add(post);
   }
 
-  const frameMat = M.woodDark;
-  const frameH = 0.15;
-  for (const [px, pz] of [[-w/2, -d/2], [w/2, -d/2], [-w/2, d/2], [w/2, d/2]] as const) {
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(w, frameH, frameH),
-      frameMat
-    );
-    beam.position.set(px, 2.5, pz);
-    beam.castShadow = true;
-    g.add(beam);
-  }
-  for (const [px, pz] of [[-w/2, -d/2], [w/2, -d/2], [-w/2, d/2], [w/2, d/2]] as const) {
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(frameH, frameH, d),
-      frameMat
-    );
-    beam.position.set(px, 2.5, pz);
-    beam.castShadow = true;
-    g.add(beam);
-  }
-
-  const roof = new THREE.Mesh(
-    new THREE.BoxGeometry(w + 0.4, 0.1, d + 0.4),
-    M.hay
-  );
-  roof.position.y = 2.55;
-  roof.castShadow = true;
-  roof.receiveShadow = true;
-  g.add(roof);
+  void loadDecorModel('models/decor/trade-tent.glb').then((модель) => {
+    if (!модель) return;
+    // Удаляем плейсхолдеры (столбы)
+    while (g.children.length) g.remove(g.children[0]);
+    const вещь = модель.clone();
+    вещь.scale.setScalar(1);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    g.add(вещь);
+  });
 
   g.userData = {
     kind: 'awning',
