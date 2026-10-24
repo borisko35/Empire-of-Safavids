@@ -47,6 +47,7 @@ import { createRipples, type RipplesHandle } from './boatRipples';
 import { createPuddleRipples, type PuddleRipplesHandle } from './puddleRipples';
 import { SkyEnvironment, type SkyState } from './skyEnvironment';
 import { createFauna, FaunaHandle } from './fauna';
+import { тикатьЗверей } from './animalModels';
 import { createNpcs, NpcsHandle } from './npc';
 import { createCivilians, CiviliansHandle } from './civilians';
 import { createTownfolk, TownfolkHandle } from './townfolk';
@@ -2589,6 +2590,8 @@ if (isMe && moving) {
     const dayI = 1 - night;
     this.sky.update(dt, now, this.clockHour / 24, { x: me.pos.x, z: me.pos.z });
     this.fauna.update(dt, now);
+    // Звери вне фауны (вол у склада, лошадь конюшни): их миксеры тикают здесь.
+    тикатьЗверей(dt);
     this.npcs.update(dt, now, this.camera.position);
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
     this.civilians.update(dt, now, me.pos.x, me.pos.z);
