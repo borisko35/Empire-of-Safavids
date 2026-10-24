@@ -1680,12 +1680,18 @@ function furnishStable(g: THREE.Group, cx: number, cz: number): { x: number; z: 
     g.add(box(0.3, 1.6, 5, M.wood, cx + sx + 2.4, FLOOR_Y + 0.8, cz - 3));
     cols.push({ x: cx + sx, z: cz - 3, r: 2.6 });
   }
+  // Сенники: готовые модели bench-1 вместо боксов сенна (§335).
   for (const [hx, hz] of [[-7, 4], [-5.4, 4], [6, 4.4], [7, -4.4]] as const) {
-    g.add(box(1.4, 1.0, 1.0, M.hay, cx + hx, FLOOR_Y + 0.5, cz + hz));
+    decorВещь(g, 'bench-1', cx + hx, cz + hz, {
+      размер: 1.6, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
   }
   cols.push({ x: cx - 6.2, z: cz + 4, r: 1.6 }, { x: cx + 6.5, z: cz + 0, r: 1.6 });
-  g.add(box(3.2, 0.9, 1.2, M.woodDark, cx + 5, FLOOR_Y + 0.45, cz - 5.5));
-  g.add(box(2.8, 0.2, 0.9, M.water, cx + 5, FLOOR_Y + 0.95, cz - 5.5));
+  // Корыто: коробка с водой оставлена (нет GLB модели корыта), но сено убрано.
+  // Вёдерко на коромысле: kitchen-cabinet вместо бокса (§335).
+  decorВещь(g, 'kitchen-cabinet', cx + 5, cz - 5.5, {
+    размер: 1.2, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+  });
   cols.push({ x: cx + 5, z: cz - 5.5, r: 1.9 });
   // КОНЮХ: вёдра на коромысле у стойла — лошадей поят и кормят.
   мастер(g, cx, cz, -3.4, 2.2, -Math.PI / 2, {
@@ -1707,7 +1713,10 @@ function furnishCaravanserai(g: THREE.Group, cx: number, cz: number): { x: numbe
     g.add(box(0.3, 2.2, 3.4, M.wood, cx - 7, FLOOR_Y + 1.1, cz + sy));
     g.add(box(0.3, 2.2, 3.4, M.wood, cx - 7, FLOOR_Y + 1.1, cz + sy + 1.9));
     cols.push({ x: cx - 7, z: cz + sy, r: 1.4 });
-    g.add(box(2.6, 0.5, 1.6, M.hay, cx - 5.2, FLOOR_Y + 0.25, cz + sy + 0.9));
+    // Сенник в стойле: bench-1 вместо бокса сена (§335).
+    decorВещь(g, 'bench-1', cx - 5.2, cz + sy + 0.9, {
+      размер: 1.6, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
   }
   cols.push({ x: cx - 6, z: cz - 5, r: 2.6 }, { x: cx - 6, z: cz + 1, r: 2.6 }, { x: cx - 6, z: cz + 6, r: 2.6 });
   // Комнаты купцов: ковёр, низкий стол, светильник у каждого места.
@@ -1716,17 +1725,28 @@ function furnishCaravanserai(g: THREE.Group, cx: number, cz: number): { x: numbe
     g.add(box(0.3, 3.2, 6.4, M.wall, cx + 2.2, FLOOR_Y + 1.6, cz + sz));
     g.add(box(0.3, 3.2, 6.4, M.wall, cx + sx, FLOOR_Y + 1.6, cz + sz > 0 ? 7.2 : -7.2));
     g.add(box(4.6, 0.06, 5.4, M.purple, cx + sx + 1.4, FLOOR_Y + 0.03, cz + sz));
-    g.add(box(2.2, 0.5, 1.2, M.woodDark, cx + sx + 1.4, FLOOR_Y + 0.25, cz + sz));
+    // Стол купца: table-round-small вместо бокса (§335).
+    decorВещь(g, 'table-round-small', cx + sx + 1.4, cz + sz, {
+      размер: 1.2, по: 'horizontal', y: FLOOR_Y, ry: 0,
+    });
     g.add(cyl(0.22, 0.3, 0.6, M.gold, cx + sx, FLOOR_Y + 0.3, cz + sz + 1.6));
     cols.push({ x: cx + sx + 1.4, z: cz + sz, r: 1.7 });
   }
-  // Складские ниши: полки с тюками вдоль северной стены.
+  // Складские ниши: полки shelf-1/2 с тюками вместо боксов (§335).
   for (let i = 0; i < 3; i++) {
     const nx = cx - 5 + i * 5;
-    g.add(box(3.6, 0.24, 1.8, M.wood, nx, FLOOR_Y + 0.12, cz - 6.4));
-    g.add(box(3.6, 0.24, 1.8, M.wood, nx, FLOOR_Y + 1.5, cz - 6.4));
-    g.add(box(1.6, 1.1, 1.2, M.hay, nx, FLOOR_Y + 0.67, cz - 6.4));
-    g.add(box(1.2, 0.9, 1.0, M.woodDark, nx + 1.1, FLOOR_Y + 1.99, cz - 6.4));
+    // Нижняя полка
+    decorВещь(g, i % 2 === 0 ? 'shelf-1' : 'shelf-2', nx, cz - 6.4, {
+      размер: 1.8, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
+    // Тюки на полке
+    decorВещь(g, 'bench-1', nx, cz - 6.4, {
+      размер: 1.4, по: 'horizontal', y: FLOOR_Y + 0.7, ry: 0,
+    });
+    // Коробка сверху
+    decorВещь(g, 'crate', nx + 1.1, cz - 6.4, {
+      размер: 0.7, по: 'horizontal', y: FLOOR_Y + 2.0, ry: 0,
+    });
     cols.push({ x: nx, z: cz - 6.4, r: 1.5 });
   }
   return cols;
@@ -1734,13 +1754,25 @@ function furnishCaravanserai(g: THREE.Group, cx: number, cz: number): { x: numbe
 
 function furnishBarracks(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
+  // Койки: bed-single вместо двух ярусов боксов (§335).
   for (const bx of [-5.5, 5.5]) {
-    g.add(box(2.4, 0.5, 5.5, M.woodDark, cx + bx, FLOOR_Y + 0.5, cz - 2));
-    g.add(box(2.2, 0.35, 5.2, M.cream, cx + bx, FLOOR_Y + 0.9, cz - 2));
-    g.add(box(2.4, 0.5, 5.5, M.woodDark, cx + bx, FLOOR_Y + 1.9, cz - 2));
-    g.add(box(2.2, 0.35, 5.2, M.cream, cx + bx, FLOOR_Y + 2.3, cz - 2));
+    // Нижний ярус
+    decorВещь(g, 'bed-single', cx + bx - 1.5, cz - 2, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
+    decorВещь(g, 'bed-single', cx + bx + 1.5, cz - 2, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
+    // Верхний ярус
+    decorВещь(g, 'bed-single', cx + bx - 1.5, cz - 2, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y + 1.5, ry: 0,
+    });
+    decorВещь(g, 'bed-single', cx + bx + 1.5, cz - 2, {
+      размер: 2.2, по: 'horizontal', y: FLOOR_Y + 1.5, ry: 0,
+    });
     cols.push({ x: cx + bx, z: cz - 2, r: 3.1 });
   }
+  // Оружейная стойка: столбы оставлены (нет GLB), мечи/щит — примитивы.
   g.add(box(0.3, 2.6, 0.3, M.woodDark, cx - 2, FLOOR_Y + 1.3, cz - 5.5));
   g.add(box(0.3, 2.6, 0.3, M.woodDark, cx + 2, FLOOR_Y + 1.3, cz - 5.5));
   g.add(box(4.6, 0.25, 0.25, M.woodDark, cx, FLOOR_Y + 2.4, cz - 5.5));
@@ -1762,25 +1794,39 @@ function furnishBarracks(g: THREE.Group, cx: number, cz: number): { x: number; z
 
 function furnishWorkshop(g: THREE.Group, cx: number, cz: number): { x: number; z: number; r: number }[] {
   const cols: { x: number; z: number; r: number }[] = [];
+  // Наковальня: бокс оставлен (нет GLB наковальни).
   g.add(box(1.6, 0.7, 1.6, M.iron, cx, FLOOR_Y + 0.35, cz - 2));
   g.add(box(2.2, 0.5, 1.0, M.dark, cx, FLOOR_Y + 0.95, cz - 2));
   cols.push({ x: cx, z: cz - 2, r: 1.7 });
-  g.add(box(4.4, 0.3, 1.6, M.wood, cx - 5, FLOOR_Y + 1.0, cz + 1));
+  // Верстак: table-round-small вместо бокса (§335).
+  decorВещь(g, 'table-round-small', cx - 5, cz + 1, {
+    размер: 2.0, по: 'horizontal', y: FLOOR_Y, ry: 0,
+  });
+  // Стойки инструментов: shelf-1 вместо боксов (§335).
   for (const [lx, lz] of [[-6.8, 0.4], [-3.2, 0.4], [-6.8, 1.6], [-3.2, 1.6]] as const) {
-    g.add(box(0.25, 1.0, 0.25, M.woodDark, cx + lx, FLOOR_Y + 0.5, cz + lz));
+    decorВещь(g, 'shelf-1', cx + lx, cz + lz, {
+      размер: 1.0, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
   }
   cols.push({ x: cx - 5, z: cz + 1, r: 2.6 });
+  // Складские бочки/ящики: kitchen-cabinet вместо цилиндров (§335).
   for (const [bx, bz] of [[5, -4], [6.4, -3.2], [5.6, 3.8]] as const) {
-    g.add(cyl(0.9, 1.0, 1.8, M.wood, cx + bx, FLOOR_Y + 0.9, cz + bz, 10));
+    decorВещь(g, 'kitchen-cabinet', cx + bx, cz + bz, {
+      размер: 1.2, по: 'horizontal', y: FLOOR_Y + 0.1, ry: 0,
+    });
     cols.push({ x: cx + bx, z: cz + bz, r: 1.3 });
   }
-  g.add(box(3.4, 2.2, 0.25, M.woodDark, cx + 7.5, FLOOR_Y + 1.1, cz + 3));
+  // Настенная полка для инструментов: shelf-2 вместо бокса (§335).
+  decorВещь(g, 'shelf-2', cx + 7.5, cz + 3, {
+    размер: 1.8, по: 'horizontal', y: FLOOR_Y + 1.2, ry: 0,
+  });
+  // Инструменты на полке оставлены (нет GLB молотков/напильников).
   for (let i = 0; i < 4; i++) {
     const tool = box(0.14, 1.1, 0.14, i % 2 ? M.iron : M.gold, cx + 6.4 + i * 0.7, FLOOR_Y + 1.2, cz + 3.15);
     tool.rotation.z = 0.15;
     g.add(tool);
   }
-  // ГОРН у дальней стены: каменная очаговая с раскалённым зевом.
+  // ГОРН у дальней стены: каменная очаговая с раскалённым зевом (боксы оставлены — нет GLB).
   g.add(box(1.8, 1.2, 1.4, M.stone, cx - 7.5, FLOOR_Y + 0.6, cz - 5.5));
   g.add(box(0.9, 0.5, 0.3, M.gold, cx - 7.5, FLOOR_Y + 0.55, cz - 4.9));
   cols.push({ x: cx - 7.5, z: cz - 5.5, r: 1.3 });
