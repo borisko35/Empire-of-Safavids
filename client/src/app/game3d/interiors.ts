@@ -83,7 +83,7 @@ function поставитьСтражаНаПост(
       rig.group.visible = false;
       g.add(clone);
     } catch (e) {
-      console.warn('[interior] страж: модель не встала', e);
+      console.warn('[interior] guard model failed', e);
     }
   })();
 }

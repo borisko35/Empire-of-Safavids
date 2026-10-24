@@ -15,6 +15,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 // (см. modelAccess.ts).
 import { сВходом } from './modelAccess';
 import { clone as копияСкелета } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   sandTexture, plasterTexture, stoneTexture, mosaicTexture, plazaTexture, woodTexture,
   waterfallTexture, macroTexture, addMacroLayer,
@@ -35,6 +36,7 @@ import { applySurface, surfaceMaterial, surfaceTile } from './surfaces';
 import { metricBoxUV, metricCylinderUV } from './metricUv';
 import { GATE_STELES, inscriptionFor, steleMesh } from './inscriptions';
 import { безМёртвыхДорожек } from './realRig';
+import { собратьЗверя, следитьЗверем } from './animalModels';
 import { WAVE_GLSL, WATER_GRIDS, gradedAxis, seaShoreProfile, type WaterBody } from './waterWaves';
 
 // Половина стороны мира живёт в shared/water.ts, потому что вода про неё тоже
@@ -2253,102 +2255,27 @@ export function followSeaToCamera(x: number): void {
 }
 
 /**
- * Лодка-челн для рек (§304).
+ * Лодка-челн (§304): готовая модель лодки (Quaternius).
  *
- * БЫЛО: на реках не было ни одной лодки — вода была пустой, и читалась как
- * пустая лента. Лодка у причала появилась в §297, но река мимо причала шла
- * пустая.
- *
- * ТЕПЕРЬ: вытянутый корпус с сужающимися носом и кормой, две поперечные
- * планки, вёсла по бортам и шест у борта — лодку ведут шестом.
+ * БЫЛО: корпус из ящика с конусами на носу и корме. ТЕПЕРЬ: настоящая
+ * гребная лодка; вёсла и шест ушли вместе с процедурной сборкой.
+ * Ставится decorВещем с y над уровнем воды — лодке нужен не грунт, а вода.
  */
-function челн(): THREE.Group {
-  const г = new THREE.Group();
-  const корпус = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.42, 3.4), MAT.wood);
-  корпус.position.y = 0.1;
-  корпус.castShadow = true;
-  г.add(корпус);
-  // Нос и корма сужаются — лодка не ящик.
-  const нос = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 6), MAT.wood);
-  нос.rotation.x = -Math.PI / 2;
-  нос.position.set(0, 0.1, 2.2);
-  г.add(нос);
-  const корма = нос.clone();
-  корма.rotation.x = Math.PI / 2;
-  корма.position.z = -2.2;
-  г.add(корма);
-  // Планки-поперечины: в них сидят.
-  for (const z of [-0.8, 0.4]) {
-    const планка = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.06, 0.2), MAT.trunk);
-    планка.position.set(0, 0.3, z);
-    г.add(планка);
-  }
-  // Вёсла по бортам.
-  for (const side of [-1, 1]) {
-    const древко = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 2.2, 5), MAT.trunk);
-    древко.rotation.z = Math.PI / 2;
-    древко.rotation.y = side * 0.5;
-    древко.position.set(side * 0.5, 0.35, 0.3);
-    древко.castShadow = true;
-    г.add(древко);
-  }
-  // Шест: лодку ведут шестом, приглубив в дно.
-  const шест = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 3.2, 5), MAT.trunk);
-  шест.position.set(0.3, 1.2, -0.6);
-  шест.rotation.z = 0.25;
-  г.add(шест);
-  return г;
+function поставитьЧелн(
+  scene: THREE.Object3D, x: number, z: number, y: number, ry: number,
+): void {
+  decorВещь(scene, 'boat', x, z, { размер: 3.2, по: 'горизонт', y, ry });
 }
 
 /**
- * Цапля у воды (§305).
+ * Цапля у воды (§305): готовая модель серой цапли (Google Poly, CC-BY).
  *
- * БЫЛО: у воды не было ни одной водоплавающей птицы — только утки (капсулы,
- * §286) и чайки на сваях (§303). Болотистая кромка была пустой.
- *
- * ТЕПЕРЬ: цапля — тело-капсула, длинная шея из двух звеньев, голова с длинным
- * клювом, длинные тонкие ноги и сложенный хвост. Стоит по колено в воде.
+ * БЫЛО: тело-капсула, шея из двух звеньев, конус-клюв — болотный суррогат.
+ * ТЕПЕРЬ: настоящая птица в позе покоя. Модель статичная: цапля стоит
+ * часами, и поза покоя — её главное состояние.
  */
-function цапля(): THREE.Group {
-  const г = new THREE.Group();
-  const перья = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.9 });
-  const тёмные = new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.9 });
-  const клювМатериал = new THREE.MeshStandardMaterial({ color: 0xd8a13a, roughness: 0.55 });
-  // Тело.
-  const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.4, 3, 10), перья);
-  тело.rotation.x = Math.PI / 2;
-  тело.position.set(0, 0.95, 0);
-  тело.castShadow = true;
-  г.add(тело);
-  // Шея: два звена, чтобы изгибалась.
-  const шея = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.3, 3, 7), перья);
-  шея.position.set(0, 1.22, -0.12);
-  шея.rotation.x = -0.35;
-  г.add(шея);
-  const шея2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.26, 3, 7), перья);
-  шея2.position.set(0, 1.5, -0.26);
-  шея2.rotation.x = -0.9;
-  г.add(шея2);
-  // Голова и длинный клюв.
-  const голова = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), перья);
-  голова.position.set(0, 1.63, -0.4);
-  г.add(голова);
-  const клюв = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.26, 5), клювМатериал);
-  клюв.rotation.x = -Math.PI / 2;
-  клюв.position.set(0, 1.61, -0.55);
-  г.add(клюв);
-  // Сложенный хвост.
-  const хвост = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.04, 0.22), тёмные);
-  хвост.position.set(0, 0.95, 0.26);
-  г.add(хвост);
-  // Длинные ноги — цапля на них тонет в камыше.
-  for (const side of [-1, 1]) {
-    const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.9, 5), клювМатериал);
-    нога.position.set(side * 0.05, 0.45, 0.02);
-    нога.castShadow = true;
-    г.add(нога);
-  }
-  return г;
+function цапляПоставить(scene: THREE.Object3D, x: number, z: number, y: number, ry: number): void {
+  decorВещь(scene, 'heron', x, z, { размер: 1.0, ry, y });
 }
 
 export function buildWater(scene: THREE.Scene): void {
@@ -2397,11 +2324,8 @@ export function buildWater(scene: THREE.Scene): void {
       const t = d * (река.length - 1) - i;
       const x = река[i].x + (река[i + 1].x - река[i].x) * t;
       const z = река[i].z + (река[i + 1].z - река[i].z) * t;
-      const лодка = челн();
-      лодка.position.set(x, LAKE.level + 0.04, z);
       // Лодка стоит по течению: нос вниз по реке.
-      лодка.rotation.y = Math.atan2(река[i + 1].x - река[i].x, река[i + 1].z - река[i].z);
-      scene.add(лодка);
+      поставитьЧелн(scene, x, z, LAKE.level + 0.04, Math.atan2(река[i + 1].x - река[i].x, река[i + 1].z - река[i].z));
     }
   }
 
@@ -2467,7 +2391,6 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   const v = new THREE.Vector3();
   const sc = new THREE.Vector3();
   const color = new THREE.Color();
-  const flowerColors = [0xe85a6a, 0xe8c94a, 0xd07ae8, 0xf0f0e0, 0xe88a4a];
   const put = (mesh: THREE.InstancedMesh, idx: number, x: number, y: number, z: number, k: number, rotY = 0, sy = k, tilt = 0) => {
     m.compose(v.set(x, y, z), q.setFromEuler(new THREE.Euler(tilt, rotY, tilt * 0.7)), sc.set(k, sy, k));
     mesh.setMatrixAt(idx, m);
@@ -2498,92 +2421,44 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     камыш.push({ x, z, h: groundHeight(x, z) });
     // Цапли на кромке (§305): стоят по колено в воде, где камыш.
     if (i % 5 === 0) {
-      const цапляПтица = цапля();
-      цапляПтица.position.set(x, LAKE.level - 0.05, z);
-      цапляПтица.rotation.y = hash2(i, 11) * Math.PI * 2;
-      scene.add(цапляПтица);
+      цапляПоставить(scene, x, z, LAKE.level - 0.05, hash2(i, 11) * Math.PI * 2);
     }
   }
 
-  // Стволы + кроны (платан/кипарис по случаю)
+  // Деревья: настоящие модели вместо капсул (§326).
   //
-  // §287. БЫЛО: ствол — ровный цилиндр, крона — один конус или один шар.
-  // Дерево читалось как палка с шариком на конце: шапка одинаковой формы,
-  // ствол без корней, все деревья строго вертикальные и одного оттенка.
+  // БЫЛО: пять InstancedMesh из примитивов (ствол, корневой наплыв, три
+  // кроны) — «палка с шариком», пусть и собранный из восьми фигур.
   //
-  // ТЕПЕРЬ: ствол сужается кверху и имеет корневой наплыв, дерево наклонено
-  // (ровные вертикальные стволы читаются как колонны), крона собрана из двух
-  // объёмов (слой у кипариса, гроздь у платана), и у каждого дерева свой
-  // оттенок листвы.
-  const trunkGeo = new THREE.CylinderGeometry(0.19, 0.34, 3.2, 6);
-  const trunks = new THREE.InstancedMesh(trunkGeo, MAT.trunk, trees.length);
-  trunks.castShadow = true;
-  // Корневой наплыв: без него ствол начинается из земли ровно, как палка.
-  const flareGeo = new THREE.CylinderGeometry(0.3, 0.62, 0.75, 7);
-  const flares = new THREE.InstancedMesh(flareGeo, MAT.trunk, trees.length);
-  flares.castShadow = true;
-  const crownGeo = new THREE.ConeGeometry(1.7, 3.4, 7);
-  const crowns = new THREE.InstancedMesh(crownGeo, MAT.foliage, trees.length);
-  crowns.castShadow = true;
-  // Нижний слой кроны кипариса — конус меньше и ниже.
-  const crownLowGeo = new THREE.ConeGeometry(1.22, 2.2, 7);
-  const crownsLow = new THREE.InstancedMesh(crownLowGeo, MAT.foliage, trees.length);
-  crownsLow.castShadow = true;
-  const crown2Geo = new THREE.SphereGeometry(1.9, 8, 6);
-  const crowns2 = new THREE.InstancedMesh(crown2Geo, MAT.foliageLight, trees.length);
-  crowns2.castShadow = true;
-  // Второй шар в кроне платана: крона-гроздь, а не один шар.
-  const crown2bGeo = new THREE.SphereGeometry(1.24, 7, 5);
-  const crowns2b = new THREE.InstancedMesh(crown2bGeo, MAT.foliageLight, trees.length);
-  crowns2b.castShadow = true;
-  trees.forEach((s, idx) => {
-    const k = 0.8 + rng() * 1.2;
-    // Наклон: деревья не растут отвесно.
-    const наклон = (rng() - 0.5) * 0.13;
-    const высота = 3.2 * k;
-    put(trunks, idx, s.x, s.h + высота / 2, s.z, k, 0, k, наклон);
-    put(flares, idx, s.x, s.h + 0.3 * k, s.z, k, rng() * Math.PI, k, наклон);
-    // Крона следует за наклоном ствола, иначе ствол с кроной разъезжаются.
-    const над = 1.9 * k;
-    const кронаY = s.h + высота + над * Math.cos(наклон);
-    const кронаZ = s.z + над * Math.sin(наклон);
+  // ТЕПЕРЬ: платан и кипарис — готовые GLB (Quaternius, CC0), по несколько
+  // вариантов на силуэт, чтобы лес не был рощей клонов. Поле собирается
+  // матрицами сразу, геометрия доезжает по сети (decorПоле). Оттенок —
+  // слабый множитель у каждого дерева: материал у модели один на ствол и
+  // крону, красить крону отдельно больше нельзя.
+  const платаны: ТочкаПоля[][] = [[], [], [], []];
+  const кипарисы: ТочкаПоля[] = [];
+  trees.forEach((s) => {
     const cypress = s.biome !== 'field' && rng() < 0.7 || rng() < 0.4;
+    // Наклон: деревья не растут отвесно.
+    const наклон = (rng() - 0.5) * 0.11;
+    const точка: ТочкаПоля = {
+      x: s.x, z: s.z, y: s.h - 0.12, k: 0, ry: rng() * Math.PI * 2, наклон,
+      // Множитель около белого: чуть теплее/холоднее и светлее/темнее.
+      tint: new THREE.Color().setHSL(0.09 + rng() * 0.05, 0.18, 0.78 + rng() * 0.18),
+    };
     if (cypress) {
-      put(crowns, idx, s.x, кронаY, кронаZ, k * 0.8, rng() * Math.PI, k * 1.25, наклон);
-      put(crownsLow, idx, s.x, кронаY - 1.5 * k, кронаZ, k * 0.85, rng() * Math.PI, k * 1.15, наклон);
-      put(crowns2, idx, s.x, -9999, s.z, 0.001);
-      put(crowns2b, idx, s.x, -9999, s.z, 0.001);
+      // Кипарис в источнике тринадцатиметровый: после нормализации k — метры.
+      точка.k = 5.5 + rng() * 3.5;
+      кипарисы.push(точка);
     } else {
-      put(crowns, idx, s.x, -9999, s.z, 0.001);
-      put(crownsLow, idx, s.x, -9999, s.z, 0.001);
-      put(crowns2, idx, s.x, кронаY, кронаZ, k * 1.05, 0, k, наклон);
-      // Второй шар — сбоку и ниже: крона становится гроздью.
-      put(crowns2b, idx, s.x + (rng() - 0.5) * 2.6 * k, кронаY - 0.8 * k, кронаZ + (rng() - 0.5) * 2.6 * k, k * 0.95, rng() * Math.PI, k, наклон);
+      точка.k = 4.5 + rng() * 3.5;
+      платаны[Math.floor(rng() * платаны.length)].push(точка);
     }
-    // Оттенок листвы у каждого дерева свой: одно зелёное на всех читалось бы
-    // как покрашенное.
-    color.setHSL(0.22 + rng() * 0.07, 0.3 + rng() * 0.18, 0.22 + rng() * 0.09);
-    crowns.setColorAt(idx, color);
-    crownsLow.setColorAt(idx, color);
-    color.offsetHSL(0.01, 0.04, 0.03);
-    crowns2.setColorAt(idx, color);
-    crowns2b.setColorAt(idx, color);
-  });
-  trunks.count = trees.length;
-  flares.count = trees.length;
-  crowns.count = trees.length;
-  crownsLow.count = trees.length;
-  crowns2.count = trees.length;
-  crowns2b.count = trees.length;
-  if (crowns.instanceColor) crowns.instanceColor.needsUpdate = true;
-  if (crownsLow.instanceColor) crownsLow.instanceColor.needsUpdate = true;
-  if (crowns2.instanceColor) crowns2.instanceColor.needsUpdate = true;
-  if (crowns2b.instanceColor) crowns2b.instanceColor.needsUpdate = true;
-
-  // Коллайдеры деревьев (стволы)
-  for (const s of trees) {
+    // Коллайдеры деревьев (стволы)
     addCollider(s.x, s.z, 0.5);
-  }
+  });
+  платаны.forEach((точки, i) => decorПоле(scene, `platan-${i + 1}`, точки));
+  decorПоле(scene, 'cypress', кипарисы);
 
   // Камыш у воды (§301): пучок длинных узких листьев, растущих из воды.
   const камышГео = new THREE.BufferGeometry();
@@ -2620,105 +2495,68 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
   камышMesh.count = камыш.length;
   if (камышMesh.instanceColor) камышMesh.instanceColor.needsUpdate = true;
 
-  // Камни
-  const rockGeo = new THREE.IcosahedronGeometry(1, 0);
-  const rocksMesh = new THREE.InstancedMesh(rockGeo, MAT.stone, rocks.length);
-  rocksMesh.castShadow = true; rocksMesh.receiveShadow = true;
+  // Камни: готовые валуны (Quaternius), у скал — крупнее. Нормализация по
+  // горизонтали: у камня важен размер в плане, а не высота.
+  const rockVariants = ['rock-1', 'rock-2', 'rock-3', 'rock-4', 'rock-5'];
+  const rockPoints: ТочкаПоля[][] = [[], [], [], [], []];
   rocks.forEach((s, idx) => {
-    const k = 0.6 + rng() * (s.biome === 'mountain' ? 2.6 : 1.6);
-    m.compose(v.set(s.x, s.h + k * 0.25, s.z), q.setFromEuler(new THREE.Euler(rng() * 0.4, rng() * Math.PI, 0)), sc.set(k, k * 0.75, k));
-    rocksMesh.setMatrixAt(idx, m);
-  });
-  rocksMesh.count = rocks.length;
-  // Коллайдеры камней: по размеру (мелочь не мешает, валуны держат)
-  for (const s of rocks) {
+    // БЫЛО: диаметр 2k при r=1 у икосаэдра; k = 0.6..3.2. Нормализованный
+    // камень — единичный габарит, поэтому k удваивается.
+    const k = (0.6 + rng() * (s.biome === 'mountain' ? 2.6 : 1.6)) * 2;
+    rockPoints[idx % rockPoints.length].push({
+      x: s.x, z: s.z, y: s.h - 0.12, k, ry: rng() * Math.PI * 2,
+      наклон: (rng() - 0.5) * 0.4,
+    });
+    // Коллайдеры камней: по размеру (мелочь не мешает, валуны держат)
     const big = s.biome === 'mountain';
     addCollider(s.x, s.z, big ? 1.4 : 0.9);
-  }
+  });
+  rockVariants.forEach((имя, i) => decorПоле(scene, имя, rockPoints[i], { по: 'горизонт', тени: true }));
 
-  // Трава: пучок из нескольких blades (§287).
-  //
-  // БЫЛО: конус. На земле стояли маленькие шишки, а не трава. ТЕПЕРЬ: пучок
-  // из четырёх наклонённых blades — как у травы в поле. Лист двусторонний:
-  // клин без обратной стороны гас с одной стороны.
-  const tuftGeo = new THREE.BufferGeometry();
-  {
-    const вершины: number[] = [];
-    const индексы: number[] = [];
-    for (let b = 0; b < 4; b++) {
-      const a = (b / 4) * Math.PI * 2 + 0.4;
-      const наклон = 0.22 + (b % 2) * 0.13;
-      const w = 0.055, h = 1.05;
-      const dx = Math.cos(a), dz = Math.sin(a);
-      const base = вершины.length / 3;
-      вершины.push(
-        -dz * w, 0, dx * w,
-        dz * w, 0, -dx * w,
-        dx * h * наклон, h, dz * h * наклон,
-      );
-      индексы.push(base, base + 1, base + 2);
-      индексы.push(base + 2, base + 1, base); // обратная сторона
-    }
-    tuftGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(вершины), 3));
-    tuftGeo.setIndex(индексы);
-    tuftGeo.computeVertexNormals();
-  }
-  const tuftsMesh = new THREE.InstancedMesh(tuftGeo, MAT.foliageLight, tufts.length);
+  // Трава: готовые пучки (Quaternius), по три варианта.
+  const grassVariants = ['grass-tuft-1', 'grass-tuft-2', 'grass-tuft-3'];
+  const grassPoints: ТочкаПоля[][] = [[], [], []];
   tufts.forEach((s, idx) => {
-    const k = 0.7 + rng() * 0.9;
-    put(tuftsMesh, idx, s.x, s.h, s.z, k, rng() * Math.PI);
+    grassPoints[idx % grassPoints.length].push({
+      x: s.x, z: s.z, y: s.h, k: 0.45 + rng() * 0.55, ry: rng() * Math.PI * 2,
+      tint: new THREE.Color().setHSL(0.24 + rng() * 0.05, 0.3, 0.75 + rng() * 0.2),
+    });
   });
-  tuftsMesh.count = tufts.length;
+  grassVariants.forEach((имя, i) => decorПоле(scene, имя, grassPoints[i]));
 
-  // Цветы (только поля)
-  const flowerGeo = new THREE.SphereGeometry(0.12, 5, 4);
-  const flowersMesh = new THREE.InstancedMesh(flowerGeo, MAT.flower, flowers.length);
-  const stemGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4);
-  const stemsMesh = new THREE.InstancedMesh(stemGeo, MAT.foliageLight, flowers.length);
+  // Цветы: четыре формы, цвет несёт сама модель.
+  const flowerVariants = ['flower-1', 'flower-2', 'flower-3', 'flower-4'];
+  const flowerPoints: ТочкаПоля[][] = [[], [], [], []];
   flowers.forEach((s, idx) => {
-    const k = 0.8 + rng() * 0.7;
-    put(stemsMesh, idx, s.x, s.h + 0.25 * k, s.z, k);
-    put(flowersMesh, idx, s.x, s.h + 0.55 * k, s.z, k);
-    color.setHex(flowerColors[Math.floor(rng() * flowerColors.length)]);
-    flowersMesh.setColorAt(idx, color);
+    flowerPoints[idx % flowerPoints.length].push({
+      x: s.x, z: s.z, y: s.h, k: 0.3 + rng() * 0.3, ry: rng() * Math.PI * 2,
+    });
   });
-  flowersMesh.count = flowers.length; stemsMesh.count = flowers.length;
-  if (flowersMesh.instanceColor) flowersMesh.instanceColor.needsUpdate = true;
+  flowerVariants.forEach((имя, i) => decorПоле(scene, имя, flowerPoints[i]));
 
-  // Пустынный кустарник (саксаул): короткий ствол + гроздь листвы (§287).
-  //
-  // БЫЛО: ствол и один шар — шарик на палочке. ТЕПЕРЬ: два шара разного
-  // размера, сбитых вбок, — кустарник ветвится.
-  const brushTrunkGeo = new THREE.CylinderGeometry(0.08, 0.14, 0.9, 5);
-  const brushTrunks = new THREE.InstancedMesh(brushTrunkGeo, MAT.trunk, brushes.length);
-  const brushGeo = new THREE.SphereGeometry(0.8, 7, 5);
-  const brushesMesh = new THREE.InstancedMesh(brushGeo, MAT.brush, brushes.length);
-  const brush2Geo = new THREE.SphereGeometry(0.52, 6, 5);
-  const brushesMesh2 = new THREE.InstancedMesh(brush2Geo, MAT.brush, brushes.length);
+  // Пустынный кустарник (саксаул): готовый куст с песочным множителем —
+  // зелень паков слишком сочная для пустыни.
+  const brushVariants = ['bush-1', 'bush-2'];
+  const brushPoints: ТочкаПоля[][] = [[], []];
   brushes.forEach((s, idx) => {
-    const k = 0.7 + rng() * 1.1;
-    put(brushTrunks, idx, s.x, s.h + 0.45 * k, s.z, k);
-    put(brushesMesh, idx, s.x, s.h + 1.1 * k, s.z, k, 0, k * 0.8);
-    // Второй шар сбоку и ниже.
-    put(brushesMesh2, idx, s.x + (rng() - 0.5) * 0.9 * k, s.h + 0.78 * k, s.z + (rng() - 0.5) * 0.9 * k, k, rng() * Math.PI, k * 0.8);
+    brushPoints[idx % brushPoints.length].push({
+      x: s.x, z: s.z, y: s.h - 0.08, k: 0.9 + rng() * 1.0, ry: rng() * Math.PI * 2,
+      tint: new THREE.Color().setHSL(0.11, 0.28, 0.62 + rng() * 0.12),
+    });
   });
-  brushTrunks.count = brushes.length; brushesMesh.count = brushes.length; brushesMesh2.count = brushes.length;
+  brushVariants.forEach((имя, i) => decorПоле(scene, имя, brushPoints[i]));
 
-  // Горная хвоя: тёмные узкие конусы (§287 — в два слоя, как у ёлки).
-  const pineGeo = new THREE.ConeGeometry(1.2, 4.4, 6);
-  const pinesMesh = new THREE.InstancedMesh(pineGeo, MAT.foliageDark, pines.length);
-  const pineLowGeo = new THREE.ConeGeometry(0.92, 3.0, 6);
-  const pinesLow = new THREE.InstancedMesh(pineLowGeo, MAT.foliageDark, pines.length);
-  const pineTrunkGeo = new THREE.CylinderGeometry(0.14, 0.2, 1.4, 5);
-  const pineTrunks = new THREE.InstancedMesh(pineTrunkGeo, MAT.trunk, pines.length);
+  // Горная хвоя: готовые ели (Quaternius).
+  const pineVariants = ['pine-1', 'pine-2', 'pine-3'];
+  const pinePoints: ТочкаПоля[][] = [[], [], []];
   pines.forEach((s, idx) => {
-    const k = 0.9 + rng() * 0.9;
-    put(pineTrunks, idx, s.x, s.h + 0.7 * k, s.z, k);
-    put(pinesMesh, idx, s.x, s.h + 3.1 * k, s.z, k);
-    // Нижний слой шире и ниже — силуэт ёлки, а не шишки.
-    put(pinesLow, idx, s.x, s.h + 1.9 * k, s.z, k * 1.08);
+    pinePoints[idx % pinePoints.length].push({
+      x: s.x, z: s.z, y: s.h - 0.1, k: 3.8 + rng() * 2.6, ry: rng() * Math.PI * 2,
+      наклон: (rng() - 0.5) * 0.09,
+      tint: new THREE.Color().setHSL(0.3 + rng() * 0.04, 0.25, 0.68 + rng() * 0.16),
+    });
   });
-  pinesMesh.count = pines.length; pinesLow.count = pines.length; pineTrunks.count = pines.length;
+  pineVariants.forEach((имя, i) => decorПоле(scene, имя, pinePoints[i]));
   // Коллайдеры горной хвои (стволы)
   for (const s of pines) {
     addCollider(s.x, s.z, 0.5);
@@ -2730,8 +2568,7 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     return wm > 0.005 && wm < 0.09 && (s.biome === 'desert' || rng() < 0.5);
   }).slice(0, 46);
 
-  scene.add(trunks, flares, crowns, crownsLow, crowns2, crowns2b, rocksMesh, tuftsMesh, flowersMesh, stemsMesh, камышMesh,
-    brushTrunks, brushesMesh, brushesMesh2, pinesMesh, pinesLow, pineTrunks);
+  scene.add(камышMesh);
 
   // Пальмы строятся группами (не инстансами — их немного)
   for (const s of oasis) addPalm(scene, s.x, s.z, 0.8 + rng() * 0.6);
@@ -3168,117 +3005,6 @@ export function buildRoads(scene: THREE.Scene): void {
   }
 }
 
-/** Пальма: изогнутый ствол + веер листьев */
-/**
- * Лист финиковой пальмы — поникающее перо из трёх сегментов.
- *
- * БЫЛО (21 октября 2026, §228): конус (ConeGeometry 0.34 x 2.6 на четыре
- * грани). В кроне такие шипы торчали во все стороны, и пальма читалась чёрной
- * звездой — силуэтом, у которого не видно ни листа, ни ветки.
- *
- * Теперь лист сложен из плоских сегментов: каждый следующий свисает
- * сильнее предыдущего, и крона получает объём и поникание.
- */
-function листФиника(parent: THREE.Object3D, угол: number, k: number): void {
-  const ветка = new THREE.Group();
-  // Местная ось +X смотрит наружу: поворот вокруг Y на минус угол.
-  ветка.rotation.y = -угол;
-  const длина = 2.6 * k;
-  const сегменты = [
-    { доля: 0.38, ширина: 0.62, наклон: -0.16 },
-    { доля: 0.3, ширина: 0.5, наклон: -0.5 },
-    { доля: 0.2, ширина: 0.34, наклон: -0.85 },
-    // Кончик загнут вверх: без этого лист просто падает, а финиковая пальма
-    // узнаётся именно изгибом — вниз, потом вверх.
-    { доля: 0.12, ширина: 0.18, наклон: -0.25 },
-  ];
-  let начало = 0;
-  for (const c of сегменты) {
-    const д = длина * c.доля;
-    const сегмент = new THREE.Mesh(
-      new THREE.BoxGeometry(д, 0.06 * k, c.ширина * k),
-      MAT.palmLeaf,
-    );
-    const центр = начало + д / 2;
-    сегмент.position.set(центр, Math.sin(c.наклон) * центр, 0);
-    сегмент.rotation.z = c.наклон;
-    сегмент.castShadow = true;
-    ветка.add(сегмент);
-    начало += д;
-  }
-  parent.add(ветка);
-}
-
-/**
- * Крона финиковой пальмы: восемь поникающих листьев и шапка у ствола.
- *
- * Шапка нужна, чтобы лист не начинался в воздухе: без неё крона выглядит
- * приколоченной к стволу сбоку.
- */
-function кронаФиника(parent: THREE.Object3D, k: number, листьев = 11): THREE.Group {
-  const крона = new THREE.Group();
-  for (let i = 0; i < листьев; i++) {
-    // Сдвиг через один — листья не встают в одну плоскость.
-    const a = (i / листьев) * Math.PI * 2 + (i % 2) * 0.19;
-    листФиника(крона, a, k);
-  }
-  // Шапка кроны: мелкие листья у самого ствола, чтобы лист не начинался в
-  // воздухе. Материал светлее листа — иначе середина кроны чёрная.
-  for (let i = 0; i < 4; i++) {
-    const a = i * 1.6;
-    const шапка = new THREE.Mesh(
-      new THREE.ConeGeometry(0.26 * k, 1.0 * k, 5),
-      MAT.foliageLight,
-    );
-    шапка.position.set(Math.cos(a) * 0.34 * k, 0.42 * k, Math.sin(a) * 0.34 * k);
-    шапка.rotation.z = -0.9;
-    шапка.castShadow = true;
-    крона.add(шапка);
-  }
-  parent.add(крона);
-  return крона;
-}
-
-/**
- * Крона кипариса: слоистый конус, а не ровный.
- *
- * БЫЛО (§228): один конус — силуэт без объёма, и два кипариса рядом читались
- * как одинаковые геометрические фигуры. Теперь крона собрана из четырёх
- * слоёв со смещением и разным поворотом: силуэт неровный, как у живого
- * дерева.
- */
-function кронаКипариса(
-  parent: THREE.Object3D, x: number, y: number, z: number,
-  s: number, материал: THREE.Material,
-): void {
-  const слои = [
-    { р: 0.9, в: 2.0, см: 0 },
-    { р: 0.72, в: 1.7, см: 0.13 },
-    { р: 0.52, в: 1.3, см: -0.11 },
-    { р: 0.3, в: 0.9, см: 0.08 },
-  ];
-  // Крона — группа (§258): качаться должна вся крона целиком, а не каждый
-  // слой по отдельности. До этого слои стояли прямо в родителе, и наклонять
-  // их можно было только поштучно — дерево развалилось бы.
-  const крона = new THREE.Group();
-  крона.position.set(x, y, z);
-  let низ = 0;
-  for (const слой of слои) {
-    const конус = new THREE.Mesh(
-      new THREE.ConeGeometry(слой.р * s, слой.в * s, 8),
-      материал,
-    );
-    конус.position.set(слой.см * s, низ + (слой.в * s) / 2, 0);
-    конус.rotation.y = слой.см * 3.1;
-    конус.castShadow = true;
-    крона.add(конус);
-    низ += слой.в * s * 0.42;
-  }
-  parent.add(крона);
-  // Крона качается по ветру (§258).
-  записатьКачание(крона, 0.035 * s, hash2(x, z + 7) * 6.28);
-}
-
 /**
  * Городской фонарь: столб, чаша, стеклянный фонарь и огонь в нём.
  *
@@ -3308,33 +3034,32 @@ function фонарь(parent: THREE.Object3D, x: number, z: number): number {
   return 5.18;
 }
 
+const ПАЛЬМЫ = ['palm-1', 'palm-2', 'palm-3', 'palm-4'] as const;
+
+/**
+ * Пальма: готовая GLB-модель (Quaternius), четыре варианта.
+ *
+ * БЫЛО: цилиндр с венцом из плоских «листьев»-брусков — читалось веером
+ * картона. ТЕПЕРЬ: модель с изогнутым стволом и поникающими перьями;
+ * качается вся целиком вокруг основания (амплитуда маленькая — дерево
+ * качается с земли, а не переламывается в кроне).
+ *
+ * k — прежняя доля старого пятиметрового ствола: высота = 5.5 * k метров.
+ * У городских пальм координаты локальные, земля города плоская — y берётся
+ * фиксированный, groundHeight по локальным числам дал бы высоту чужого места.
+ */
 function addPalm(parent: THREE.Object3D, x: number, z: number, k = 1, cityLocal = false): void {
-  const palm = new THREE.Group();
-  const lean = (Math.random() - 0.5) * 0.28;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * k, 0.26 * k, 5.4 * k, 6), MAT.palmTrunk);
-  trunk.position.y = 2.7 * k;
-  trunk.rotation.z = lean;
-  trunk.castShadow = true;
-  palm.add(trunk);
-  const topX = -Math.sin(lean) * 5.4 * k, topY = Math.cos(lean) * 5.4 * k;
-  // Крона из настоящих поникающих листьев (§228) — раньше здесь стояли семь
-  // конических шипов, и пальма читалась чёрной звездой.
-  const крона = кронаФиника(palm, k);
-  крона.position.set(topX, topY, 0);
-  крона.rotation.z = -lean;
-  for (let i = 0; i < 3; i++) {
-    const nut = new THREE.Mesh(new THREE.SphereGeometry(0.12 * k, 6, 5), MAT.trunk);
-    nut.position.set(topX + (Math.random() - 0.5) * 0.4 * k, topY - 0.25 * k, (Math.random() - 0.5) * 0.4 * k);
-    palm.add(nut);
-  }
-  palm.position.set(x, groundHeight(x, z), z);
-  parent.add(palm);
-  // Крона пальмы качается по ветру (§258). Записываем ПОСЛЕ того, как пальма
-  // встала на место: мировая точка считается от сцены, а до этого пальма стояла
-  // в нуле.
-  записатьКачание(крона, 0.05 * k, Math.random() * 6.28);
   if (cityLocal) addCollider(CITY.x + x, CITY.z + z, 0.55);
   else addCollider(x, z, 0.55);
+  const имя = ПАЛЬМЫ[Math.floor(hash2(x * 7.3, z * 3.1) * ПАЛЬМЫ.length)];
+  decorВещь(parent, имя, x, z, {
+    размер: 5.5 * k,
+    ry: hash2(x, z) * Math.PI * 2,
+    y: cityLocal ? 0.3 : undefined,
+    наклон: (hash2(x + 5, z - 3) - 0.5) * 0.14,
+    colliderR: 0,
+    качание: { амплитуда: 0.02 * k, фаза: hash2(x - 2, z + 9) * 6.28 },
+  });
 }
 
 // ── Город Исфахан ────────────────────────────────────────────
@@ -3708,34 +3433,17 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
     //
     // ТЕПЕРЬ: кузница с наковальней, горном и углями, колодец с воротами и
     // ведром, бочки, мешки, поленница и телега у склада.
+    // Поленница: готовое бревно (Quaternius), две плашмя одна на другой.
     const поленница = (px: number, pz: number, поворот: number, рядов: number) => {
-      for (let ряд = 0; ряд < рядов; ряд++) {
-        for (let i = 0; i < 5 - ряд; i++) {
-          const полено = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 1.5, 6), MAT.trunk);
-          полено.rotation.z = Math.PI / 2;
-          полено.rotation.y = поворот;
-          const off = (i - (4 - ряд) / 2) * 0.28;
-          полено.position.set(
-            px + Math.cos(поворот) * off,
-            groundHeight(px, pz) + 0.14 + ряд * 0.26,
-            pz - Math.sin(поворот) * off,
-          );
-          полено.castShadow = true;
-          city.add(полено);
-        }
+      for (let ряд = 0; ряд < Math.min(рядов, 2); ряд++) {
+        decorВещь(city, 'wood-log', px, pz + ряд * 0.55, {
+          размер: 1.6, по: 'горизонт', y: groundHeight(px, pz) + 0.14 + ряд * 0.55, ry: поворот,
+        });
       }
     };
+    // Бочка: готовая модель (Quaternius). БЫЛО: цилиндр с двумя торусами.
     const бочка = (px: number, pz: number, k: number) => {
-      const б = new THREE.Mesh(new THREE.CylinderGeometry(0.36 * k, 0.32 * k, 0.85 * k, 10), MAT.wood);
-      б.position.set(px, groundHeight(px, pz) + 0.42 * k, pz);
-      б.castShadow = true;
-      city.add(б);
-      for (const yy of [0.28, 0.58]) {
-        const обруч = new THREE.Mesh(new THREE.TorusGeometry(0.355 * k, 0.028, 4, 12), MAT.dark);
-        обруч.position.set(px, groundHeight(px, pz) + yy * k, pz);
-        обруч.rotation.x = Math.PI / 2;
-        city.add(обруч);
-      }
+      decorВещь(city, 'barrel', px, pz, { размер: 0.9 * k, ry: k * 2.1 });
     };
     // КУЗНИЦА: горн с углями, наковальня, пень с топором.
     {
@@ -3775,62 +3483,22 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       топор.rotation.z = 0.35;
       city.add(топор);
     }
-    // КОЛОДЕЦ с воротами и ведром.
+    // КОЛОДЕЦ двора: готовая модель (Quaternius) — каменное кольцо с крышей
+    // и воротом. БЫЛО: цилиндр, вал, стойки, верёвка и ведро из примитивов.
     {
       const px = 112, pz = 82;
-      const круг = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.0, 0.9, 12), MAT.sandstone);
-      круг.position.set(px, groundHeight(px, pz) + 0.45, pz);
-      круг.castShadow = true;
-      city.add(круг);
-      const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.5, 6), MAT.trunk);
-      вал.rotation.z = Math.PI / 2;
-      вал.position.set(px, groundHeight(px, pz) + 1.5, pz);
-      city.add(вал);
-      for (const side of [-1, 1]) {
-        const стойка = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.6, 6), MAT.trunk);
-        стойка.position.set(px + side * 0.8, groundHeight(px, pz) + 0.8, pz);
-        стойка.castShadow = true;
-        city.add(стойка);
-      }
-      const верёвка = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 4), MAT.dark);
-      верёвка.position.set(px, groundHeight(px, pz) + 0.95, pz);
-      city.add(верёвка);
-      const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.16, 0.28, 9), MAT.wood);
-      ведро.position.set(px, groundHeight(px, pz) + 0.25, pz);
-      ведро.castShadow = true;
-      city.add(ведро);
+      decorВещь(city, 'well', px, pz, { размер: 1.7, ry: 0.5 });
+      addCollider(CITY.x + px, CITY.z + pz, 1.2);
     }
     // СКЛАД: телега, бочки, мешки и поленница.
     {
       const px = 106, pz = 98;
-      // Телега: кузов на бортах и два колеса со спицами.
-      const кузов = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.7, 2.2), MAT.wood);
-      кузов.position.set(px, groundHeight(px, pz) + 0.85, pz);
-      кузов.castShadow = true;
-      city.add(кузов);
-      for (const side of [-1, 1]) {
-        const борт = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 2.2), MAT.wood);
-        борт.position.set(px + side * 0.62, groundHeight(px, pz) + 1.2, pz);
-        city.add(борт);
-      }
-      for (const side of [-1, 1]) {
-        const колесо = new THREE.Group();
-        колесо.position.set(px + side * 0.78, groundHeight(px, pz) + 0.5, pz);
-        const обод = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.05, 5, 14), MAT.trunk);
-        обод.rotation.y = Math.PI / 2;
-        колесо.add(обод);
-        for (let i = 0; i < 6; i++) {
-          const спица = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), MAT.wood);
-          спица.rotation.x = (i / 6) * Math.PI;
-          колесо.add(спица);
-        }
-        city.add(колесо);
-      }
-      // Оглобель от телеги.
-      const оглобель = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1.8), MAT.trunk);
-      оглобель.position.set(px, groundHeight(px, pz) + 0.7, pz + 1.9);
-      city.add(оглобель);
-      // ПАРУС на мачте: полотнище с провисом, как на лодке (§297).
+      // Телега: готовая модель (medieval-cart-lite), приезжала ещё для рынка.
+      decorВещь(city, 'medieval-cart-lite', px, pz, {
+        размер: 2.8, по: 'горизонт', y: 0.3, ry: 0.4,
+      });
+      // ПАРУС на мачте: полотнище с провисом, как на лодке (§297) — своё,
+      // ткань живёт на каркасе, который модель не передаёт.
       const мачта = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.0, 6), MAT.trunk);
       мачта.position.set(px, groundHeight(px, pz) + 2.2, pz + 0.3);
       мачта.castShadow = true;
@@ -3843,51 +3511,18 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       парус.position.set(px, groundHeight(px, pz) + 2.5, pz + 0.3);
       (парус.material as THREE.Material).side = THREE.DoubleSide;
       city.add(парус);
-      // ГРУЗ в телеге: мешки и свёртки ткани.
-      for (let i = 0; i < 3; i++) {
-        const груз = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), MAT.sand);
-        груз.scale.set(1, 1.1, 0.9);
-        груз.position.set(px - 0.25 + (i % 2) * 0.5, groundHeight(px, pz) + 1.4, pz - 0.6 + i * 0.55);
-        груз.castShadow = true;
-        city.add(груз);
-      }
-      for (let i = 0; i < 2; i++) {
-        const свёрток = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 1.0, 8), i ? MAT.clothRed : MAT.clothTeal);
-        свёрток.rotation.z = Math.PI / 2;
-        свёрток.position.set(px + 0.2, groundHeight(px, pz) + 1.35, pz + 0.5 - i * 0.4);
-        свёрток.castShadow = true;
-        city.add(свёрток);
-      }
-      // ВОЛЪ в оглобле: без него телега стоит сама по себе.
-      {
-        const ox = px, oz = pz + 3.1;
-        const шерсть = new THREE.MeshStandardMaterial({ color: 0x6a5240, roughness: 0.95 });
-        const тело = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.1, 4, 12), шерсть);
-        тело.rotation.x = Math.PI / 2;
-        тело.position.set(ox, groundHeight(ox, oz) + 1.05, oz);
-        тело.castShadow = true;
-        city.add(тело);
-        // Голова с рогами.
-        const голова = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.34, 3, 10), шерсть);
-        голова.rotation.x = Math.PI / 2;
-        голова.position.set(ox, groundHeight(ox, oz) + 1.0, oz + 0.85);
-        city.add(голова);
-        for (const side of [-1, 1]) {
-          const рог = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.42, 6), MAT.sandstone);
-          рог.position.set(ox + side * 0.18, groundHeight(ox, oz) + 1.2, oz + 0.78);
-          рог.rotation.set(0.9, 0, side * 0.4);
-          city.add(рог);
-        }
-        // Ноги.
-        for (const lx of [-0.32, 0.32]) {
-          for (const lz of [-0.55, 0.55]) {
-            const нога = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.95, 6), шерсть);
-            нога.position.set(ox + lx, groundHeight(ox, oz) + 0.48, oz + lz);
-            нога.castShadow = true;
-            city.add(нога);
-          }
-        }
-      }
+      // ГРУЗ у телеги: готовые мешки и свёрток ткани.
+      decorВещь(city, 'bags', px - 1.6, pz - 0.8, { размер: 0.9, по: 'горизонт', y: 0.3 });
+      decorВещь(city, 'package-1', px - 1.4, pz + 0.6, { размер: 0.5, по: 'горизонт', y: 0.3, ry: 0.7 });
+      // ВОЛ в оглобле: настоящая ригованная модель, дышит в покое.
+      void собратьЗверя('bull', 2.6).then((зверь) => {
+        if (!зверь) return;
+        зверь.group.position.set(px, groundHeight(px, pz + 3.1) + 0.3, pz + 3.1);
+        зверь.group.rotation.y = Math.PI;
+        city.add(зверь.group);
+        следитьЗверем(зверь);
+      });
+      addCollider(CITY.x + px, CITY.z + pz + 3.1, 1.0);
       // САРАЙ: навес на столбах с наклонной крышей, сено под ним и вилы в стене (§314).
       {
         const sx = px + 7.5, sz = pz - 4.5;
@@ -4048,31 +3683,10 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       дорожка.receiveShadow = true;
       city.add(дорожка);
     }
-    // Колодец в середине кольца: двор без воды — пустырь.
-    const колодец = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.2, 0.9, 12), MAT.sandstone);
-    колодец.position.set(центрX, 0.75, центрZ);
-    колодец.castShadow = true;
-    колодец.receiveShadow = true;
-    const обод = new THREE.Mesh(new THREE.TorusGeometry(1.12, 0.12, 6, 16), MAT.sandstoneDark);
-    обод.position.set(центрX, 1.2, центрZ);
-    обод.rotation.x = Math.PI / 2;
-    // Стойки, перекладина и вал с ведром: без них это просто каменное кольцо.
-    for (const s of [-1, 1] as const) {
-      const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.0, 0.16), MAT.wood);
-      стойка.position.set(центрX + s * 1.0, 1.0, центрZ);
-      стойка.castShadow = true;
-      city.add(стойка);
-    }
-    const перекладина = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.16, 0.16), MAT.wood);
-    перекладина.position.set(центрX, 1.95, центрZ);
-    перекладина.castShadow = true;
-    const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.8, 8), MAT.wood);
-    вал.rotation.z = Math.PI / 2;
-    вал.position.set(центрX, 1.7, центрZ);
-    const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.3, 8), MAT.trunk);
-    ведро.position.set(центрX, 1.35, центрZ);
-    ведро.castShadow = true;
-    city.add(колодец, обод, перекладина, вал, ведро);
+    // Колодец в середине кольца: готовая модель (Quaternius) — каменное
+    // кольцо с двускатной крышей и воротом. БЫЛО: цилиндр, торус, стойки,
+    // перекладина, вал и ведро из семи примитивов.
+    decorВещь(city, 'well', центрX, центрZ, { размер: 1.7, y: 0.3, ry: 0.4 });
     addCollider(CITY.x + центрX, CITY.z + центрZ, 1.3);
     // Кусты между домами — в промежутках, где домов нет.
     for (let i = 0; i < homeOffsets.length; i++) {
@@ -4381,8 +3995,8 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     const a = (i / 8) * Math.PI * 2 + 0.3;
     куст(city, скверX + Math.cos(a) * 4.2, скверZ + Math.sin(a) * 4.2, 0.46, 1.2);
   }
-  for (const [dx, dz, s] of [[-1.8, 1.4, 0.85], [2.2, -1.6, 0.7]] as const) {
-    кронаКипариса(city, скверX + dx, 0.46, скверZ + dz, s, MAT.foliageDark);
+  for (const [dx, dz] of [[-1.8, 1.4], [2.2, -1.6]] as const) {
+    куст(city, скверX + dx, скверZ + dz, 0.46, 0.9);
   }
   // Скамейки лицом к городу: сидеть можно.
   for (const [bx, bz, ry] of [[-12, 11.4, 0], [-12, -3.4, 0], [-3.4, 4, Math.PI / 2]] as const) {
@@ -5227,27 +4841,15 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       pillar.position.set(px, 1.4, 1.5);
       stable.add(pillar);
     }
-    // Лошадь — простая модель из примитивов
-    const horseMat = new THREE.MeshStandardMaterial({ color: 0x7a4a2a, roughness: 1 });
-    const horse = new THREE.Group();
-    const hBody = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.2, 2.2), horseMat);
-    hBody.position.y = 1.5;
-    const hNeck = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.0, 0.5), horseMat);
-    hNeck.position.set(0, 2.2, 1.0); hNeck.rotation.x = -0.4;
-    const hHead = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.9), horseMat);
-    hHead.position.set(0, 2.7, 1.3);
-    const hTail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.9, 4), horseMat);
-    hTail.position.set(0, 1.9, -1.3); hTail.rotation.x = 0.4;
-    // Ноги
-    for (const [lx, lz] of [[-0.35, 0.7], [0.35, 0.7], [-0.35, -0.7], [0.35, -0.7]] as const) {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 1.0, 5), horseMat);
-      leg.position.set(lx, 0.5, lz);
-      horse.add(leg);
-    }
-    horse.add(hBody, hNeck, hHead, hTail);
-    horse.position.set(0, 0.2, 0);
-    horse.rotation.y = -Math.PI / 2;
-    stable.add(horse);
+    // Лошадь: настоящая ригованная модель (Quaternius), стоит в стойле и
+    // дышит — миксер гонит клип покоя. БЫЛО: ящик с шеей из ящика.
+    void собратьЗверя('horse', 2.5).then((зверь) => {
+      if (!зверь) return;
+      зверь.group.position.set(0, 0.2, 0);
+      зверь.group.rotation.y = 0.35;
+      stable.add(зверь.group);
+      следитьЗверем(зверь);
+    });
     stable.position.set(sx, 0.2, sz);
     city.add(stable);
     addCollider(CITY.x + sx, CITY.z + sz, 5.0);
@@ -5368,171 +4970,28 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
  * ручка); ящики — из реек, а не сплошные; корзины — плетёные, с ободком и
  * дужкой.
  */
-function buildStall(kind: number, canopies: THREE.MeshStandardMaterial[]): THREE.Group {
+function buildStall(kind: number, _canopies: THREE.MeshStandardMaterial[]): THREE.Group {
+  // Торговый ряд: готовый навес-прилавок (Quaternius), два варианта чередуются.
+  // БЫЛО: стол из ящиков, купол навеса из треугольников, кувшины на токарном
+  // профиле, рулоны ткани и корзина из цилиндров — прилавок собирался из
+  // двух десятков примитивов, а цвет несла краска canopies.
+  // ТЕПЕРЬ: модель несёт и навес, и прилавок; товар вокруг — готовые
+  // кувшин, ящик и мешки, поставленные рядом с прилавком.
   const stall = new THREE.Group();
-  // Столешница.
-  const table = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 1.6), MAT.wood);
-  table.position.y = 0.94; table.castShadow = true;
-  // Ножки: у стола, стоящего на земле, они есть.
-  for (const [lx, lz] of [[-1.35, -0.65], [1.35, -0.65], [-1.35, 0.65], [1.35, 0.65]] as const) {
-    const ножка = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.94, 6), MAT.wood);
-    ножка.position.set(lx, 0.47, lz);
-    ножка.castShadow = true;
-    stall.add(ножка);
-  }
-  // Полка снизу: под полкой стоит товар, который видно снизу.
-  const полка = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.08, 1.2), MAT.wood);
-  полка.position.y = 0.36;
-  stall.add(полка);
-  // Навес: купол из полотна, а не плоская плита. Половина цилиндра вдоль
-  // прилавка, дугой вверх; полотно двустороннее — из-под навеса его видно.
-  // Геометрия строится сразу в нужном положении: поворотами цилиндра дуга
-  // вставала боком.
-  const полотно = (canopies[kind % 3] as THREE.MeshStandardMaterial).clone();
-  полотно.side = THREE.DoubleSide;
-  const дуга: number[] = [];
-  const полосы: number[] = [];
-  const дуг = 8;
-  const длина = 3.5;
-  for (let i = 0; i <= дуг; i++) {
-    const a = -Math.PI / 2 + (Math.PI * i) / дуг;
-    const y = Math.cos(a) * 1.25;
-    const z = Math.sin(a) * 1.25;
-    дуга.push(-длина / 2, y, z);
-    дуга.push(длина / 2, y, z);
-  }
-  for (let i = 0; i < дуг; i++) {
-    const a = i * 2;
-    полосы.push(a, a + 1, a + 3, a, a + 3, a + 2);
-  }
-  const геометрияНавеса = new THREE.BufferGeometry();
-  геометрияНавеса.setAttribute('position', new THREE.BufferAttribute(new Float32Array(дуга), 3));
-  геометрияНавеса.setIndex(полосы);
-  геометрияНавеса.computeVertexNormals();
-  const roof = new THREE.Mesh(геометрияНавеса, полотно);
-  roof.position.set(0, 2.42, 0);
-  roof.castShadow = true;
-  stall.add(roof);
-  // Бахрома по краю навеса: полотно не обрывается ровно.
-  for (let j = 0; j < 9; j++) {
-    const бахрома = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.22, 0.3), canopies[(kind + j) % 3]);
-    бахрома.position.set(-1.6 + j * 0.4, 2.42, 1.16);
-    бахрома.rotation.z = (j % 2 ? 0.12 : -0.12);
-    stall.add(бахрома);
-  }
-  const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.6, 5), MAT.wood);
-  p1.position.set(-1.4, 1.3, -0.8);
-  const p2 = p1.clone(); p2.position.x = 1.4;
-  stall.add(p1, p2);
-  // ── Товар на прилавке (§237) ──
-  //
-  // Лавка стояла под навесом, и товар на ней тонул в его тени: с улицы
-  // читался пустой тёмный стол. Теперь на переднем крае — полотнище цвета
-  // навеса (лавка видна издали даже в тени), горшки светлее, и добавлены
-  // мешки с товаром.
-  const полотнище = new THREE.Mesh(
-    new THREE.BoxGeometry(3.02, 0.72, 0.06),
-    canopies[kind % 3],
-  );
-  полотнище.position.set(0, 0.72, 0.83);
-  stall.add(полотнище);
-  if (kind === 0) {
-    for (let j = 0; j < 4; j++) {
-      // Гончарный кувшин: тело вращением профиля, горло, ручка. Цилиндр
-      // читался как гильза.
-      const профиль: THREE.Vector2[] = [];
-      for (let i = 0; i <= 7; i++) {
-        const t = i / 7;
-        // Расширяется книзу, сужается к плечику.
-        профиль.push(new THREE.Vector2(0.06 + Math.sin(t * Math.PI * 0.92) * 0.14, t * 0.34));
-      }
-      const кувшин = new THREE.Mesh(new THREE.LatheGeometry(профиль, 9), MAT.sandstone);
-      кувшин.position.set(-1 + j * 0.65, 1.0, j % 2 ? 0.25 : -0.25);
-      кувшин.castShadow = true;
-      stall.add(кувшин);
-      // Горло.
-      const горло = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.11, 7), MAT.sandstoneDark);
-      горло.position.set(-1 + j * 0.65, 1.38, j % 2 ? 0.25 : -0.25);
-      stall.add(горло);
-      // Ручка.
-      const ручка = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.018, 5, 10, Math.PI), MAT.sandstoneDark);
-      ручка.position.set(-1 + j * 0.65, 1.3, j % 2 ? 0.25 : -0.25);
-      ручка.rotation.set(Math.PI / 2, 0, 0);
-      stall.add(ручка);
-    }
-  } else if (kind === 1) {
-    // Ящик из реек: сплошной брусок читался как кирпич.
-    const ящик = (x: number, y: number, z: number, w: number, h: number, d: number, поворот: number) => {
-      const г = new THREE.Group();
-      г.position.set(x, y, z);
-      г.rotation.y = поворот;
-      // Угловые стойки.
-      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-        const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.07, h, 0.07), MAT.wood);
-        стойка.position.set((sx * w) / 2, h / 2, (sz * d) / 2);
-        г.add(стойка);
-      }
-      // Планки по бокам: между ними щели, и ящик читается как ящик.
-      for (let i = 0; i < 2; i++) {
-        const yy = h * (0.25 + i * 0.5);
-        const бок = new THREE.Mesh(new THREE.BoxGeometry(w, h * 0.3, 0.05), MAT.wood);
-        бок.position.set(0, yy, d / 2);
-        г.add(бок);
-        const бок2 = бок.clone(); бок2.position.z = -d / 2;
-        г.add(бок2);
-        const торец = new THREE.Mesh(new THREE.BoxGeometry(0.05, h * 0.3, d), MAT.wood);
-        торец.position.set(w / 2, yy, 0);
-        г.add(торец);
-        const торец2 = торец.clone(); торец2.position.x = -w / 2;
-        г.add(торец2);
-      }
-      // Дно.
-      const дно = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), MAT.wood);
-      дно.position.y = 0.025;
-      г.add(дно);
-      stall.add(г);
-      return г;
-    };
-    ящик(0.4, 1.0, 0, 0.9, 0.55, 0.7, 0.3);
-    ящик(-0.7, 1.0, 0.1, 0.7, 0.45, 0.6, -0.2);
-    // Свитки ткани поверх ящиков: товар виден и с улицы.
-    for (let j = 0; j < 2; j++) {
-      const свиток = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.15, 0.15, 0.9, 8),
-        canopies[(kind + j) % 3],
-      );
-      свиток.rotation.z = Math.PI / 2;
-      свиток.position.set(-0.4 + j * 0.7, 1.92, 0.05);
-      stall.add(свиток);
-    }
+  decorВещь(stall, kind % 2 ? 'market-stand-2' : 'market-stand-1', 0, 0, {
+    размер: 2.3, по: 'горизонт', y: 0, ry: kind * 0.7,
+  });
+  // Товар на земле у прилавка: набор по роду ряда.
+  const товар = kind % 3;
+  if (товар === 0) {
+    decorВещь(stall, 'clay-jug', 1.35, 0.5, { размер: 0.5, по: 'горизонт', y: 0 });
+    decorВещь(stall, 'clay-jug', 1.7, -0.3, { размер: 0.38, по: 'горизонт', y: 0 });
+  } else if (товар === 1) {
+    decorВещь(stall, 'crate', -1.5, 0.7, { размер: 0.75, по: 'горизонт', y: 0, ry: 0.3 });
+    decorВещь(stall, 'crate', -1.55, -0.15, { размер: 0.6, по: 'горизонт', y: 0, ry: -0.2 });
   } else {
-    for (let j = 0; j < 3; j++) {
-      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 8), canopies[(kind + j) % 3]);
-      roll.rotation.z = Math.PI / 2;
-      roll.position.set(-0.7 + j * 0.7, 1.16, 0.2);
-      stall.add(roll);
-    }
-    // Плетёная корзина: расширяющийся конус с ободком и дужкой.
-    const корзина = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.24, 0.4, 10), MAT.sand);
-    корзина.position.set(1.15, 1.2, -0.35);
-    корзина.castShadow = true;
-    stall.add(корзина);
-    const ободок = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 5, 12), MAT.sand);
-    ободок.position.set(1.15, 1.4, -0.35);
-    ободок.rotation.x = Math.PI / 2;
-    stall.add(ободок);
-    const дужка = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.018, 5, 12, Math.PI), MAT.wood);
-    дужка.position.set(1.15, 1.4, -0.35);
-    дужка.rotation.set(0, Math.PI / 2, 0);
-    stall.add(дужка);
-  }
-  // Мешки у края: полая лавка выглядит полой, а набитая — нет.
-  for (const s of [-1, 1] as const) {
-    const мешок = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), MAT.sand);
-    мешок.position.set(s * 1.18, 1.28, -0.42);
-    мешок.scale.set(1, 1.25, 0.9);
-    мешок.castShadow = true;
-    stall.add(мешок);
+    decorВещь(stall, 'bags', 1.4, -0.4, { размер: 0.9, по: 'горизонт', y: 0 });
+    decorВещь(stall, 'barrel', -1.45, 0.5, { размер: 1.0, по: 'высота', y: 0 });
   }
   return stall;
 }
@@ -5914,61 +5373,57 @@ function buildPuddles(city: THREE.Group): void {
   }
 }
 
+/**
+ * Куст: готовая модель (Quaternius), два варианта чередуются по хэшу места.
+ *
+ * БЫЛО: три-четыре приплюснутых шара — гроздь, а не куст. ТЕПЕРЬ: модель
+ * с ветвлением и объёмом листвы. Качается весь целиком.
+ *
+ * s — прежняя доля шаров: высота куста ≈ s метров.
+ */
 function куст(parent: THREE.Object3D, x: number, z: number, основание: number, s = 1): void {
-  const материалы = [MAT.foliage, MAT.foliageLight, MAT.brush];
-  const сколько = 3 + Math.floor(hash2(x, z) * 2);
-  for (let i = 0; i < сколько; i++) {
-    const a = (i / сколько) * Math.PI * 2 + hash2(x + i, z) * 1.3;
-    const r = 0.3 * s * (0.7 + hash2(x - i, z + 3) * 0.6);
-    const лепок = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 6, 5),
-      материалы[i % материалы.length],
-    );
-    лепок.position.set(
-      x + Math.cos(a) * 0.32 * s,
-      основание + r * 0.72,
-      z + Math.sin(a) * 0.32 * s,
-    );
-    лепок.scale.y = 0.82;
-    лепок.castShadow = true;
-    parent.add(лепок);
-    // Куст качается по ветру (§258).
-    записатьКачание(лепок, 0.07 * s, hash2(x + i, z - 5) * 6.28);
-  }
+  const имя = hash2(x, z) < 0.5 ? 'bush-1' : 'bush-2';
+  decorВещь(parent, имя, x, z, {
+    размер: Math.max(0.5, 0.95 * s),
+    ry: hash2(x + 3, z - 5) * Math.PI * 2,
+    y: основание - 0.05,
+    colliderR: 0,
+    качание: { амплитуда: 0.05 * s, фаза: hash2(x + i_куста(x, z), z - 5) * 6.28 },
+  });
 }
+function i_куста(x: number, z: number): number { return hash2(x, z + 11) * 10; }
 
 /**
- * Трава: пучок из трёх тонких blades.
+ * Трава у мостовой: готовый пучок (Quaternius).
  *
  * Стоит там, где кончается плитка: без него край площади — ровная линия
  * между мостовой и песком, а город обрывается без перехода.
  */
 function трава(parent: THREE.Object3D, x: number, z: number, основание: number, s = 1): void {
-  for (let i = 0; i < 3; i++) {
-    const blade = new THREE.Mesh(
-      new THREE.ConeGeometry(0.075 * s, 0.55 * s, 3),
-      i % 2 ? MAT.foliageLight : MAT.foliage,
-    );
-    const a = hash2(x + i, z - 2) * Math.PI * 2;
-    blade.position.set(
-      x + Math.cos(a) * 0.16 * s,
-      основание + 0.26 * s,
-      z + Math.sin(a) * 0.16 * s,
-    );
-    blade.rotation.set(Math.cos(a) * 0.25, a, Math.sin(a) * 0.25);
-    blade.castShadow = true;
-    parent.add(blade);
-    // Трава качается по ветру (§258): она ниже всего и шевелится сильнее.
-    записатьКачание(blade, 0.11 * s, hash2(x + i * 3, z + 1) * 6.28);
-  }
+  const имя = ['grass-tuft-1', 'grass-tuft-2', 'grass-tuft-3'][Math.floor(hash2(x, z + 2) * 3)];
+  decorВещь(parent, имя, x, z, {
+    размер: 0.5 * s,
+    ry: hash2(x + 1, z - 1) * Math.PI * 2,
+    y: основание,
+    colliderR: 0,
+    качание: { амплитуда: 0.09 * s, фаза: hash2(x + 3, z + 1) * 6.28 },
+  });
 }
 
+/**
+ * Кипарис садов столицы: готовая модель.
+ *
+ * Кипарис в источнике тринадцатиметровый, k — прежняя доля: итог ≈ 5 * s м.
+ */
 function cypress(parent: THREE.Group, x: number, z: number, baseY: number, s: number): void {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.7, 6), MAT.trunk);
-  trunk.position.set(x, baseY + 0.35, z);
-  // Крона слоями, а не ровный конус (§228).
-  кронаКипариса(parent, x, baseY + 0.7, z, s, MAT.foliageDark);
-  parent.add(trunk);
+  decorВещь(parent, 'cypress', x, z, {
+    размер: 5 * s,
+    ry: hash2(x, z) * Math.PI * 2,
+    y: baseY,
+    colliderR: 0,
+    наклон: (hash2(x - 4, z + 6) - 0.5) * 0.1,
+    качание: { амплитуда: 0.02 * s, фаза: hash2(x, z + 7) * 6.28 },
+  });
   addCollider(CITY.x + x, CITY.z + z, 0.55);
 }
 
@@ -6089,37 +5544,16 @@ export function buildCamp(scene: THREE.Scene): void {
     camp.add(flag);
     addCollider(CAMP.x + x, CAMP.z + z, 2.5);
   }
-  // Частокол кольцом (с юга — проход) и большой шатёр вождя
+  // Частокол кольцом (с юга — проход): готовые секции палисада вместо
+  // двадцати шести кольев и двух рядов перекладин.
   for (let i = 0; i < 26; i++) {
     const a = (i / 26) * Math.PI * 2;
     if (Math.abs(a - Math.PI / 2) < 0.28) continue;
     const px = Math.cos(a) * 15, pz = Math.sin(a) * 15;
-    // Кол из заострённого бревна, а не из бруска.
-    const stake = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.19, 2.6, 6), MAT.trunk);
-    stake.position.set(px, 1.25, pz);
-    stake.rotation.z = i % 2 ? 0.04 : -0.04;
-    stake.castShadow = true;
-    camp.add(stake);
-  }
-  // Перекладина, связывающая колья: без неё частокол — просто палки.
-  for (const высота of [0.9, 1.9]) {
-    for (let i = 0; i < 26; i++) {
-      const a = (i / 26) * Math.PI * 2;
-      if (Math.abs(a - Math.PI / 2) < 0.28) continue;
-      const a2 = ((i + 1) / 26) * Math.PI * 2;
-      if (Math.abs(a2 - Math.PI / 2) < 0.28) continue;
-      const x1 = Math.cos(a) * 15, z1 = Math.sin(a) * 15;
-      const x2 = Math.cos(a2) * 15, z2 = Math.sin(a2) * 15;
-      const перекладина = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 5), MAT.trunk);
-      const mid = new THREE.Vector3((x1 + x2) / 2, высота, (z1 + z2) / 2);
-      перекладина.position.copy(mid);
-      перекладина.scale.y = Math.hypot(x2 - x1, z2 - z1);
-      перекладина.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 1, 0),
-        new THREE.Vector3(x2 - x1, 0, z2 - z1).normalize(),
-      );
-      camp.add(перекладина);
-    }
+    decorВещь(camp, 'medieval-wooden-palisade', px, pz, {
+      размер: 3.7, по: 'горизонт', y: 0, ry: -a,
+      наклон: i % 2 ? 0.03 : -0.03,
+    });
   }
   addCollider(CAMP.x + 15, CAMP.z, 1.6);
   addCollider(CAMP.x - 15, CAMP.z, 1.6);
@@ -6131,29 +5565,15 @@ export function buildCamp(scene: THREE.Scene): void {
   bigFlag.position.set(0, 5.6, -6.5);
   camp.add(bigFlag);
   addCollider(CAMP.x, CAMP.z - 6.5, 3.4);
-  // Костёр: очаг из камней, поленья крест-накрест и пламя.
-  const fire = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.2, 0.4, 9), MAT.dark);
-  fire.position.set(0, 0.2, 0);
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2;
-    const камень = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22, 0), MAT.stone);
-    камень.position.set(Math.cos(a) * 1.05, 0.16, Math.sin(a) * 1.05);
-    камень.rotation.set(a, a * 1.7, 0);
-    камень.castShadow = true;
-    camp.add(камень);
-  }
-  for (const поворот of [0.5, -0.5]) {
-    const полено = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.5, 6), MAT.trunk);
-    полено.rotation.set(Math.PI / 2, поворот, 0);
-    полено.position.set(0, 0.36, 0);
-    полено.castShadow = true;
-    camp.add(полено);
-  }
+  // Костёр: готовая модель (камни и поленья), пламя остаётся своим —
+  // оно же носитель света и анимации огня. БЫЛО: цилиндр очага, девять
+  // додекаэдров и два полена-цилиндра.
+  decorВещь(camp, 'bonfire', 0, 0, { размер: 1.7, по: 'горизонт', y: 0 });
   addCollider(CAMP.x, CAMP.z, 1.4);
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 7), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.6 }));
   flame.position.set(0, 1, 0);
   flame.name = 'campfire-flame';
-  camp.add(fire, flame);
+  camp.add(flame);
   camp.userData.flame = flame;
   scene.add(camp);
 }
@@ -6737,14 +6157,10 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
       g.add(house);
       addCollider(VILLAGE.x + house.position.x, VILLAGE.z + house.position.z, w * 0.6);
     }
-    // поленница
-    for (let i = 0; i < 8; i++) {
-      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 1.6, 6), MAT.trunk);
-      log.rotation.z = Math.PI / 2;
-      log.position.set(-6 + (i % 4) * 0.42, 0.2 + Math.floor(i / 4) * 0.36, 8);
-      g.add(log);
+    // Поленница: готовое бревно в три плашмя. БЫЛО: восемь цилиндров.
+    for (const [lx, lz, ry] of [[-6, 8, 0], [-5.4, 8, 0.12], [-6.15, 7.4, 0.05]] as const) {
+      decorВещь(g, 'wood-log', lx, lz, { размер: 1.9, по: 'горизонт', y: 0.18, ry });
     }
-    addCollider(VILLAGE.x - 6, VILLAGE.z + 8, 1.4);
     // Фонарь у поленницы (§251): деревня стояла в темноте — дома, поленница и
     // стог были, а света не было ни одного.
     const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.6, 5), MAT.wood);
@@ -9726,6 +9142,168 @@ function placeDecor(
   });
 }
 
+// ── Нормализованные модели природы и деревни (§326) ─────────────────────
+// Новые модели из чужих паков едут в разных единицах: метры и сантиметры
+// вперемешку (коза выходила двенадцатиметровой). Ставить «как есть» нельзя.
+// Договорённость здесь одна: при разборе модель приводится к базе на y = 0
+// и единичному размеру — по высоте, а у плоских вещей (камни, ковры) по
+// широчайшему горизонтальному габариту. Дальше вызывающий называет размер
+// в метрах и не знает, в чём модель лежала на диске.
+//
+// Геометрия сливается по материалам: для поля инстансов нужен один меш на
+// материал, иначе тысяча деревьев — тысяча вызовов отрисовки.
+
+interface ЧастиМодели { гео: THREE.BufferGeometry; материал: THREE.Material }
+
+const частиCache = new Map<string, Promise<ЧастиМодели[] | null>>();
+
+function частиМодели(имя: string, по: 'высота' | 'горизонт'): Promise<ЧастиМодели[] | null> {
+  const ключ = `${имя}:${по}`;
+  const готовый = частиCache.get(ключ);
+  if (готовый) return готовый;
+  const задача = loadDecorModel(`decor/${имя}.glb`).then((сцена) => {
+    if (!сцена) return null;
+    сцена.updateMatrixWorld(true);
+    const группы = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    const box = new THREE.Box3();
+    сцена.traverse((o) => {
+      const меш = o as THREE.Mesh;
+      if (!меш.isMesh) return;
+      const гео = меш.geometry.clone().applyMatrix4(меш.matrixWorld);
+      гео.computeBoundingBox();
+      box.union(гео.boundingBox!);
+      const материал = меш.material as THREE.Material;
+      const список = группы.get(материал) ?? [];
+      список.push(гео);
+      группы.set(материал, список);
+    });
+    const размерY = box.max.y - box.min.y;
+    const горизонт = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+    const делитель = по === 'высота' ? размерY : горизонт;
+    if (!(делитель > 1e-6)) return null;
+    const k = 1 / делитель;
+    const части: ЧастиМодели[] = [];
+    for (const [материал, геос] of группы) {
+      for (const гео of геос) {
+        гео.scale(k, k, k);
+        // База на землю: у модели низ где угодно, ставим min.y в ноль.
+        гео.translate(0, -box.min.y * k, 0);
+      }
+      try {
+        части.push({ гео: mergeGeometries(геос, false)!, материал });
+      } catch (e) {
+        console.warn(`[decor] ${имя}: слияние частей не вышло`, e);
+        return null;
+      }
+    }
+    return части;
+  });
+  частиCache.set(ключ, задача);
+  return задача;
+}
+
+export interface ТочкаПоля {
+  x: number;
+  z: number;
+  y: number;
+  /** Размер в метрах: по высоте или по горизонтали — как договорились. */
+  k: number;
+  ry: number;
+  /** Лёгкий наклон ствола: ровные вертикали читаются колоннами. */
+  наклон?: number;
+  /** Оттенок инстанса: умножается на материал модели. */
+  tint?: THREE.Color;
+}
+
+/**
+ * Поле инстансов одной модели: позиции известны сразу, меши доезжают по
+ * сети — тот же контракт, что у placeDecor (коллайдер сразу, тело потом).
+ */
+function decorПоле(
+  родитель: THREE.Object3D, имя: string, точки: ТочкаПоля[],
+  opts?: { по?: 'высота' | 'горизонт'; тени?: boolean },
+): void {
+  if (!точки.length) return;
+  void частиМодели(имя, opts?.по ?? 'высота').then((части) => {
+    if (!части) {
+      console.warn(`[decor] поле ${имя} не доехало — участок останется пустым`);
+      return;
+    }
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const sc = new THREE.Vector3();
+    for (const ч of части) {
+      const меш = new THREE.InstancedMesh(ч.гео, ч.материал, точки.length);
+      точки.forEach((т, i) => {
+        const наклон = т.наклон ?? 0;
+        q.setFromEuler(new THREE.Euler(наклон, т.ry, наклон * 0.7));
+        v.set(т.x, т.y, т.z);
+        sc.set(т.k, т.k, т.k);
+        m.compose(v, q, sc);
+        меш.setMatrixAt(i, m);
+        if (т.tint) меш.setColorAt(i, т.tint);
+      });
+      меш.instanceMatrix.needsUpdate = true;
+      if (меш.instanceColor) меш.instanceColor.needsUpdate = true;
+      меш.castShadow = opts?.тени ?? true;
+      // Поле размазано по всему миру: bbox базовой геометрии ничего не знает
+      // о разбросе инстансов, а корректный общий bbox дорог.
+      меш.frustumCulled = false;
+      родитель.add(меш);
+    }
+  });
+}
+
+/** Одиночная нормализованная модель: размер в метрах, база на земле. */
+function decorВещь(
+  родитель: THREE.Object3D, имя: string, x: number, z: number,
+  opts: {
+    размер: number; по?: 'высота' | 'горизонт';
+    ry?: number; y?: number; lift?: number; наклон?: number; tint?: number;
+    colliderR?: number;
+    качание?: { амплитуда: number; фаза: number };
+  },
+): void {
+  if (opts.colliderR) addCollider(x, z, opts.colliderR);
+  void частиМодели(имя, opts.по ?? 'высота').then((части) => {
+    if (!части || !части.length) return;
+    const вещь = new THREE.Group();
+    for (const ч of части) {
+      вещь.add(new THREE.Mesh(ч.гео, ч.материал));
+    }
+    const py = opts.y !== undefined ? opts.y : groundHeight(x, z) + (opts.lift ?? 0);
+    вещь.position.set(x, py, z);
+    вещь.rotation.y = opts.ry ?? 0;
+    if (opts.наклон) вещь.rotation.z = opts.наклон;
+    вещь.scale.setScalar(opts.размер);
+    if (opts.tint !== undefined) {
+      const t = new THREE.Color(opts.tint);
+      вещь.traverse((o) => {
+        const меш = o as THREE.Mesh;
+        if (!меш.isMesh) return;
+        // Клон материала: окраска одной вещи не должна перекрашивать остальные
+        // клоны той же модели.
+        меш.material = (меш.material as THREE.Material).clone();
+        (меш.material as THREE.MeshStandardMaterial).color.multiply(t);
+      });
+    }
+    вещь.traverse((o) => {
+      const меш = o as THREE.Mesh;
+      if (!меш.isMesh) return;
+      меш.castShadow = true;
+      меш.receiveShadow = true;
+      const мат = меш.material as THREE.MeshStandardMaterial;
+      if (мат) {
+        мат.transparent = false;
+        мат.side = THREE.DoubleSide;
+      }
+    });
+    родитель.add(вещь);
+    if (opts.качание) записатьКачание(вещь, opts.качание.амплитуда, opts.качание.фаза);
+  });
+}
+
 export function buildAqueduct(scene: THREE.Scene): void {
   for (let i = 0; i < AQUEDUCT.count; i++) {
     const px = AQUEDUCT.x + (i - (AQUEDUCT.count - 1) / 2) * AQUEDUCT.step;
@@ -10704,7 +10282,13 @@ export function buildMosqueCourtyard(scene: THREE.Scene): { x: number; y: number
       for (let i = 0; i < 2; i++) {
         const x = c.x + s * (4.6 + i * 1.6);
         const z = c.z + hz + 5 + i * 7;
-        кронаКипариса(scene, x, groundHeight(x, z), z, 0.85 + i * 0.1, MAT.foliageDark);
+        decorВещь(scene, 'cypress', x, z, {
+          размер: 5 + i * 0.5,
+          ry: hash2(x, z) * Math.PI * 2,
+          наклон: (hash2(x, z + 4) - 0.5) * 0.1,
+          colliderR: 0,
+          качание: { амплитуда: 0.02, фаза: hash2(x, z + 7) * 6.28 },
+        });
         addCollider(x, z, 0.6);
       }
     }
@@ -11283,44 +10867,10 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
       stall.rotation.y = -a;
       g.add(stall);
     }
-    // Колодец на площади (§298): каменный ворот, вал с перекладиной, верёвка и
-    // ведро. Раньше это был ровный цилиндр — бак без намёка.
-    const колодец = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.4, 1.5, 10), MAT.stone);
-    колодец.position.set(0, 0.75, 0);
-    колодец.castShadow = true;
-    g.add(колодец);
-    // Ворот: каменный обод с зубцами.
-    const ворот = new THREE.Mesh(new THREE.TorusGeometry(1.28, 0.16, 6, 14), MAT.sandstoneDark);
-    ворот.position.set(0, 1.5, 0);
-    ворот.rotation.x = Math.PI / 2;
-    ворот.castShadow = true;
-    g.add(ворот);
-    for (let j = 0; j < 6; j++) {
-      const зубец = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.4), MAT.sandstoneDark);
-      const угол = (j / 6) * Math.PI * 2;
-      зубец.position.set(Math.cos(угол) * 1.28, 1.62, Math.sin(угол) * 1.28);
-      зубец.rotation.y = -угол;
-      g.add(зубец);
-    }
-    // Стойки и перекладина вала.
-    for (const side of [-1, 1]) {
-      const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.5, 0.16), MAT.trunk);
-      стойка.position.set(side * 1.1, 2.25, 0);
-      стойка.castShadow = true;
-      g.add(стойка);
-    }
-    const вал = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.3, 6), MAT.trunk);
-    вал.rotation.z = Math.PI / 2;
-    вал.position.set(0, 2.9, 0);
-    g.add(вал);
-    // Верёвка и ведро на краю.
-    const верёвка = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.9, 4), MAT.dark);
-    верёвка.position.set(0.35, 1.95, 0);
-    g.add(верёвка);
-    const ведро = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.16, 0.28, 9), MAT.wood);
-    ведро.position.set(0.35, 0.9, 0);
-    ведро.castShadow = true;
-    g.add(ведро);
+    // Колодец на площади (§298): готовая модель (Quaternius) — каменное
+    // кольцо с крышей и воротом. БЫЛО: цилиндр, торус с зубцами, стойки,
+    // вал, верёвка и ведро из дюжины примитивов.
+    decorВещь(g, 'well', 0, 0, { размер: 2.0, y: 0, ry: 0.4 });
     коллайдер(0, 0, 1.4);
 
     // ── Памятник региона ───────────────────────────────────────
@@ -11543,14 +11093,11 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
           пирс.add(plank);
         }
         for (let i = 0; i < 3; i++) {
-          const лодка = new THREE.Group();
-          const корпус = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.45, 3.2, 7), MAT.wood);
-          корпус.rotation.x = Math.PI / 2;
-          корпус.scale.y = 0.4;
-          лодка.add(корпус);
-          лодка.position.set(2.8 + i * 0.5, 0.2, -6 - i * 0.9);
-          лодка.rotation.y = 0.3;
-          пирс.add(лодка);
+          // Лодки у причала: готовая модель (Quaternius). БЫЛО: сплюснутый
+          // цилиндр — поплавок, а не лодка.
+          decorВещь(пирс, 'boat', 2.8 + i * 0.5, -6 - i * 0.9, {
+            размер: 3.0, по: 'горизонт', y: 0.2, ry: 0.3 + i * 0.15,
+          });
         }
         пирс.position.set(-t.radius * 0.5, 0, t.radius * 0.2);
         g.add(пирс);
@@ -11582,7 +11129,7 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
 }
 
 /**
- * Кипарис для городов регионов.
+ * Кипарис для городов регионов: готовая модель.
  *
  * Отдельная функция, а не cypress(), потому что cypress ставит коллайдер
  * в координатах столицы (CITY.x + x): внутри группы нового города все
@@ -11593,26 +11140,30 @@ function деревоКипарис(
   g: THREE.Group, x: number, z: number, s: number,
   коллайдер: (x: number, z: number, r: number) => void,
 ): void {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16 * s, 0.24 * s, 2.2 * s, 6), MAT.trunk);
-  trunk.position.set(x, 1.1 * s, z);
-  trunk.castShadow = true;
-  g.add(trunk);
-  // Крона слоями, а не ровный конус (§228).
-  кронаКипариса(g, x, 1.6 * s, z, s, MAT.palmLeaf);
+  decorВещь(g, 'cypress', x, z, {
+    размер: 5 * s,
+    ry: hash2(x, z) * Math.PI * 2,
+    y: 0,
+    colliderR: 0,
+    наклон: (hash2(x - 4, z + 6) - 0.5) * 0.1,
+    качание: { амплитуда: 0.02 * s, фаза: hash2(x, z + 7) * 6.28 },
+  });
   коллайдер(x, z, 0.55);
 }
 
-/** Финиковая пальма для городов регионов. Причина та же, что у кипариса. */
+/** Финиковая пальма для городов регионов: готовая модель, причина та же. */
 function деревоФиник(
   g: THREE.Group, x: number, z: number, k: number,
   коллайдер: (x: number, z: number, r: number) => void,
 ): void {
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.17 * k, 0.27 * k, 5.4 * k, 6), MAT.palmTrunk);
-  trunk.position.set(x, 2.7 * k, z);
-  trunk.castShadow = true;
-  g.add(trunk);
-  // Крона из поникающих листьев (§228) — раньше семь конических шипов.
-  const крона = кронаФиника(g, k);
-  крона.position.set(x, 5.4 * k, z);
+  const имя = ПАЛЬМЫ[Math.floor(hash2(x * 3.7, z * 5.3) * ПАЛЬМЫ.length)];
+  decorВещь(g, имя, x, z, {
+    размер: 5.5 * k,
+    ry: hash2(x, z) * Math.PI * 2,
+    y: 0,
+    colliderR: 0,
+    наклон: (hash2(x + 5, z - 3) - 0.5) * 0.14,
+    качание: { амплитуда: 0.02 * k, фаза: hash2(x - 2, z + 9) * 6.28 },
+  });
   коллайдер(x, z, 0.55);
 }
