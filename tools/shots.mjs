@@ -152,9 +152,8 @@ try {
         o.getWorldPosition(поз);
         const dx = поз.x - камера.position.x;
         const dz = поз.z - камера.position.z;
-        if (Math.hypot(dx, dz) > 50) return;
-        if (поз.y < 2.2 || поз.y > 9) return;
-        o.geometry.computeBoundingBox();
+        const близко = Math.hypot(dx, dz) <= 14;
+        if (близко ? поз.y < 0.2 : (Math.hypot(dx, dz) > 50 || поз.y < 2.2 || поз.y > 9)) return;        o.geometry.computeBoundingBox();
         const б = o.geometry.boundingBox;
         const размер = [б.max.x - б.min.x, б.max.y - б.min.y, б.max.z - б.min.z].map((v) => v.toFixed(1)).join('x');
         строки.push(`${o.geometry.type} ${размер} y=${поз.y.toFixed(1)} x=${поз.x.toFixed(0)} z=${поз.z.toFixed(0)} мат=${o.material && o.material.color ? o.material.color.getHexString() : '-'}`);

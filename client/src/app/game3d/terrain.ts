@@ -2024,6 +2024,12 @@ const MAT = {
   houseRoof: surfaceMaterial('sand_01', {
     color: 0xb08f66, roughness: 1, normalScale: 0.8,
   }),
+  // Кладка парапета и дувалов (§329): темнее штукатурки и камня балок.
+  // БЫЛО: парапет брал sandstoneDark, и на солнце верх бортов и зубцов
+  // светился так, что с высоты каждая крыша была обведена белым пунктиром.
+  parapet: surfaceMaterial('sandstone_blocks_04', {
+    color: 0x8f7554, roughness: 0.95, normalScale: 0.9,
+  }),
   cityStone: surfaceMaterial('sandstone_blocks_05', {
     color: 0xd6c3a0, roughness: 0.88, normalScale: 1.0,
   }),
@@ -2376,7 +2382,11 @@ function поставитьЧелн(
  * часами, и поза покоя — её главное состояние.
  */
 function цапляПоставить(scene: THREE.Object3D, x: number, z: number, y: number, ry: number): void {
-  decorВещь(scene, 'heron', x, z, { размер: 1.0, ry, y });
+  // Путь с папкой, а не имя из decor: цапля живёт в models/animals.
+  // БЫЛО: decorВещь(scene, 'heron', …) — он искал decor/heron.glb, файла
+  // там нет, и цапли не появлялись вовсе: в консоли висело «нет частей
+  // heron», а у воды было пусто (§329).
+  decorВещь(scene, 'animals/heron', x, z, { размер: 1.0, ry, y });
 }
 
 export function buildWater(scene: THREE.Scene): void {
@@ -5133,7 +5143,7 @@ function зубцыПарапета(w: number, d: number, верх: number): THR
   ряд(d, 'z', -1, w / 2);
   const гео = mergeGeometries(части, false);
   if (!гео) return null;
-  const меш = new THREE.Mesh(гео, MAT.sandstoneDark);
+  const меш = new THREE.Mesh(гео, MAT.parapet);
   меш.castShadow = true;
   меш.receiveShadow = true;
   return меш;
@@ -5151,11 +5161,11 @@ function домОбвес(house: THREE.Group, w: number, h: number, d: number): 
   const поперёк = new THREE.BoxGeometry(w, пh, пт);
   const вдоль = new THREE.BoxGeometry(пт, пh, d - пт * 2);
   const край = d / 2 - пт / 2;
-  const бортХ = new THREE.Mesh(поперёк, MAT.sandstoneDark);
+  const бортХ = new THREE.Mesh(поперёк, MAT.parapet);
   бортХ.position.set(0, h + пh / 2, край);
   const бортХ2 = бортХ.clone();
   бортХ2.position.z = -край;
-  const бортZ = new THREE.Mesh(вдоль, MAT.sandstoneDark);
+  const бортZ = new THREE.Mesh(вдоль, MAT.parapet);
   бортZ.position.set(-(w / 2 - пт / 2), h + пh / 2, 0);
   const бортZ2 = бортZ.clone();
   бортZ2.position.x = w / 2 - пт / 2;
@@ -5484,6 +5494,35 @@ function жилыеУлицы(
         addCollider(CITY.x + cx, CITY.z + cz, r);
         домов++;
 
+        // ── Второй ряд: дом во дворе за первым (§329) ──
+        //
+        // С §328 улица была односторонней: ряд домов лицом на переулок, а
+        // за ним пусто. С высоты квартал читался полосой, а не кварталом:
+        // настоящий Исфахан — дворы в глубину. Второй дом стоит за двором
+        // в 4.6 м, меньше первого и лицом во двор.
+        if (hash2(cx, cz + 7.3) > 0.3) {
+          const w2 = w * 0.78;
+          const d2 = w2 * 0.9;
+          const отступ2 = ФАСАД + d + 4.6 + d2 / 2;
+          const bx = ux * вдоль + px * сторона * отступ2;
+          const bz = uz * вдоль + pz * сторона * отступ2;
+          const r2 = Math.max(2.2, Math.hypot(w2, d2) / 2);
+          if (
+            Math.hypot(bx, bz) < CITY.radius - 14
+            && !занято.some((p) => Math.hypot(p.x - bx, p.z - bz) < p.r + r2 + 1.6)
+          ) {
+            занято.push({ x: bx, z: bz, r: r2 });
+            brickHouse(city, bx, bz, w2, h * 0.92, {
+              rotY: rotY + Math.PI,
+              dome: false,
+              balcony: false,
+              badgirH: hash2(bx, bz) > 0.82 ? 1.6 : undefined,
+            });
+            addCollider(CITY.x + bx, CITY.z + bz, r2);
+            домов++;
+          }
+        }
+
         // ── Дувал между соседями ──
         if (прошлый) {
           const промежуток = (вдоль - w / 2) - (прошлый.вдоль + прошлый.w / 2);
@@ -5509,6 +5548,7 @@ function жилыеУлицы(
       addCollider(CITY.x + lx, CITY.z + lz, 0.4);
       сторонаФонаря *= -1;
     }
+
   }
   // Отчёт в консоль: сколько домов встало. Нужен, чтобы «улицы есть» было
   // числом, а не утверждением.
@@ -5538,15 +5578,14 @@ function дувал(
   const cz = uz * вдоль + pz * сторона * отступ;
   const поворот = Math.atan2(ux, uz);
   // Стена: толщина 0.36, высота 2.3 — ниже дома и ниже парапета.
-  const стена = new THREE.Mesh(new THREE.BoxGeometry(0.36, 2.3, длина), MAT.houseWall);
-  стена.position.set(cx, 1.15, cz);
+  const стена = new THREE.Mesh(new THREE.BoxGeometry(0.36, 2.3, длина), MAT.houseWall);  стена.position.set(cx, 1.15, cz);
   стена.rotation.y = поворот;
   стена.castShadow = true;
   стена.receiveShadow = true;
   // Крышка стены: без неё торец выглядит обрезанной коробкой.
   const крышка = new THREE.Mesh(
     new THREE.BoxGeometry(0.5, 0.12, длина),
-    MAT.sandstoneDark,
+    MAT.parapet,
   );
   крышка.position.set(cx, 2.36, cz);
   крышка.rotation.y = поворот;
@@ -9505,7 +9544,10 @@ function частиМодели(имя: string, по: 'height' | 'horizontal'): 
   const ключ = `${имя}:${по}`;
   const готовый = частиCache.get(ключ);
   if (готовый) return готовый;
-  const задача = loadDecorModel(`decor/${имя}.glb`).then((сцена) => {
+  // Имя может быть путём от models/: 'animals/heron'. Раньше здесь всегда
+  // подставлялось decor/, и модели из других папок молча не находились.
+  const путь = имя.includes('/') ? `${имя}.glb` : `decor/${имя}.glb`;
+  const задача = loadDecorModel(путь).then((сцена) => {
     if (!сцена) return null;
     сцена.updateMatrixWorld(true);
     const группы = new Map<THREE.Material, THREE.BufferGeometry[]>();
@@ -9611,7 +9653,7 @@ export function decorВещь(
 ): void {
   if (opts.colliderR) addCollider(x, z, opts.colliderR);
   void частиМодели(имя, opts.по ?? 'height').then((части) => {
-    if (!части || !части.length) return;
+    if (!части || !части.length) { console.warn('[decor] no parts for ' + имя); return; }
     const вещь = new THREE.Group();
     for (const ч of части) {
       вещь.add(new THREE.Mesh(ч.гео, ч.материал));
