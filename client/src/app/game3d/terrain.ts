@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // 3D-мир: рельеф, биомы, вода, города — Empire of Safavids
 // ============================================================
 // Бесшовный ландшафт 6350x6350: поля вокруг Исфахана, пустыня с
@@ -1365,6 +1365,94 @@ export function pishtaqGeometry(
 }
 
 /**
+ * Слить меши группы в один меш на материал (§328).
+ *
+ * ЗАЧЕМ. Окно со ставнями — двенадцать коробок: рама из четырёх, стекло,
+ * два средника, подоконник, две створки и две петли. На фасаде таких окон
+ * шесть, а на улице — сорок домов: две тысячи восемьсот мешей на окна
+ * одной улицы. Здесь они складываются в четыре меша (стекло, камень,
+ * дерево, тёмный металл), и вызовов отрисовки становится втрое меньше без
+ * изменения картинки: материалы те же, UV те же.
+ *
+ * ТРАНСФОРМАЦИЯ ГРУППЫ СОХРАНЯЕТСЯ. Геометрия запекается в системе
+ * координат группы (позиция и поворот обнуляются на время слива и
+ * возвращаются после), иначе окно уехало бы в начало координат дома.
+ */
+function слитьПоМатериалам(группа: THREE.Group): THREE.Group {
+  const по = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const позиция = группа.position.clone();
+  const поворот = группа.rotation.clone();
+  группа.position.set(0, 0, 0);
+  группа.rotation.set(0, 0, 0);
+  группа.updateMatrixWorld(true);
+  группа.traverse((о) => {
+    const м = о as THREE.Mesh;
+    if (!м.isMesh || !м.geometry) return;
+    const мат = м.material as THREE.Material;
+    const гео = м.geometry.clone();
+    гео.applyMatrix4(м.matrixWorld);
+    const список = по.get(мат);
+    if (список) список.push(гео); else по.set(мат, [гео]);
+  });
+  const слитая = new THREE.Group();
+  for (const [мат, геос] of по) {
+    const гео = геос.length === 1 ? геос[0] : mergeGeometries(геос, false);
+    if (!гео) continue;
+    const меш = new THREE.Mesh(гео, мат);
+    меш.castShadow = true;
+    меш.receiveShadow = true;
+    слитая.add(меш);
+  }
+  слитая.position.copy(позиция);
+  слитая.rotation.copy(поворот);
+  return слитая;
+}
+
+/**
+ * Окно со ставнями и подоконником: общий фасадный элемент города (§328).
+ *
+ * ЗАЧЕМ. Окно из windowPane — стекло, рама и средник. На стене в 12 метров
+ * оно читалось одним пятном: рама толщиной 10 см с восьми метров — это
+ * полтора пикселя, и фасад снова становился плоскостью. Ставни дают окну
+ * тень по бокам (дерево темнее штукатурки), подоконник — тень под низом,
+ * и окно начинает читаться проёмом, а не наклейкой.
+ *
+ * ПОЧЕМУ СТАВНИ ОТКРЫТЫ, А НЕ ЗАКРЫТЫ. Закрытые ставни — это глухая
+ * доска на месте окна: город выглядел бы вымершим. Открытые стоят
+ * плоскостями по бокам проёма, как в персидском квартале: днём их
+ * раскрывают ради тени и ветра.
+ */
+function окноСоСтавнями(
+  cx: number, cy: number, faceZ: number, rotY: number,
+  W = 0.9, H = 1.3,
+): THREE.Group {
+  const g = windowPane(cx, cy, faceZ, rotY, W, H);
+  // Подоконник: каменная полка под проёмом, выступает на 12 см.
+  const подоконник = new THREE.Mesh(
+    new THREE.BoxGeometry(W + 0.3, 0.09, 0.22),
+    MAT.windowFrame,
+  );
+  подоконник.position.set(0, -H / 2 - 0.13, 0.05);
+  подоконник.castShadow = true;
+  g.add(подоконник);
+  // Ставни: две створки, раскрытые настежь к стене.
+  const створка = new THREE.BoxGeometry(W * 0.52, H * 0.96, 0.06);
+  for (const s of [-1, 1] as const) {
+    const створ = new THREE.Mesh(створка, MAT.wood);
+    створ.position.set(s * (W * 0.78), 0, 0.05);
+    створ.rotation.y = s * 0.22;
+    створ.castShadow = true;
+    g.add(створ);
+    // Петли: две тёмные полоски по краю створки — без них ставень
+    // читается доской, приклеенной к стене.
+    const петля = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.02), MAT.dark);
+    петля.position.set(s * (W * 0.55), H * 0.28, 0.09);
+    g.add(петля);
+  }
+  return слитьПоМатериалам(g);
+}
+
+/**
  * Окна по фасаду и бокам дома — рядами, а не двумя глазами.
  *
  * БЫЛО: у дома всегда два окна на фасаде, сколько бы он ни был широк.
@@ -1384,22 +1472,22 @@ function окнаПоФасаду(house: THREE.Group, w: number, h: number, d: n
   // Верхний ярус двухэтажного дома — окна выше, но того же размера.
   const ярус = h > 5.2 ? h * 0.66 : h * 0.55;
   for (let i = 1; i <= колонн; i++) {
-    house.add(windowPane(-w / 2 + шаг * i, ярус, d / 2 + 0.02, 0));
+    house.add(окноСоСтавнями(-w / 2 + шаг * i, ярус, d / 2 + 0.02, 0));
   }
   // Задняя стена. Дом стоит фасадом к улице, но его тыл виден с площади
   // и из переулка; без окон он и есть та самая глухая плоскость, ради
   // которой всё это делалось. Сзади окон меньше: подсобные комнаты.
   const сзади = Math.max(1, Math.min(2, колонн - 1));
   for (let i = 1; i <= сзади; i++) {
-    house.add(windowPane(-w / 2 + (w / (сзади + 1)) * i, ярус, -d / 2 - 0.02, Math.PI));
+    house.add(окноСоСтавнями(-w / 2 + (w / (сзади + 1)) * i, ярус, -d / 2 - 0.02, Math.PI));
   }
   if (d > 6.4) {
     const боковых = Math.max(1, Math.min(2, Math.round(d / 4.5)));
     const бшаг = d / (боковых + 1);
     for (let i = 1; i <= боковых; i++) {
       const z = -d / 2 + бшаг * i;
-      house.add(windowPane(-w / 2 - 0.02, ярус, z, -Math.PI / 2, 0.78, 1.15));
-      house.add(windowPane(w / 2 + 0.02, ярус, z, Math.PI / 2, 0.78, 1.15));
+      house.add(окноСоСтавнями(-w / 2 - 0.02, ярус, z, -Math.PI / 2, 0.78, 1.15));
+      house.add(окноСоСтавнями(w / 2 + 0.02, ярус, z, Math.PI / 2, 0.78, 1.15));
     }
   }
 }
@@ -1930,6 +2018,12 @@ const MAT = {
   houseWallClay: surfaceMaterial('clay_plaster', {
     color: 0xd9c09a, roughness: 0.97, normalScale: 0.9,
   }),
+  // Кровля плоская: глиняная обмазка, а не штукатурка стены. Без неё верх
+  // дома — светлая плита: с высоты город читался белыми квадратами, и
+  // сводные пятна крыш съедали всю работу фасада.
+  houseRoof: surfaceMaterial('sand_01', {
+    color: 0xb08f66, roughness: 1, normalScale: 0.8,
+  }),
   cityStone: surfaceMaterial('sandstone_blocks_05', {
     color: 0xd6c3a0, roughness: 0.88, normalScale: 1.0,
   }),
@@ -1972,6 +2066,13 @@ const MAT = {
   // и темнее — улица видна как улица.
   street: new THREE.MeshStandardMaterial({
     color: 0x9a8a68, roughness: 1, map: plazaTexture(3),
+  }),
+  // Мостовая переулков (§328): та же плитка, но для метрического UV —
+  // repeat 1, потому что масштаб живёт в UV, а не в текстуре. С repeat 3
+  // на переулке 70 м плитка повторилась три раза на всю длину и читалась
+  // досками настила, а не камнем.
+  streetLane: new THREE.MeshStandardMaterial({
+    color: 0x9a8a68, roughness: 1, map: plazaTexture(1),
   }),
   // Огонь в городском фонаре (§232): светящийся шар под стеклом.
   lampGlow: new THREE.MeshStandardMaterial({
@@ -2264,7 +2365,7 @@ export function followSeaToCamera(x: number): void {
 function поставитьЧелн(
   scene: THREE.Object3D, x: number, z: number, y: number, ry: number,
 ): void {
-  decorВещь(scene, 'boat', x, z, { размер: 3.2, по: 'горизонт', y, ry });
+  decorВещь(scene, 'boat', x, z, { размер: 3.2, по: 'horizontal', y, ry });
 }
 
 /**
@@ -2511,7 +2612,7 @@ if (dCity < СТЕНА_НАРУЖНАЯ || dSpawn < 14) continue;
     const big = s.biome === 'mountain';
     addCollider(s.x, s.z, big ? 1.4 : 0.9);
   });
-  rockVariants.forEach((имя, i) => decorПоле(scene, имя, rockPoints[i], { по: 'горизонт', тени: true }));
+  rockVariants.forEach((имя, i) => decorПоле(scene, имя, rockPoints[i], { по: 'horizontal', тени: true }));
 
   // Трава: готовые пучки (Quaternius), по три варианта.
   const grassVariants = ['grass-tuft-1', 'grass-tuft-2', 'grass-tuft-3'];
@@ -3017,21 +3118,27 @@ export function buildRoads(scene: THREE.Scene): void {
  * по ней ставится источник света.
  */
 function фонарь(parent: THREE.Object3D, x: number, z: number): number {
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 4.4, 6), MAT.dark);
+  // Столб чуть толще прежнего (§328): при 0.14 радиуса на шестидесяти
+  // метрах он тоньше пикселя, и в кадре оставались висеть в воздухе
+  // чаша и колпак — «вывески без столбов» из первого замера города.
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 4.4, 6), MAT.dark);
   pole.position.set(x, 2.2, z);
   pole.castShadow = true;
+  // Кронштейн под чашей: железный обод, на котором она держится.
+  const кронштейн = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.08, 8), MAT.dark);
+  кронштейн.position.set(x, 4.38, z);
   const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.3, 0.5, 8), MAT.gold);
   bowl.position.set(x, 4.65, z);
-  const стекло = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.44, 0.72, 8), MAT.glass);
-  стекло.position.set(x, 5.22, z);
-  const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), MAT.lampGlow);
-  огонь.position.set(x, 5.18, z);
-  const колпак = new THREE.Mesh(new THREE.ConeGeometry(0.52, 0.34, 8), MAT.gold);
-  колпак.position.set(x, 5.72, z);
-  parent.add(pole, bowl, стекло, огонь, колпак);
+  const стекло = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.5, 0.8, 8), MAT.glass);
+  стекло.position.set(x, 5.26, z);
+  const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), MAT.lampGlow);
+  огонь.position.set(x, 5.2, z);
+  const колпак = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.4, 8), MAT.gold);
+  колпак.position.set(x, 5.82, z);
+  parent.add(pole, кронштейн, bowl, стекло, огонь, колпак);
   // Огонь в списке на наклон по ветру (§282).
   огниФонарей.push({ mesh: огонь, base: огонь.position.clone() });
-  return 5.18;
+  return 5.2;
 }
 
 const ПАЛЬМЫ = ['palm-1', 'palm-2', 'palm-3', 'palm-4'] as const;
@@ -3105,7 +3212,12 @@ function buildQuarters(
     // Проспект только по внешнему кольцу (r=30..len-14): центр занят
     // площадью, мечетью и рынком — дорога их не пересекает.
     const r0 = 30, r1 = len - 14;
-    const ave = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, r1 - r0), streetMat);
+    const ave = new THREE.Mesh(
+      // Метрический UV и здесь (§328): на проспекте 55 м плитка с repeat 3
+      // растягивалась в доски, как и на переулках. См. MAT.streetLane.
+      metricBoxUV(new THREE.BoxGeometry(5, 0.12, r1 - r0), 5, 0.12, r1 - r0, 2.4),
+      MAT.streetLane,
+    );
     ave.position.set(q.x / len * ((r0 + r1) / 2), 0.42, q.z / len * ((r0 + r1) / 2));
     ave.rotation.y = Math.atan2(q.x, q.z);
     ave.receiveShadow = true;
@@ -3127,16 +3239,15 @@ function buildQuarters(
       const lx = (q.x / len) * d + nx * сторона * 3.4;
       const lz = (q.z / len) * d + nz * сторона * 3.4;
       const земля = groundHeight(CITY.x + lx, CITY.z + lz) - city.position.y;
-      const столб = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 3.4, 6), MAT.dark);
-      столб.position.set(lx, земля + 1.7, lz);
-      столб.castShadow = true;
-      const чаша = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.24, 0.42, 8), MAT.gold);
-      чаша.position.set(lx, земля + 3.6, lz);
-      const огонь = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), MAT.lampGlow);
-      огонь.position.set(lx, земля + 3.55, lz);
-      city.add(столб, чаша, огонь);
-      // Источник света — в фонаре, как у городских (§232).
-      lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + земля + 3.55 });
+      // Тот же фонарь, что и в городе (§328). БЫЛО: свой столб с чашей и
+      // шаром огня — вторая реализация рядом с первой, и правка одного
+      // фонаря не доходила до проспектов: в кадре над проспектом висели
+      // чаши без видимых столбов.
+      const подставка = new THREE.Group();
+      подставка.position.y = земля;
+      city.add(подставка);
+      const высотаОгня = фонарь(подставка, lx, lz);
+      lights.push({ x: CITY.x + lx, z: CITY.z + lz, y: city.position.y + земля + высотаОгня });
       addCollider(CITY.x + lx, CITY.z + lz, 0.35);
     }
 
@@ -3437,7 +3548,7 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
     const поленница = (px: number, pz: number, поворот: number, рядов: number) => {
       for (let ряд = 0; ряд < Math.min(рядов, 2); ряд++) {
         decorВещь(city, 'wood-log', px, pz + ряд * 0.55, {
-          размер: 1.6, по: 'горизонт', y: groundHeight(px, pz) + 0.14 + ряд * 0.55, ry: поворот,
+          размер: 1.6, по: 'horizontal', y: groundHeight(px, pz) + 0.14 + ряд * 0.55, ry: поворот,
         });
       }
     };
@@ -3495,7 +3606,7 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       const px = 106, pz = 98;
       // Телега: готовая модель (medieval-cart-lite), приезжала ещё для рынка.
       decorВещь(city, 'medieval-cart-lite', px, pz, {
-        размер: 2.8, по: 'горизонт', y: 0.3, ry: 0.4,
+        размер: 2.8, по: 'horizontal', y: 0.3, ry: 0.4,
       });
       // ПАРУС на мачте: полотнище с провисом, как на лодке (§297) — своё,
       // ткань живёт на каркасе, который модель не передаёт.
@@ -3512,8 +3623,8 @@ function огород(parent: THREE.Object3D, x: number, z: number, s: number, �
       (парус.material as THREE.Material).side = THREE.DoubleSide;
       city.add(парус);
       // ГРУЗ у телеги: готовые мешки и свёрток ткани.
-      decorВещь(city, 'bags', px - 1.6, pz - 0.8, { размер: 0.9, по: 'горизонт', y: 0.3 });
-      decorВещь(city, 'package-1', px - 1.4, pz + 0.6, { размер: 0.5, по: 'горизонт', y: 0.3, ry: 0.7 });
+      decorВещь(city, 'bags', px - 1.6, pz - 0.8, { размер: 0.9, по: 'horizontal', y: 0.3 });
+      decorВещь(city, 'package-1', px - 1.4, pz + 0.6, { размер: 0.5, по: 'horizontal', y: 0.3, ry: 0.7 });
       // ВОЛ в оглобле: настоящая ригованная модель, дышит в покое.
       void собратьЗверя('bull', 2.6).then((зверь) => {
         if (!зверь) return;
@@ -4216,6 +4327,20 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       awning.position.set(ax, 4.1, az);
       awning.rotation.y = -streetDir - Math.PI / 2;
       awning.rotation.x = 0.05;
+      // СВИСАЮЩАЯ КРОМКА (§328). Плоское полотно 7.2 x 2.6 с высоты
+      // читалось доской, висящей в воздухе: у ткани нет ни толщины, ни
+      // веса, и глаз не находил, за что она держится. Две полосы по
+      // краям дают ей провис — у настоящего базарного навеса передний
+      // край всегда опущен.
+      for (const сторона of [-1, 1] as const) {
+        const кромка = new THREE.Mesh(
+          new THREE.BoxGeometry(7.2, 0.4, 0.06),
+          awning.material as THREE.Material,
+        );
+        кромка.position.set(0, -0.22, сторона * 1.27);
+        кромка.castShadow = true;
+        awning.add(кромка);
+      }
       city.add(awning);
     }
   }
@@ -4685,7 +4810,6 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   }
 
   // Жилые дома: купольные одно- и двухэтажные, с балконами
-  const rng = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
   const canopies = [MAT.clothRed, MAT.clothTeal, MAT.clothPurple];
   // Занятые места площади: мечеть, фонтан, прилавки, аркада, NPC —
   // дома ставятся только с учётом дистанции до них (см. проверку ниже)
@@ -4730,81 +4854,10 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       placed.push({ x: (q.x / len) * t, z: (q.z / len) * t, r: 4 });
     }
   }
-  for (let i = 0; i < 44; i++) {
-    const a = rng() * Math.PI * 2;
-    const r = 18 + rng() * 78;
-    const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    const w = 4 + rng() * 4, h = 3 + rng() * 2.5;
-    // Занятые места: мечеть, фонтан, прилавки, аркада, NPC (npc.ts).
-    // Дома не должны прилипать друг к другу и к постройкам.
-    const houseR = Math.max(2.4, Math.hypot(w, w * 0.9) / 2); // коллайдер по диагонали (дома вращаются случайно)
-    if (placed.some(p => Math.hypot(p.x - x, p.z - z) < p.r + houseR + 3.0)) continue;
-    placed.push({ x, z, r: houseR });
-    const house = new THREE.Group();
-    const twoStory = rng() < 0.35;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.9), MAT.sandstone);
-    body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true;
-    house.add(body);
-    if (twoStory) {
-      const upper = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, h * 0.7, w * 0.75), MAT.sandstoneDark);
-      upper.position.y = h + h * 0.35; upper.castShadow = true; upper.receiveShadow = true;
-      const balcony = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.14, 1.1), MAT.wood);
-      balcony.position.set(0, h - 0.1, w * 0.45);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.5, 0.08), MAT.wood);
-      rail.position.set(0, h + 0.18, w * 0.45 + 0.5);
-      house.add(upper, balcony, rail);
-    }
-    // Обвес по верхнему контуру: у одноэтажных — крыша корпуса, у
-    // двухэтажных — крыша верхнего яруса. Парапет и пояс — тот же
-    // фасадный язык, что у brickHouse и посёлков.
-    домОбвес(house, twoStory ? w * 0.8 : w, twoStory ? h + h * 0.7 : h, twoStory ? w * 0.75 : w * 0.9);
-    // Вход по центру фасада первого этажа; окна первого этажа — попарно
-    // по бокам портала (центр раньше занимала одна плоская лепушка).
-    входДом(house, w * 0.9);
-    house.add(windowPane(-w * 0.3, h * 0.55, w * 0.45 + 0.02, 0));
-    house.add(windowPane(w * 0.3, h * 0.55, w * 0.45 + 0.02, 0));
-    if (twoStory) house.add(windowPane(0, h * 1.02, w * 0.38, 0));
-    // §317: боковое окно. Дом в переулке виден сбоку, и его боковая стена
-    // была глухой плоскостью — именно она занимала пол-экрана на кадре.
-    // Одно окно на сторону: фасад уже получил своё, а мешей в городе и
-    // так двадцать две тысячи.
-    if (w > 5) {
-      house.add(windowPane(w / 2 + 0.02, h * 0.55, 0, Math.PI / 2, 0.78, 1.15));
-      house.add(windowPane(-w / 2 - 0.02, h * 0.55, 0, -Math.PI / 2, 0.78, 1.15));
-    }
-    // И задняя стена: с площади видно именно её. Одно окно по центру у
-    // узкого дома, два у широкого — иначе глухая стена снова занимает
-    // полкадра при спавне.
-    for (const sx of w > 6 ? [-w * 0.24, w * 0.24] : [0]) {
-      house.add(windowPane(sx, h * 0.55, -w * 0.45 - 0.02, Math.PI, 0.78, 1.15));
-    }
-    // §317: тот же счёт, что у brickHouse: купол — деталь крыши. Прежний
-    // множитель 0.55 давал на доме 6 м купол 3 м радиусом — треть дома.
-    const domeR = Math.min(w, h * 1.4) * 0.36;
-    const domeY = twoStory ? h + h * 0.7 : h;
-    // §317: луковичный профиль вместо сплющенного шара — силуэт города
-    // держится на куполах, и именно они раньше читались как грибы.
-    const hd = new THREE.Mesh(
-      onionDomeGeometry(domeR, domeR * 1.45, 14),
-      rng() > 0.55 ? MAT.tealDome : MAT.sandstoneDark,
-    );
-    hd.position.y = domeY + 0.02;
-    hd.castShadow = true;
-    house.add(hd);
-    // Восточный колорит столицы: бадгиры и балконы на части домов
-    if (rng() < 0.45) badgir(house, w * 0.26, -w * 0.2, h, 1.8 + rng() * 1.2);
-    if (rng() < 0.4) {
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.12, 0.9), MAT.wood);
-      slab.position.set(0, h * 0.6, w * 0.45 + 0.35);
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.42, 0.07), MAT.wood);
-      rail.position.set(0, h * 0.6 + 0.27, w * 0.45 + 0.75);
-      house.add(slab, rail);
-    }
-    house.position.set(x, 0.25, z);
-    house.rotation.y = rng() * Math.PI;
-    city.add(house);
-    addCollider(CITY.x + x, CITY.z + z, Math.max(2.4, Math.hypot(w, w * 0.9) / 2));
-  }
+  // §328: вместо случайной россыпи сорока четырёх коробок — восемь жилых
+  // улиц с домами лицом к переулку и дувалами между ними. Список занятых
+  // мест тот же: переулки обходят мечеть, фонтан, проспекты и чужие дома.
+  жилыеУлицы(city, placed);
 
   // ── Конюшня: длинное стойло с крышей и лошадью ──
   {
@@ -4979,19 +5032,19 @@ function buildStall(kind: number, _canopies: THREE.MeshStandardMaterial[]): THRE
   // кувшин, ящик и мешки, поставленные рядом с прилавком.
   const stall = new THREE.Group();
   decorВещь(stall, kind % 2 ? 'market-stand-2' : 'market-stand-1', 0, 0, {
-    размер: 2.3, по: 'горизонт', y: 0, ry: kind * 0.7,
+    размер: 2.3, по: 'horizontal', y: 0, ry: kind * 0.7,
   });
   // Товар на земле у прилавка: набор по роду ряда.
   const товар = kind % 3;
   if (товар === 0) {
-    decorВещь(stall, 'clay-jug', 1.35, 0.5, { размер: 0.5, по: 'горизонт', y: 0 });
-    decorВещь(stall, 'clay-jug', 1.7, -0.3, { размер: 0.38, по: 'горизонт', y: 0 });
+    decorВещь(stall, 'clay-jug', 1.35, 0.5, { размер: 0.5, по: 'horizontal', y: 0 });
+    decorВещь(stall, 'clay-jug', 1.7, -0.3, { размер: 0.38, по: 'horizontal', y: 0 });
   } else if (товар === 1) {
-    decorВещь(stall, 'crate', -1.5, 0.7, { размер: 0.75, по: 'горизонт', y: 0, ry: 0.3 });
-    decorВещь(stall, 'crate', -1.55, -0.15, { размер: 0.6, по: 'горизонт', y: 0, ry: -0.2 });
+    decorВещь(stall, 'crate', -1.5, 0.7, { размер: 0.75, по: 'horizontal', y: 0, ry: 0.3 });
+    decorВещь(stall, 'crate', -1.55, -0.15, { размер: 0.6, по: 'horizontal', y: 0, ry: -0.2 });
   } else {
-    decorВещь(stall, 'bags', 1.4, -0.4, { размер: 0.9, по: 'горизонт', y: 0 });
-    decorВещь(stall, 'barrel', -1.45, 0.5, { размер: 1.0, по: 'высота', y: 0 });
+    decorВещь(stall, 'bags', 1.4, -0.4, { размер: 0.9, по: 'horizontal', y: 0 });
+    decorВещь(stall, 'barrel', -1.45, 0.5, { размер: 1.0, по: 'height', y: 0 });
   }
   return stall;
 }
@@ -5042,6 +5095,51 @@ function tiledIwan(parent: THREE.Group, x: number, z: number, w: number, h: numb
 }
 
 /**
+ * Зубцы парапета: одна меш-геометрия на все четыре стороны (§328).
+ *
+ * ЗАЧЕМ. Парапет из четырёх гладких бортов — это ободок, а не крыша
+ * восточного дома: без зубцов силуэт дома сверху — коробка с рамкой.
+ * Зубцы дают ту самую рваную линию кровли, по которой город читается
+ * городом даже с высокой камеры.
+ *
+ * ПОЧЕМУ СЛИТЫЕ. Зубцов на дом 20–30 штук; отдельными мешами они дали бы
+ * столько же вызовов отрисовки, а рисовали бы тридцать одинаковых
+ * коробок. Здесь они собираются в одну геометрию и рисуются одним
+ * вызовом.
+ */
+function зубцыПарапета(w: number, d: number, верх: number): THREE.Mesh | null {
+  const части: THREE.BufferGeometry[] = [];
+  const шаг = 1.15;
+  const ш = 0.46, в = 0.42, г = 0.3;
+  const ряд = (длина: number, вдоль: 'x' | 'z', знак: 1 | -1, отступ: number) => {
+    const n = Math.max(2, Math.round(длина / шаг));
+    const шагР = длина / n;
+    for (let i = 0; i < n; i++) {
+      const поз = -длина / 2 + шагР * (i + 0.5);
+      const гео = new THREE.BoxGeometry(
+        вдоль === 'x' ? ш : г, в, вдоль === 'x' ? г : ш,
+      );
+      гео.translate(
+        вдоль === 'x' ? поз : знак * отступ,
+        верх + в / 2,
+        вдоль === 'x' ? знак * отступ : поз,
+      );
+      части.push(гео);
+    }
+  };
+  ряд(w, 'x', 1, d / 2);
+  ряд(w, 'x', -1, d / 2);
+  ряд(d, 'z', 1, w / 2);
+  ряд(d, 'z', -1, w / 2);
+  const гео = mergeGeometries(части, false);
+  if (!гео) return null;
+  const меш = new THREE.Mesh(гео, MAT.sandstoneDark);
+  меш.castShadow = true;
+  меш.receiveShadow = true;
+  return меш;
+}
+
+/**
  * Обвес корпуса: парапет по крыше и каменный пояс под карнизом.
  * Раньше жил только в brickHouse; процедурные дома столицы стояли голыми
  * коробками — фасадная работа стала общей для обоих типов домов.
@@ -5063,6 +5161,11 @@ function домОбвес(house: THREE.Group, w: number, h: number, d: number): 
   бортZ2.position.x = w / 2 - пт / 2;
   бортХ.castShadow = true;
   house.add(бортХ, бортХ2, бортZ, бортZ2);
+
+  // §328: зубцы по верху парапета. Одна слитая геометрия на дом —
+  // см. зубцыПарапета: отдельных мешей было бы тридцать.
+  const зубцы = зубцыПарапета(w, d, h + пh);
+  if (зубцы) house.add(зубцы);
 
   // Каменный пояс под карнизом: опора для глаза — стена перестаёт быть
   // голой плоскостью.
@@ -5099,35 +5202,35 @@ function домОбвес(house: THREE.Group, w: number, h: number, d: number): 
  * и крыльцо перед ней. Фасад — грань z+ локально, на глубине d/2.
  */
 function входДом(house: THREE.Group, d: number): void {
-  const опора = new THREE.BoxGeometry(0.16, 2.05, 0.3);
-  const лево = new THREE.Mesh(опора, MAT.sandstoneDark);
-  лево.position.set(-0.63, 1.02, d / 2 + 0.05);
-  const право = лево.clone();
-  право.position.x = 0.63;
-  const портал = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.22, 0.34), MAT.sandstoneDark);
-  портал.position.set(0, 2.9, d / 2 + 0.05);
-  // §317: арочная голова над дверью. Прямая перекладина на двух стойках
-  // — это не портал, а буква «П»: у персидского входа над створом идёт
-  // полукруг. Торус в половину окружности ставится в плоскости фасада,
-  // и дверь сразу читается аркой, а не проёмом в сарае.
-  const арка = new THREE.Mesh(
-    new THREE.TorusGeometry(0.64, 0.1, 6, 14, Math.PI),
+  // ПИШТАК (§328): вход обрамлён плоской рамой со стрельчатой аркой.
+  //
+  // БЫЛО: две стойки и перекладина (буква «П») плюс торус-полукруг над
+  // дверью. На фасаде это читалось наличником от сарая: у персидского
+  // входа над створом не полукруг, а остриё, и обрамляет его каменная
+  // рама, а не труба.
+  //
+  // ТЕПЕРЬ: та же геометрия, что у мечети (§317, pishtaqGeometry) — рама
+  // с вырезанной аркой. Один вход с площадью и мечетью — один язык.
+  const рама = new THREE.Mesh(
+    pishtaqGeometry(1.98, 3.34, 1.3, 2.62, 0.22),
     MAT.sandstoneDark,
   );
-  арка.position.set(0, 2.02, d / 2 + 0.06);
-  арка.castShadow = true;
-  const замок = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.3), MAT.sandstoneDark);
-  замок.position.set(0, 2.72, d / 2 + 0.06);
-  const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.06, 1.9, 0.07), MAT.wood);
-  дверь.position.set(0, 0.95, d / 2 + 0.03);
-  const стойка = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.02), MAT.dark);
-  стойка.position.set(0, 0.95, d / 2 + 0.075);
-  const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.14, 0.55), MAT.sandstoneDark);
+  рама.position.set(0, 0.02, d / 2 - 0.07);
+  рама.castShadow = true;
+  рама.receiveShadow = true;
+  // Полотно двери в проёме: дерево с поперечной набивкой.
+  const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.16, 2.3, 0.08), MAT.wood);
+  дверь.position.set(0, 1.15, d / 2 + 0.02);
+  дверь.castShadow = true;
+  const набивка = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.03), MAT.dark);
+  набивка.position.set(0, 1.72, d / 2 + 0.07);
+  const набивка2 = набивка.clone();
+  набивка2.position.y = 0.72;
+  // Ступень: каменная плита перед порогом.
+  const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.6), MAT.sandstoneDark);
   крыльцо.position.set(0, 0.07, d / 2 + 0.3);
-  лево.castShadow = true;
-  право.castShadow = true;
-  портал.castShadow = true;
-  house.add(лево, право, портал, арка, замок, дверь, стойка, крыльцо);
+  крыльцо.receiveShadow = true;
+  house.add(рама, дверь, набивка, набивка2, крыльцо);
 }
 
 /**
@@ -5176,6 +5279,17 @@ function brickHouse(
   body.receiveShadow = true;
   house.add(body);
 
+  // Кровля: глиняная плита, утопленная за парапет (§328). БЫЛО: крышей
+  // служила верхняя грань самого бокса — на аэроснимке город выглядел
+  // белыми квадратами, а не городом с плоскими крышами.
+  const кровля = new THREE.Mesh(
+    new THREE.BoxGeometry(w - 0.45, 0.09, d - 0.45),
+    MAT.houseRoof,
+  );
+  кровля.position.y = h + 0.02;
+  кровля.receiveShadow = true;
+  house.add(кровля);
+
   // Пристройка: вторая коробка ниже и уже, сдвинута вбок и назад —
   // силуэт перестаёт читаться «коробкой». Хвост за задней гранью —
   // около 0.12w, в пятне прежнего коллайдера почти целиком.
@@ -5212,9 +5326,9 @@ function brickHouse(
     // 11 м купол выходил 3.5 м радиусом и 5.3 м высотой — выше самого
     // дома: силуэт читался грибом. Теперь радиус ограничен и шириной, и
     // высотой дома, а высота купола — 1.35 радиуса.
-    const domeR = Math.min(w * 0.24, h * 0.55);
-    const dome = new THREE.Mesh(onionDomeGeometry(domeR, domeR * 1.35, 16), MAT.tealDome);
-    dome.position.set(0, h + 0.02, 0);
+    const domeR = Math.min(w * 0.2, h * 0.5);
+    const dome = new THREE.Mesh(onionDomeGeometry(domeR, domeR * 1.25, 16), MAT.tealDome);
+    dome.position.set(0, h + 0.06, 0);
     dome.castShadow = true;
     house.add(dome);
   }
@@ -5226,8 +5340,238 @@ function brickHouse(
     house.add(slab, rail);
   }
   if (opts.badgirH) badgir(house, w * 0.28, -w * 0.2, h, opts.badgirH);
+  кровельныйСкарб(house, w, d, h, x * 3.1 + z * 1.7);
   parent.add(house);
   return Math.max(2.4, Math.hypot(w, d) / 2);
+}
+
+/**
+ * Скарб на плоской крыше (§328).
+ *
+ * ЗАЧЕМ. Крыша дома была геометрически правильной плитой с парапетом и
+ * куполом — сверху она читается чертежом. Настоящая плоская крыша
+ * Исфахана — склад: кувшины для воды, лестница к парапету, сушится
+ * что-нибудь. Три-четыре предмета ломают эту правильность, и дом
+ * перестаёт быть коробкой, даже если смотреть с площади.
+ *
+ * ПОЧЕМУ НЕ НА КАЖДОМ ДОМЕ. Крыша со скарбом на каждом доме — тоже
+ * штамп: город выглядел бы одним домом, размноженным двести раз.
+ * Ставим по хэшу позиции — детерминированно: после перезагрузки тот же
+ * дом стоит с тем же кувшином.
+ */
+function кровельныйСкарб(
+  house: THREE.Group, w: number, d: number, h: number, seed: number,
+): void {
+  const жребий = hash2(seed, 13.7);
+  if (жребий < 0.35) return;
+  // Кувшины: готовая модель (Quaternius), база на уровне крыши.
+  const сколько = жребий > 0.72 ? 2 : 1;
+  for (let i = 0; i < сколько; i++) {
+    const px = (hash2(seed + i * 3.1, 7.7) - 0.5) * Math.max(1, w - 2.6);
+    const pz = (hash2(seed - i * 1.7, 2.3) - 0.5) * Math.max(1, d - 2.6);
+    decorВещь(house, 'clay-jug', px, pz, {
+      размер: 0.5 + hash2(seed + i, 4.1) * 0.2,
+      y: h + 0.04,
+      ry: hash2(px, pz) * Math.PI * 2,
+    });
+  }
+  // Лестница к парапету: две рейки и три ступени одной геометрией.
+  if (жребий > 0.5) {
+    const части: THREE.BufferGeometry[] = [];
+    for (const x of [-0.28, 0.28]) {
+      const рейка = new THREE.BoxGeometry(0.07, 2.5, 0.07);
+      рейка.translate(x, 1.25, 0);
+      части.push(рейка);
+    }
+    for (let i = 0; i < 3; i++) {
+      const ступень = new THREE.BoxGeometry(0.62, 0.05, 0.09);
+      ступень.translate(0, 0.5 + i * 0.65, 0);
+      части.push(ступень);
+    }
+    const гео = mergeGeometries(части, false);
+    if (гео) {
+      const лестница = new THREE.Mesh(гео, MAT.wood);
+      лестница.position.set(
+        (hash2(seed + 9, 2.2) - 0.5) * Math.max(1, w - 3),
+        h + 0.02,
+        d * 0.3,
+      );
+      лестница.rotation.x = -0.3;
+      лестница.rotation.y = hash2(seed, 8.8) * Math.PI * 0.5;
+      лестница.castShadow = true;
+      house.add(лестница);
+    }
+  }
+}
+
+/**
+ * Жилые улицы: кварталы вдоль переулков (§328).
+ *
+ * ЧТО БЫЛО. Сорок четыре дома ставились по городу случайными точками с
+ * зазором в три метра. На аэроснимке город читался россыпью отдельных
+ * коробок на песке: ни улиц, ни кварталов, ни дворовых стен, и даже
+ * готовые фасады не помогали, потому что дома не стояли лицами друг к
+ * другу.
+ *
+ * ЧТО ТЕПЕРЬ. Восемь переулков лучами от площади до городской стены.
+ * По обе стороны — дома лицом на улицу, с шагом в двенадцать метров, а
+ * промежутки между ними закрыты дувалами (глиняными заборами с воротами).
+ * Улица с двумя сплошными стенами по бокам и есть квартал: она читается
+ * улицей даже с самолёта.
+ *
+ * УГЛЫ ВЫБРАНЫ ПО ПРОСПЕКТАМ. Четыре проспекта уже идут к кварталам
+ * (0°, 45°, 98°, 112°). Новые улицы стоят между ними, чтобы город не
+ * получился восемью линиями из одного центра — так же он выглядел бы
+ * решёткой.
+ *
+ * ЧТО НЕ СТАВИТСЯ. Дом не встанет на мечеть, фонтан, проспект, чужой дом
+ * или у самой стены: занятые места приходят готовым списком, тем же, что
+ * был у случайной россыпи — переулки и площадь наконец говорят на одном
+ * языке координат.
+ */
+function жилыеУлицы(
+  city: THREE.Group,
+  занято: { x: number; z: number; r: number }[],
+): void {
+  const УГЛЫ = [0.36, 1.16, 2.34, 2.86, 3.62, 4.34, 5.12, 5.9];
+  const ШИРИНА = 4.2;
+  const НАЧАЛО = 24;
+  const КОНЕЦ = 94;
+  const ШАГ = 10.8;
+  // Линия фасада: от оси переулка до стены дома.
+  const ФАСАД = 3.9;
+  let домов = 0;
+  for (const угол of УГЛЫ) {
+    const ux = Math.cos(угол), uz = Math.sin(угол);
+    const px = -uz, pz = ux;
+    // ── Мостовая переулка ──
+    const длина = КОНЕЦ - НАЧАЛО;
+    const мостовая = new THREE.Mesh(
+      metricBoxUV(new THREE.BoxGeometry(ШИРИНА, 0.1, длина), ШИРИНА, 0.1, длина, 2.4),
+      MAT.streetLane,
+    );
+    мостовая.position.set(
+      ux * (НАЧАЛО + длина / 2), 0.4, uz * (НАЧАЛО + длина / 2),
+    );
+    мостовая.rotation.y = Math.atan2(ux, uz);
+    мостовая.receiveShadow = true;
+    city.add(мостовая);
+
+    // ── Дома по обе стороны ──
+    for (const сторона of [-1, 1] as const) {
+      let прошлый: { вдоль: number; w: number } | null = null;
+      for (let т = НАЧАЛО + 4; т <= КОНЕЦ - 2; т += ШАГ) {
+        const вдоль = т + (hash2(т * 1.7, угол * 3.1 + сторона) - 0.5) * 1.4;
+        const w = 6.2 + hash2(вдоль * 2.3, сторона * 5.1) * 2.6;
+        const d = w * 0.9;
+        const h = 3.4 + hash2(угол * 5.7, вдоль * 1.3) * 1.6;
+        const отступ = ФАСАД + d / 2;
+        const cx = ux * вдоль + px * сторона * отступ;
+        const cz = uz * вдоль + pz * сторона * отступ;
+        if (Math.hypot(cx, cz) > CITY.radius - 14) continue;
+        const r = Math.max(2.6, Math.hypot(w, d) / 2);
+        if (занято.some((p) => Math.hypot(p.x - cx, p.z - cz) < p.r + r + 2.0)) continue;
+        занято.push({ x: cx, z: cz, r });
+
+        // Фасад — к переулку: локальный +z (перед дома) смотрит на ось.
+        const rotY = Math.atan2(-сторона * px, -сторона * pz);
+        brickHouse(city, cx, cz, w, h, {
+          rotY,
+          dome: hash2(cx, cz) > 0.74,
+          balcony: hash2(cz, cx) > 0.62,
+          badgirH: hash2(cx + 4, cz - 3) > 0.62 ? 1.8 + hash2(cx, cz) * 0.8 : undefined,
+        });
+        addCollider(CITY.x + cx, CITY.z + cz, r);
+        домов++;
+
+        // ── Дувал между соседями ──
+        if (прошлый) {
+          const промежуток = (вдоль - w / 2) - (прошлый.вдоль + прошлый.w / 2);
+          if (промежуток > 0.7) {
+            дувал(
+              city, ux, uz, px, pz, сторона,
+              (прошлый.вдоль + прошлый.w / 2 + вдоль - w / 2) / 2,
+              промежуток, ФАСАД,
+              hash2(вдоль, угол),
+            );
+          }
+        }
+        прошлый = { вдоль, w };
+      }
+    }
+
+    // ── Фонари: по одному через двадцать два метра, попеременно ──
+    let сторонаФонаря = 1;
+    for (let т = НАЧАЛО + 8; т <= КОНЕЦ - 4; т += 22) {
+      const lx = ux * т + px * сторонаФонаря * (ШИРИНА / 2 + 0.7);
+      const lz = uz * т + pz * сторонаФонаря * (ШИРИНА / 2 + 0.7);
+      фонарь(city, lx, lz);
+      addCollider(CITY.x + lx, CITY.z + lz, 0.4);
+      сторонаФонаря *= -1;
+    }
+  }
+  // Отчёт в консоль: сколько домов встало. Нужен, чтобы «улицы есть» было
+  // числом, а не утверждением.
+  if (домов < 20) {
+    console.warn(`[city] zhilye ulitsy: vsego ${домов} domov — mesto zanyato`);
+  }
+}
+
+/**
+ * Дувал — глиняный забор между двумя домами, с воротами через один (§328).
+ *
+ * ЗАЧЕМ. Дома нового квартала стоят вдоль улицы с промежутками в два-три
+ * метра. Без забора между ними улица — ряд отдельных домов, а не
+ * квартал: между домами видно дворы и пустырь.
+ *
+ * ВОРОТА НЕ В КАЖДОМ. Ворота в каждом промежутке — это ряд одинаковых
+ * калиток через два метра; через один — уже хозяйство.
+ */
+function дувал(
+  city: THREE.Group,
+  ux: number, uz: number, px: number, pz: number,
+  сторона: 1 | -1,
+  вдоль: number, длина: number, отступ: number,
+  жребий: number,
+): void {
+  const cx = ux * вдоль + px * сторона * отступ;
+  const cz = uz * вдоль + pz * сторона * отступ;
+  const поворот = Math.atan2(ux, uz);
+  // Стена: толщина 0.36, высота 2.3 — ниже дома и ниже парапета.
+  const стена = new THREE.Mesh(new THREE.BoxGeometry(0.36, 2.3, длина), MAT.houseWall);
+  стена.position.set(cx, 1.15, cz);
+  стена.rotation.y = поворот;
+  стена.castShadow = true;
+  стена.receiveShadow = true;
+  // Крышка стены: без неё торец выглядит обрезанной коробкой.
+  const крышка = new THREE.Mesh(
+    new THREE.BoxGeometry(0.5, 0.12, длина),
+    MAT.sandstoneDark,
+  );
+  крышка.position.set(cx, 2.36, cz);
+  крышка.rotation.y = поворот;
+  city.add(стена, крышка);
+  // Коллайдеры вдоль стены: круг на всю длину перекрыл бы проход.
+  const шагов = Math.max(1, Math.ceil(длина / 2));
+  for (let i = 0; i < шагов; i++) {
+    const t = вдоль - длина / 2 + (i + 0.5) * (длина / шагов);
+    addCollider(
+      CITY.x + ux * t + px * сторона * отступ,
+      CITY.z + uz * t + pz * сторона * отступ,
+      0.55,
+    );
+  }
+  // Ворота: два столба, перекладина и полотно.
+  if (жребий > 0.5 && длина > 1.6) {
+    const полотно = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.9, 1.3), MAT.wood);
+    полотно.position.set(cx, 0.95, cz);
+    полотно.rotation.y = поворот;
+    const замок = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.22), MAT.dark);
+    замок.position.set(
+      cx - px * сторона * 0.12, 1.05, cz - pz * сторона * 0.12,
+    );
+    city.add(полотно, замок);
+  }
 }
 
 /** Кипарис для садов и дворов. */
@@ -5551,7 +5895,7 @@ export function buildCamp(scene: THREE.Scene): void {
     if (Math.abs(a - Math.PI / 2) < 0.28) continue;
     const px = Math.cos(a) * 15, pz = Math.sin(a) * 15;
     decorВещь(camp, 'medieval-wooden-palisade', px, pz, {
-      размер: 3.7, по: 'горизонт', y: 0, ry: -a,
+      размер: 3.7, по: 'horizontal', y: 0, ry: -a,
       наклон: i % 2 ? 0.03 : -0.03,
     });
   }
@@ -5568,7 +5912,7 @@ export function buildCamp(scene: THREE.Scene): void {
   // Костёр: готовая модель (камни и поленья), пламя остаётся своим —
   // оно же носитель света и анимации огня. БЫЛО: цилиндр очага, девять
   // додекаэдров и два полена-цилиндра.
-  decorВещь(camp, 'bonfire', 0, 0, { размер: 1.7, по: 'горизонт', y: 0 });
+  decorВещь(camp, 'bonfire', 0, 0, { размер: 1.7, по: 'horizontal', y: 0 });
   addCollider(CAMP.x, CAMP.z, 1.4);
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 7), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.6 }));
   flame.position.set(0, 1, 0);
@@ -6159,7 +6503,7 @@ export function buildSettlements(scene: THREE.Scene): { x: number; y: number; z:
     }
     // Поленница: готовое бревно в три плашмя. БЫЛО: восемь цилиндров.
     for (const [lx, lz, ry] of [[-6, 8, 0], [-5.4, 8, 0.12], [-6.15, 7.4, 0.05]] as const) {
-      decorВещь(g, 'wood-log', lx, lz, { размер: 1.9, по: 'горизонт', y: 0.18, ry });
+      decorВещь(g, 'wood-log', lx, lz, { размер: 1.9, по: 'horizontal', y: 0.18, ry });
     }
     // Фонарь у поленницы (§251): деревня стояла в темноте — дома, поленница и
     // стог были, а света не было ни одного.
@@ -9157,7 +9501,7 @@ interface ЧастиМодели { гео: THREE.BufferGeometry; материа�
 
 const частиCache = new Map<string, Promise<ЧастиМодели[] | null>>();
 
-function частиМодели(имя: string, по: 'высота' | 'горизонт'): Promise<ЧастиМодели[] | null> {
+function частиМодели(имя: string, по: 'height' | 'horizontal'): Promise<ЧастиМодели[] | null> {
   const ключ = `${имя}:${по}`;
   const готовый = частиCache.get(ключ);
   if (готовый) return готовый;
@@ -9179,7 +9523,7 @@ function частиМодели(имя: string, по: 'высота' | 'гори
     });
     const размерY = box.max.y - box.min.y;
     const горизонт = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
-    const делитель = по === 'высота' ? размерY : горизонт;
+    const делитель = по === 'height' ? размерY : горизонт;
     if (!(делитель > 1e-6)) return null;
     const k = 1 / делитель;
     const части: ЧастиМодели[] = [];
@@ -9221,10 +9565,10 @@ export interface ТочкаПоля {
  */
 function decorПоле(
   родитель: THREE.Object3D, имя: string, точки: ТочкаПоля[],
-  opts?: { по?: 'высота' | 'горизонт'; тени?: boolean },
+  opts?: { по?: 'height' | 'horizontal'; тени?: boolean },
 ): void {
   if (!точки.length) return;
-  void частиМодели(имя, opts?.по ?? 'высота').then((части) => {
+  void частиМодели(имя, opts?.по ?? 'height').then((части) => {
     if (!части) {
       console.warn(`[decor] поле ${имя} не доехало — участок останется пустым`);
       return;
@@ -9256,17 +9600,17 @@ function decorПоле(
 }
 
 /** Одиночная нормализованная модель: размер в метрах, база на земле. */
-function decorВещь(
+export function decorВещь(
   родитель: THREE.Object3D, имя: string, x: number, z: number,
   opts: {
-    размер: number; по?: 'высота' | 'горизонт';
+    размер: number; по?: 'height' | 'horizontal';
     ry?: number; y?: number; lift?: number; наклон?: number; tint?: number;
     colliderR?: number;
     качание?: { амплитуда: number; фаза: number };
   },
 ): void {
   if (opts.colliderR) addCollider(x, z, opts.colliderR);
-  void частиМодели(имя, opts.по ?? 'высота').then((части) => {
+  void частиМодели(имя, opts.по ?? 'height').then((части) => {
     if (!части || !части.length) return;
     const вещь = new THREE.Group();
     for (const ч of части) {
@@ -11096,7 +11440,7 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
           // Лодки у причала: готовая модель (Quaternius). БЫЛО: сплюснутый
           // цилиндр — поплавок, а не лодка.
           decorВещь(пирс, 'boat', 2.8 + i * 0.5, -6 - i * 0.9, {
-            размер: 3.0, по: 'горизонт', y: 0.2, ry: 0.3 + i * 0.15,
+            размер: 3.0, по: 'horizontal', y: 0.2, ry: 0.3 + i * 0.15,
           });
         }
         пирс.position.set(-t.radius * 0.5, 0, t.radius * 0.2);
