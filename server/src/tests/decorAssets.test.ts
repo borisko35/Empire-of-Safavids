@@ -30,6 +30,7 @@ const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
 const ВОЛНЫ_СЕТОК = читать('client/src/app/game3d/waterWaves.ts');
 const МАНИФЕСТ = JSON.parse(читать('client/src/app/public/models/manifest.json')) as {
   decor?: { file: string; name: string; bytes: number }[];
+  animals?: { file: string; name: string; bytes: number }[];
 };
 
 function деревня(): { x: number; z: number } {
@@ -44,13 +45,21 @@ describe('Акведук деревни: модель на месте и в сц
       МАНИФЕСТ.decor !== undefined && МАНИФЕСТ.decor.length >= 1,
       'в манифесте нет раздела decor: файл декора никто не сверяет с диском',
     );
-    for (const запись of МАНИФЕСТ.decor!) {
-      const путь = join(корень, 'client/src/app/public', запись.file);
-      must(existsSync(путь), `нет файла декора ${запись.file}: сцена останется без аркады`);
+    // Секция animals сверяется тем же обходом: звери и рыбы фауны — такие же
+    // файлы сборки, и промолчавшая пропажа файла оставила бы биом пустым.
+    for (const [раздел, записи] of [['decor', МАНИФЕСТ.decor], ['animals', МАНИФЕСТ.animals]] as const) {
       must(
-        statSync(путь).size === запись.bytes,
-        `${запись.file}: на диске ${statSync(путь).size}, в манифесте ${запись.bytes}`
+        записи !== undefined && записи.length >= 1,
+        `в манифесте нет раздела ${раздел}: файлы никто не сверяет с диском`,
       );
+      for (const запись of записи) {
+        const путь = join(корень, 'client/src/app/public', запись.file);
+        must(existsSync(путь), `нет файла ${раздел} ${запись.file}: сцена останется без него`);
+        must(
+          statSync(путь).size === запись.bytes,
+          `${запись.file}: на диске ${statSync(путь).size}, в манифесте ${запись.bytes}`
+        );
+      }
     }
   });
 

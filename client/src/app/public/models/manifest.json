@@ -469,6 +469,571 @@
       "file": "models/decor/grindstone.glb",
       "name": "grindstone",
       "bytes": 20488
+    },
+    {
+      "file": "models/decor/palm-1.glb",
+      "name": "palm-1",
+      "bytes": 21752
+    },
+    {
+      "file": "models/decor/palm-2.glb",
+      "name": "palm-2",
+      "bytes": 16180
+    },
+    {
+      "file": "models/decor/palm-3.glb",
+      "name": "palm-3",
+      "bytes": 20464
+    },
+    {
+      "file": "models/decor/palm-4.glb",
+      "name": "palm-4",
+      "bytes": 15792
+    },
+    {
+      "file": "models/decor/platan-1.glb",
+      "name": "platan-1",
+      "bytes": 30328
+    },
+    {
+      "file": "models/decor/platan-2.glb",
+      "name": "platan-2",
+      "bytes": 30952
+    },
+    {
+      "file": "models/decor/platan-3.glb",
+      "name": "platan-3",
+      "bytes": 19600
+    },
+    {
+      "file": "models/decor/platan-4.glb",
+      "name": "platan-4",
+      "bytes": 20584
+    },
+    {
+      "file": "models/decor/pine-1.glb",
+      "name": "pine-1",
+      "bytes": 22032
+    },
+    {
+      "file": "models/decor/pine-2.glb",
+      "name": "pine-2",
+      "bytes": 26452
+    },
+    {
+      "file": "models/decor/pine-3.glb",
+      "name": "pine-3",
+      "bytes": 20044
+    },
+    {
+      "file": "models/decor/willow-1.glb",
+      "name": "willow-1",
+      "bytes": 22536
+    },
+    {
+      "file": "models/decor/willow-2.glb",
+      "name": "willow-2",
+      "bytes": 29928
+    },
+    {
+      "file": "models/decor/bush-1.glb",
+      "name": "bush-1",
+      "bytes": 5528
+    },
+    {
+      "file": "models/decor/bush-2.glb",
+      "name": "bush-2",
+      "bytes": 4440
+    },
+    {
+      "file": "models/decor/bush-berries.glb",
+      "name": "bush-berries",
+      "bytes": 11700
+    },
+    {
+      "file": "models/decor/bush-berries-2.glb",
+      "name": "bush-berries-2",
+      "bytes": 10800
+    },
+    {
+      "file": "models/decor/grass-tuft-1.glb",
+      "name": "grass-tuft-1",
+      "bytes": 3696
+    },
+    {
+      "file": "models/decor/grass-tuft-2.glb",
+      "name": "grass-tuft-2",
+      "bytes": 3648
+    },
+    {
+      "file": "models/decor/grass-tuft-3.glb",
+      "name": "grass-tuft-3",
+      "bytes": 3836
+    },
+    {
+      "file": "models/decor/flowers.glb",
+      "name": "flowers",
+      "bytes": 7712
+    },
+    {
+      "file": "models/decor/flower-1.glb",
+      "name": "flower-1",
+      "bytes": 2236
+    },
+    {
+      "file": "models/decor/flower-2.glb",
+      "name": "flower-2",
+      "bytes": 1744
+    },
+    {
+      "file": "models/decor/flower-3.glb",
+      "name": "flower-3",
+      "bytes": 3712
+    },
+    {
+      "file": "models/decor/flower-4.glb",
+      "name": "flower-4",
+      "bytes": 4192
+    },
+    {
+      "file": "models/decor/rock-1.glb",
+      "name": "rock-1",
+      "bytes": 2116
+    },
+    {
+      "file": "models/decor/rock-2.glb",
+      "name": "rock-2",
+      "bytes": 2244
+    },
+    {
+      "file": "models/decor/rock-3.glb",
+      "name": "rock-3",
+      "bytes": 2196
+    },
+    {
+      "file": "models/decor/rock-4.glb",
+      "name": "rock-4",
+      "bytes": 2880
+    },
+    {
+      "file": "models/decor/rock-5.glb",
+      "name": "rock-5",
+      "bytes": 2404
+    },
+    {
+      "file": "models/decor/rock-moss-1.glb",
+      "name": "rock-moss-1",
+      "bytes": 2916
+    },
+    {
+      "file": "models/decor/rock-moss-2.glb",
+      "name": "rock-moss-2",
+      "bytes": 3072
+    },
+    {
+      "file": "models/decor/cactus-1.glb",
+      "name": "cactus-1",
+      "bytes": 7732
+    },
+    {
+      "file": "models/decor/cactus-2.glb",
+      "name": "cactus-2",
+      "bytes": 8816
+    },
+    {
+      "file": "models/decor/plant-1.glb",
+      "name": "plant-1",
+      "bytes": 4860
+    },
+    {
+      "file": "models/decor/plant-2.glb",
+      "name": "plant-2",
+      "bytes": 4928
+    },
+    {
+      "file": "models/decor/plant-3.glb",
+      "name": "plant-3",
+      "bytes": 8060
+    },
+    {
+      "file": "models/decor/lilypad.glb",
+      "name": "lilypad",
+      "bytes": 6736
+    },
+    {
+      "file": "models/decor/tree-stump.glb",
+      "name": "tree-stump",
+      "bytes": 5648
+    },
+    {
+      "file": "models/decor/wood-log.glb",
+      "name": "wood-log",
+      "bytes": 8192
+    },
+    {
+      "file": "models/decor/wheat-sheaf.glb",
+      "name": "wheat-sheaf",
+      "bytes": 5928
+    },
+    {
+      "file": "models/decor/wheat-1.glb",
+      "name": "wheat-1",
+      "bytes": 1724
+    },
+    {
+      "file": "models/decor/wheat-2.glb",
+      "name": "wheat-2",
+      "bytes": 2592
+    },
+    {
+      "file": "models/decor/wheat-3.glb",
+      "name": "wheat-3",
+      "bytes": 3996
+    },
+    {
+      "file": "models/decor/wheat-4.glb",
+      "name": "wheat-4",
+      "bytes": 2408
+    },
+    {
+      "file": "models/decor/corn-1.glb",
+      "name": "corn-1",
+      "bytes": 2272
+    },
+    {
+      "file": "models/decor/corn-2.glb",
+      "name": "corn-2",
+      "bytes": 2852
+    },
+    {
+      "file": "models/decor/pumpkin.glb",
+      "name": "pumpkin",
+      "bytes": 3572
+    },
+    {
+      "file": "models/decor/lettuce.glb",
+      "name": "lettuce",
+      "bytes": 2316
+    },
+    {
+      "file": "models/decor/carrot.glb",
+      "name": "carrot",
+      "bytes": 2328
+    },
+    {
+      "file": "models/decor/mushroom.glb",
+      "name": "mushroom",
+      "bytes": 4044
+    },
+    {
+      "file": "models/decor/barrel.glb",
+      "name": "barrel",
+      "bytes": 13636
+    },
+    {
+      "file": "models/decor/crate.glb",
+      "name": "crate",
+      "bytes": 6852
+    },
+    {
+      "file": "models/decor/cart.glb",
+      "name": "cart",
+      "bytes": 18672
+    },
+    {
+      "file": "models/decor/well.glb",
+      "name": "well",
+      "bytes": 20760
+    },
+    {
+      "file": "models/decor/bonfire.glb",
+      "name": "bonfire",
+      "bytes": 9796
+    },
+    {
+      "file": "models/decor/bonfire-lit.glb",
+      "name": "bonfire-lit",
+      "bytes": 14856
+    },
+    {
+      "file": "models/decor/bench-1.glb",
+      "name": "bench-1",
+      "bytes": 5196
+    },
+    {
+      "file": "models/decor/bench-2.glb",
+      "name": "bench-2",
+      "bytes": 3344
+    },
+    {
+      "file": "models/decor/market-stand-1.glb",
+      "name": "market-stand-1",
+      "bytes": 13108
+    },
+    {
+      "file": "models/decor/market-stand-2.glb",
+      "name": "market-stand-2",
+      "bytes": 10192
+    },
+    {
+      "file": "models/decor/hay.glb",
+      "name": "hay",
+      "bytes": 6876
+    },
+    {
+      "file": "models/decor/bag.glb",
+      "name": "bag",
+      "bytes": 2584
+    },
+    {
+      "file": "models/decor/bags.glb",
+      "name": "bags",
+      "bytes": 5056
+    },
+    {
+      "file": "models/decor/package-1.glb",
+      "name": "package-1",
+      "bytes": 4336
+    },
+    {
+      "file": "models/decor/package-2.glb",
+      "name": "package-2",
+      "bytes": 4516
+    },
+    {
+      "file": "models/decor/cauldron.glb",
+      "name": "cauldron",
+      "bytes": 11756
+    },
+    {
+      "file": "models/decor/bell.glb",
+      "name": "bell",
+      "bytes": 4948
+    },
+    {
+      "file": "models/decor/fence.glb",
+      "name": "fence",
+      "bytes": 3212
+    },
+    {
+      "file": "models/decor/clay-jug.glb",
+      "name": "clay-jug",
+      "bytes": 4072
+    },
+    {
+      "file": "models/decor/amphora.glb",
+      "name": "amphora",
+      "bytes": 9056
+    },
+    {
+      "file": "models/decor/bookshelf.glb",
+      "name": "bookshelf",
+      "bytes": 1856
+    },
+    {
+      "file": "models/decor/shelf-1.glb",
+      "name": "shelf-1",
+      "bytes": 1648
+    },
+    {
+      "file": "models/decor/shelf-2.glb",
+      "name": "shelf-2",
+      "bytes": 1736
+    },
+    {
+      "file": "models/decor/table-round-large.glb",
+      "name": "table-round-large",
+      "bytes": 4428
+    },
+    {
+      "file": "models/decor/table-round-small.glb",
+      "name": "table-round-small",
+      "bytes": 4664
+    },
+    {
+      "file": "models/decor/table-round-small2.glb",
+      "name": "table-round-small2",
+      "bytes": 5712
+    },
+    {
+      "file": "models/decor/chair-1.glb",
+      "name": "chair-1",
+      "bytes": 2984
+    },
+    {
+      "file": "models/decor/chair-2.glb",
+      "name": "chair-2",
+      "bytes": 4720
+    },
+    {
+      "file": "models/decor/chair-3.glb",
+      "name": "chair-3",
+      "bytes": 5452
+    },
+    {
+      "file": "models/decor/chair-4.glb",
+      "name": "chair-4",
+      "bytes": 3188
+    },
+    {
+      "file": "models/decor/stool.glb",
+      "name": "stool",
+      "bytes": 5096
+    },
+    {
+      "file": "models/decor/carpet-1.glb",
+      "name": "carpet-1",
+      "bytes": 2812
+    },
+    {
+      "file": "models/decor/carpet-2.glb",
+      "name": "carpet-2",
+      "bytes": 2740
+    },
+    {
+      "file": "models/decor/carpet-round.glb",
+      "name": "carpet-round",
+      "bytes": 2876
+    },
+    {
+      "file": "models/decor/column-round-1.glb",
+      "name": "column-round-1",
+      "bytes": 3212
+    },
+    {
+      "file": "models/decor/column-round-2.glb",
+      "name": "column-round-2",
+      "bytes": 4072
+    },
+    {
+      "file": "models/decor/column-round-3.glb",
+      "name": "column-round-3",
+      "bytes": 4000
+    },
+    {
+      "file": "models/decor/houseplant-1.glb",
+      "name": "houseplant-1",
+      "bytes": 4416
+    },
+    {
+      "file": "models/decor/houseplant-2.glb",
+      "name": "houseplant-2",
+      "bytes": 6508
+    },
+    {
+      "file": "models/decor/houseplant-3.glb",
+      "name": "houseplant-3",
+      "bytes": 7420
+    },
+    {
+      "file": "models/decor/houseplant-4.glb",
+      "name": "houseplant-4",
+      "bytes": 5132
+    },
+    {
+      "file": "models/decor/plate-1.glb",
+      "name": "plate-1",
+      "bytes": 1916
+    },
+    {
+      "file": "models/decor/plate-2.glb",
+      "name": "plate-2",
+      "bytes": 2248
+    },
+    {
+      "file": "models/decor/plate-3.glb",
+      "name": "plate-3",
+      "bytes": 2116
+    },
+    {
+      "file": "models/decor/drawer-small.glb",
+      "name": "drawer-small",
+      "bytes": 4884
+    },
+    {
+      "file": "models/decor/drawer-small-2.glb",
+      "name": "drawer-small-2",
+      "bytes": 4844
+    },
+    {
+      "file": "models/decor/nightstand.glb",
+      "name": "nightstand",
+      "bytes": 3628
+    },
+    {
+      "file": "models/decor/bed-single.glb",
+      "name": "bed-single",
+      "bytes": 7340
+    },
+    {
+      "file": "models/decor/bed-king.glb",
+      "name": "bed-king",
+      "bytes": 7828
+    },
+    {
+      "file": "models/decor/curtains.glb",
+      "name": "curtains",
+      "bytes": 3388
+    },
+    {
+      "file": "models/decor/kitchen-cabinet.glb",
+      "name": "kitchen-cabinet",
+      "bytes": 2552
+    },
+    {
+      "file": "models/decor/kitchen-oven.glb",
+      "name": "kitchen-oven",
+      "bytes": 8592
+    },
+    {
+      "file": "models/decor/chandelier.glb",
+      "name": "chandelier",
+      "bytes": 6712
+    },
+    {
+      "file": "models/decor/book-closed.glb",
+      "name": "book-closed",
+      "bytes": 4408
+    },
+    {
+      "file": "models/decor/book-open.glb",
+      "name": "book-open",
+      "bytes": 5560
+    },
+    {
+      "file": "models/decor/parchment.glb",
+      "name": "parchment",
+      "bytes": 8020
+    },
+    {
+      "file": "models/decor/scroll.glb",
+      "name": "scroll",
+      "bytes": 13308
+    },
+    {
+      "file": "models/decor/pouch.glb",
+      "name": "pouch",
+      "bytes": 6852
+    },
+    {
+      "file": "models/decor/potion-1.glb",
+      "name": "potion-1",
+      "bytes": 8240
+    },
+    {
+      "file": "models/decor/potion-2.glb",
+      "name": "potion-2",
+      "bytes": 9096
+    },
+    {
+      "file": "models/decor/cypress.glb",
+      "name": "cypress",
+      "bytes": 14720
+    },
+    {
+      "file": "models/decor/boat.glb",
+      "name": "boat",
+      "bytes": 4340
     }
   ],
   "weapons": [
@@ -476,6 +1041,148 @@
       "file": "models/weapons/staff.glb",
       "name": "staff",
       "bytes": 582376
+    }
+  ],
+  "animals": [
+    {
+      "file": "models/animals/alpaca.glb",
+      "name": "alpaca",
+      "bytes": 407056
+    },
+    {
+      "file": "models/animals/bluetang.glb",
+      "name": "bluetang",
+      "bytes": 60900
+    },
+    {
+      "file": "models/animals/bull.glb",
+      "name": "bull",
+      "bytes": 376640
+    },
+    {
+      "file": "models/animals/bunny.glb",
+      "name": "bunny",
+      "bytes": 331812
+    },
+    {
+      "file": "models/animals/camel.glb",
+      "name": "camel",
+      "bytes": 22968
+    },
+    {
+      "file": "models/animals/clownfish.glb",
+      "name": "clownfish",
+      "bytes": 63708
+    },
+    {
+      "file": "models/animals/cow.glb",
+      "name": "cow",
+      "bytes": 377196
+    },
+    {
+      "file": "models/animals/deer.glb",
+      "name": "deer",
+      "bytes": 380196
+    },
+    {
+      "file": "models/animals/donkey.glb",
+      "name": "donkey",
+      "bytes": 417624
+    },
+    {
+      "file": "models/animals/duck.glb",
+      "name": "duck",
+      "bytes": 16152
+    },
+    {
+      "file": "models/animals/fish-a.glb",
+      "name": "fish-a",
+      "bytes": 27028
+    },
+    {
+      "file": "models/animals/fish-b.glb",
+      "name": "fish-b",
+      "bytes": 26012
+    },
+    {
+      "file": "models/animals/fish-c.glb",
+      "name": "fish-c",
+      "bytes": 28032
+    },
+    {
+      "file": "models/animals/fox.glb",
+      "name": "fox",
+      "bytes": 392360
+    },
+    {
+      "file": "models/animals/goat.glb",
+      "name": "goat",
+      "bytes": 21256
+    },
+    {
+      "file": "models/animals/heron.glb",
+      "name": "heron",
+      "bytes": 10396
+    },
+    {
+      "file": "models/animals/horse.glb",
+      "name": "horse",
+      "bytes": 425180
+    },
+    {
+      "file": "models/animals/husky.glb",
+      "name": "husky",
+      "bytes": 371156
+    },
+    {
+      "file": "models/animals/koi.glb",
+      "name": "koi",
+      "bytes": 64516
+    },
+    {
+      "file": "models/animals/lizard.glb",
+      "name": "lizard",
+      "bytes": 27860
+    },
+    {
+      "file": "models/animals/piranha.glb",
+      "name": "piranha",
+      "bytes": 64480
+    },
+    {
+      "file": "models/animals/seagull.glb",
+      "name": "seagull",
+      "bytes": 10960
+    },
+    {
+      "file": "models/animals/sheep.glb",
+      "name": "sheep",
+      "bytes": 85700
+    },
+    {
+      "file": "models/animals/stag.glb",
+      "name": "stag",
+      "bytes": 392892
+    },
+    {
+      "file": "models/animals/stork.glb",
+      "name": "stork",
+      "bytes": 10988
+    },
+    {
+      "file": "models/animals/swordfish.glb",
+      "name": "swordfish",
+      "bytes": 61248
+    },
+    {
+      "file": "models/animals/tuna.glb",
+      "name": "tuna",
+      "bytes": 67440
+    },
+    {
+      "file": "models/animals/wolf.glb",
+      "name": "wolf",
+      "bytes": 393964
     }
   ]
 }

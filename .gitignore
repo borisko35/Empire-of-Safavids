@@ -219,3 +219,4 @@ tools/publish-instructions.md
 # секунды и весила бы 526 КБ в проде ради модели, которую игра не грузит),
 # отчёты — здесь.
 client/src/app/public/models/decor/*.report.json
+client/src/app/public/models/animals/*.report.json
