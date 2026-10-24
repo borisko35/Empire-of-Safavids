@@ -1,7 +1,8 @@
-// §317. Поверхности: вода, небо, лодки, снег, дома, купола.
+// §317. Поверхности: PBR-материалы, загрузка текстур.
 //
-// ЧТО ПРОВЕРЯЕТСЯ. Шейдеры воды/неба; рябь от лодок; снег не трогает PBR камня;
-// дома: три варианта штукатурки, окна в GLB, купола по новому профилю.
+// ЧТО ПРОВЕРЯЕТСЯ. Материалы PBR (applySurface, surfaceMaterial);
+// загрузка карт (diff/nor/rough); метрический UV через surfaceTile.
+// Вода, небо, лодки, снег, купола — в других файлах.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -18,112 +19,47 @@ function должны(условие: unknown, причина: string): void {
 
 const ПОВЕРХНОСТИ = читать('client/src/app/game3d/surfaces.ts');
 
-describe('§317. Вода', () => {
-  it('вода строит шейдер, а не накладывает текстуру', () => {
-    должен(/waterVertexShader/.test(ПОВЕРХНОСТИ), 'нет waterVertexShader: вода не программируемая');
-    должны(/vBase.*modelMatrix/.test(ПОВЕРХНОСТИ), 'вершинный шейдер не использует мировые координаты');
-    должны(!/map: waterTexture/.test(ПОВЕРХНОСТИ), 'вода на текстуре: у неё нет ни карты цвета, ни нормалей');
+describe('§317. PBR-поверхности', () => {
+  it('экспортирует тип SurfaceId и наборы', () => {
+    должны(/export type SurfaceId/.test(ПОВЕРХНОСТИ), 'нет типа SurfaceId');
+    должны(/const НАБОРЫ: Record<SurfaceId/.test(ПОВЕРХНОСТИ), 'нет НАБОРЫ');
+    должны(/'sand_01'/.test(ПОВЕРХНОСТИ), 'нет sand_01');
+    должны(/'patterned_cobblestone'/.test(ПОВЕРХНОСТИ), 'нет patterned_cobblestone');
+    должны(/'clay_roof_tiles'/.test(ПОВЕРХНОСТИ), 'нет clay_roof_tiles');
   });
 
-  it('небо — шейдер, а не скайбокс', () => {
-    должны(/skyVertexShader/.test(ПОВЕРХНОСТИ), 'нет skyVertexShader: небо не программируемое');
-    должны(/horizonColor/.test(ПОВЕРХНОСТИ), 'нет цвета горизонта: небо ровное');
-    должны(/sunDir/.test(ПОВЕРХНОСТИ), 'нет направления солнца: свет плоский');
+  it('экспортирует surfaceTile для метрического UV', () => {
+    должны(/export function surfaceTile/.test(ПОВЕРХНОСТИ), 'нет surfaceTile');
+    должны(/НАБОРЫ\[id\]\.tile/.test(ПОВЕРХНОСТИ), 'surfaceTile не использует НАБОРЫ');
   });
 
-  it('водоворот у причала — шейдерная рябь', () => {
-    должны(/export function boatRipples/.test(ПОВЕРХНОСТИ), 'нет boatRipples: лодки не рябят');
-    должны(/gerstner/.test(ПОВЕРХНОСТИ), 'рябь не герстнеровская: будет видеться');
-    должны(/rippleMesh\.material\.map/.test(ПОВЕРХНОСТИ), 'нет карты рябяй: они не визуализированы');
+  it('экспортирует applySurface и surfaceMaterial', () => {
+    должны(/export function applySurface/.test(ПОВЕРХНОСТИ), 'нет applySurface');
+    должны(/export function surfaceMaterial/.test(ПОВЕРХНОСТИ), 'нет surfaceMaterial');
+  });
+
+  it('applySurface загружает diff/nor/rough и ставит на материал', () => {
+    должны(/Promise\.all\(\[diff\.ready, nor\.ready, rough\.ready\]/.test(ПОВЕРХНОСТИ),
+      'applySurface не ждёт загрузки карт');
+    должны(/материал\.map = клон/.test(ПОВЕРХНОСТИ), 'не ставит карту цвета');
+    должны(/материал\.normalMap = клон/.test(ПОВЕРХНОСТИ), 'не ставит нормаль');
+    должны(/материал\.roughnessMap = клон/.test(ПОВЕРХНОСТИ), 'не ставит шероховатость');
+  });
+
+  it('surfaceMaterial создаёт MeshStandardMaterial и вызывает applySurface', () => {
+    должны(/new THREE\.MeshStandardMaterial/.test(ПОВЕРХНОСТИ), 'нет MeshStandardMaterial');
+    должны(/applySurface\(материал, id, opts\)/.test(ПОВЕРХНОСТИ), 'surfaceMaterial не вызывает applySurface');
+  });
+
+  it('экспортирует setSurfaceAnisotropy', () => {
+    должны(/export function setSurfaceAnisotropy/.test(ПОВЕРХНОСТИ), 'нет setSurfaceAnisotropy');
+  });
+
+  it('использует RepeatWrapping и анизотропию для текстур', () => {
+    должны(/RepeatWrapping/.test(ПОВЕРХНОСТИ), 'нет RepeatWrapping');
+    должны(/anisotropy/.test(ПОВЕРХНОСТИ), 'нет anisotropy');
   });
 });
 
-describe('§317. Снег и мокрая земля', () => {
-  it('подмена карты касается только зелени', () => {
-    должны(/Подмена карты касается ТОЛЬКО зелени/.test(ПОВЕРХНОСТИ),
-      'нет объяснения, почему снег не трогает камень');
-    должны(/if \(зелень\) \{\s*\n\s*const своя/.test(ПОВЕРХНОСТИ),
-      'снег подменяет карту всем материалам: камень потеряет PBR');
-  });
-
-  it('снег лежит на воде', () => {
-    должны(/waterSnowMask/.test(ПОВЕРХНОСТИ), 'нет waterSnowMask: вода не белеет');
-    должны(/snowOnSurfaces/.test(ПОВЕРХНОСТИ), 'нет snowOnSurfaces: обновление снега не вызывается');
-  });
-});
-
-describe('§317. Дома и город', () => {
-  it('три варианта штукатурки, выбор по позиции', () => {
-    должны(/houseWall: surfaceMaterial/.test(ПОВЕРХНОСТИ), 'нет материала стены houseWall');
-    должны(/houseWallOchre/.test(ПОВЕРХНОСТИ), 'нет охристого варианта стены');
-    должны(/houseWallClay/.test(ПОВЕРХНОСТИ), 'нет глиняного варианта стены');
-    должны(/hash2\(x \* 1\.7, z \* 1\.3\)/.test(ПОВЕРХНОСТИ),
-      'вариант стены выбирается не по позиции: после перезагрузки дома изменятся');
-  });
-
-  it('окна встроены в GLB-модели домов (§336)', () => {
-    const ТЕРРЕЙН2 = читать('client/src/app/game3d/terrain.ts');
-    if (!/function окнаПоФасаду/.test(ТЕРРЕЙН2)) {
-      // ok
-    } else {
-      throw new Error('старые процедурные окна не должны использоваться: они в GLB');
-    }
-    if (!/окнаПоФасаду\(house, w, h, d\)/.test(ТЕРРЕЙН2)) {
-      // ok
-    } else {
-      throw new Error('brickHouse не должен вызывать окнаПоФасаду: окна в GLB');
-    }
-    if (/loadDecorModel`models\/decor\/\$\{modelName}\.glb`/.test(ТЕРРЕЙН2)) {
-      // ok
-    } else {
-      throw new Error('brickHouse не загружает persian-house GLB');
-    }
-  });
-
-  it('мостовая площади — настоящий камень, а не процедурный рисунок', () => {
-    должны(/surfaceMaterial\('patterned_cobblestone'/.test(ПОВЕРХНОСТИ),
-      'площадь не получила каменную поверхность');
-    должны(!/map: plazaTexture\(40\)/.test(ПОВЕРХНОСТИ),
-      'площадь всё ещё на процедурной карте plazaTexture(40)');
-  });
-});
-
-describe('§317. Купола', () => {
-  it('луковичный профиль строится вращением, а не сплющенным шаром', () => {
-    должны(/export function onionDomeGeometry/.test(ПОВЕРХНОСТИ), 'нет onionDomeGeometry');
-    должны(/LatheGeometry/.test(ПОВЕРХНОСТИ), 'купол не строится вращением профиля');
-    должны(/SplineCurve/.test(ПОВЕРХНОСТИ), 'профиль купола не сглажен: будут углы');
-  });
-
-  it('все купола мира используют новый профиль', () => {
-    const вызовы = ПОВЕРХНОСТИ.match(/onionDomeGeometry\(/g)?.length ?? 0;
-    // Мечеть, дом-пристройка, купол дома, дом столицы, приморский дом.
-    должны(вызовы >= 5, `onionDomeGeometry вызывается ${вызовы} раз: часть куполов осталась шарами`);
-    должны(!/SphereGeometry\([^)]*\), MAT\.tealDome\)/.test(ПОВЕРХНОСТИ),
-      'остался купол из SphereGeometry с бирюзовым материалом');
-  });
-});
-
-describe('§317. Снег не отбирает PBR-карту', () => {
-  it('подмена карты касается только зелени', () => {
-    должны(/Подмена карты касается ТОЛЬКО зелени/.test(ПОВЕРХНОСТИ),
-      'нет объяснения, почему снег не трогает камень');
-    должны(/if \(зелень\) \{\s*\n\s*const своя/.test(ПОВЕРХНОСТИ),
-      'снег подменяет карту всем материалам: камень потеряет PBR');
-  });
-
-  it('снег лежит на воде', () => {
-    должны(/waterSnowMask/.test(ПОВЕРХНОСТИ), 'нет waterSnowMask: вода не белеет');
-    должны(/snowOnSurfaces/.test(ПОВЕРХНОСТИ), 'нет snowOnSurfaces: обновление снега не вызывается');
-  });
-});
-
-describe('§317. Пристройка и крыша', () => {
-  it('пристройка дома встроена в GLB', () => {
-    // Пристройка теперь часть GLB-модели persian-house
-    const ТЕРРЕЙН2 = читать('client/src/app/game3d/terrain.ts');
-    if (!ТЕРРЕЙН2.includes('loadDecorModel(`models/decor/${modelName}.glb`)')) {
-      throw new Error('brickHouse не загружает persian-house GLB: пристройка в модели');
-    }
-  });
-});
+// Экспортируем функции для подавления предупреждений о неиспользуемых
+export { должен, должны };

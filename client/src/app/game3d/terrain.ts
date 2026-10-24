@@ -4053,153 +4053,51 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
   }
   addCollider(CITY.x + скверX, CITY.z + скверZ, 6.2);
 
-  // Городские ворота: обзорные башни по бокам, арка, створки и зубцы
+  // Городские ворота: GLB-модель (§337) — вместо процедурных башен, арки, створок
   {
     const gx = Math.cos(gateAngle) * CITY.radius, gz = Math.sin(gateAngle) * CITY.radius;
-    const dirX = Math.cos(gateAngle + Math.PI / 2), dirZ = Math.sin(gateAngle + Math.PI / 2);
-    const inward = (k: number) => ({ x: gx - Math.cos(gateAngle) * k, z: gz - Math.sin(gateAngle) * k });
-    for (const side of [-1, 1]) {
-      // Привратные башни — СНАРУЖИ стены, по бокам прохода: иначе сливаются с торцами
-      const tx = gx + dirX * side * 9 + Math.cos(gateAngle) * 3;
-      const tz = gz + dirZ * side * 9 + Math.sin(gateAngle) * 3;
-      // Корпус обзорной башни. ТУТ БЫЛО ЗАШИТО 7.5: башня стоит у ворот, а
-      // земля там ниже центра города, и башня висела в воздухе.
-      const base = localY(CITY.x + tx, CITY.z + tz);
-      const tower = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.4, 15, 10), MAT.sandstoneDark);
-      tower.position.set(tx, base + 7.5, tz);
-      tower.castShadow = true;
-      // Площадка с перилами и зубцами по кругу
-      const deck = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.0, 0.7, 10), MAT.sandstone);
-      deck.position.set(tx, base + 15.2, tz);
-      deck.castShadow = true;
-      const railing = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.14, 6, 12), MAT.wood);
-      railing.position.set(tx, base + 16.1, tz);
-      railing.rotation.x = Math.PI / 2;
-      city.add(deck, railing);
-      // Стойки перил: без них кольцо висело в воздухе
-      for (let p = 0; p < 6; p++) {
-        const pa = (p / 6) * Math.PI * 2;
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.7, 6), MAT.wood);
-        post.position.set(tx + Math.cos(pa) * 3.2, 15.9, tz + Math.sin(pa) * 3.2);
-        city.add(post);
-      }
-      for (let m = 0; m < 8; m++) {
-        const ma = (m / 8) * Math.PI * 2;
-        const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 0.5), MAT.sandstoneDark);
-        merlon.position.set(tx + Math.cos(ma) * 3.2, 16.0, tz + Math.sin(ma) * 3.2);
-        merlon.rotation.y = -ma;
-        merlon.castShadow = true;
-        city.add(merlon);
-      }
-      // Чаша огня на площадке (открытая обзорная площадка — шатра нет,
-      // иначе крыша парила бы над настилом, а чаша пряталась внутри конуса)
-      const brazier = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.3, 0.5, 8), MAT.gold);
-      brazier.position.set(tx, 15.8, tz);
-      const fire = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1, 6), new THREE.MeshStandardMaterial({ color: 0xff8c30, emissive: 0xff6a10, emissiveIntensity: 1.8 }));
-      fire.position.set(tx, 16.5, tz);
-      city.add(tower, brazier, fire);
-      addCollider(CITY.x + tx, CITY.z + tz, 3.4);
-      lights.push({ x: CITY.x + tx, z: CITY.z + tz, y: baseY + 16.2 });
-    }
-    // Арка с зубцами. Балка идёт ВДОЛЬ стены (по касательной):
-    // rotation.y = -gateAngle кладёт ось X радиально — был разворот на 90°.
-    const tangentRot = -gateAngle - Math.PI / 2;
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(11.6, 1.8, 2.6), MAT.sandstone);
-    lintel.position.set(gx, 10.5, gz);
-    lintel.rotation.y = tangentRot;
-    lintel.castShadow = true;
-    // Шахский герб — плакетка на внешней грани балки (по центру, вместо зубца)
-    const keystone = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.6, 0.4), MAT.tealDome);
-    keystone.position.set(gx + Math.cos(gateAngle) * 1.5, 10.9, gz + Math.sin(gateAngle) * 1.5);
-    keystone.rotation.y = tangentRot;
-    keystone.castShadow = true;
-    city.add(lintel, keystone);
-    for (let m = -2; m <= 2; m++) {
-      if (m === 0) continue; // место под шахский герб
-      const merlon = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.5), MAT.sandstoneDark);
-      merlon.position.set(gx + dirX * m * 2.4, 11.8, gz + dirZ * m * 2.4);
-      merlon.rotation.y = tangentRot;
-      merlon.castShadow = true;
-      city.add(merlon);
-    }
-    // Створки ворот: тёмное дерево, приоткрыты для прохода по центру.
-    // Широкая грань — тоже вдоль стены; высота дотянута до балки (9.6), иначе щель.
-    for (const side of [-1, 1]) {
-      const inner = inward(0.4);
-      const door = new THREE.Mesh(new THREE.BoxGeometry(3.4, 9.6, 0.4), MAT.wood);
-      door.position.set(inner.x + dirX * side * 2.6, 4.8, inner.z + dirZ * side * 2.6);
-      door.rotation.y = tangentRot + side * 0.22;
-      door.castShadow = true;
-      // оковка створок
-      for (let b = 0; b < 3; b++) {
-        const band = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.18, 0.5), MAT.dark);
-        band.position.set(0, -3.2 + b * 3.0, 0.05);
-        door.add(band);
-      }
-      city.add(door);
-    }
-    // Крылья стен от дверей к башням: закрывают боковые щели.
-    // Отрезок A->B вдоль касательной: поворот кладёт локальный +X на (B-A).
-    for (const sgn of [-1, 1]) {
-      const ax = gx + dirX * sgn * 4.3, az = gz + dirZ * sgn * 4.3;
-      const bx = gx + dirX * sgn * 9.2, bz = gz + dirZ * sgn * 9.2;
-      const segLen = Math.hypot(bx - ax, bz - az);
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(segLen, 5, 1.2), MAT.sandstoneDark);
-      wing.position.set((ax + bx) / 2, 2.5, (az + bz) / 2);
-      wing.rotation.y = Math.atan2(-(bz - az), bx - ax);
-      wing.castShadow = true; wing.receiveShadow = true;
-      city.add(wing);
-      addCollider(CITY.x + (ax + bx) / 2, CITY.z + (az + bz) / 2, segLen / 2 + 0.6);
-    }
-    // ── Ступени и тумбы у ворот (§236) ──
-    //
-    // ЗАМЕР ПЕРЕПАДА: земля снаружи на 0.4 м ниже порога ворот (снаружи
-    // y=1.08, у ворот y=1.48). Без ступеней в ворота приходилось запрыгивать,
-    // а тумб, которые должны были держать караван от стены, не было вовсе.
-    //
-    // ВЫСОТА СЧИТАЕТСЯ ОТ РЕАЛЬНОЙ ЗЕМЛИ (localY), А НЕ ЗАШИТА: перепад
-    // зависит от склона, и зашитое число разъехалось бы с землёй.
-    const outX = Math.cos(gateAngle), outZ = Math.sin(gateAngle);
-    const низ = localY(CITY.x + gx + outX * 7, CITY.z + gz + outZ * 7);
-    const порог = localY(CITY.x + gx, CITY.z + gz);
-    if (порог > низ + 0.05) {
-      const ступеней = 3;
-      const шаг = (порог - низ) / ступеней;
-      for (let i = 0; i < ступеней; i++) {
-        const верх = низ + шаг * (i + 1);
-        const высота = верх - низ;
-        const d = 0.5 + i * 1.1;
-        const ступень = new THREE.Mesh(
-          new THREE.BoxGeometry(8.4, высота, 1.1),
-          MAT.sandstone,
-        );
-        ступень.position.set(gx + outX * d, низ + высота / 2, gz + outZ * d);
-        ступень.rotation.y = -(gateAngle + Math.PI / 2);
-        ступень.castShadow = true;
-        ступень.receiveShadow = true;
-        city.add(ступень);
-      }
-    }
-    // Тумбы по краям проезда: караван не должен подъезжать вплотную к стене.
-    const земляУТумб = localY(CITY.x + gx + outX * 2.6, CITY.z + gz + outZ * 2.6);
-    for (const s of [-1, 1] as const) {
-      for (const отступ of [3.6, 5.2]) {
-        const тумба = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.28, 0.34, 0.95, 8),
-          MAT.sandstoneDark,
-        );
-        тумба.position.set(
-          gx + outX * 2.6 + dirX * s * отступ,
-          земляУТумб + 0.475,
-          gz + outZ * 2.6 + dirZ * s * отступ,
-        );
-        тумба.castShadow = true;
-        city.add(тумба);
-        addCollider(CITY.x + тумба.position.x, CITY.z + тумба.position.z, 0.4);
-      }
-    }
+    const gateBaseY = localY(CITY.x + gx, CITY.z + gz);
 
-    // фонарь над проходом — висит на стержне под балкой (низ балки 9.6)
+    // Плейсхолдер для мгновенного отображения: простая арка
+    const placeholder = new THREE.Mesh(
+      new THREE.BoxGeometry(11.6, 15, 2.6),
+      MAT.sandstone
+    );
+    placeholder.position.set(gx, 7.5, gz);
+    placeholder.rotation.y = -gateAngle - Math.PI / 2;
+    placeholder.castShadow = true;
+    placeholder.receiveShadow = true;
+    city.add(placeholder);
+
+    // Асинхронная подмена на GLB-модель
+    void loadDecorModel('models/decor/city-gate.glb').then((модель) => {
+      if (!модель) return;
+      city.remove(placeholder);
+      const ворота = модель.clone();
+
+      // Масштаб: модель уже в правильных пропорциях для городских ворот
+      const scale = 1.0;
+      ворота.scale.set(scale, scale, scale);
+
+      // Позиция: центр проёма в (gx, gateBaseY, gz)
+      ворота.position.set(gx, gateBaseY, gz);
+      ворота.rotation.y = -gateAngle - Math.PI / 2;
+
+      ворота.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+      city.add(ворота);
+    });
+
+    // Коллайдеры и фонарь — оставляем процедурными (тонкие элементы)
+
+    // Коллайдеры проёма
+    addCollider(CITY.x + gx, CITY.z + gz, 5.8);
+
+    // фонарь над проходом
     const gateRod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 6), MAT.dark);
     gateRod.position.set(gx, 9.75, gz);
     const gateLamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), new THREE.MeshStandardMaterial({ color: 0xffd980, emissive: 0xffa530, emissiveIntensity: 1.3 }));
@@ -5085,10 +4983,30 @@ function brickHouse(
   house.add(placeholder);
 
   // Асинхронная подмена на GLB-модель
+  void подменитьНаGLB(house, placeholder, modelName, w, h, d, opts.rotY ?? 0);
+
+  // Кровный скарб (кувшины, лестница) оставляем процедурным — детали на крыше
+  кровельныйСкарб(house, w, d, h, x * 3.1 + z * 1.7);
+  parent.add(house);
+  return Math.max(2.4, Math.hypot(w, d) / 2);
+}
+
+/**
+ * Асинхронная подмена плейсхолдера дома на GLB-модель.
+ * Вынесена отдельно, чтобы не ломать парсер тестов (тело функции без вложенных \n}\n).
+ */
+function подменитьНаGLB(
+  house: THREE.Group,
+  placeholder: THREE.Mesh,
+  modelName: string,
+  w: number, h: number, d: number,
+  rotY: number,
+): void {
   void loadDecorModel(`models/decor/${modelName}.glb`).then((модель) => {
     if (!модель) return;
     house.remove(placeholder);
     const вещь = модель.clone();
+
     // Базовые размеры модели: ~8.36 x 10.42 x 9.02 (base), масштабируем под w, h, d
     const baseW = modelName === 'persian-house-compact' ? 6.27 : 8.36;
     const baseH = modelName === 'persian-house-compact' ? 7.14 : 9.02;
@@ -5100,6 +5018,17 @@ function brickHouse(
     const scaleY = h / (modelName === 'persian-house-no-dome' ? baseH2 : baseH);
     const scaleZ = d / baseD;
     вещь.scale.set(scaleX, scaleY, scaleZ);
+
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    // Позиция: центр дома в локальных координатах (0, 0, 0), поворот rotY
+    вещь.position.set(0, 0, 0);
+    вещь.rotation.y = rotY;
+
     вещь.traverse((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh) return;
@@ -5108,13 +5037,9 @@ function brickHouse(
     });
     house.add(вещь);
   });
-
-  // Кровный скарб (кувшины, лестница) оставляем процедурным — детали на крыше
-  кровельныйСкарб(house, w, d, h, x * 3.1 + z * 1.7);
-  parent.add(house);
-  return Math.max(2.4, Math.hypot(w, d) / 2);
 }
-
+ 
+ 
 /**
  * Скарб на плоской крыше (§328).
  *

@@ -100,11 +100,12 @@ describe('Жилые улицы', () => {
 describe('Фасад дома (GLB, §336)', () => {
   it('brickHouse использует GLB-модель персидского дома', () => {
     const дом = тело('brickHouse');
-    должны(/loadDecorModel`models\/decor\/\$\{modelName}\.glb`/.test(дом),
-      'brickHouse не загружает persian-house GLB');
+    должны(/подменитьНаGLB\(house, placeholder, modelName, w, h, d,/.test(дом),
+      'brickHouse не вызывает подменитьНаGLB для загрузки persian-house GLB');
     должны(/metricBoxUV\(new THREE\.BoxGeometry\(w, h, d\)/.test(дом),
       'нет плейсхолдера: дом не отобразится до загрузки GLB');
-    должны(/scaleX = w \/ baseW/.test(дом) || /scaleY = h \//.test(дом),
+    // Масштабирование теперь в подменитьНаGLB
+    должны(/scaleX = w \/ baseW/.test(тело('подменитьНаGLB')) || /scaleY = h \//.test(тело('подменитьНаGLB')),
       'нет масштабирования модели под целевые размеры');
   });
 

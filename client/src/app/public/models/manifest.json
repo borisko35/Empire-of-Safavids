@@ -1054,6 +1054,11 @@
       "file": "models/decor/persian-house-compact.glb",
       "name": "persian-house-compact",
       "bytes": 182980
+    },
+    {
+      "file": "models/decor/city-gate.glb",
+      "name": "city-gate",
+      "bytes": 284508
     }
   ],
   "weapons": [
