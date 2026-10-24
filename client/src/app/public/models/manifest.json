@@ -1034,6 +1034,26 @@
       "file": "models/decor/boat.glb",
       "name": "boat",
       "bytes": 4340
+    },
+    {
+      "file": "models/decor/persian-house-base.glb",
+      "name": "persian-house-base",
+      "bytes": 186060
+    },
+    {
+      "file": "models/decor/persian-house-no-dome.glb",
+      "name": "persian-house-no-dome",
+      "bytes": 21912
+    },
+    {
+      "file": "models/decor/persian-house-no-badgir.glb",
+      "name": "persian-house-no-badgir",
+      "bytes": 185220
+    },
+    {
+      "file": "models/decor/persian-house-compact.glb",
+      "name": "persian-house-compact",
+      "bytes": 182980
     }
   ],
   "weapons": [

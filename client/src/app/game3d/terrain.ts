@@ -1408,89 +1408,9 @@ function слитьПоМатериалам(группа: THREE.Group): THREE.Gr
   return слитая;
 }
 
-/**
- * Окно со ставнями и подоконником: общий фасадный элемент города (§328).
- *
- * ЗАЧЕМ. Окно из windowPane — стекло, рама и средник. На стене в 12 метров
- * оно читалось одним пятном: рама толщиной 10 см с восьми метров — это
- * полтора пикселя, и фасад снова становился плоскостью. Ставни дают окну
- * тень по бокам (дерево темнее штукатурки), подоконник — тень под низом,
- * и окно начинает читаться проёмом, а не наклейкой.
- *
- * ПОЧЕМУ СТАВНИ ОТКРЫТЫ, А НЕ ЗАКРЫТЫ. Закрытые ставни — это глухая
- * доска на месте окна: город выглядел бы вымершим. Открытые стоят
- * плоскостями по бокам проёма, как в персидском квартале: днём их
- * раскрывают ради тени и ветра.
- */
-function окноСоСтавнями(
-  cx: number, cy: number, faceZ: number, rotY: number,
-  W = 0.9, H = 1.3,
-): THREE.Group {
-  const g = windowPane(cx, cy, faceZ, rotY, W, H);
-  // Подоконник: каменная полка под проёмом, выступает на 12 см.
-  const подоконник = new THREE.Mesh(
-    new THREE.BoxGeometry(W + 0.3, 0.09, 0.22),
-    MAT.windowFrame,
-  );
-  подоконник.position.set(0, -H / 2 - 0.13, 0.05);
-  подоконник.castShadow = true;
-  g.add(подоконник);
-  // Ставни: две створки, раскрытые настежь к стене.
-  const створка = new THREE.BoxGeometry(W * 0.52, H * 0.96, 0.06);
-  for (const s of [-1, 1] as const) {
-    const створ = new THREE.Mesh(створка, MAT.wood);
-    створ.position.set(s * (W * 0.78), 0, 0.05);
-    створ.rotation.y = s * 0.22;
-    створ.castShadow = true;
-    g.add(створ);
-    // Петли: две тёмные полоски по краю створки — без них ставень
-    // читается доской, приклеенной к стене.
-    const петля = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.12, 0.02), MAT.dark);
-    петля.position.set(s * (W * 0.55), H * 0.28, 0.09);
-    g.add(петля);
-  }
-  return слитьПоМатериалам(g);
-}
 
-/**
- * Окна по фасаду и бокам дома — рядами, а не двумя глазами.
- *
- * БЫЛО: у дома всегда два окна на фасаде, сколько бы он ни был широк.
- * На доме 12–15 метров (а такие в кварталах есть) между окнами
- * оставалась стена в шесть метров: игрок видел не дом, а забор с
- * двумя форточками. Именно эти глухие плоскости и читались как
- * примитив на скриншотах.
- *
- * ТЕЧЬ: число окон считается от ширины — примерно одно на 3.2 м, от
- * двух до четырёх. Боковые стены получают окна, если дом достаточно
- * глубокий. Размер окна не растёт вместе с домом: окно — человеческая
- * мерка, и на большом доме оно должно казаться меньше, а не больше.
- */
-function окнаПоФасаду(house: THREE.Group, w: number, h: number, d: number): void {
-  const колонн = Math.max(2, Math.min(4, Math.round(w / 3.2)));
-  const шаг = w / (колонн + 1);
-  // Верхний ярус двухэтажного дома — окна выше, но того же размера.
-  const ярус = h > 5.2 ? h * 0.66 : h * 0.55;
-  for (let i = 1; i <= колонн; i++) {
-    house.add(окноСоСтавнями(-w / 2 + шаг * i, ярус, d / 2 + 0.02, 0));
-  }
-  // Задняя стена. Дом стоит фасадом к улице, но его тыл виден с площади
-  // и из переулка; без окон он и есть та самая глухая плоскость, ради
-  // которой всё это делалось. Сзади окон меньше: подсобные комнаты.
-  const сзади = Math.max(1, Math.min(2, колонн - 1));
-  for (let i = 1; i <= сзади; i++) {
-    house.add(окноСоСтавнями(-w / 2 + (w / (сзади + 1)) * i, ярус, -d / 2 - 0.02, Math.PI));
-  }
-  if (d > 6.4) {
-    const боковых = Math.max(1, Math.min(2, Math.round(d / 4.5)));
-    const бшаг = d / (боковых + 1);
-    for (let i = 1; i <= боковых; i++) {
-      const z = -d / 2 + бшаг * i;
-      house.add(окноСоСтавнями(-w / 2 - 0.02, ярус, z, -Math.PI / 2, 0.78, 1.15));
-      house.add(окноСоСтавнями(w / 2 + 0.02, ярус, z, Math.PI / 2, 0.78, 1.15));
-    }
-  }
-}
+
+
 
 // ── Материалы (с процедурными текстурами) ────────────────────
 // ── Water shader sources (extracted for TS parsing) ──────────────
@@ -5104,144 +5024,11 @@ function tiledIwan(parent: THREE.Group, x: number, z: number, w: number, h: numb
   parent.add(g);
 }
 
-/**
- * Зубцы парапета: одна меш-геометрия на все четыре стороны (§328).
- *
- * ЗАЧЕМ. Парапет из четырёх гладких бортов — это ободок, а не крыша
- * восточного дома: без зубцов силуэт дома сверху — коробка с рамкой.
- * Зубцы дают ту самую рваную линию кровли, по которой город читается
- * городом даже с высокой камеры.
- *
- * ПОЧЕМУ СЛИТЫЕ. Зубцов на дом 20–30 штук; отдельными мешами они дали бы
- * столько же вызовов отрисовки, а рисовали бы тридцать одинаковых
- * коробок. Здесь они собираются в одну геометрию и рисуются одним
- * вызовом.
- */
-function зубцыПарапета(w: number, d: number, верх: number): THREE.Mesh | null {
-  const части: THREE.BufferGeometry[] = [];
-  const шаг = 1.15;
-  const ш = 0.46, в = 0.42, г = 0.3;
-  const ряд = (длина: number, вдоль: 'x' | 'z', знак: 1 | -1, отступ: number) => {
-    const n = Math.max(2, Math.round(длина / шаг));
-    const шагР = длина / n;
-    for (let i = 0; i < n; i++) {
-      const поз = -длина / 2 + шагР * (i + 0.5);
-      const гео = new THREE.BoxGeometry(
-        вдоль === 'x' ? ш : г, в, вдоль === 'x' ? г : ш,
-      );
-      гео.translate(
-        вдоль === 'x' ? поз : знак * отступ,
-        верх + в / 2,
-        вдоль === 'x' ? знак * отступ : поз,
-      );
-      части.push(гео);
-    }
-  };
-  ряд(w, 'x', 1, d / 2);
-  ряд(w, 'x', -1, d / 2);
-  ряд(d, 'z', 1, w / 2);
-  ряд(d, 'z', -1, w / 2);
-  const гео = mergeGeometries(части, false);
-  if (!гео) return null;
-  const меш = new THREE.Mesh(гео, MAT.parapet);
-  меш.castShadow = true;
-  меш.receiveShadow = true;
-  return меш;
-}
 
-/**
- * Обвес корпуса: парапет по крыше и каменный пояс под карнизом.
- * Раньше жил только в brickHouse; процедурные дома столицы стояли голыми
- * коробками — фасадная работа стала общей для обоих типов домов.
- * (w, h, d) — габариты объёма, обвесимого по его контуру.
- */
-function домОбвес(house: THREE.Group, w: number, h: number, d: number): void {
-  // Парапет: плоская крыша с невысоким зубцом — жилой силуэт Исфахана.
-  const пт = 0.14, пh = 0.34;
-  const поперёк = new THREE.BoxGeometry(w, пh, пт);
-  const вдоль = new THREE.BoxGeometry(пт, пh, d - пт * 2);
-  const край = d / 2 - пт / 2;
-  const бортХ = new THREE.Mesh(поперёк, MAT.parapet);
-  бортХ.position.set(0, h + пh / 2, край);
-  const бортХ2 = бортХ.clone();
-  бортХ2.position.z = -край;
-  const бортZ = new THREE.Mesh(вдоль, MAT.parapet);
-  бортZ.position.set(-(w / 2 - пт / 2), h + пh / 2, 0);
-  const бортZ2 = бортZ.clone();
-  бортZ2.position.x = w / 2 - пт / 2;
-  бортХ.castShadow = true;
-  house.add(бортХ, бортХ2, бортZ, бортZ2);
 
-  // §328: зубцы по верху парапета. Одна слитая геометрия на дом —
-  // см. зубцыПарапета: отдельных мешей было бы тридцать.
-  const зубцы = зубцыПарапета(w, d, h + пh);
-  if (зубцы) house.add(зубцы);
 
-  // Каменный пояс под карнизом: опора для глаза — стена перестаёт быть
-  // голой плоскостью.
-  const пояс = new THREE.Mesh(new THREE.BoxGeometry(w * 1.02, 0.2, d + 0.12), MAT.sandstoneDark);
-  пояс.position.y = h - 0.62;
-  house.add(пояс);
 
-  // §317: цоколь и угловые лопатки. До этого стена дома была ровным
-  // прямоугольником от земли до парапета: ни основания, ни углов, и
-  // глаз читал её как покрашенную коробку. Цоколь темнее стены и
-  // «прижимает» дом к земле, лопатки дают вертикаль — по ним видно,
-  // что у дома есть угол, а не только плоскость.
-  const цоколь = new THREE.Mesh(new THREE.BoxGeometry(w + 0.28, 0.34, d + 0.28), MAT.sandstoneDark);
-  цоколь.position.y = 0.17;
-  цоколь.receiveShadow = true;
-  house.add(цоколь);
-  const лопатка = new THREE.BoxGeometry(0.26, Math.max(0.6, h - 0.95), 0.26);
-  for (const sx of [-1, 1] as const) {
-    for (const sz of [-1, 1] as const) {
-      const стойка = new THREE.Mesh(лопатка, MAT.sandstoneDark);
-      стойка.position.set(
-        sx * (w / 2 - 0.06),
-        0.34 + Math.max(0.6, h - 0.95) / 2,
-        sz * (d / 2 - 0.06),
-      );
-      стойка.castShadow = true;
-      house.add(стойка);
-    }
-  }
-}
 
-/**
- * Вход: две опоры портала, перекладина, деревянная дверь со стойкой
- * и крыльцо перед ней. Фасад — грань z+ локально, на глубине d/2.
- */
-function входДом(house: THREE.Group, d: number): void {
-  // ПИШТАК (§328): вход обрамлён плоской рамой со стрельчатой аркой.
-  //
-  // БЫЛО: две стойки и перекладина (буква «П») плюс торус-полукруг над
-  // дверью. На фасаде это читалось наличником от сарая: у персидского
-  // входа над створом не полукруг, а остриё, и обрамляет его каменная
-  // рама, а не труба.
-  //
-  // ТЕПЕРЬ: та же геометрия, что у мечети (§317, pishtaqGeometry) — рама
-  // с вырезанной аркой. Один вход с площадью и мечетью — один язык.
-  const рама = new THREE.Mesh(
-    pishtaqGeometry(1.98, 3.34, 1.3, 2.62, 0.22),
-    MAT.sandstoneDark,
-  );
-  рама.position.set(0, 0.02, d / 2 - 0.07);
-  рама.castShadow = true;
-  рама.receiveShadow = true;
-  // Полотно двери в проёме: дерево с поперечной набивкой.
-  const дверь = new THREE.Mesh(new THREE.BoxGeometry(1.16, 2.3, 0.08), MAT.wood);
-  дверь.position.set(0, 1.15, d / 2 + 0.02);
-  дверь.castShadow = true;
-  const набивка = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.03), MAT.dark);
-  набивка.position.set(0, 1.72, d / 2 + 0.07);
-  const набивка2 = набивка.clone();
-  набивка2.position.y = 0.72;
-  // Ступень: каменная плита перед порогом.
-  const крыльцо = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.6), MAT.sandstoneDark);
-  крыльцо.position.set(0, 0.07, d / 2 + 0.3);
-  крыльцо.receiveShadow = true;
-  house.add(рама, дверь, набивка, набивка2, крыльцо);
-}
 
 /**
  * Кирпичный дом — не одна коробка. Состав: главный корпус, у части домов
@@ -5266,90 +5053,63 @@ function brickHouse(
   const house = new THREE.Group();
   house.position.set(x, 0, z);
   house.rotation.y = opts.rotY ?? 0;
-  // §317: у жилого дома три варианта настоящей штукатурки. Выбор по
-  // позиции, а не по Math.random: дом обязан выглядеть тем же после
-  // перезагрузки мира, иначе скриншот и жалоба «стена была другая»
-  // расходятся на пустом месте.
-  const выборСтены = hash2(x * 1.7, z * 1.3);
-  const wallMat = opts.plaster ?? (
-    выборСтены < 0.24 ? MAT.houseWallOchre
-      : выборСтены > 0.76 ? MAT.houseWallClay
-        : MAT.houseWall
-  );
   const d = w * 0.9;
 
-  // Главный корпус. UV метрические: повтор штукатурки 2.4 м на всех
-  // домах, независимо от ширины (см. metricUv.ts).
-  const body = new THREE.Mesh(
+  // Выбор варианта GLB-модели по признакам дома (§336)
+  // Базовые модели имеют размеры ~8x7.2x5.5 (W x D x H)
+  // Масштабируем под целевые w, h, d
+  const hasDome = opts.dome !== false;
+  const hasBalcony = !!opts.balcony;
+  const hasBadgir = !!opts.badgirH;
+  const isCompact = w < 7.0 || h < 4.0; // узкие/низкие дома
+
+  let modelName: string;
+  if (isCompact) {
+    modelName = 'persian-house-compact';
+  } else if (!hasDome && hasBalcony && hasBadgir) {
+    modelName = 'persian-house-no-dome';
+  } else if (hasDome && hasBalcony && !hasBadgir) {
+    modelName = 'persian-house-no-badgir';
+  } else {
+    modelName = 'persian-house-base'; // full features
+  }
+
+  // Плейсхолдер для мгновенного отображения (простой бокс с метрическим UV)
+  const placeholder = new THREE.Mesh(
     metricBoxUV(new THREE.BoxGeometry(w, h, d), w, h, d, 2.4),
-    wallMat,
+    opts.plaster ?? MAT.houseWall
   );
-  body.position.y = h / 2;
-  body.castShadow = true;
-  body.receiveShadow = true;
-  house.add(body);
+  placeholder.position.y = h / 2;
+  placeholder.castShadow = true;
+  placeholder.receiveShadow = true;
+  house.add(placeholder);
 
-  // Кровля: глиняная плита, утопленная за парапет (§328). БЫЛО: крышей
-  // служила верхняя грань самого бокса — на аэроснимке город выглядел
-  // белыми квадратами, а не городом с плоскими крышами.
-  const кровля = new THREE.Mesh(
-    new THREE.BoxGeometry(w - 0.45, 0.09, d - 0.45),
-    MAT.houseRoof,
-  );
-  кровля.position.y = h + 0.02;
-  кровля.receiveShadow = true;
-  house.add(кровля);
+  // Асинхронная подмена на GLB-модель
+  void loadDecorModel(`models/decor/${modelName}.glb`).then((модель) => {
+    if (!модель) return;
+    house.remove(placeholder);
+    const вещь = модель.clone();
+    // Базовые размеры модели: ~8.36 x 10.42 x 9.02 (base), масштабируем под w, h, d
+    const baseW = modelName === 'persian-house-compact' ? 6.27 : 8.36;
+    const baseH = modelName === 'persian-house-compact' ? 7.14 : 9.02;
+    const baseD = modelName === 'persian-house-compact' ? 6.84 : 10.42;
+    // Для no-dome модель ниже
+    const baseH2 = modelName === 'persian-house-no-dome' ? 8.0 : baseH;
+    
+    const scaleX = w / baseW;
+    const scaleY = h / (modelName === 'persian-house-no-dome' ? baseH2 : baseH);
+    const scaleZ = d / baseD;
+    вещь.scale.set(scaleX, scaleY, scaleZ);
+    вещь.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+    });
+    house.add(вещь);
+  });
 
-  // Пристройка: вторая коробка ниже и уже, сдвинута вбок и назад —
-  // силуэт перестаёт читаться «коробкой». Хвост за задней гранью —
-  // около 0.12w, в пятне прежнего коллайдера почти целиком.
-  if (hash2(x, z) > 0.32) {
-    const dw = w * 0.55, dd = w * 0.42, dh = h * 0.66;
-    const пристройка = new THREE.Mesh(
-      metricBoxUV(new THREE.BoxGeometry(dw, dh, dd), dw, dh, dd, 2.4),
-      wallMat,
-    );
-    пристройка.position.set(w * 0.27, dh / 2, -(d / 2 + dd / 2 - w * 0.3));
-    пристройка.castShadow = true;
-    пристройка.receiveShadow = true;
-    house.add(пристройка);
-    if (opts.dome !== false) {
-      // Малый купол на пристройке: соседние дома перестают совпадать
-      // один в один. Форма — тот же луковичный профиль (§317), иначе
-      // на одном доме стоял бы восточный купол, а на соседнем гриб.
-      const miniR = dw * 0.34;
-      const mini = new THREE.Mesh(onionDomeGeometry(miniR, miniR * 1.5, 14), MAT.tealDome);
-      mini.position.set(пристройка.position.x, dh + 0.04, пристройка.position.z);
-      mini.castShadow = true;
-      house.add(mini);
-    }
-  }
-
-  // Парапет, пояс, окна и вход — общий фасадный язык с процедурными
-  // домами столицы.
-  домОбвес(house, w, h, d);
-  окнаПоФасаду(house, w, h, d);
-  входДом(house, d);
-
-  if (opts.dome !== false) {
-    // §317: купол — деталь крыши, а не вторая крыша. При w*0.32 на доме
-    // 11 м купол выходил 3.5 м радиусом и 5.3 м высотой — выше самого
-    // дома: силуэт читался грибом. Теперь радиус ограничен и шириной, и
-    // высотой дома, а высота купола — 1.35 радиуса.
-    const domeR = Math.min(w * 0.2, h * 0.5);
-    const dome = new THREE.Mesh(onionDomeGeometry(domeR, domeR * 1.25, 16), MAT.tealDome);
-    dome.position.set(0, h + 0.06, 0);
-    dome.castShadow = true;
-    house.add(dome);
-  }
-  if (opts.balcony) {
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.14, 1.1), MAT.wood);
-    slab.position.set(0, h * 0.62, d / 2 + 0.4);
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(w * 0.6, 0.5, 0.08), MAT.wood);
-    rail.position.set(0, h * 0.62 + 0.32, d / 2 + 0.9);
-    house.add(slab, rail);
-  }
-  if (opts.badgirH) badgir(house, w * 0.28, -w * 0.2, h, opts.badgirH);
+  // Кровный скарб (кувшины, лестница) оставляем процедурным — детали на крыше
   кровельныйСкарб(house, w, d, h, x * 3.1 + z * 1.7);
   parent.add(house);
   return Math.max(2.4, Math.hypot(w, d) / 2);
