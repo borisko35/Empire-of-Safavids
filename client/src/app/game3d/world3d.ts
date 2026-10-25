@@ -17,7 +17,7 @@ import { World, PlayerEntity } from '../entities';
 import { STANCES, getStance } from '../stance';
 import { buildPlayerRig, buildMonsterRig, Rig, type DodgeDirection } from './rig';
 import { loadRealPlayerRig, CLASS_WEAPON, ростПозы } from './realRig';
-import { loadRealMonsterRig } from './characterModels';
+import { loadRealMonsterRig, preloadModels } from './characterModels';
 import { обновитьСтражей } from './interiors';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
@@ -774,6 +774,20 @@ private roll = 0;
     this.sun.shadow.radius = 3;
     this.sun.shadow.blurSamples = 12;
     this.scene.add(this.sun, this.sun.target);
+
+    // ПЕРСОНАЖИ — ВПЕРЁД ДЕКОРА (§343).
+    //
+    // Мир строит сотни моделей декора (террейн, флора, дома), и браузер
+    // держит шесть соединений на хост. Персонажные GLB весят 0.6–1.2 МБ и,
+    // стоя в общей очереди последними, приезжали через десятки секунд после
+    // домов — или не приезжали вовсе: замер §342 показал ВСЕ персонажные
+    // модели в таймауте при уже стоящих горожанах. Из-за этого торговец в
+    // центре площади стоял процедурным конусом (§341).
+    //
+    // Теперь их загрузка начинается до постройки мира: те же шесть
+    // соединений занимают сначала люди, а декор доезжает следом. Игрок
+    // видит живой город сразу, а дробности декора подождут.
+    preloadModels(['guard', 'merchant', 'citizen', 'citizen2', 'citizen3', 'crier', 'scholar', 'archer', 'warrior']);
 
     // Мир
     buildTerrain(this.scene);
