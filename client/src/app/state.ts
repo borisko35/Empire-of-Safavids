@@ -1,7 +1,3 @@
-// ============================================================
-// Состояние сессии — Empire of Safavids
-// ============================================================
-
 export interface Vec3 { x: number; y: number; z: number }
 
 export interface CharacterStats {
@@ -148,10 +144,11 @@ export function clearAuth(): void {
   session.username = '';
   session.isAdmin = false;
   session.isAdminRole = 'gm';
-  session.isGuest = localStorage.getItem('eos_guest') === '1';
+  session.isGuest = false;
   session.character = null;
   session.skills = [];
   localStorage.removeItem('eos_token');
   localStorage.removeItem('eos_user_id');
   localStorage.removeItem('eos_username');
+  localStorage.removeItem('eos_guest');
 }
