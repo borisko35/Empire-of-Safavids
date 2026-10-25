@@ -1,3 +1,7 @@
+// ============================================================
+// Состояние сессии — Empire of Safavids
+// ============================================================
+
 export interface Vec3 { x: number; y: number; z: number }
 
 export interface CharacterStats {
@@ -131,6 +135,19 @@ export function persistAuth(token: string, userId: string, username: string, isG
   session.userId = userId;
   session.username = username;
   session.isGuest = isGuest;
+  session.notifications.unread = 0;
+  session.worldTime = '';
+  session.kills = {};
+  session.questState = {};
+  session.character = null;
+  session.skills = [];
+  session.hp = 0; session.maxHp = 0; session.mana = 0; session.maxMana = 0; session.stamina = 0; session.maxStamina = 0;
+  session.waterBonus = { waterSpeed: 0, swimStamina: 0 };
+  session.selfPos = { x: 0, z: 0 };
+  session.boat = null;
+  session.mount = null;
+  session.dead = false;
+  session.gear = null;
   localStorage.setItem('eos_token', token);
   localStorage.setItem('eos_user_id', userId);
   localStorage.setItem('eos_username', username);
@@ -147,6 +164,17 @@ export function clearAuth(): void {
   session.isGuest = false;
   session.character = null;
   session.skills = [];
+  session.hp = 0; session.maxHp = 0; session.mana = 0; session.maxMana = 0; session.stamina = 0; session.maxStamina = 0;
+  session.waterBonus = { waterSpeed: 0, swimStamina: 0 };
+  session.selfPos = { x: 0, z: 0 };
+  session.notifications.unread = 0;
+  session.boat = null;
+  session.mount = null;
+  session.dead = false;
+  session.gear = null;
+  session.kills = {};
+  session.questState = {};
+  session.worldTime = '';
   localStorage.removeItem('eos_token');
   localStorage.removeItem('eos_user_id');
   localStorage.removeItem('eos_username');
