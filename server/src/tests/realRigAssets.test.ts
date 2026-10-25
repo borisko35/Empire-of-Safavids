@@ -1006,7 +1006,7 @@ describe('Запасной путь не потерян', () => {
       'podmena proiskhodit dazhe bez pokoya skeleta: igrok uvidit model s rasstavlennymi rukami',
     );
     must(
-      (src.match(/\(\) => готово\(null\)/g) ?? []).length >= 2,
+      (src.match(/\(\) => (готово|ответить)\(null\)/g) ?? []).length >= 2,
       'obrabotchik oshibki est ne u oboih zagruzchikov: odin iz nih obryvaet igru pri nedostupnom fayle. Soderzhashchego nyaledo dva — u sceny i u klipov',
     );
     must(
