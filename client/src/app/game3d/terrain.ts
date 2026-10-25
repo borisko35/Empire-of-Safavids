@@ -1950,6 +1950,11 @@ const MAT = {
   parapet: surfaceMaterial('sandstone_blocks_04', {
     color: 0x8f7554, roughness: 0.95, normalScale: 0.9,
   }),
+  // Камень городских ворот и глина кувшина (§340).
+  // В этих двух GLB материалов нет вовсе: three подставляет белый
+  // MeshStandardMaterial, и ворота/кувшин выглядят гипсовым макетом.
+  gateStone: new THREE.MeshStandardMaterial({ color: 0xbfa77f, roughness: 0.92 }),
+  clayPot: new THREE.MeshStandardMaterial({ color: 0x9a5636, roughness: 0.85 }),
   cityStone: surfaceMaterial('sandstone_blocks_05', {
     color: 0xd6c3a0, roughness: 0.88, normalScale: 1.0,
   }),
@@ -4083,6 +4088,13 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
       if (!модель) return;
       city.remove(placeholder);
       const ворота = модель.clone();
+
+      // Одёжка (§340): в city-gate.glb материалов нет вовсе — без этого
+      // ворота стоят гипсово-белым макетом.
+      const одето = одетьБелыеМеста(ворота, MAT.gateStone);
+      if (одето === 0) {
+        console.warn('[gate] u modeli est materialy — odezhda ne nuzhna');
+      }
 
       // Масштаб: модель уже в правильных пропорциях для городских ворот
       const scale = 1.0;
@@ -9635,6 +9647,40 @@ function decorПоле(
       }
     }
   });
+}
+
+/**
+ * Глина кувшина (§340): отдельный экспорт, чтобы интерактивным объектам не
+ * тянуть весь MAT и не держать у себя второй цвет того же кувшина.
+ */
+export const МАТЕРИАЛ_ГЛИНЫ = MAT.clayPot;
+
+/**
+ * Одёжка модели там, где материала нет (§340).
+ *
+ * ЗАЧЕМ. В `city-gate.glb` и `clay-jug.glb` материалов нет вовсе: three
+ * подставляет белый MeshStandardMaterial, и ворота с кувшином выглядят
+ * гипсовыми макетами. Свои материалы есть у домов (штукатурка, глина,
+ * бирюза) — их трогать нельзя.
+ *
+ * ЧТО ДЕЛАЕТ. Меняет материал ТОЛЬКО у мешей без карты и с белым цветом.
+ * Если у меша есть своя карта или цвет — он остаётся как был.
+ * Возвращает число переодетых мешей — для отчёта в консоль.
+ */
+export function одетьБелыеМеста(
+  модель: THREE.Object3D, материал: THREE.Material,
+): number {
+  let сколько = 0;
+  модель.traverse((o) => {
+    const м = o as THREE.Mesh;
+    if (!м.isMesh) return;
+    const мат = м.material as THREE.MeshStandardMaterial | undefined;
+    const безСвоего = !мат || (!мат.map && (!мат.color || мат.color.getHex() === 0xffffff));
+    if (!безСвоего) return;
+    м.material = материал;
+    сколько++;
+  });
+  return сколько;
 }
 
 /** Одиночная нормализованная модель: размер в метрах, база на земле. */

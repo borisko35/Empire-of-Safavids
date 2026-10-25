@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { M } from './interiors';
 import { loadDecorModel } from './terrain';
+import { одетьБелыеМеста, МАТЕРИАЛ_ГЛИНЫ } from './terrain';
 
 /** Тип интерактивного объекта. */
 export type InteractiveKind =
@@ -87,6 +88,8 @@ export function createOilJug(
     if (!модель) return;
     g.remove(placeholder);
     const вещь = модель.clone();
+    // Одёжка (§340): у clay-jug.glb материалов нет — кувшин белый, как гипс.
+    одетьБелыеМеста(вещь, МАТЕРИАЛ_ГЛИНЫ);
     вещь.scale.setScalar(1);
     вещь.traverse((o) => {
       const m = o as THREE.Mesh;
