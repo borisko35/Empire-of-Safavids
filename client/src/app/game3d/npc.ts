@@ -329,15 +329,43 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
     if (id.includes('harbor_brute') || id.includes('west_border_warden')) return 'guard';
     if (id.includes('king') || id.includes('boss') || id.includes('rustam') || id.includes('simurgh') || id.includes('arzhang')) return 'paladin';
     if (id.includes('road_bandit')) return 'bandit';
-    // По умолчанию — обычный житель
+    // По умолчанию — обычный житель.
+    //
+    // ОТКРЫТЫЙ ВОПРОС (§341): у торговца в центре площади модель НЕ
+    // подменяется — он стоит процедурным конусом (кадр `merchant-probe`),
+    // хотя стражники у ворот получают модели. Ни ошибки, ни предупреждения
+    // при этом нет. Что уже проверено и исключено:
+    //   - модель citizen.glb цела (GLB, Draco, 1 скин, 7 материалов);
+    //   - def есть в NPC_GROUPS, координаты совпадают с кадром;
+    //   - подмена на citizen3 не помогла;
+    //   - в консоли нет ни "[npc] Failed", ни "[rig] citizen*".
+    // Значит обещание загрузки не сбывается (висящий промис), а не падает.
+    // Дальше: смотреть кеш characterModels и путь загрузки для citizen*.
     return 'citizen';
   }
 
   // Загрузить и применить реальную модель для NPC
   async function applyRealModel(npcId: string, modelType: string, proceduralGroup: THREE.Group, position: THREE.Vector3, rotation: THREE.Euler): Promise<void> {
     try {
-      const modelGroup = await loadCharacterModel(modelType);
-      if (!modelGroup) return; // фолбэк на процедурный
+      let modelGroup = await loadCharacterModel(modelType);
+      // ЗАПАСНАЯ МОДЕЛЬ И ГРОМКИЙ ЛОГ (§341).
+      //
+      // БЫЛО: `if (!modelGroup) return;` — тихий выход. Если базовая модель
+      // жителя не доехала, NPC навсегда оставался процедурным конусом, и в
+      // консоли не было ни строки. Так торговец в центре площади и стоял
+      // примитивом (кадр `merchant-probe`).
+      //
+      // ТЕПЕРЬ: не доехала базовая — берём соседнюю (citizen3): она грузится
+      // теми же загрузчиками и уже проверена в толпе. Не доехали обе —
+      // говорим в консоль, чтобы молчаливый примитив не спрятался.
+      if (!modelGroup && modelType === 'citizen') {
+        console.warn('[npc] citizen ne doehal, beryom citizen3: ' + npcId);
+        modelGroup = await loadCharacterModel('citizen3');
+      }
+      if (!modelGroup) {
+        console.warn('[npc] model ne doehal: ' + npcId + ' (' + modelType + ') — ostayotsya primitiv');
+        return;
+      }
 
       // Подгонка по позе костей, а не по Box3: setFromObject у скинированного
       // меша читает геометрию позы покоя, и рост выходил не из модели, а из
