@@ -27,7 +27,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildPassageTorches, ФОНАРИ_ГРОБНИЦЫ,
   ТОРЧ_СВЕТ_ЦВЕТ, ТОРЧ_СВЕТ_ЯРКОСТЬ, ТОРЧ_СВЕТ_ДАЛЬНОСТЬ, buildMosqueCourtyard,
   buildFortBastions, buildRuinChapel, buildRuinCourt, buildOaks,
-  buildRuinBridge, buildPassRocks, buildDesertTower, buildChurchRuin,
+  buildRuinBridge, buildPassRocks, buildDesertTower,
   buildVillageArchway, buildChurchDoorway, buildOnionDomeTower, buildGallows,
   buildMarketCart, buildGallowsPalisade, buildPortRoadBarricade, buildCaravanseraiWindmill,
   buildMillPlough, buildVillageGrindstone,
@@ -926,9 +926,7 @@ private roll = 0;
     // Руины: капелла у Месопотамии и двор у святилища.
     buildRuinChapel(this.scene);
     buildRuinCourt(this.scene);
-    // Руины церкви на Кавказе, к востоку от горного города.
-    buildChurchRuin(this.scene);
-    // Каменная арка у деревни и дверной проём у той же церкви.
+    // Каменная арка у деревни и церковный проём в Кавказе.
     buildVillageArchway(this.scene);
     buildChurchDoorway(this.scene);
     // Купольная башня к востоку от мечети.

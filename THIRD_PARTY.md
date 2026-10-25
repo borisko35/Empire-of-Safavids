@@ -24,6 +24,7 @@
 | Статичные звери и птицы (верблюд, коза, ящерица, чайка, цапля, аист, утка) | 7 моделей | Google Poly (архив), через Poly Pizza | CC-BY 3.0 | подпись «Google Poly» в этом файле (см. ниже) |
 | Модели природы, деревни, интерьеров и предметов | 147 файлов decor, 62 МБ | Quaternius, паки «Ultimate Nature», «Medieval Village», «House Interior», «RPG Items», «Crops» | **QAL v1.0** (с 28.08.2026) | **смотреть §«Quaternius: смена лицензии»** |
 | Две иконки на посадочной | 2 файла PNG | Flaticon, автор Magnific | Flaticon Free License | подпись автора со ссылкой на страницу иконки |
+| Церковный проём в Кавказе | 1 `.glb`, 1.5 МБ | Sketchfab, «North Doorway St. Martins Holt», автор morturn | CC-BY 4.0 | подпись автора (см. ниже) |
 
 ## Как это проверено
 
@@ -55,6 +56,19 @@
   Draco, отбор клипов `--keep`) и `tools/convert-assets.py` (статика: Draco,
   центр, записи манифеста). Сторож — секция `animals` в
   `server/src/tests/decorAssets.test.ts`.
+- **Церковный проём в Кавказе (`church-doorway.glb`, октябрь 2026)** —
+  фотограмметрия «North Doorway St. Martins Holt» (северный дверной проём
+  церкви Св. Мартина в Холте, Норфолк), автор morturn, страница
+  https://sketchfab.com/3d-models/none-3c9a5fb5352e498ab7374f51a413e469.
+  Лицензия проверена по API Sketchfab 26.10.2026: CC Attribution 4.0 —
+  «Author must be credited. Commercial use is allowed». Обязательство
+  атрибуции выполняется настоящим файлом; потому модель закрыта тем же
+  входом `/game/models/`, что и Mixamo. Конвертация —
+  `tools/convert-assets.py` (Draco, текстура 8192→1024). Из той же выкладки
+  автора стоявшие рядом руины «Pieve San Martino's ruins» удалить пришлось:
+  их лицензия CC-BY-NC-SA-4.0 запрещает коммерческое использование — модель
+  убрана из игры и из репозитория целиком (см. ASSET_LICENSES.md, статус
+  «Rejected»).
 - **Модели** — по содержимому файлов: `.glb` хранит своё происхождение в
   блоке `asset` (`generator: Khronos glTF Blender I/O`) и в именах узлов. У 45
   файлов в узлах видны кости `mixamorig:` — это риг и библиотека анимаций
