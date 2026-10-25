@@ -40,6 +40,21 @@ function сессияОтозвана(err: unknown): boolean {
   return err instanceof ApiError && (err.status === 401 || err.status === 403);
 }
 
+function isTransientNetworkError(err: unknown): boolean {
+  if (err instanceof ApiError) return !сессияОтозвана(err);
+  if (err instanceof TypeError) return true;
+  if (err instanceof Error) {
+    const msg = err.message.toLowerCase();
+    return msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch') || msg.includes('timeout');
+  }
+  return false;
+}
+
+function clearOAuthState(): void {
+  sessionStorage.removeItem('eos_oauth_provider');
+  sessionStorage.removeItem('eos_oauth_linking');
+}
+
 async function boot(): Promise<void> {
   // Словарь нужен для перевода интерфейса, но его отсутствие не должно
   // оставлять игрока на пустом экране — тексты останутся как в разметке
@@ -89,12 +104,17 @@ async function boot(): Promise<void> {
       // Сеть недоступна — вход стирать нельзя (см. сессияОтозвана).
       // Иначе перезагрузка страницы без связи выкидывала бы игрока из
       // игры, а гостя — в новый аккаунт с пустым списком персонажей.
-      if (!сессияОтозвана(err)) {
+      if (isTransientNetworkError(err)) {
         showConnectionLost();
         return;
       }
-      clearAuth();
-      showScreen('screen-auth');
+      if (сессияОтозвана(err)) {
+        clearAuth();
+        showScreen('screen-auth');
+        return;
+      }
+      showConnectionLost();
+      return;
     }
   } else {
     showScreen('screen-auth');
@@ -137,6 +157,7 @@ async function enterAsGuestFromLink(): Promise<boolean> {
   if (session.token) return false;
 
   try {
+    clearAuth();
     await enterAsGuest();
     await gotoCharacters();
     return true;
@@ -169,10 +190,18 @@ async function finishOAuthReturn(): Promise<boolean> {
   if (denied || !code) {
     // Игрок отказался на экране провайдера — это не ошибка, просто молча
     // возвращаем на экран входа
+    if (session.token) {
+      await gotoCharacters();
+      return true;
+    }
     showScreen('screen-auth');
     return true;
   }
   if (!state) {
+    if (session.token) {
+      await gotoCharacters();
+      return true;
+    }
     showScreen('screen-auth');
     return true;
   }
@@ -186,15 +215,13 @@ async function finishOAuthReturn(): Promise<boolean> {
   try {
     const { data } = await api.oauthCallback(provider, code, state);
     persistAuth(data.token, data.userId, data.username, false);
-    sessionStorage.removeItem('eos_oauth_provider');
-    sessionStorage.removeItem('eos_oauth_linking');
+    clearOAuthState();
     if (wasLinking) {
       toast(t('link.provider_linked'), 'success');
     }
     await gotoCharacters();
   } catch (err) {
-    sessionStorage.removeItem('eos_oauth_provider');
-    sessionStorage.removeItem('eos_oauth_linking');
+    clearOAuthState();
     if (wasLinking && session.token) {
       // Привязка не удалась, но аккаунт живой: остаёмся в игре и говорим почему
       const code_ = (err as { code?: string }).code;
@@ -202,6 +229,10 @@ async function finishOAuthReturn(): Promise<boolean> {
         ? t('link.identity_taken')
         : ((err as Error).message || t('link.provider_failed'));
       toast(msg, 'error');
+      await gotoCharacters();
+      return true;
+    }
+    if (session.token) {
       await gotoCharacters();
       return true;
     }
@@ -249,6 +280,7 @@ export async function gotoCharacters(): Promise<void> {
       return;
     }
     clearAuth();
+    clearOAuthState();
     showScreen('screen-auth');
     return;
   }
@@ -258,6 +290,7 @@ export async function gotoCharacters(): Promise<void> {
 /** Полный выход (из меню мира) */
 export function logoutLocal(): void {
   clearAuth();
+  clearOAuthState();
   showScreen('screen-auth');
 }
 
