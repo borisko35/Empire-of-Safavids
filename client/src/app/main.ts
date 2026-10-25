@@ -157,7 +157,6 @@ async function enterAsGuestFromLink(): Promise<boolean> {
   if (session.token) return false;
 
   try {
-    clearAuth();
     await enterAsGuest();
     await gotoCharacters();
     return true;

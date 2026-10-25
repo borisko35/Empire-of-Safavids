@@ -782,7 +782,7 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    label.textContent = t('wallet.battlepass_tier').replace('{tier}', String(tier.tier)).replace('{free}', tier.freeReward.nameRu).replace('{premium}', tier.premiumReward.nameRu);
+    label.textContent = t('wallet.battlepass_tier').replace('{tier}', String(tier.tier)).replace('{free}', tier.freeReward.nameRu).replace('{premium}', tier.premiumReward?.nameRu ?? '—');
     row.append(label);
     if (unlocked && !got) {
       row.append(actionButton(t('panels.collect'), async () => {

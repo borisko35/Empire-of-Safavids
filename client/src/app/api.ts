@@ -382,7 +382,7 @@ export const api = {
     req<AdminFunnelReport>(`/api/admin/funnel?days=${days}`),
 
   adminFinance: () =>
-    req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { gold: string; azens: string } }>(`/api/admin/finance`),
+    req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { azens: string; silver: string; syrian: string; redemptions: number }; grants: { currency: string; count: number; total: string }[]; velocity: { user_id: string; completed_24h: number }[] }>(`/api/admin/finance`),
 
   adminPromoCreate: (body: { code: string; azens?: number; silver?: number; syrian?: number; maxUses?: number; expiresAt?: string }) =>
     req<{ success: boolean; promo: { code: string } }>('/api/admin/promocodes', {
@@ -457,7 +457,7 @@ export const api = {
 
   enhance: (characterId: string, itemId: string) =>
     req<{ result: string; newEnhancement: number; message: string; messageRu: string }>(
-      '/api/characters/${characterId}/enhance',
+      `/api/characters/${characterId}/enhance`,
       { method: 'POST', body: JSON.stringify({ itemId }) },
     ),
 
@@ -588,7 +588,7 @@ export const api = {
     }),
 
   paymentRates: () =>
-    req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; payoutInfo: { status: string; messageRu: string } }>(' /api/game/payments/rates'),
+    req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; payoutInfo: { status: string; messageRu: string }; firstBonus: { multiplier: number; maxBonus: number }; simulator: boolean }>('/api/game/payments/rates'),
 
   paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }, provider?: string) =>
     req<{
@@ -621,9 +621,10 @@ export const api = {
   paymentHistory: (characterId: string) =>
     req<{ payments: { paymentId: string; status: string; packId: string | null; azensExpected: number; bonus: number; realCurrency: string; realAmount: number; createdAt: string }[] }>(`/api/game/payments/history?characterId=${characterId}`),
 
-  paymentSimulate: (paymentId: string) =>
-    req<{ success: boolean; deduped: boolean; azens?: number; bonus?: number }>(`/api/game/payments/${paymentId}/simulate`, {
+  paymentSimulate: (characterId: string, paymentId: string) =>
+    req<{ success: boolean; deduped: boolean; azens?: number; bonus?: number }>('/api/game/payments/simulate', {
       method: 'POST',
+      body: JSON.stringify({ characterId, paymentId }),
     }),
 
   wallet: (characterId: string) =>
@@ -666,7 +667,10 @@ export const api = {
     }),
 
   battlepassStatus: (characterId: string) =>
-    req<{ season: { id: string; nameRu: string; premiumPrice: number }; tiers: { tier: number; requiredPoints: number; freeReward: { type: string; amount?: number; nameRu: string }; premiumReward?: { type: string; amount?: number; nameRu: string } }[] }>(`/api/game/battlepass?characterId=${characterId}`),
+    req<{ season: { id: string; nameRu: string; premiumPrice: number }; tiers: { tier: number; requiredPoints: number; freeReward: { type: string; amount?: number; nameRu: string }; premiumReward?: { type: string; amount?: number; nameRu: string } }[]; progress: { is_premium: boolean; points: number; claimed_tiers: number[] } | null }>('/api/game/battlepass/status', {
+      method: 'POST',
+      body: JSON.stringify({ characterId }),
+    }),
 
   battlepassPurchase: (characterId: string) =>
     req<{ success: boolean; price: number; azens: number; season: string }>('/api/game/battlepass/purchase', {
@@ -740,7 +744,7 @@ export const api = {
     req<{ levels: Record<string, number> }>(`/api/game/crafting/skills?characterId=${characterId}`),
 
   craftingRecipes: () =>
-    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultNameRu: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; quantity: number }[] }[] }>(
+    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultNameRu: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; quantity: number; nameRu: string }[] }[] }>(
       '/api/game/crafting/recipes',
     ),
 
@@ -818,11 +822,11 @@ export const api = {
     }),
 
   quests: (params?: { level?: number; characterId?: string; type?: string }) => {
-    const search = new URLSearchParams();
-    if (params?.level !== undefined) search.set('level', String(params.level));
-    if (params?.characterId) search.set('characterId', params.characterId);
-    if (params?.type) search.set('type', params.type);
-    const suffix = search.toString();
+    const поиск = new URLSearchParams();
+    if (params?.level !== undefined) поиск.set('level', String(params.level));
+    if (params?.characterId) поиск.set('characterId', params.characterId);
+    if (params?.type) поиск.set('type', params.type);
+    const suffix = поиск.toString();
     return req<{ quests: QuestDef[] }>(`/api/game/quests${suffix ? `?${suffix}` : ''}`);
   },
 
@@ -869,8 +873,8 @@ export const api = {
   tutorialProgress: (characterId: string) =>
     req<{ progress: { step: number; completed: boolean }; currentStep: TutorialStepApi | null; totalSteps: number }>(`/api/tutorial/${characterId}`),
 
-  tutorialAdvance: (characterId: string, step: number) =>
-    req<{ step: number; completed: boolean; tutorialStep: TutorialStepApi; totalSteps: number }>(`/api/tutorial/${characterId}/advance`, { method: 'POST', body: JSON.stringify({ step }) }),
+  tutorialAdvance: (characterId: string) =>
+    req<{ step: number; completed: boolean; tutorialStep: TutorialStepApi; totalSteps: number }>(`/api/tutorial/${characterId}/advance`, { method: 'POST' }),
 
   tutorialSkip: (characterId: string) =>
     req<{ success: boolean }>(`/api/tutorial/${characterId}/skip`, { method: 'POST' }),
