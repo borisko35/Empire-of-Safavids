@@ -2046,6 +2046,15 @@ const MAT = {
   // Озеро, пруд, река и море собираются в buildWater каждое со своим
   // материалом - у них разный уровень, глубина и мера расстояния до берега.
   water: decorWaterMaterial,
+  // Вода джуба (§339). БЫЛО: джуб брал MAT.water — шейдер реки с отражением
+  // неба. Полоса шириной 0.4 м с высоты 85 м превращалась в СВЕТЛУЮ СИНЮЮ
+  // ЛИНИЮ через весь город: небо в отражении ярче камня, и глаз читал не
+  // воду, а провод. ТЕПЕРЬ — тёмная вода стоячей канавы: низкая
+  // шероховатость, никакого отражения неба, цвет ближе к камню.
+  jubWater: new THREE.MeshStandardMaterial({
+    color: 0x24423f, roughness: 0.32, metalness: 0.05,
+    normalMap: waterNormalTexture(1), normalScale: new THREE.Vector2(0.3, 0.3),
+  }),
   // Струи фонтана (§318). Отдельный материал, а не MAT.water.
   //
   // В шейдере воды солнечный блик прибавляется с множителем 1.8: на широкой
@@ -4070,7 +4079,7 @@ export function buildCity(scene: THREE.Scene): THREE.Group {
     city.add(placeholder);
 
     // Асинхронная подмена на GLB-модель
-    void loadDecorModel('models/decor/city-gate.glb').then((модель) => {
+    void loadDecorModel('decor/city-gate.glb').then((модель) => {
       if (!модель) return;
       city.remove(placeholder);
       const ворота = модель.clone();
@@ -5199,12 +5208,19 @@ function жилыеУлицы(
         борт.receiveShadow = true;
         city.add(борт);
       }
-      const вода = new THREE.Mesh(
-        new THREE.PlaneGeometry(ДЖУБ - 0.16, длина),
-        MAT.water,
-      );
-      вода.rotation.x = -Math.PI / 2;
-      вода.rotation.z = -Math.atan2(ux, uz);
+      // ВОДА ДЖУБА — СВОЙ МАТЕРИАЛ (§339).
+      //
+      // БЫЛО: MAT.water (шейдер реки с отражением неба). Полоса 0.4 м с
+      // высоты 85 м — это 2–3 пикселя, и отражённое небо делало из неё
+      // светлую синюю линию через город.
+      //
+      // ПОВОРОТ ЖИВЁТ В ГЕОМЕТРИИ. Так порядок Эйлера не может поставить
+      // плоскость на ребро — вид ошибки, который уже ловили на полотнище
+      // навеса (§317): rotation.x −90° плюс rotation.z даёт не то, чего ждёшь.
+      const ПОВОРОТ_УЛИЦЫ = Math.atan2(ux, uz);
+      const геоВоды = new THREE.PlaneGeometry(ДЖУБ - 0.16, длина);
+      геоВоды.rotateX(-Math.PI / 2);
+      const вода = new THREE.Mesh(геоВоды, MAT.jubWater);
       // Вода у самой кромки: в §331 первая версия стояла на 0.28, а борта —
       // до 0.40, и с уровня глаз канал читался чёрной щелью, а не водой.
       вода.position.set(
@@ -5212,20 +5228,19 @@ function жилыеУлицы(
         0.34,
         uz * (НАЧАЛО + длина / 2) + pz * сторона * (КРАЙ + ПОРЕБРИК + ДЖУБ / 2),
       );
+      вода.rotation.y = -ПОВОРОТ_УЛИЦЫ;
       вода.receiveShadow = true;
       // Дно лотка: тёмный камень под водой, чтобы сквозь прозрачную воду не
       // просвечивал песок и канал не выглядел ямой.
-      const дно = new THREE.Mesh(
-        new THREE.PlaneGeometry(ДЖУБ - 0.14, длина),
-        MAT.cityStoneDark,
-      );
-      дно.rotation.x = -Math.PI / 2;
-      дно.rotation.z = -Math.atan2(ux, uz);
+      const геоДна = new THREE.PlaneGeometry(ДЖУБ - 0.14, длина);
+      геоДна.rotateX(-Math.PI / 2);
+      const дно = new THREE.Mesh(геоДна, MAT.cityStoneDark);
       дно.position.set(
         ux * (НАЧАЛО + длина / 2) + px * сторона * (КРАЙ + ПОРЕБРИК + ДЖУБ / 2),
         0.2,
         uz * (НАЧАЛО + длина / 2) + pz * сторона * (КРАЙ + ПОРЕБРИК + ДЖУБ / 2),
       );
+      дно.rotation.y = -ПОВОРОТ_УЛИЦЫ;
       дно.receiveShadow = true;
       city.add(дно);
 
@@ -9408,6 +9423,21 @@ const AQUEDUCT_MODEL = 'decor/aqueduct-seg.glb';
 const decorCache = new Map<string, Promise<THREE.Group | null>>();
 
 export function loadDecorModel(path: string): Promise<THREE.Group | null> {
+  // ЛИШНИЙ ПРЕФИКС models/ СНИМАЕТСЯ (§339).
+  //
+  // Функция сама подставляет `/game/models/`. Три раза подряд (§336 дома,
+  // §337 ворота, §334 ящик/кувшин/навес) вызывающий передавал ещё и `models/`
+  // — выходил `/game/models/models/decor/…`, 404, и объекта в мире не было.
+  // Ошибки никто не видел: onError отдаёт null молча, а вызывающие молча	
+  // оставляли заглушку.
+  //
+  // Теперь путь чинится на входе и ругается в консоль: опечатка видна сразу,
+  // а мир не теряет объект.
+  const чистый = path.startsWith('models/') ? path.slice('models/'.length) : path;
+  if (чистый !== path) {
+    console.warn('[models] lishniy prefiks models/ uberen: ' + path);
+  }
+  path = чистый;
   const готовый = decorCache.get(path);
   if (готовый) return готовый;
   const задача = new Promise<THREE.Group | null>((готово) => {

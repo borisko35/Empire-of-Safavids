@@ -25,7 +25,7 @@ const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
 
 describe('Ступени и тумбы у ворот (§337)', () => {
   it('ворота загружаются как GLB-модель city-gate.glb', () => {
-    if (!/loadDecorModel\('models\/decor\/city-gate\.glb'\)/.test(ТЕРРЕЙН)) {
+    if (!/loadDecorModel\('decor\/city-gate\.glb'\)/.test(ТЕРРЕЙН)) {
       throw new Error('городские ворота не загружают city-gate.glb');
     }
   });
@@ -71,7 +71,7 @@ describe('Ступени и тумбы у ворот (§337)', () => {
 
   it('ворота имеют GLB-модель со ступенями и тумбами внутри', () => {
     // Проверяем, что модель city-gate.glb загружается
-    if (!/loadDecorModel\('models\/decor\/city-gate\.glb'\)/.test(ТЕРРЕЙН)) {
+    if (!/loadDecorModel\('decor\/city-gate\.glb'\)/.test(ТЕРРЕЙН)) {
       throw new Error('city-gate.glb не загружается');
     }
   });

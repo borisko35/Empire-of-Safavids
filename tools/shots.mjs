@@ -48,6 +48,9 @@ if (!ГДЕ_CHROME) {
 const браузер = await puppeteer.launch({
   executablePath: ГДЕ_CHROME,
   headless: process.env.SHOT_HEADLESS === '1',
+  // Мир тяжёлый: софтверный GL рисует кадр секундами, и штатный
+  // protocolTimeout (180 с) рвёт съёмку на ожидании сводки.
+  protocolTimeout: 600000,
   defaultViewport: null,
   args: [
     '--window-size=1290,780',

@@ -24,7 +24,7 @@ const код = ИНТЕРАКТИВ.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/
 
 describe('Интерактивные объекты на GLB (§334)', () => {
   it('ящик — crate.glb, рёбра ушли', () => {
-    должен(/loadDecorModel\(['"]models\/decor\/crate\.glb['"]\)/.test(код),
+    должен(/loadDecorModel\(['"]decor\/crate\.glb['"]\)/.test(код),
       'createCrate не вызывает loadDecorModel для crate.glb');
     // Рёбра ящика (BoxGeometry(t, h, t) в цикле) ушли — остался только
     // простой плейсхолдер BoxGeometry(w, h, d).
@@ -33,7 +33,7 @@ describe('Интерактивные объекты на GLB (§334)', () => {
   });
 
   it('кувшин — clay-jug.glb, горлышко и ручка ушли', () => {
-    должен(/loadDecorModel\(['"]models\/decor\/clay-jug\.glb['"]\)/.test(код),
+    должен(/loadDecorModel\(['"]decor\/clay-jug\.glb['"]\)/.test(код),
       'createOilJug не вызывает loadDecorModel для clay-jug.glb');
     // Сложные части: горлышко (CylinderGeometry 0.1, 0.12, 0.2), пробка,
     // ручка (TorusGeometry) ушли — остался только простой цилиндр-плейсхолдер.
@@ -44,7 +44,7 @@ describe('Интерактивные объекты на GLB (§334)', () => {
   });
 
   it('навес — trade-tent.glb, каркас ушёл', () => {
-    должен(/loadDecorModel\(['"]models\/decor\/trade-tent\.glb['"]\)/.test(код),
+    должен(/loadDecorModel\(['"]decor\/trade-tent\.glb['"]\)/.test(код),
       'createAwning не вызывает loadDecorModel для trade-tent.glb');
     // Каркас навеса: перекладины BoxGeometry(w, frameH, frameH) и
     // BoxGeometry(frameH, frameH, d) ушли — остались только 4 столба-плейсхолдера.

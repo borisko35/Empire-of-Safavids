@@ -41,7 +41,7 @@ export function createCrate(
   g.add(placeholder);
 
   // Асинхронная подмена на GLB-модель
-  void loadDecorModel('models/decor/crate.glb').then((модель) => {
+  void loadDecorModel('decor/crate.glb').then((модель) => {
     if (!модель) return;
     g.remove(placeholder);
     const вещь = модель.clone();
@@ -83,7 +83,7 @@ export function createOilJug(
   placeholder.receiveShadow = true;
   g.add(placeholder);
 
-  void loadDecorModel('models/decor/clay-jug.glb').then((модель) => {
+  void loadDecorModel('decor/clay-jug.glb').then((модель) => {
     if (!модель) return;
     g.remove(placeholder);
     const вещь = модель.clone();
@@ -129,7 +129,7 @@ export function createAwning(
     g.add(post);
   }
 
-  void loadDecorModel('models/decor/trade-tent.glb').then((модель) => {
+  void loadDecorModel('decor/trade-tent.glb').then((модель) => {
     if (!модель) return;
     // Удаляем плейсхолдеры (столбы)
     while (g.children.length) g.remove(g.children[0]);
