@@ -174,7 +174,9 @@ if [ "$TARGET" = "aws" ]; then
   fi
   say "  SSH ok"
 fi
-bash tools/deploy-preflight.sh || stop "предварительная проверка не пройдена"
+# Цель передаётся префлайту: при aws образы собираются на удалённой машине,
+# и требовать локальный docker бессмысленно — он нужен только там, где сборка.
+bash tools/deploy-preflight.sh "$TARGET" || stop "предварительная проверка не пройдена"
 if [ "$TUNNEL" -eq 1 ]; then
   say "  rezhim: tunnel Cloudflare (docker-compose.tunnel.yml podklyuchen)"
 else
