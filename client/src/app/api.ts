@@ -33,6 +33,7 @@ export interface TutorialStepApi {
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) {
     super(message);
+    this.name = 'ApiError';
   }
 }
 
@@ -72,15 +73,28 @@ async function req<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('eos_token');
   if (token) headers.Authorization = `Bearer ${token}`;
+
   const res = await fetch(path, { ...options, headers });
-  const body = await res.json().catch(() => ({}));
+  const raw = await res.text();
+
+  let body: unknown = {};
+  if (raw && raw.trim().length > 0) {
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      body = { message: raw };
+    }
+  }
+
   if (!res.ok) {
-    const b = body as { message?: string; error?: string; code?: string };
-    // Код ошибки: явный code либо одиночный токен в error («username_taken»)
+    const b = (body && typeof body === 'object' ? body as Record<string, unknown> : {}) as {
+      message?: string; error?: string; code?: string;
+    };
     const code = b.code
-      ?? (b.error && !b.error.includes(' ') ? b.error : undefined);
+      ?? (typeof b.error === 'string' && !b.error.includes(' ') ? b.error : undefined);
     throw new ApiError(b.message ?? b.error ?? `HTTP ${res.status}`, res.status, code);
   }
+
   return body as T;
 }
 
@@ -236,8 +250,6 @@ export const api = {
     }),
 
   authMe: () =>
-    // adminRole приходит null, если роль не выдана: сервер больше не подставляет
-// 'gm' по умолчанию, потому что это открывало панели сотрудников гостям.
     req<{ success: boolean; data: { userId: string; username: string; email: string; isAdmin: boolean; adminRole: string | null; isGuest?: boolean } }>('/api/auth/me'),
 
   changePassword: (oldPass: string, newPass: string) =>
@@ -245,10 +257,6 @@ export const api = {
       method: 'POST', body: JSON.stringify({ oldPassword: oldPass, newPassword: newPass }),
     }),
 
-  // ── Второй фактор ──────────────────────────────────────────
-  // Всё решение принимает сервер: клиент не решает, включён ли 2FA, можно
-  // ли его выключить и действителен ли код. Иначе он нарисовал бы кнопку
-  // там, где сервер откажет.
   twoFactorStatus: () =>
     req<{ success: boolean; enabled: boolean; confirmed: boolean; locked: boolean;
           lockedUntil: string | null; период: number; цифры: number }>('/api/auth/2fa/status'),
@@ -280,52 +288,19 @@ export const api = {
       method: 'POST', body: JSON.stringify({ name: newName }),
     }),
 
-  // Стойка читается, а не меняется: запись идёт через сокет, где сервер
-  // проверяет скакуна для конной стрельбы. Второй путь записи разошёлся бы
-  // с этим и обошёл бы проверку.
   characterStance: (characterId: string) =>
     req<{ stance: string }>(`/api/characters/${characterId}/stance`),
 
-  /** Прогресс навыка: уровень, накопленный опыт и порог следующего уровня */
   skillProgress: (characterId: string, skillId: string) =>
     req<{ progress: { level: number; xp: number; needed: number } }>(`/api/skills/progress/${skillId}?characterId=${characterId}`),
 
-  /**
-   * Ссылка перехода по рекламному партнёру с идентификатором игрока.
-   *
-   * Заглушка вида «?userid=PLAYER_ID» больше не встречается на сайте: все
-   * игроки уходили бы с одним и тем же sub-id, и партнёрский счёт считал бы
-   * такой поток невалидным. Идентификатор подставляет сервер - на статической
-   * странице подставить его нечем.
-   */
   rewardLink: (characterId: string) =>
     req<{ url: string; gold: number; alreadyClaimed: boolean }>(
       `/api/game/reward-link?characterId=${characterId}`),
 
-  /**
-   * Можно ли проголосовать на партнёрском сайте.
-   *
-   * Живёт здесь, а не собирает запрос руками в voteReminder: там стоял
-   * голый `fetch('/api/game/vote/status')` без `characterId`, а сервер на
-   * маршруте требует его через `requireCharacterOwnership()` и отвечал 400
-   * «Missing characterId». Замерено на проде: ошибка была одна на сессию,
-   * и запрос ловится перехватом `fetch` — `/api/game/vote/status` со
-   * статусом 400.
-   *
-   * Напоминание о голосовании при этом не просто шло с ошибкой, а не работало
-   * вовсе: `if (!res.ok) return;` глотал 400 молча, и тост про 500 золота
-   * не появлялся никогда. Плюс запрос долбил сервер раз в десять минут
-   * гарантированным отказом.
-   */
   voteStatus: (characterId: string) =>
     req<{ canVote?: boolean }>(`/api/game/vote/status?characterId=${characterId}`),
 
-  /**
-   * Забрать награду за переход.
-   *
-   * Ответ 409 с already_claimed - это НЕ ошибка для игрока, а «уже
-   * получено»: кнопка должна гаснуть, а не показывать тревогу.
-   */
   claimReward: (characterId: string) =>
     req<{ success: boolean; gold: number }>('/api/game/reward-claim', {
       method: 'POST',
@@ -347,7 +322,7 @@ export const api = {
     req<{ profession: any }>(`/api/skills/professions?characterId=${characterId}`),
 
   unlockProfession: (characterId: string, professionId: string) =>
-    req<{ success: boolean; profession: any }>('/api/skills/professions/unlock', {
+    req<{ success: boolean; profession: any }>(`/api/skills/professions/unlock`, {
       method: 'POST', body: JSON.stringify({ characterId, professionId }),
     }),
 
@@ -401,21 +376,13 @@ export const api = {
     req<{ grants: { id: string; admin_id: string; character_id: string; currency: string; amount: string; reason: string; created_at: string; character_name: string; admin_email: string }[] }>(`/api/admin/grants?limit=${limit}`),
 
   adminPayments: (limit = 50) =>
-    req<{ payments: { id: string; user_id: string; character_id: string; real_currency: string; real_amount: string; azens_credited: string; status: string; created_at: string; character_name: string }[] }>(`/api/admin/payments?limit=${limit}`),
+    req<{ payments: { id: string; user_id: string; character_id: string; real_currency: string; real_amount: string; azens_credited: string; status: string; created_at: string; character_name: string; admin_email: string }[] }>(`/api/admin/payments?limit=${limit}`),
 
-  /**
-   * Воронка новичка и удержание D1/D7/D30.
-   *
-   * В ответе есть eventSince — с какого дня в аналитике появилось каждое
-   * событие. Показывать его в панели обязательно: у событий, которые
-   * писать начали недавно, значения по старым когортам всегда ноль, и без
-   * даты этот ноль читается как «игроки застревают».
-   */
   adminFunnel: (days = 30) =>
     req<AdminFunnelReport>(`/api/admin/funnel?days=${days}`),
 
   adminFinance: () =>
-    req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { azens: string; silver: string; syrian: string; redemptions: number }; grants: { currency: string; count: number; total: string }[]; velocity: { user_id: string; completed_24h: number }[] }>('/api/admin/finance'),
+    req<{ byStatus: { status: string; count: number; minted: string; bonus: string }[]; circulating: { azens: string; gold: string; silver: string; syrian: string; debtors: number }; promoGranted: { gold: string; azens: string } }>(`/api/admin/finance`),
 
   adminPromoCreate: (body: { code: string; azens?: number; silver?: number; syrian?: number; maxUses?: number; expiresAt?: string }) =>
     req<{ success: boolean; promo: { code: string } }>('/api/admin/promocodes', {
@@ -432,16 +399,13 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({
         name, class: characterClass, serverId,
-        // Код приглашения необязателен: без него сервер просто ничего не начислит
         ...(referralCode ? { referralCode } : {}),
       }),
     }),
 
-  // Мой код приглашения, ссылка для друга и сколько я пригласил
   referralInfo: () =>
     req<{ code: string; invited: number; earnedGold: number; link: string }>('/api/characters/referral'),
 
-  // ── Привязка аккаунта ──────────────────────────────────────
   accountIdentities: () =>
     req<{ accounts: LinkedAccountInfo[]; total: number }>('/api/auth/identities'),
 
@@ -462,10 +426,7 @@ export const api = {
 
   skills: (characterId: string) => req<{ skills: SkillDef[] }>(`/api/characters/${characterId}/skills`),
 
-  // iconPath и description обязаны быть в типе: сервер их отдаёт, и без
-// объявления здесь TS отказал бы на item.iconPath — то есть нарисовать
-// иконку было нельзя даже при живых данных.
-inventory: (characterId: string) =>
+  inventory: (characterId: string) =>
     req<{ items: { itemId: string; nameRu: string; rarity: string; quantity: number; type: string; enhancement: number; iconPath?: string; description?: string }[] }>(`/api/characters/${characterId}/inventory`),
 
   equipment: (characterId: string) =>
@@ -489,7 +450,6 @@ inventory: (characterId: string) =>
       body: JSON.stringify({ itemId }),
     }),
 
-  /** Активные временные бонусы с остатком времени */
   buffs: (characterId: string) =>
     req<{ buffs: ActiveBuff[]; damageMultiplier: number; expMultiplier: number }>(
       `/api/characters/${characterId}/buffs`
@@ -497,7 +457,7 @@ inventory: (characterId: string) =>
 
   enhance: (characterId: string, itemId: string) =>
     req<{ result: string; newEnhancement: number; message: string; messageRu: string }>(
-      `/api/characters/${characterId}/enhance`,
+      '/api/characters/${characterId}/enhance',
       { method: 'POST', body: JSON.stringify({ itemId }) },
     ),
 
@@ -515,86 +475,47 @@ inventory: (characterId: string) =>
       { method: 'POST', body: JSON.stringify({ characterId, itemId, quantity }) },
     ),
 
-  // isRaid обязателен в типе: панель решает по нему, рисовать ли блок рейда.
-// Пока флага не было в типе, TS отказал на `d.isRaid` — то есть панель не
-// могла отличить рейд от захода даже при живых данных на сервере.
-// difficulties: список объявленных сложностей — по нему панель рисует выбор.
-// Раньше поле в типе не было, и сложность нельзя было выбрать даже при живых
-// данных на сервере.
-dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; difficulties?: string[]; timeLimit?: number; minPlayers?: number; isRaid?: boolean }[] }>('/api/game/dungeons'),
+  dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; maxLevel: number; region: string; difficulty?: string; difficulties?: string[]; timeLimit?: number; minPlayers?: number; isRaid?: boolean }[] }>(`/api/game/dungeons`),
 
-  // Сложность едет только когда выбрана: пустая строка означала бы
-  // «выбрана не та» и молча спускала бы игрока на normal.
   dungeonEnter: (dungeonId: string, characterId: string, difficulty?: string) =>
-    req<{ session: { id: string; /** Присылается сервером и нужен для перевода названия: по nameRu перевод не ищется. */
-        dungeonId: string; dungeonNameRu: string; monsterCount: number; bossCount: number; difficulty?: string; timeLeftSec?: number } }>(
+    req<{ session: { id: string; dungeonId: string; dungeonNameRu: string; monsterCount: number; bossCount: number; difficulty?: string; timeLeftSec?: number } }>(
       `/api/game/dungeons/${dungeonId}/enter`,
       { method: 'POST', body: JSON.stringify(difficulty ? { characterId, difficulty } : { characterId }) },
     ),
 
-  /**
-   * Кто онлайн в этом же регионе — список для приглашения в заход.
-   *
-   * Раньше приглашение брало игроков из списка друзей, и заход на 8-20 человек
-   * было не набрать иначе. Сервер отдаёт characterId: пригласить можно любого
-   * игрока региона, а не только друга.
-   */
-  // bounty: активная награда за голову игрока. Без него объявить награду
-  // можно было только мёртвым кодом, а увидеть — никак.
   regionPlayers: (characterId: string) =>
     req<{ players: { id: string; name: string; level: number; class: string; bounty?: number }[] }>(
       `/api/game/players?characterId=${characterId}`,
     ),
 
-  /**
-   * Позвать в заход. Отправить может только лидер.
-   *
-   * targetId — characterId из regionPlayers. Прежний friendUserId сервер ещё
-   * принимает: друзей по userId пригласить можно и дальше.
-   */
   dungeonInvite: (characterId: string, targetId: string) =>
     req<{ inviteId: string }>('/api/game/dungeons/invite', {
       method: 'POST',
       body: JSON.stringify({ characterId, targetId }),
     }),
 
-  /** Ответ на приглашение: принять значит войти в заход. */
   dungeonInviteAnswer: (characterId: string, inviteId: string, accept: boolean) =>
     req<{ joined: boolean }>(`/api/game/dungeons/invite/${inviteId}/answer`, {
       method: 'POST',
       body: JSON.stringify({ characterId, accept }),
     }),
 
-  /** Рекорды прохождений: кто прошёл быстрее всех */
   dungeonRecords: (dungeonId: string) =>
     req<{
       records: { name: string; durationSec: number; completedAt: string; bossesKilled: number }[];
     }>(`/api/game/dungeons/${dungeonId}/records`),
 
-  /**
-   * Сундуки моего захода: где стоят и какие уже вскрыты.
-   *
-   * Клиент рисует сундуки по этому списку, поэтому картинка и игра показывают
-   * одну и ту же точку: координаты в данных и в схеме сверяет проверка.
-   */
   dungeonChests: (characterId: string) =>
     req<{ chests: { id: string; x: number; z: number; opened: boolean }[] }>(
       `/api/game/dungeons/chests?characterId=${characterId}`
     ),
 
-  /**
-   * Вскрыть сундук.
-   *
-   * Координаты игрока идут в запрос, чтобы сервер отказал, если игрок далеко:
-   * до сундука надо дойти пешком. Добыча выдаётся по идентификатору из
-   * сессии, а не по присланным координатам, поэтому подделать их нельзя.
-   */
   dungeonChestOpen: (characterId: string, chestId: string, x: number, z: number) =>
     req<{ gold: number; experience: number }>(`/api/game/dungeons/chests/${chestId}/open`, {
       method: 'POST',
       body: JSON.stringify({ characterId, x, z }),
     }),
-  /** Открытые заходы по данжу: к кому можно присоединиться */
+
   dungeonSessions: (dungeonId: string) =>
     req<{ sessions: { sessionId: string; members: number; maxPlayers: number }[] }>(
       `/api/game/dungeons/${dungeonId}/sessions`
@@ -612,38 +533,25 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       body: JSON.stringify({ characterId }),
     }),
 
-  // ── Рейды ──────────────────────────────────────────────────────────
-  // Отдельные вызовы, а не флаги у заходов: в рейд входят партиями, и
-  // показывать рейд как «заход, в который можно войти по одному» значило бы
-  // показать ровно то, чего в рейде нет.
-
-  /** Открытые сборы по рейд-подземелью */
   raids: (dungeonId: string) =>
     req<{
       raids: { raidId: string; name: string; parties: number; maxParties: number; members: number; maxPlayers: number }[];
     }>(`/api/game/raids/${dungeonId}`),
 
-  /** Открыть сбор. Войдёт вся партия, а не только лидер. */
   raidCreate: (dungeonId: string, characterId: string, name: string) =>
     req<{ raid: { id: string; sessionId: string; name: string } }>(
       `/api/game/raids/${dungeonId}/create`,
       { method: 'POST', body: JSON.stringify({ characterId, name }) },
     ),
 
-  /** Вступить в сбор партией. Возвращает error, если хотя бы один не проходит. */
   raidJoin: (raidId: string, characterId: string) =>
     req<{ raidId: string; sessionId: string; joined: number; parties: number; maxParties: number }>(
       `/api/game/raids/${raidId}/join`,
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
-  // ── Абордаж ──────────────────────────────────────────────────────
-  // Режим выбирает атакующий: 'pve' — пираты, 'pvp' — чужая лодка.
-  // Список целей фильтруется общим фильтром: лодка, вода, своя зона,
-  // дистанция. Без вызова кнопка абордажа рисовалась бы некому.
   boardingTargets: (characterId: string, mode: 'pve' | 'pvp') =>
-    req<{ targets: { id: string; /** Вид монстра для PvE; у PvP-целей его нет — там имя задал игрок. */
-        monsterId?: string; nameRu: string; mode: string; level: number }[]; reason?: string }>(
+    req<{ targets: { id: string; monsterId?: string; nameRu: string; mode: string; level: number }[]; reason?: string }>(
       `/api/game/boarding/targets?characterId=${characterId}&mode=${mode}`,
     ),
   dungeonStatus: (characterId: string) =>
@@ -652,17 +560,9 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
 
-  // ── Награда за голову ────────────────────────────────────────────
-  // Ставить награду можно было только мёртвым кодом: placeBounty не
-  // вызывался ни разу, а получить было нельзя вообще — claimer_id и
-  // claimed_at в таблице не заполнял никто. Между таблицей и слушателем
-  // клиента висел обрывок.
-
-  /** Активная награда за голову персонажа */
   bountyOn: (characterId: string) =>
     req<{ characterId: string; amount: number }>(`/api/game/bounty?characterId=${characterId}`),
 
-  /** Поставить награду. Ошибается, если золота не хватило или цель — сам игрок */
   bountyPlace: (placerId: string, targetId: string, amount: number) =>
     req<{ ok: true }>('/api/game/bounty', {
       method: 'POST',
@@ -670,11 +570,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     }),
 
   tradeContracts: (characterId: string) =>    req<{
-      contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; /** Присылается сервером (TradeService отдаёт определение целиком) и нужен, чтобы перевести название груза. */
-        cargoItemId: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];
-      /** Свой караван: null если контракта нет */
+      contracts: { id: string; nameRu: string; fromRegion: string; toRegion: string; cargoItemId: string; cargoNameRu: string; cargoQty: number; rewardGold: number; rewardSilver?: number; rewardSyrian?: number; minLevel: number; travelMinutes: number }[];
       active: { contractId: string; startedAt: number; arrivesAt: number; status: 'transit' | 'arrived'; cargoReturned: boolean; cargoItemId: string; cargoQty: number } | null;
-      /** Серверное время — по нему считаем таймер, а не по часам игрока */
       serverTime: number;
     }>(`/api/game/trade/contracts?characterId=${encodeURIComponent(characterId)}`),
 
@@ -691,24 +588,14 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     }),
 
   paymentRates: () =>
-    req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; firstBonus: { multiplier: number; maxBonus: number }; premiumDurations: { days: number; priceAzens: number }[]; simulator: boolean }>('/api/game/payments/rates'),
+    req<{ rates: Record<string, { realAmount: number; azensAmount: number }>; packs: { id: string; realCurrency: string; realAmount: number; azens: number; bonusPct: number; tagRu?: string }[]; payoutInfo: { status: string; messageRu: string } }>(' /api/game/payments/rates'),
 
-  // Имя провайдера здесь намеренно НЕ задано. Раньше стояло
-  // `provider = 'yookassa'`, и это была вторая копия решения: клиент
-  // указывал провайдера, которого на сервере не настроено, и покупка
-  // упиралась в «провайдер не настроен». Теперь поле не уходит вовсе, а
-  // сервер выбирает того, кто у него реально настроен. Чтобы принудительно
-  // задать - передать provider явно.
   paymentTopup: (characterId: string, input: { packId: string } | { realCurrency: string; amount: number }, provider?: string) =>
     req<{
       success: boolean; paymentId: string; status: string; packId: string | null;
       azensExpected: number; realCurrency: string; realAmount: number;
-      // Куда идти платить. null = счёт не создан: провайдер не настроен или
-      // его запрос не прошёл. Это не «оплачено» и не «отказано», и клиент
-      // обязан показать именно это, а не радостно закрыть окно.
       checkoutUrl: string | null;
       providerError: string | null;
-      // Для Intellect Money — параметры инициализации виджета
       intellectmoneyWidgetParams: {
         EshopId: string;
         OrderId: string;
@@ -725,8 +612,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       } | null;
     }>('/api/game/payments/topup', {
       method: 'POST',
-      // provider попадает в тело, только если его задали явно: пустая строка
-      // это уже значение, и сервер не примет её за «не задано».
       body: JSON.stringify(provider ? { characterId, provider, ...input } : { characterId, ...input }),
     }),
 
@@ -734,12 +619,11 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     req<{ paymentId: string; status: string; azensExpected: number; bonus: number; realCurrency: string; realAmount: number }>(`/api/game/payments/${paymentId}`),
 
   paymentHistory: (characterId: string) =>
-    req<{ payments: { paymentId: string; status: string; packId: string | null; azensExpected: number; bonus: number; realCurrency: string; realAmount: number; createdAt: string }[] }>(`/api/game/payments/mine?characterId=${characterId}`),
+    req<{ payments: { paymentId: string; status: string; packId: string | null; azensExpected: number; bonus: number; realCurrency: string; realAmount: number; createdAt: string }[] }>(`/api/game/payments/history?characterId=${characterId}`),
 
-  paymentSimulate: (characterId: string, paymentId: string) =>
-    req<{ success: boolean; deduped: boolean; azens?: number; bonus?: number }>('/api/game/payments/simulate', {
+  paymentSimulate: (paymentId: string) =>
+    req<{ success: boolean; deduped: boolean; azens?: number; bonus?: number }>(`/api/game/payments/${paymentId}/simulate`, {
       method: 'POST',
-      body: JSON.stringify({ characterId, paymentId }),
     }),
 
   wallet: (characterId: string) =>
@@ -782,10 +666,7 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     }),
 
   battlepassStatus: (characterId: string) =>
-    req<{ season: { id: string; nameRu: string; premiumPrice: number }; tiers: { tier: number; requiredPoints: number; freeReward: { type: string; amount?: number; nameRu: string }; premiumReward: { type: string; amount?: number; nameRu: string } }[]; progress: { points: number; is_premium: boolean; claimed_tiers: number[] | string } | null }>('/api/game/battlepass/status', {
-      method: 'POST',
-      body: JSON.stringify({ characterId }),
-    }),
+    req<{ season: { id: string; nameRu: string; premiumPrice: number }; tiers: { tier: number; requiredPoints: number; freeReward: { type: string; amount?: number; nameRu: string }; premiumReward?: { type: string; amount?: number; nameRu: string } }[] }>(`/api/game/battlepass?characterId=${characterId}`),
 
   battlepassPurchase: (characterId: string) =>
     req<{ success: boolean; price: number; azens: number; season: string }>('/api/game/battlepass/purchase', {
@@ -805,7 +686,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       body: JSON.stringify({ characterId }),
     }),
 
-  // ── Лодки и рыбалка ─────────────────────────────────────────
   boats: (characterId: string) =>
     req<{
       boats: { boatId: string; isActive: boolean; totalCatches: number; fatigue: number }[];
@@ -832,9 +712,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   fishingState: (characterId: string) =>
     req<{
       cast: { castId: string; phase: string; biteAt: number; waitTotalMs: number; deep: boolean; luck: number } | null;
-      // id присылает сервер (game.ts отдаёт лодку целиком, {...лодка,
-      // swimSpeed}), и по нему находится перевод названия. В типе его не
-      // было, поэтому подстановка имени лодки молча собирала бы undefined.
       boat: { id: string; nameRu: string; catchLimit: number; fishingBonus: number } | null;
       boatFatigue: number;
       fish: { id: string; nameRu: string; rarity: string; weightKg: number; deepOnly?: boolean; minLevel: number }[];
@@ -859,25 +736,14 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       method: 'POST', body: JSON.stringify({ characterId, castId }),
     }),
 
-  /**
-   * Уровень крафта по профессиям. Раньше был один общий, и панель
-   * показывала «Закрыто», не объясняя, чего не хватает.
-   */
   craftingSkills: (characterId: string) =>
     req<{ levels: Record<string, number> }>(`/api/game/crafting/skills?characterId=${characterId}`),
 
   craftingRecipes: () =>
-    // resultNameRu и nameRu у ингредиентов присылает сервер (§195). Без них
-    // панель печатала идентификаторы: игрок видел «wpn_shah_blade» и
-    // «mat_dragon_scale» вместо названий.
-    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultNameRu: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; nameRu: string; quantity: number }[] }[] }>(
+    req<{ recipes: { id: string; nameRu: string; resultItemId: string; resultNameRu: string; resultQuantity: number; craftingTime: number; requiredLevel: number; successRate: number; ingredients: { itemId: string; quantity: number }[] }[] }>(
       '/api/game/crafting/recipes',
     ),
 
-  /** Что сейчас в работе: нужно, чтобы не потерять задание вместе с данными
-   * браузера. Идентификатор хранится в localStorage, и после очистки
-   * сайта или входа с другого устройства клиент о нём не знал, а предмет
-   * остался изготовленным и незабираемым */
   craftingJobs: (characterId: string) =>
     req<{ jobs: { id: string; recipeId: string; completesAt: string }[] }>(
       `/api/game/crafting/jobs?characterId=${characterId}`,
@@ -937,13 +803,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       body: JSON.stringify({ characterId }),
     }),
 
-  /**
-   * Пригласить в группу.
-   *
-   * inviterId, а не characterId: так маршрут называет того, кто зовёт, и по
-   * нему проверяется, что он вообще глава. Переименовывать поле на клиенте
-   * незачем — сервер проверяет именно это имя.
-   */
   partyInvite: (partyId: string, inviterId: string, targetId: string) =>
     req<{ success: boolean }>(`/api/game/parties/${partyId}/invite`, {
       method: 'POST',
@@ -958,21 +817,13 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       body: JSON.stringify({ characterId, region }),
     }),
 
-  /**
-   * Список квестов.
-   *
-   * БЕЗ ПАРАМЕТРОВ сервер отдаёт всю базу целиком, и вкладка квестов показывала
-   * первые восемь квестов по порядку в базе: чужие, закрытые и выполненные. С
-   * уровнем и персонажем сервер применяет настоящий фильтр доступности
-   * (getAvailableQuests): уровень, класс, предыдущие квесты, карма.
-   */
   quests: (params?: { level?: number; characterId?: string; type?: string }) => {
-    const поиск = new URLSearchParams();
-    if (params?.level !== undefined) поиск.set('level', String(params.level));
-    if (params?.characterId) поиск.set('characterId', params.characterId);
-    if (params?.type) поиск.set('type', params.type);
-    const хвост = поиск.toString();
-    return req<{ quests: QuestDef[] }>(`/api/game/quests${хвост ? `?${хвост}` : ''}`);
+    const search = new URLSearchParams();
+    if (params?.level !== undefined) search.set('level', String(params.level));
+    if (params?.characterId) search.set('characterId', params.characterId);
+    if (params?.type) search.set('type', params.type);
+    const suffix = search.toString();
+    return req<{ quests: QuestDef[] }>(`/api/game/quests${suffix ? `?${suffix}` : ''}`);
   },
 
   questState: (characterId: string) =>
@@ -989,9 +840,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       { method: 'POST', body: JSON.stringify({ objectiveId }) },
     ),
 
-  // ── Друзья ────────────────────────────────────────────────
   friends: () =>
-    req<{ friends: { userId: string; friendId: string; friendName: string; status: string; online: boolean; level: number; region: string }[]; pending: { userId: string; friendName: string; level: number }[] }>('/api/friends'),
+    req<{ friends: { userId: string; friendId: string; friendName: string; status: string; online: boolean; level: number; region: string }[]; pending: { userId: string; friendName: string; level: number; region: string }[] }>(`/api/friends`),
 
   friendRequest: (friendId: string) =>
     req<{ success: boolean }>('/api/friends/request', { method: 'POST', body: JSON.stringify({ friendId }) }),
@@ -1005,7 +855,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   friendBlock: (friendId: string) =>
     req<{ success: boolean }>('/api/friends/block', { method: 'POST', body: JSON.stringify({ friendId }) }),
 
-  // ── Рейтинги ──────────────────────────────────────────────
   leaderboard: (type: string, limit = 20, offset = 0) =>
     req<{ entries: { rank: number; characterId: string; characterName: string; className: string; level: number; value: number; guild?: string }[]; total: number }>(
       `/api/leaderboard/${type}?limit=${limit}&offset=${offset}`,
@@ -1014,22 +863,18 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   leaderboardMe: (type: string, characterId: string) =>
     req<{ rank: { rank: number; value: number } | null }>(`/api/leaderboard/${type}/me?characterId=${characterId}`),
 
-  // ── Туториал ──────────────────────────────────────────────
-  // target/count обязательны в типе: без них клиент молча получал шаг
-  // без цели и без счётчика, и такой шаг было невозможно закрыть
   tutorialSteps: () =>
     req<{ steps: TutorialStepApi[]; totalSteps: number }>('/api/tutorial/steps'),
 
   tutorialProgress: (characterId: string) =>
     req<{ progress: { step: number; completed: boolean }; currentStep: TutorialStepApi | null; totalSteps: number }>(`/api/tutorial/${characterId}`),
 
-  tutorialAdvance: (characterId: string) =>
-    req<{ step: number; completed: boolean; tutorialStep: TutorialStepApi; totalSteps: number }>(`/api/tutorial/${characterId}/advance`, { method: 'POST' }),
+  tutorialAdvance: (characterId: string, step: number) =>
+    req<{ step: number; completed: boolean; tutorialStep: TutorialStepApi; totalSteps: number }>(`/api/tutorial/${characterId}/advance`, { method: 'POST', body: JSON.stringify({ step }) }),
 
   tutorialSkip: (characterId: string) =>
     req<{ success: boolean }>(`/api/tutorial/${characterId}/skip`, { method: 'POST' }),
 
-  // ── Шахматы Шаха ──────────────────────────────────────────
   chessStart: (characterId: string, betGold: number) =>
     req<{ gameId: string; board: (string | null)[][]; turn: string; status: string; betGold: number }>(
       '/api/chess/start', { method: 'POST', body: JSON.stringify({ characterId, betGold }) },
@@ -1048,7 +893,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   chessResign: (characterId: string, gameId: string) =>
     req<{ success: boolean }>('/api/chess/resign', { method: 'POST', body: JSON.stringify({ characterId, gameId }) }),
 
-  // ── Стихи Хафиза ──────────────────────────────────────────
   poetryChallenges: () =>
     req<{ challenges: { id: string; title: string; titleRu: string; difficulty: string; lineCount: number; reward: { gold: number; experience: number } }[] }>(
       '/api/poetry/challenges',
@@ -1067,8 +911,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   poetryUndo: (gameId: string) =>
     req<{ selectedCount: number }>('/api/poetry/undo', { method: 'POST', body: JSON.stringify({ gameId }) }),
 
-  // Забрать награду за верно собранное стихотворение. Персонаж обязателен:
-  // награда идёт в кошелёк ПЕРСОНАЖА, а не аккаунта.
   poetryFinish: (characterId: string, gameId: string) =>
     req<{ success: boolean; reward: { gold: number; experience: number; title?: string }; gold: number; experience: number; achievements: string[]; counterSaved?: boolean }>(
       '/api/poetry/finish', { method: 'POST', body: JSON.stringify({ characterId, gameId }) }),
@@ -1076,8 +918,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   poetryQuit: (gameId: string) =>
     req<{ success: boolean }>('/api/poetry/quit', { method: 'POST', body: JSON.stringify({ gameId }) }),
 
-  // ── Хроники Сефевидов ─────────────────────────────────────
-  // ── Сюжет: главы и кат-сцены ──────────────────────────────
   storyState: (characterId: string) =>
     req<{
       chapters: {
@@ -1122,10 +962,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       `/api/chronicles/category/${cat}`,
     ),
 
-  // ── Гильдии ──────────────────────────────────────────────
-  // Персонаж обязателен в каждом маршруте: сервер ищет по guild_members
-  // .character_id, а не по аккаунту. Раньше он не передавался, и панель
-  // показывала «вы не в гильдии» игроку, который в гильдии состоял.
   guildMy: (characterId: string) => req<{ guild: any; rank: string } | null>(`/api/guilds?characterId=${characterId}`),
   guildSearch: (q: string) => req<{ guilds: any[] }>(`/api/guilds/search?q=${encodeURIComponent(q)}`),
   guildCreate: (characterId: string, name: string, tag: string, description: string) =>
@@ -1143,15 +979,8 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
     req<{ success: boolean }>('/api/guilds/deposit-item', { method: 'POST', body: JSON.stringify({ characterId, itemId, qty }) }),
   guildWithdrawItem: (characterId: string, bankId: number, qty = 1) =>
     req<{ success: boolean }>('/api/guilds/withdraw-item', { method: 'POST', body: JSON.stringify({ characterId, bankId, qty }) }),
-  // any[] означал, что ни item_id, ни nameRu здесь не проверяются
-  // компилятором: поле можно переименовать на сервере, и подстановка имени
-  // предмета молча собрала бы undefined. Тип взят из GuildService
-  // .getBankItems(), который возвращает строку запроса плюс nameRu.
   guildBank: (characterId: string) => req<{ items: { id: number; item_id: string; nameRu: string; quantity: number; deposited_by: string; deposited_at: string }[] }>(
     `/api/guilds/bank?characterId=${characterId}`),
-  // Навыки гильдии. Право на покупку и цена приходят готовыми с сервера:
-  // клиент не решает, можно ли купить, - иначе он нарисует кнопку там, где
-  // покупка невозможна, и игрок увидит цену рядом с отказом.
   guildSkills: (characterId: string) => req<{
     gold: number;
     canManage: boolean;
@@ -1166,10 +995,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       method: 'POST',
       body: JSON.stringify({ characterId, skillId, levels }),
     }),
-  // Гильдейские задания. Состояние приходит с сервера: что открыто, что уже
-  // взято, что готово и почему нельзя. Клиент ничего не решает - иначе он
-  // нарисует кнопку «взять» там, где сервер откажет, а игрок увидит причину
-  // отказа только после нажатия.
   guildMissions: (characterId: string) => req<{
     missions: {
       id: string; name: string; nameRu: string; description: string;
@@ -1180,9 +1005,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       blockedBy: string; availableAt: string | null;
     }[];
   }>(`/api/guilds/missions?characterId=${characterId}`),
-  // Территории и осады. Панель гильдии показывает их всем участникам
-  // одинаково: и владельцу, и атакующей гильдии — осада коллективная,
-  // и каждый должен видеть одну и ту же картину боя.
   guildTerritories: (characterId: string) => req<{ territories: TerritoryState[] }>(
     `/api/guilds/territories?characterId=${characterId}`,
   ),
@@ -1200,36 +1022,24 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   guildKick: (actorId: string, targetId: string) =>
     req<{ success: boolean }>('/api/guilds/kick', { method: 'POST', body: JSON.stringify({ characterId: actorId, targetId }) }),
 
-  // ── Модерация ───────────────────────────────────────────
-  // Жалоба на игрока. characterId — наш персонаж, его сервер сверяет
-  // с владельцем аккаунта: иначе можно было бы жаловаться от чужого
   report: (characterId: string, reportedId: string, reason: string, detail = '') =>
     req<{ success: boolean; error?: string }>('/api/game/report', {
       method: 'POST',
       body: JSON.stringify({ characterId, reportedId, reason, detail }),
     }),
 
-  // ── Достижения / Задачи / Репутация ─────────────────────
-  // characterId обязателен: сервер считает открытые достижения по персонажу,
-  // а не по аккаунту — иначе счётчик «Разблокировано» всегда нулевой
   achievements: (characterId: string) =>
     req<{ achievements: any[]; total: number; unlockedCount: number }>(
       `/api/progression/achievements?characterId=${characterId}`),
-  // characterId обязателен: сервер ищет прогресс по персонажу, а не по аккаунту
   tasks: (characterId: string) =>
     req<{ tasks: any[]; completedCount: number }>(`/api/progression/tasks?characterId=${characterId}`),
   tasksProgress: (characterId: string) =>
     req<{ completedCount: number }>(`/api/progression/tasks/progress?characterId=${characterId}`),
-  // Персонаж обязателен: сервер ищет по character_reputation.character_id,
-  // а не по аккаунту. Раньше он не передавался, и панель всегда была пустой.
   reputation: (characterId: string) =>
     req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>(
       `/api/progression/reputation?characterId=${characterId}`),
   factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
 
-  // ── Питомцы ─────────────────────────────────────────────
-  // Персонаж обязателен: сервер искал питомцев по account id, из-за чего
-  // список был пуст, а переименование меняло чужую строку
   pets: (characterId: string) => req<{ pets: any[]; allDefs: any[] }>(`/api/game/pets?characterId=${characterId}`),
   petsActive: (characterId: string) => req<{ pet: any }>(`/api/game/pets/active?characterId=${characterId}`),
   petAcquire: (characterId: string, petId: string) =>
@@ -1241,23 +1051,11 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   petRelease: (characterId: string, petDbId: number) =>
     req<{ success: boolean }>('/api/game/pets/release', { method: 'POST', body: JSON.stringify({ characterId, petDbId }) }),
 
-  // ── Зал славы мировых боссов ────────────────────────────
-  // Раньше история побед над мировыми боссами писалась в базу, но смотреть
-  // на неё было некому: панели не существовало
   hallOfFame: (limit = 20) =>
     req<{ entries: { rank: number; characterId: string; characterName: string; class: string;
       kills: number; guildId: string | null; guildName: string | null; lastKill: string }[] }>(
-      `/api/hall-of-fame/bosses?limit=${limit}`),
+        `/api/hall-of-fame/bosses?limit=${limit}`),
 
-  // ── Караул (вербовка солдат) ─────────────────────────────
-  // Цена и доступность каждой доли приходят с сервера: панель не решает,
-  // кого можно нанять, — иначе она и сервер разошлись бы, как это уже было
-  // с панелью навыков (она отсекала список сама и предлагала купить то,
-  // что сервер потом отказывал).
-  // ── Шёлковый путь: засада на караван (§179) ─────────────
-  // Список дороги и подъём засады. Оба ходят по characterId с проверкой
-  // владения на сервере: чужим караваном можно панель набить, если бы
-  // идентификатор брался из тела без сверки.
   tradeRoad: (characterId: string) =>
     req<{
       caravans: { ownerId: string; ownerName: string; contractId: string; contractNameRu: string;
@@ -1286,9 +1084,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       method: 'POST', body: JSON.stringify({ characterId, id }),
     }),
 
-  // ── Почтовый ящик ──────────────────────────────────────
-  // Таблица mailbox была пуста: награды выдавались напрямую, и если
-  // предмет не помещался в сумку, он просто пропадал
   mail: (characterId: string) =>
     req<{ items: { id: string; subject: string; body: string | null; gold: number;
       itemId: string | null; itemQty: number; isRead: boolean; senderName: string | null;
@@ -1299,9 +1094,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   mailRead: (characterId: string, id: string) =>
     req<{ success: boolean }>('/api/game/mail/read', { method: 'POST', body: JSON.stringify({ characterId, id }) }),
 
-  // ── Уведомления ────────────────────────────────────────
-  // Списка не было: сервер писал строки в таблицу notifications, а прочитать
-  // их было нечем. Панели уведомлений в игре не существовало
   notifications: (characterId: string) =>
     req<{ items: { id: string; type: string; title_ru: string; body_ru: string; is_read: boolean; created_at: string }[]; unread: number }>(
       `/api/game/notifications?characterId=${characterId}`),
@@ -1310,7 +1102,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   notificationRead: (characterId: string, id: string) =>
     req<{ success: boolean }>('/api/game/notifications/read', { method: 'POST', body: JSON.stringify({ characterId, id }) }),
 
-  // ── Конюшня: скакуны ────────────────────────────────────
   mountsBuy: (shopId: string, characterId: string, mountId: string) =>
     req<{ success: boolean; gold?: number; azens?: number; silver?: number; syrian?: number; mount?: any; error?: string }>('/api/game/shops/' + shopId + '/buy', {
       method: 'POST',
@@ -1327,8 +1118,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       body: JSON.stringify({ characterId, mountId }),
     }),
 
-
-  // ── Дом ─────────────────────────────────────────────────
   house: (characterId: string) =>
     req<{ house: any; playerDecorations: any[]; houseTypes: any[]; allDecorations: any[] }>(
       `/api/game/house?characterId=${characterId}`),
@@ -1339,10 +1128,7 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   houseDecorate: (characterId: string, decorationId: string) =>
     req<{ success: boolean }>('/api/game/house/decorate', { method: 'POST', body: JSON.stringify({ characterId, decorationId }) }),
 
-  // ── PvP Арена ───────────────────────────────────────────
   pvpFindMatch: (characterId: string) => req<{ match: any }>('/api/game/pvp/find-match', { method: 'POST', body: JSON.stringify({ characterId }) }),
-  // Исход боя подтверждают оба игрока, поэтому ответ может быть не
-  // «победа», а «ждём второго». Клиент обязан это учитывать.
   pvpComplete: (characterId: string, matchId: number, winnerId: string) =>
     req<{
       status: 'settled' | 'pending' | 'draw';
@@ -1355,18 +1141,11 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
       winnerId?: string; winnerChange?: number; loserChange?: number; settleAfter?: string;
     }>(`/api/game/pvp/matches/${matchId}/status`),
   pvpRankings: (limit = 50) => req<{ rankings: any[] }>(`/api/game/pvp/rankings?limit=${limit}`),
-  // Персонаж обязателен: сервер искал рейтинг по account id, из-за чего свой
-  // рейтинг и своя история матчей были пустыми у каждого
   pvpMe: (characterId: string) => req<{ ranking: any }>(`/api/game/pvp/me?characterId=${characterId}`),
   pvpHistory: (characterId: string) => req<{ history: any[] }>(`/api/game/pvp/history?characterId=${characterId}`),
-  // Отмена поиска. Маршрут был написан, обёртки не было: матч оставался в
-  // состоянии 'waiting' навсегда, и «Найти бой» нельзя было отменить
   pvpCancel: (characterId: string, matchId: number) =>
     req<{ success: boolean }>('/api/game/pvp/cancel', { method: 'POST', body: JSON.stringify({ characterId, matchId }) }),
 
-  // ── Бесконечная Башня ───────────────────────────────────
-  // Персонаж обязателен: сервер ищет по endless_tower.character_id, а не по
-  // аккаунту. Раньше он не передавался, и прогресс башни был всегда нулевым
   towerProgress: (characterId: string) =>
     req<{ progress: any; floor: any }>(`/api/game/tower/progress?characterId=${characterId}`),
   towerStart: (characterId: string) =>
@@ -1377,7 +1156,6 @@ dungeons: () => req<{ dungeons: { id: string; nameRu: string; minLevel: number; 
   towerFloor: (num: number) => req<{ floor: any }>(`/api/game/tower/floor/${num}`),
   towerLeaderboard: () => req<{ leaderboard: any[] }>('/api/game/tower/leaderboard'),
 
-  // ── NPC Диалоги ────────────────────────────────────────────
   npcInfo: () => req<{ npcs: { npcId: string; nameRu: string; role: string; region: string; helloLineId: string }[] }>('/api/npc/info'),
 
   npcDialog: (npcId: string, lineId?: string, characterId?: string) => {
