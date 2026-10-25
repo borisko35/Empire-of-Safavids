@@ -23,14 +23,16 @@ Third-party assets are allowed only if their license is compatible with the proj
 
 | Category | Asset Name | Source | License | Status | Notes / Attribution |
 |----------|------------|--------|---------|--------|-------------------|
-| 3D Models | Kenney - Props Pack | https://www.kenney.nl/ | CC0 / Public Domain | Approved | Safe default choice for game props and objects. |
-| 3D Models | Poly Haven - Environment Pack | https://polyhaven.com/ | Varies by asset | Needs review | Confirm the exact license for each file before use. |
+| 3D Models | Kenney Castle Kit | https://kenney.nl/assets/castle-kit | CC0 / Public Domain | Approved | Downloaded 2026-10-25 to `Assets/_downloads/kenney_castle-kit` (License.txt inside, CC0 stated). Not wired into the game build. |
+| 3D Models | Kenney Furniture Kit | https://kenney.nl/assets/furniture-kit | CC0 / Public Domain | Approved | Downloaded 2026-10-25 to `Assets/_downloads/kenney_furniture-kit` (License.txt inside, CC0 stated). Not wired into the game build. |
+| 3D Models | Poly Haven - Environment Pack | https://polyhaven.com/ | CC0 | Approved | Verified 2026-10-25 on polyhaven.com/license: all Poly Haven assets are CC0. Already in use (HDRI "Qwantani", 12 PBR surface sets) and recorded in THIRD_PARTY.md. |
 | 3D Models | OpenGameArt asset | https://opengameart.org/ | Varies by asset | Needs review | Only use assets explicitly marked with a compatible license. |
-| UI | Kenney UI Pack | https://www.kenney.nl/ | CC0 / Public Domain | Approved | Good for game UI and menu graphics. |
-| Icons | Lucide | https://lucide.dev/ | ISC / MIT | Approved | Suitable for UI icons. |
-| Icons | Heroicons | https://heroicons.com/ | MIT | Approved | Suitable for UI icons. |
+| UI | Kenney UI Pack | https://kenney.nl/assets/ui-pack | CC0 / Public Domain | Approved | Downloaded 2026-10-25 to `Assets/_downloads/kenney_ui-pack` (License.txt inside, CC0 stated). Good for game UI and menu graphics. Not wired into the game build. |
+| Icons | Lucide | https://lucide.dev/ | ISC | Approved | lucide-static 1.61.0 downloaded 2026-10-25 to `Assets/_downloads/lucide-static` (package/LICENSE: ISC). Suitable for UI icons. Not wired into the game build. |
+| Icons | Heroicons | https://heroicons.com/ | MIT | Approved | v2.2.0 release archive downloaded 2026-10-25 to `Assets/_downloads/heroicons-2.2.0` (LICENSE: MIT, Tailwind Labs). Suitable for UI icons. Not wired into the game build. |
 | Fonts | Google Fonts / Fontsource | https://fonts.google.com/ | SIL OFL / Apache / MIT | Approved | Safe for web and UI text. |
-| Sounds | Kenney Audio | https://www.kenney.nl/ | CC0 / Public Domain | Approved | Good for SFX. |
+| Sounds | Kenney RPG Audio | https://kenney.nl/assets/rpg-audio | CC0 / Public Domain | Approved | Downloaded 2026-10-25 to `Assets/_downloads/kenney_rpg-audio` (License.txt inside, CC0 stated). Good for SFX. Not wired into the game build. |
+| Sounds | Kenney Interface Sounds | https://kenney.nl/assets/interface-sounds | CC0 / Public Domain | Approved | Downloaded 2026-10-25 to `Assets/_downloads/kenney_interface-sounds` (License.txt inside, CC0 stated). Good for SFX. Not wired into the game build. |
 | Music | Mixkit | https://mixkit.co/ | Royalty-free / per-track | Needs review | Verify each track's rights before use. |
 | Music | Pixabay | https://pixabay.com/ | Varies by track | Needs review | Check for commercial use and redistribution restrictions. |
 | Music | YouTube Audio Library | https://studio.youtube.com/ | Track-specific | Needs review | License must be verified per track. |
@@ -62,3 +64,20 @@ Third-party assets are allowed only if their license is compatible with the proj
 4. Mark status.
 5. If uncertain, reject the asset.
 6. Keep local copy of source and license information.
+
+## Local Downloads (2026-10-25)
+
+Downloaded per this workflow into `Assets/_downloads/` with a README.md
+listing source URLs and license files. The whole `Assets/` directory is
+git-ignored on purpose, so these copies live locally and none of them are
+wired into the game build. Pulling any of them into the build or the
+repository requires a row in `THIRD_PARTY.md` first (its rule: a new
+third-party asset gets its line before the commit).
+
+Checked and deliberately NOT downloaded:
+- Fonts (Google Fonts / Fontsource): the game uses system font stacks only
+  (`client/web/css/main.css`: Georgia / Segoe UI) — no third-party font is
+  in use, so nothing to download.
+- Music (Mixkit, Pixabay, YouTube Audio Library) and OpenGameArt: per-track
+  licenses, still "Needs review" — not downloaded until a specific track is
+  confirmed compatible.
