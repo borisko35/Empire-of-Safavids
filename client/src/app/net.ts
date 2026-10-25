@@ -25,6 +25,7 @@ const socket: Socket = io({
 /** Текущее состояние соединения */
 let connectionState: ConnectionState = 'disconnected';
 const stateListeners: Set<(state: ConnectionState) => void> = new Set();
+let connectionTrackingAttached = false;
 
 /**
  * Подписка сокета на события состояния соединения.
@@ -44,6 +45,9 @@ const stateListeners: Set<(state: ConnectionState) => void> = new Set();
  * их по (событие, функция), так что дубликат не образуется.
  */
 export function attachConnectionStateTracking(): void {
+  if (connectionTrackingAttached) return;
+  connectionTrackingAttached = true;
+
   socket.on('connect', () => {
     connectionState = 'connected';
     notifyStateListeners();
@@ -68,6 +72,10 @@ export function attachConnectionStateTracking(): void {
     connectionState = 'reconnecting';
     notifyStateListeners();
   });
+}
+
+export function resetConnectionStateTracking(): void {
+  connectionTrackingAttached = false;
 }
 
 attachConnectionStateTracking();
