@@ -65,7 +65,10 @@ describe('Стена и башни стоят на земле', () => {
   it('башня встаёт на землю, а не на семь с половиной', () => {
     const body = cityBuilder();
     expect(body).not.toMatch(/tower\.position\.set\(tx, 7\.5, tz\)/);
-    expect(body).toMatch(/tower\.position\.set\(tx, base \+ 7\.5, tz\)/);
+    // С §328–§338 башня ставится клоном модели, и высота берётся из рельефа
+    // под каждой точкой: localY(...). Постоянного смещения быть не должно.
+    expect(body).toMatch(/башня\.position\.set\(\s*т\.x - CITY\.x,\s*localY\(т\.x, т\.z\)/);
+    expect(body).not.toMatch(/башня\.position\.set\([^)]*\+\s*[\d.]+\s*,/);
   });
 
   it('стена берёт землю под каждой точкой, а не одну отметку на дугу', () => {

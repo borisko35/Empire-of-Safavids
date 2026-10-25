@@ -100,7 +100,7 @@ describe('Жилые улицы', () => {
 describe('Фасад дома (GLB, §336)', () => {
   it('brickHouse использует GLB-модель персидского дома', () => {
     const дом = тело('brickHouse');
-    должны(/подменитьНаGLB\(house, placeholder, modelName, w, h, d,/.test(дом),
+    должны(/подменитьНаGLB\(house, placeholder, modelName, w, h, d\);/.test(дом),
       'brickHouse не вызывает подменитьНаGLB для загрузки persian-house GLB');
     должны(/metricBoxUV\(new THREE\.BoxGeometry\(w, h, d\)/.test(дом),
       'нет плейсхолдера: дом не отобразится до загрузки GLB');
@@ -136,13 +136,17 @@ describe('Глубина квартала и зелень (§329)', () => {
   });
 
   it('кладка парапета темнее штукатурки (встроена в GLB)', () => {
-    const ТЕРРЕЙН2 = читать('client/src/app/game3d/terrain.ts');
-    if (!ТЕРРЕЙН2.includes('loadDecorModel(`models/decor/${modelName}.glb`)')) {
-      throw new Error('brickHouse не загружает persian-house GLB: парапет в модели');
-    }
-    if (/const меш = new THREE\.Mesh\(гео, MAT\.parapet\);/.test(код)) {
-      throw new Error('парапет не должен быть процедурным: он в GLB-модели');
-    }
+    // С §336 парапет и зубцы — часть GLB-модели дома, а не процедурная
+    // геометрия. Сторож проверяет две вещи: модель грузится из decor/
+    // (без второго models/, иначе 404 и вечная заглушка) и в самом
+    // brickHouse не осталось процедурного парапета.
+    const дом = тело('brickHouse');
+    должен(/loadDecorModel\(`decor\/\$\{modelName\}\.glb`\)/.test(ТЕРРЕЙН),
+      'brickHouse не загружает persian-house GLB: парапет в модели');
+    должен(!/loadDecorModel\(`models\/decor\//.test(ТЕРРЕЙН),
+      'в пути модели двойной models/: GLB-дома не доедут, останутся заглушки');
+    должен(!/зубцыПарапета\(/.test(дом),
+      'парапет снова процедурный: он уже есть в GLB-модели');
   });
 
   it('между лучами переулков стоят дворы, а не песок (§332)', () => {
