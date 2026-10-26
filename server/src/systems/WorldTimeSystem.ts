@@ -17,6 +17,12 @@ export interface WorldTime {
   timeOfDay:  TimeOfDay;
   season:     Season;
   weather:    Weather;
+  // Множитель скорости наземного движения из WEATHER_EFFECTS. Едет в том же
+  // пакете world:time, что и погода: скорость считает клиент, и дублировать
+  // справочник на клиенте значило бы рано или поздно разъехаться — как
+  // разъезжались арифметика слотов и порядок ключей. Античиту правка не
+  // нужна: погода только замедляет, потолок скорости остаётся прежним.
+  speedMod:   number;
 }
 
 // 1 реальная минута = 1 игровой час
@@ -111,6 +117,8 @@ export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null): Wo
   const gameMonth = (totalMonths % 12) + 1;
   const gameYear  = GAME_START_YEAR + Math.floor(totalMonths / 12);
 
+  const погода = weatherOverride ?? currentWeather(nowMs);
+
   return {
     gameHour,
     gameDay,
@@ -118,7 +126,8 @@ export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null): Wo
     gameYear,
     timeOfDay:  timeOfDayOf(gameHour),
     season:     seasonOf(gameMonth),
-    weather:    weatherOverride ?? currentWeather(nowMs),
+    weather:    погода,
+    speedMod:   WEATHER_EFFECTS[погода].speedMod,
   };
 }
 

@@ -21,7 +21,11 @@
 //                   песчаную бурю - с 20 единиц до 6. Ровно то, что просил
 //                   владелец: «пыльная буря ухудшает обзор, но скрывает
 //                   игрока в стелсе».
-//   speedMod      - единственный по-настоящему мёртвый. Никто не читает.
+//   speedMod      - читает клиент (§349): множитель суши едет в пакете
+//                   world:time, world3d умножает на него шаг и бег. В
+//                   песчаную бурю персонаж идёт на 0.6, в бурю - 0.7.
+//                   Дольше всех поле оставалось мёртвым: до §349 не читал
+//                   никто, погода тормозила спавн и стражей, но не игрока.
 //
 // ПОЧЕМУ ШАПКА ВРАЛА. Искали по имени поля рядом с WEATHER_EFFECTS и
 // находили объявление, а не потребителя: читали его другие файлы - точечной
@@ -34,7 +38,7 @@
 // и оказалось мёртвым.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { WEATHER_EFFECTS, currentWeather, weatherExpMultiplier, GAME_EPOCH_MS } from '../systems/WorldTimeSystem';
+import { WEATHER_EFFECTS, currentWeather, weatherExpMultiplier, worldTimeAt, GAME_EPOCH_MS } from '../systems/WorldTimeSystem';
 import type { Weather } from '../systems/WorldTimeSystem';
 
 const корень = join(__dirname, '..', '..', '..');
@@ -157,6 +161,52 @@ describe('Погода: объявленные модификаторы прим
     must(
       !/respawnTime\s*=\s*respawnTime\s*\*\s*effect\.spawnMod/.test(спавн),
       'spawnMod умножается на respawnTime: в буре монстры будут появляться реже, а не чаще',
+    );
+  });
+
+  it('множитель скорости едет клиенту в world:time, а не считается у него самого', () => {
+    // speedMod — последнее ожившее поле (§349). Провод — то же поле
+    // WorldTime, что уходит в Redis и в сокет, поэтому проверяется
+    // справочник против worldTimeAt по всей шкале времени.
+    const шаг = 4 * 60 * 1000;
+    for (let i = 0; i < 400; i++) {
+      const t = GAME_EPOCH_MS + i * шаг;
+      const время = worldTimeAt(t);
+      must(
+        время.speedMod === WEATHER_EFFECTS[время.weather].speedMod,
+        `на ${new Date(t).toISOString()} погода ${время.weather}: ждали скорость x${WEATHER_EFFECTS[время.weather].speedMod}, получили x${время.speedMod}`,
+      );
+    }
+    // Ручная погода админа обязана менять и множитель: кнопка «снег» в
+    // админке, при которой игрок едет как по снегу, а не по его расписанию.
+    must(
+      worldTimeAt(GAME_EPOCH_MS, 'sandstorm').speedMod === WEATHER_EFFECTS.sandstorm.speedMod,
+      'override погоды не меняет speedMod: в админской песчаной буре игрок идёт как в ясную',
+    );
+    must(worldTimeAt(GAME_EPOCH_MS, 'clear').speedMod === 1.0, 'в ясную погоду множитель скорости не 1.0');
+  });
+
+  it('клиент замедляет сушу и не трогает рывок и воду', () => {
+    // Умножение должно стоять именно на шаге и беге. На всей скорости
+    // целиком оно замедлило бы и рывок — чья математика посчитана и
+    // проверена отдельно (dodgeFeel.test.ts), — и плавание, у которого
+    // своя физика брода и снаряжения.
+    const мир = исходник('client/src/app/game3d/world3d.ts');
+    must(
+      /landWalk\s*=\s*\(this\.mountSpeed > 0 \? this\.mountSpeed : WALK_SPEED\)\s*\*\s*this\.speedMod/.test(мир),
+      'world3d не умножает шаг на speedMod: погода не замедляет игрока',
+    );
+    must(
+      /landRun\s*=\s*\(this\.mountSpeed > 0 \? this\.mountSpeed \* MOUNT_SPRINT_MULT : RUN_SPEED\)\s*\*\s*this\.speedMod/.test(мир),
+      'world3d не умножает бег на speedMod: в бурю можно бежать как в ясную',
+    );
+    // И провод: множитель приходит из пакета world:time, а не выдуман на
+    // клиенте. Своя копия справочника на клиенте — та же мина, что и
+    // везде: справочник поменяют на сервере и забудут про копию.
+    const провод = исходник('client/src/app/world.ts');
+    must(
+      /payload\.speedMod/.test(провод) && /setSpeedMod\(/.test(провод),
+      'world.ts не передаёт speedMod из world:time в движок',
     );
   });
 });

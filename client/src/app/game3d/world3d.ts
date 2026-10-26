@@ -343,6 +343,18 @@ private roll = 0;
    */
   private mountSpeed = 0;
   /**
+   * Множитель погоды на скорость суши, присылает сервер в world:time.
+   *
+   * Значение — WEATHER_EFFECTS[weather].speedMod того же пакета: в песчаную
+   * бурю 0.6, в бурю 0.7, в снег 0.8, в дождь 0.9. Считать его на клиенте
+   * по своей копии справочника значило бы рано или поздно разъехаться с
+   * сервером. Медленным погода делает только сушу: у воды своя физика
+   * (брод, сапоги, лодка), рывок — фиксированный манёвр со своей
+   * проверенной математикой, присед — «крадусь тихо». Античиту ничего не
+   * нужно: погода замедляет, потолок скорости не растёт.
+   */
+  private speedMod = 1;
+  /**
    * Экипировка своего персонажа для рига; null — сервер ещё не ответил.
    *
    * armorColor — цвет груди по редкости доспеха, чтобы смена брони была видна
@@ -452,6 +464,17 @@ private roll = 0;
   setSprintAllowed(v: boolean): void {    // Момент, когда силы кончились, — один раз подсказываем игроку
     if (this.sprintAllowed && !v) this.exhaustedFlash = 0.4;
     this.sprintAllowed = v;
+  }
+
+  /**
+   * Множитель погоды на скорость суши. Приходит с сервера в world:time.
+   * Мусор и ускорение отсекаются: погода умеет только мешать идти, fastest
+   * погода — ясная (1.0).
+   */
+  setSpeedMod(speedMod: number): void {
+    this.speedMod = Number.isFinite(speedMod) && speedMod > 0
+      ? Math.min(1, Math.max(0.3, speedMod))
+      : 1;
   }
 
   /** Экономия выносливости при плавании: сапоги/плащ или лодка */
@@ -2303,8 +2326,10 @@ private roll = 0;
     // ускорял бы ещё и плавление.
     // Приседание всегда оставляет пешую скорость: это «крадусь тихо», и
     // верхом красться бессмысленно.
-    const landWalk = this.mountSpeed > 0 ? this.mountSpeed : WALK_SPEED;
-    const landRun = this.mountSpeed > 0 ? this.mountSpeed * MOUNT_SPRINT_MULT : RUN_SPEED;
+    // Погода тормозит сушу целиком — шаг, бег и скакуна: в песчаную бурю
+    // против ветра не скачут. Рывок и вода погоду не читают (см. speedMod).
+    const landWalk = (this.mountSpeed > 0 ? this.mountSpeed : WALK_SPEED) * this.speedMod;
+    const landRun = (this.mountSpeed > 0 ? this.mountSpeed * MOUNT_SPRINT_MULT : RUN_SPEED) * this.speedMod;
     const speed = (this.swimming
       ? (shifting ? Math.max(swimSprint, boatSpeed * 1.25) : Math.max(swimSpeed, boatSpeed))
       : this.crouch ? CROUCH_SPEED : shifting ? landRun : landWalk)

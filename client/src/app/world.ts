@@ -1664,6 +1664,11 @@ function wireSocket(): void {
     if (Number.isFinite(hour)) world3d?.setClock(hour);
     const weather = String(payload.weather ?? '');
     if (weather) world3d?.setWeather(weather);
+    // Множитель скорости суши едет в том же пакете, что и погода: в бурю и
+    // песчаную бурю персонаж идёт заметно тяжелее. Число считает сервер из
+    // WEATHER_EFFECTS — у клиента своей копии справочника нет.
+    const скоростьПогоды = Number(payload.speedMod);
+    world3d?.setSpeedMod(Number.isFinite(скоростьПогоды) ? скоростьПогоды : 1);
   });
 
   socket.on('move:rejected', ({ reason }: { reason?: string }) => {
