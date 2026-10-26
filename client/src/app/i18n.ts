@@ -80,10 +80,31 @@ export function имяПредмета(itemId: string, fallback: string): string
   return tOr(`items.${ПСЕВДОНИМЫ[itemId] ?? itemId}`, fallback);
 }
 
+// ── Браузерные глобалы без lib.dom ──────────────────────────────
+// Файл импортируется и серверными тестами (gameI18n.test.ts), а серверный
+// tsconfig живёт без DOM-либы: прямые localStorage/navigator/document там
+// не компилируются (TS2304), что и уронило набор после появления
+// detectLocale. globalThis в браузере — тот же window, поведение не
+// меняется; опциональность честно описывает среду без DOM.
+interface БраузерноеОкружение {
+  localStorage?: { getItem(key: string): string | null };
+  navigator?: { language?: string };
+  document?: {
+    documentElement: { lang: string };
+    querySelectorAll(selectors: string): Iterable<{
+      textContent: string | null;
+      title: string;
+      placeholder?: string;
+      dataset: Record<string, string>;
+    }>;
+  };
+}
+const браузер = globalThis as unknown as БраузерноеОкружение;
+
 export function detectLocale(): string {
-  const saved = localStorage.getItem('eos.locale');
+  const saved = браузер.localStorage?.getItem('eos.locale');
   if (['ru', 'en', 'az'].includes(saved ?? '')) return saved!;
-  const nav = (navigator.language || '').slice(0, 2).toLowerCase();
+  const nav = (браузер.navigator?.language || '').slice(0, 2).toLowerCase();
   return ['ru', 'en', 'az'].includes(nav) ? nav : 'ru';
 }
 
@@ -91,14 +112,16 @@ export async function loadLocale(code: string): Promise<Dict> {
   const res = await fetch(`/locales/${code}.json`);
   if (!res.ok) throw new Error(`locale ${code}: HTTP ${res.status}`);
   current = (await res.json()) as Dict;
-  document.documentElement.lang = code;
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
+  const документ = браузер.document;
+  if (!документ) return current; // серверная среда: DOM нет, словарь уже загружен
+  документ.documentElement.lang = code;
+  for (const el of документ.querySelectorAll('[data-i18n]')) {
     el.textContent = t(el.dataset.i18n!);
   }
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-placeholder]')) {
-    (el as HTMLInputElement).placeholder = t(el.dataset.i18nPlaceholder!);
+  for (const el of документ.querySelectorAll('[data-i18n-placeholder]')) {
+    el.placeholder = t(el.dataset.i18nPlaceholder!);
   }
-  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-title]')) {
+  for (const el of документ.querySelectorAll('[data-i18n-title]')) {
     el.title = t(el.dataset.i18nTitle!);
   }
   return current;

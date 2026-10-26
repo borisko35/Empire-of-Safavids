@@ -146,11 +146,18 @@ export class PremiumSystem {
     tier: number,
     isPremiumReward: boolean
   ): Promise<BattlePassReward | null> {
-    const progress = await this.db.queryOne<{ points: number; is_premium: boolean; claimed_tiers: number[] }>(
+    // БЫЛО: if (!progress) return null. У свежего персонажа строки в
+    // battle_pass_progress ещё нет — авторегистрация (ниже, в
+    // addSeasonPoints) происходит только с первыми очками. А Tier 1 в
+    // данных стоит с requiredPoints: 0 — это стартовый подарок: клиент
+    // честно показывает «Collect», сервер отвечал «Reward not available».
+    // Замерено на проде 26.10.2026: кнопка есть, награда не выдаётся.
+    // Теперь отсутствие строки означает нулевой прогресс, и запись
+    // заявленного тира идёт upsert'ом — как в purchaseBattlePass выше.
+    const progress = (await this.db.queryOne<{ points: number; is_premium: boolean; claimed_tiers: number[] }>(
       'SELECT points, is_premium, claimed_tiers FROM battle_pass_progress WHERE character_id = $1 AND season_id = $2',
       [characterId, CURRENT_SEASON.id]
-    );
-    if (!progress) return null;
+    )) ?? { points: 0, is_premium: false, claimed_tiers: [] as number[] };
 
     const tierDef = BATTLE_PASS_TIERS.find(t => t.tier === tier);
     if (!tierDef || progress.points < tierDef.requiredPoints) return null;
@@ -182,8 +189,13 @@ export class PremiumSystem {
       }
 
       const updatedTiers = [...progress.claimed_tiers, tier];
+      // Upsert, а не UPDATE: строки может не быть — у свежего персонажа
+      // это первый контакт с боевым пропуском (Tier 1 = 0 очков).
       await client.query(
-        'UPDATE battle_pass_progress SET claimed_tiers = $1 WHERE character_id = $2 AND season_id = $3',
+        `INSERT INTO battle_pass_progress (character_id, season_id, is_premium, points, claimed_tiers)
+         VALUES ($2, $3, FALSE, 0, $1)
+         ON CONFLICT (character_id, season_id)
+         DO UPDATE SET claimed_tiers = EXCLUDED.claimed_tiers`,
         [JSON.stringify(updatedTiers), characterId, CURRENT_SEASON.id]
       );
     });

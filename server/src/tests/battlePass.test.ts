@@ -102,4 +102,23 @@ describe('Боевой пропуск: покупка имеет смысл', ()
     expect(premium).toMatch(/async claimTierReward/);
     expect(premium).toMatch(/claimed_tiers/);
   });
+
+  it('Tier 1 забирается без строки прогресса — стартовый подарок', () => {
+    // ЗАМЕРЕНО НА ПРОДЕ 26.10.2026. У свежего персонажа строки в
+    // battle_pass_progress ещё нет: авторегистрация в addSeasonPoints
+    // происходит только с первыми очками. А Tier 1 стоит с
+    // requiredPoints: 0 — клиент честно показывает «Collect», сервер
+    // отвечал «Reward not available». Первая версия claimTierReward
+    // обрывала выдачу на if (!progress) return null.
+    const claim = premium.slice(premium.indexOf('async claimTierReward'));
+    // Граница тела — следующий МЕТОД класса (два пробела), иначе срез
+    // обрывается на 'async (client)' внутри транзакции
+    const граница = claim.indexOf('\n  async ', 10);
+    const body = claim.slice(0, граница > 0 ? граница : claim.length);
+    // Прогресс подменяется нулевым, а не обрывает выдачу
+    expect(body).toMatch(/\?\?\s*\{\s*points:\s*0/);
+    // Заявленный тир пишется upsert'ом: строки может не существовать
+    expect(body).toMatch(/INSERT INTO battle_pass_progress/);
+    expect(body).toMatch(/ON CONFLICT \(character_id, season_id\)/);
+  });
 });
