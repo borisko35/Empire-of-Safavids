@@ -23,7 +23,9 @@ interface Civilian {
   armR: THREE.Group;
   bubble: THREE.Sprite;
   bubbleUntil: number;
-  state: 'idle' | 'walk' | 'talk';
+  state: 'idle' | 'walk' | 'talk' | 'сон';
+  /** Этот горожанин на ночь уходит домой: улицы к ночи пустеют (§351) */
+  ночует: boolean;
   target: { x: number; z: number };
   speed: number;
   stateUntil: number;
@@ -79,8 +81,13 @@ interface Civilian {
 }
 
 export interface CiviliansHandle {
-  /** playerX/playerZ — чтобы горожане обходили и игрока, а не шли сквозь него */
-  update(dt: number, now: number, playerX?: number, playerZ?: number): void;
+  /**
+   * playerX/playerZ — чтобы горожане обходили и игрока, а не шли сквозь него.
+   *
+   * night — 0 днём, 0.5 в сумерках/на рассвете, 1 ночью: по нему город
+   * расходится по домам (§351), как roadTraffic зажигает фонари.
+   */
+  update(dt: number, now: number, playerX?: number, playerZ?: number, night?: number): void;
   dispose(): void;
 }
 
@@ -718,6 +725,10 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     const civilian: Civilian = {
       group: g, body, head, legL, legR, armL, armR, bubble, bubbleUntil: 0,
       state: 'idle', target: { x: p.x, z: p.z },
+      // Три из четырёх расходятся по домам на ночь, каждый четвёртый —
+      // ночной: у ночного города должна быть жизнь, а не пустые декорации
+      // (§351). Чередование по индексу — детерминированно и дёшево.
+      ночует: i % 4 !== 0,
       speed: 1.1 + Math.random() * 0.7,
       stateUntil: 0, talkWith: null, phase: Math.random() * 10,
       lastDist: Math.hypot(p.x, p.z), stuckFor: 0,
@@ -737,6 +748,15 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
   let talkTimer = 5000;
 
   /**
+   * Ночной режим города: улицы пустеют, три из четырёх горожан уходят домой.
+   *
+   * Переключается по факту ночи, а не по часу: night доходит сюда тем же
+   * путём, что и в roadTraffic (0 день, 0.5 сумерки, 1 ночь). В сумерках
+   * режим не меняется: город полон до самой ночи и просыпается на рассвете.
+   */
+  let ночнойРежим = false;
+
+  /**
    * Повернуть горожанина к точке.
    *
    * dt обязателен: раньше доля поворота была фиксированной на кадр (0.15),
@@ -754,7 +774,7 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     a.group.rotation.y += d * Math.min(1, dt * 9);
   }
 
-  function update(dt: number, now: number, playerX?: number, playerZ?: number): void {
+  function update(dt: number, now: number, playerX?: number, playerZ?: number, night?: number): void {
     // SAFETY: one non-finite frame must not blind the crowd for a whole
     // session. NaN never recovers here — every citizen stayed in the scene
     // and visible, but their world matrices went NaN and the GPU dropped
@@ -765,6 +785,34 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     if (playerZ !== undefined && !Number.isFinite(playerZ)) playerZ = undefined;
     CIV_COLLIDERS.length = 0;
 
+    // Смена ночного режима (§351). Ночь пришла — ночующие обрывают разговор
+    // и держат путь домой; домозад, добравшись до двери, исчезает в ней.
+    // Рассвет — спящие снова стоят у порога и продолжают день.
+    const режимНочи = (night ?? 0) >= 1;
+    if (режимНочи !== ночнойРежим) {
+      ночнойРежим = режимНочи;
+      for (const c of civs) {
+        if (!c.ночует) continue;
+        if (ночнойРежим) {
+          c.talkWith = null;
+          c.bubbleUntil = 0;
+          c.bubble.visible = false;
+          // Идущий — прямо домой. Стоящий — постоит ещё сколько-то (кто
+          // сразу, кто до получаса игрового): иначе в 21:00 весь город
+          // исчез бы одним кадром, и уход по домам выглядел бы выключателем.
+          if (c.state !== 'walk') {
+            c.state = 'idle';
+            c.stateUntil = now + Math.random() * 45000;
+          }
+          c.target = { x: c.homeX, z: c.homeZ };
+        } else if (c.state === 'сон') {
+          c.state = 'idle';
+          c.group.visible = true;
+          c.stateUntil = now + 800 + Math.random() * 4000;
+        }
+      }
+    }
+
     // Разговоры. Раньше требовалось, чтобы ОБА стояли без дела и ждали не
     // больше одной пары за 6-10 с. При восьми горожанах на город радиусом
     // 116 м это почти никогда не случалось — город был безмолвным. Теперь
@@ -773,8 +821,10 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     talkTimer -= dt * 1000;
     if (talkTimer <= 0) {
       talkTimer = 3000 + Math.random() * 3500;
-      // Уже занятые разговором не трогаем
-      const free = civs.filter(c => c.state !== 'talk');
+      // Уже занятые разговором не трогаем; спящий спит, а ночующий по пути
+      // домой не останавливается поболтать — иначе он застынет посреди
+      // ночной улицы и никогда не дойдёт до двери.
+      const free = civs.filter(c => c.state !== 'talk' && c.state !== 'сон' && !(ночнойРежим && c.ночует));
       // Сначала те, кто и так стоит: разговор с прохожим на полпути к цели
       // замораживал его посреди улицы, и город наполовину замирал
       // (замер: 44% времени все горожане болтали вместо ~20%).
@@ -818,6 +868,9 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
 
     for (const c of civs) {
       revive(c, now);
+      // Спящий дома не толкается, не анимируется и не ставит коллайдер:
+      // невидимая стена посреди улицы выглядела бы как поломка.
+      if (c.state === 'сон') continue;
       CIV_COLLIDERS.push({ x: c.group.position.x, z: c.group.position.z, r: 0.5 });
       c.frameStartX = c.group.position.x;
       c.frameStartZ = c.group.position.z;
@@ -859,9 +912,24 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
         c.legL.rotation.x *= 0.9;
         c.legR.rotation.x *= 0.9;
         if (now >= c.stateUntil) {
-          const t = freeSpot(c.group.position.x, c.group.position.z, c.homeX, c.homeZ);
-          c.target = t;
-          c.state = 'walk';
+          if (ночнойРежим && c.ночует) {
+            // Ночь, пора домой. У двери дома горожанин исчезает — читается
+            // как «зашёл внутрь»: дома в районах настоящие, дверь рядом.
+            const дома = Math.hypot(c.group.position.x - c.homeX, c.group.position.z - c.homeZ) < 1.5;
+            if (дома) {
+              c.state = 'сон';
+              c.group.visible = false;
+              c.bubble.visible = false;
+              c.bubbleUntil = 0;
+            } else {
+              c.target = { x: c.homeX, z: c.homeZ };
+              c.state = 'walk';
+            }
+          } else {
+            const t = freeSpot(c.group.position.x, c.group.position.z, c.homeX, c.homeZ);
+            c.target = t;
+            c.state = 'walk';
+          }
         }
       } else {
         const dx = c.target.x - c.group.position.x;
@@ -1073,7 +1141,9 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     if (playerX !== undefined && playerZ !== undefined) {
       for (const c of civs) {
         const dist = Math.hypot(c.group.position.x - playerX, c.group.position.z - playerZ);
-        const visible = dist < LEASH && now >= c.hiddenUntil;
+        // Спящий дома невидим независимо от дистанции: иначе цикл видимости
+        // разбудил бы его первым же кадром после ухода в дом.
+        const visible = dist < LEASH && now >= c.hiddenUntil && c.state !== 'сон';
         if (c.group.visible === visible) continue;
         c.group.visible = visible;
         // Скрытого горожанина не должно быть видно «призраком» в тумане:
@@ -1089,6 +1159,8 @@ export function createCivilians(scene: THREE.Scene): CiviliansHandle {
     for (const c of civs) {
       if (c.group.visible) continue;
       if (now < c.hiddenUntil) continue;
+      // Спящий вернётся сам — на рассвете, в блоке смены режима, а не здесь.
+      if (c.state === 'сон') continue;
       c.group.visible = true;
     }
   }

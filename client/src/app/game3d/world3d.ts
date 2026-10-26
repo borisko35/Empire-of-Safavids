@@ -2630,8 +2630,10 @@ if (isMe && moving) {
     // Звери вне фауны (вол у склада, лошадь конюшни): их миксеры тикают здесь.
     тикатьЗверей(dt);
     this.npcs.update(dt, now, this.camera.position);
-    // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь
-    this.civilians.update(dt, now, me.pos.x, me.pos.z);
+    // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь него.
+    // night — тот же фактор, что у sky и roadTraffic: к ночи город расходится
+    // по домам (§351).
+    this.civilians.update(dt, now, me.pos.x, me.pos.z, night);
     // Смесители жителей: без update они стоят столбом, а сцена формально жива.
     this.townfolk.update(dt, me.pos.x, me.pos.z);
     updateCows(this.cowMixers, dt);
