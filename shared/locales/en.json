@@ -1641,6 +1641,27 @@
     "pay_widget_cancelled": "Payment cancelled or not completed",
     "pay_widget_failed": "Payment error. Please try again"
   },
+  "battlepass": {
+    "season_season_1_safavid_glory": "Season 1: Safavid Glory",
+    "tier_1_free": "500 Gold",
+    "tier_1_premium": "50 Gems",
+    "tier_5_free": "2 Scholar’s Scrolls",
+    "tier_5_premium": "“Warrior of Tabriz” Skin",
+    "tier_10_free": "5 Nishapur Turquoise",
+    "tier_10_premium": "Desert Fox Pet",
+    "tier_15_free": "2000 Gold",
+    "tier_15_premium": "“Fire Trail” Effect",
+    "tier_20_free": "5 Scholar’s Scrolls",
+    "tier_20_premium": "Qizilbash Warhorse Mount",
+    "tier_25_free": "2 Simurgh Feathers",
+    "tier_25_premium": "“Hero of the Season” Title",
+    "tier_30_free": "5000 Gold",
+    "tier_30_premium": "“Isfahan Armor” Skin",
+    "tier_40_free": "100 Gems",
+    "tier_40_premium": "Saker Falcon Pet",
+    "tier_50_free": "5 Simurgh Feathers",
+    "tier_50_premium": "Young Simurgh Mount"
+  },
   "mounts": {
     "yours": "Your mounts ({n})",
     "none": "No mounts yet",
@@ -1698,6 +1719,18 @@
     "herat": "Herat",
     "east_frontier": "Far East",
     "west_frontier": "Far West"
+  },
+  "region_desc": {
+    "tabriz": "Capital of the Safavid empire. Starting zone for new players.",
+    "isfahan": "“Half the world” — a magnificent trading city of mosques and bazaars.",
+    "shiraz": "City of poets, gardens and wine. Home of Hafez and Saadi.",
+    "caucasus": "Mountain fortresses and hardy warriors. Active PvP zone.",
+    "mesopotamia": "Contested land between the Safavids and the Ottomans. Constant fighting.",
+    "khorasan": "The eastern marches. Raid dungeons and world bosses.",
+    "persian_gulf": "Sea trade and pirate battles. Endgame content.",
+    "herat": "The farthest region beyond Khorasan. Gates, caravans and the last frontier.",
+    "east_frontier": "An outpost, a road through the mountains and the land beyond the ridge. There is nothing further east.",
+    "west_frontier": "Steppe on the western edge of the world, and the far limit beyond it. The hardest land of all."
   },
   "achievements": {
     "stats": "Unlocked: {done} / {total}",
@@ -1795,7 +1828,15 @@
     "personal": "Personal"
   },
   "shop": {
-    "no_shop_near": "No shop available nearby"
+    "no_shop_near": "No shop available nearby",
+    "shop_tabriz_general": "Tabriz General Store",
+    "shop_isfahan_bazaar": "Isfahan Bazaar",
+    "shop_khorasan_rare": "Khorasan Curios Shop",
+    "shop_shiraz_scribe": "Shiraz Scribes’ Row",
+    "shop_premium": "Premium Shop",
+    "shop_silver_goods": "Silver Goods Shop",
+    "shop_isfahan_stable": "Isfahan Stables",
+    "shop_isfahan_fishmonger": "Isfahan Fishmonger"
   },
   "places": {
     "isfahan": "Isfahan",

@@ -755,7 +755,9 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
   } catch { return; }
   const head = document.createElement('div');
   head.className = 'panel-subhead';
-  head.textContent = t('wallet.battlepass_season').replace('{name}', status.season.nameRu);
+  // Сезон — из словаря по id сезона, nameRu из данных — откат: строки
+  // данных существуют только по-русски, и en/az видели русский заголовок (§347).
+  head.textContent = t('wallet.battlepass_season').replace('{name}', tOr(`battlepass.season_${status.season.id}`, status.season.nameRu));
   box.append(head);
   const claimed: number[] = Array.isArray(status.progress?.claimed_tiers)
     ? (status.progress.claimed_tiers as number[])
@@ -782,7 +784,10 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
     const row = rowEl('inv-item');
     const label = document.createElement('span');
     label.className = 'inv-name';
-    label.textContent = t('wallet.battlepass_tier').replace('{tier}', String(tier.tier)).replace('{free}', tier.freeReward.nameRu).replace('{premium}', tier.premiumReward?.nameRu ?? '—');
+    label.textContent = t('wallet.battlepass_tier')
+      .replace('{tier}', String(tier.tier))
+      .replace('{free}', tOr(`battlepass.tier_${tier.tier}_free`, tier.freeReward.nameRu))
+      .replace('{premium}', tier.premiumReward ? tOr(`battlepass.tier_${tier.tier}_premium`, tier.premiumReward.nameRu) : '—');
     row.append(label);
     if (unlocked && !got) {
       row.append(actionButton(t('panels.collect'), async () => {
@@ -813,7 +818,8 @@ export async function loadShop(): Promise<void> {
     for (const shop of shops) {
       const head = document.createElement('div');
       head.className = 'panel-subhead';
-      head.textContent = shop.nameRu;
+      // Название магазина — из словаря (shop.<id>), nameRu из данных — откат.
+      head.textContent = tOr(`shop.${shop.id}`, shop.nameRu);
       box.append(head);
       for (const item of shop.items) {
         const cur2 = (item.currency === 'premium' ? 'azens' : item.currency) as 'gold' | 'azens' | 'silver' | 'syrian';

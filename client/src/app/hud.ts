@@ -22,7 +22,7 @@ function заглушкаПредмета(имя: string, редкость: stri
 
 import { api, ApiError } from './api';
 import type { ActiveBuff } from './api';
-import { t, имяПредмета } from './i18n';
+import { t, tOr, имяПредмета } from './i18n';
 import { fogLayerFor, worldFogMask } from './minimapFog';
 import { icon } from '../ui/icons';
 import { session } from './state';
@@ -386,9 +386,14 @@ export async function loadRegions(): Promise<void> {
       const here = r.id === session.character?.region;
       const row = document.createElement('div');
       row.className = 'region-row' + (here ? ' current' : '');
+      // Имя и описание — из словаря, nameRu/description из данных — откат.
+      // Сервер присылает описание только по-русски, и на en/az панель
+      // городов была наполовину русской (§347).
+      const имя = tOr(`regions.${r.id}`, r.nameRu);
+      const описание = tOr(`region_desc.${r.id}`, r.description);
       row.innerHTML =
-        `<div class="rname"><b>${r.nameRu}</b><span class="ronline">${r.onlinePlayers} ${t('world.online')}</span></div>` +
-        `<div class="rdesc">${r.description}</div>` +
+        `<div class="rname"><b>${имя}</b><span class="ronline">${r.onlinePlayers} ${t('world.online')}</span></div>` +
+        `<div class="rdesc">${описание}</div>` +
         `<div class="rdesc">${t('badges.level')} ${r.minLevel}+</div>`;
       if (!here) {
         const btn = document.createElement('button');

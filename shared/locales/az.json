@@ -1641,6 +1641,27 @@
     "pay_widget_cancelled": "Ödəniş ləğv edilib və ya başa çatmayıb",
     "pay_widget_failed": "Ödəniş xətası. Yenidən cəhd edin"
   },
+  "battlepass": {
+    "season_season_1_safavid_glory": "1-ci Mövsüm: Səfəvi Şöhrəti",
+    "tier_1_free": "500 qızıl",
+    "tier_1_premium": "50 Almaz",
+    "tier_5_free": "2 Təcrübə Zərfi",
+    "tier_5_premium": "Skin «Təbriz Döyüşçüsü»",
+    "tier_10_free": "5 Firuzə",
+    "tier_10_premium": "Səhra Tülküsü Ev Heyvanı",
+    "tier_15_free": "2000 qızıl",
+    "tier_15_premium": "«Odlu İz» Effekti",
+    "tier_20_free": "5 Təcrübə Zərfi",
+    "tier_20_premium": "Qızılbaş Döyüş Atı",
+    "tier_25_free": "2 Səmürg lələyi",
+    "tier_25_premium": "«Mövsüm Qəhrəmanı» Titulu",
+    "tier_30_free": "5000 qızıl",
+    "tier_30_premium": "Skin «İsfahan Zirehi»",
+    "tier_40_free": "100 Almaz",
+    "tier_40_premium": "Laçın Ev Heyvanı",
+    "tier_50_free": "5 Səmürg lələyi",
+    "tier_50_premium": "Maunt Gənc Səmürg"
+  },
   "mounts": {
     "yours": "Atlarınız ({n})",
     "none": "Hələ at yoxdur",
@@ -1698,6 +1719,18 @@
     "herat": "Herət",
     "east_frontier": "Uzaq Şərq",
     "west_frontier": "Uzaq Qərb"
+  },
+  "region_desc": {
+    "tabriz": "Səfəvi imperiyasının paytaxtı. Yeni oyunçular üçün başlanğıc zona.",
+    "isfahan": "«Dünyanın yarısı» — məscidləri və bazarları ilə möhtəşəm ticarət şəhəri.",
+    "shiraz": "Şairlər, bağlar və şərab şəhəri. Hafiz və Sədidin vətəni.",
+    "caucasus": "Dağ qalaları və sərt döyüşçülər. Aktiv PvP zonası.",
+    "mesopotamia": "Səfəvilər və Osmanlılar arasında mübahisəli torpaqlar. Daimi döyüşlər.",
+    "khorasan": "Şərq sərhədləri. Reyd zindanları və dünya bossları.",
+    "persian_gulf": "Dəniz ticarəti və quldurluq döyüşləri. Son mərhələ məzmunu.",
+    "herat": "Xorasandan sonra ən uzaq region. Darvazalar, karvanlar və son sərhəd.",
+    "east_frontier": "Qaravul, dağlardan keçən yol və silsilənin o tayındakı diyar. Şərqdə daha irəlidə heç nə yoxdur.",
+    "west_frontier": "Dünyanın qərb kənarındakı çöl və ondan aralıdakı son hədd. Ən çətin diyar."
   },
   "achievements": {
     "stats": "Açılıb: {done} / {total}",
@@ -1795,7 +1828,15 @@
     "personal": "Şəxsi"
   },
   "shop": {
-    "no_shop_near": "Yaxınlıqda dükan yoxdur"
+    "no_shop_near": "Yaxınlıqda dükan yoxdur",
+    "shop_tabriz_general": "Təbriz Ümumi Mağazası",
+    "shop_isfahan_bazaar": "İsfahan Bazarı",
+    "shop_khorasan_rare": "Xorasan Nadirliklər Dükanı",
+    "shop_shiraz_scribe": "Şiraz Katiblər Sırası",
+    "shop_premium": "Premium Mağaza",
+    "shop_silver_goods": "Gümüş Mal Dükanı",
+    "shop_isfahan_stable": "İsfahan At Dükanı",
+    "shop_isfahan_fishmonger": "İsfahan Balıq Dükanı"
   },
   "places": {
     "isfahan": "İsfahən",
