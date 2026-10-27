@@ -816,7 +816,8 @@
     "boarding_loot": "spoils",
     "boarding_gold": "— gold:",
     "craft_needs": "Needs:",
-    "craft_short": "missing"
+    "craft_short": "missing",
+    "trade_err_grudge": "Caravan masters remember your ambush. No contracts for now"
   },
   "settings": {
     "title": "⚙ Settings",

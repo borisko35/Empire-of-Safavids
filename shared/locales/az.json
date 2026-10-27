@@ -816,7 +816,8 @@
     "boarding_loot": "qənim",
     "boarding_gold": "— qızıl:",
     "craft_needs": "Lazımdır:",
-    "craft_short": "çatışmır"
+    "craft_short": "çatışmır",
+    "trade_err_grudge": "Karvançılar basqınını yadında saxlayır. İndi müqavilə yoxdur"
   },
   "settings": {
     "title": "⚙ Parametrlər",

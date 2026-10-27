@@ -117,6 +117,17 @@ export const TRADE_CONTRACTS: TradeContractDef[] = [
   },
 ];
 
+/**
+ * Сколько караванщики не доверяют грабителю (§361).
+ *
+ * ВЫБОР, не измерение. Рамки: меньше 10 минут игрок не успел бы связать
+ * отказ с засадой; больше двух часов — наказание жило бы дольше, чем
+ * memory мира в соседних правилах (розыск стражи — 10 минут). Засада —
+ * публичное действие: конвой поднят у всех на глазах, караванщик знает
+ * нападавшего, и записано это в caravan_ambushes.
+ */
+const CARAVAN_GRUDGE_MINUTES = 30;
+
 export class TradeService {
   private redis = RedisService.getInstance();
   private characters = new CharacterService();
@@ -182,6 +193,22 @@ export class TradeService {
     };
   }
 
+  /**
+   * Есть ли у персонажа свежая засада на караван (§361).
+   *
+   * Источник — таблица caravan_ambushes, куда пишет AmbushService в момент
+   * поднятия конвоя: отдельная «карта обид» была бы второй истиной, и
+   * караванщики помнили бы не то, что случилось, а то, что запомнилось.
+   */
+  private async помнятГрабителя(characterId: string): Promise<boolean> {
+    const обида = await this.db.queryOne<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM caravan_ambushes
+        WHERE ambusher_id = $1 AND started_at > NOW() - make_interval(mins => $2)`,
+      [characterId, CARAVAN_GRUDGE_MINUTES],
+    );
+    return (обида?.n ?? 0) > 0;
+  }
+
   async accept(
     characterId: string,
     contractId: string
@@ -194,6 +221,10 @@ export class TradeService {
     if (character.level < def.minLevel) return { ok: false, code: 'contract_level_low' };
     if (character.region !== def.fromRegion) return { ok: false, code: 'contract_wrong_region' };
     if (await this.getActive(characterId)) return { ok: false, code: 'contract_already_active' };
+
+    // Живые последствия (§361): караванщики помнят грабителя. Удачной засада
+    // быть не обязана — попытка уже публична, и доверие ушло.
+    if (await this.помнятГрабителя(characterId)) return { ok: false, code: 'caravan_grudge' };
 
     const startsAt = new Date();
     const active: ActiveContract = {

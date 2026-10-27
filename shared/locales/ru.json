@@ -816,7 +816,8 @@
     "boarding_loot": "трофеи",
     "boarding_gold": "— золото:",
     "craft_needs": "Нужно:",
-    "craft_short": "не хватает"
+    "craft_short": "не хватает",
+    "trade_err_grudge": "Караванщики помнят твою засаду. Контрактов не будет"
   },
   "settings": {
     "title": "⚙ Настройки",

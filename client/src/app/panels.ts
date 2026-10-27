@@ -1411,6 +1411,9 @@ export async function loadTrade(): Promise<void> {
           else if (code.includes('level_low')) toast(t('panels.trade_err_level'), 'error');
           else if (code.includes('wrong_region')) toast(t('panels.trade_err_wrong_city'), 'error');
           else if (code.includes('unavailable')) toast(t('panels.trade_err_unavailable'), 'error');
+          // Живые последствия (§361): причина отказа названа честно —
+          // караванщики помнят засаду, а не «что-то сломалось».
+          else if (code.includes('grudge')) toast(t('panels.trade_err_grudge'), 'error');
           else toast(t('panels.trade_err_none'), 'error');
         }
         await loadTrade();
