@@ -30,6 +30,8 @@ import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
 import { activeGuardPosts, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
+// Точный удар (§356): правило спины в shared, монстровая ветка того же права.
+import { isBehindTarget, BACK_STRIKE_MULT } from '../../../shared/backStrike';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -355,6 +357,19 @@ private soldiers = soldiers;
       const defense = victim.stats.endurance * 0.75 + equipStats.endurance * 0.75;
       let damage = this.monsterDamage(atk, defense);
 
+      // Точный удар монстра (§356): правило спины одно для всех. Цель —
+      // игрок: спина открывается, если игрок смотрит прочь от монстра.
+      // Позиция игрока — та же, что пришла в тик; направление — из пакета
+      // движения (DefenseStates): не шёл — спины нет, сомнение против
+      // атакующего. Позиция монстра — та же, по которой ИИ ходит и бьёт.
+      const монстрCtx = this.spawnSystem.getAI().getContext(atk.instanceId);
+      const вСпинуИгрока = !!монстрCtx && isBehindTarget(
+        { x: target.position.x, z: target.position.z },
+        this.defenseStates.getFacing(target.id),
+        { x: монстрCtx.position.x, z: монстрCtx.position.z },
+      );
+      if (вСпинуИгрока) damage = Math.floor(damage * BACK_STRIKE_MULT);
+
       // Парирование: удар в первые миллисекунды щита гасится полностью.
       // Против монстров окно прежде не читалось вовсе - игрок, поймавший
       // удар таймингом, получал то же, что и держащий щит постоянно, и
@@ -500,6 +515,9 @@ private soldiers = soldiers;
         maxHp: applied.maxHp,
         isDodged,
         isBlocked: !isDodged && defenseMult < 1,
+        // Точный удар (§356): клиент помечает ✧ — игрок понимает, почему
+        // удар был больнее, и поворачивается лицом к монстру.
+        isPrecise: вСпинуИгрока && !isDodged,
         died: applied.died,
         // Имя эффекта едет вместе с ударом, а не отдельным сообщением:
         // клиенту нужно показать иконку в тот же миг, что и число урона.

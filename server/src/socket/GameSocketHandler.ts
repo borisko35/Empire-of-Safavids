@@ -243,15 +243,6 @@ private territory = TerritoryBonuses.getInstance();
   // по 30 ударов в секунду - лимит пакетов (30/с) это пропускал.
   private lastAttackAt = new Map<string, number>();
   /**
-   * Куда игрок смотрит: characterId -> направление из пакета движения (§355).
-   *
-   * Раньше direction только транслировался соседям и нигде не хранился,
-   * и у сервера не было ни одного уязвимого места: удар в спину нечем было
-   * бы посчитать. Приходит из того же пакета, что уже прошёл античит.
-   * Направления нет у игрока, который ещё не шёл, — его спина не открыта.
-   */
-  private playerFacing = new Map<string, { x: number; z: number }>();
-  /**
    * Позиция игрока на прошлом тике регенерации и время: по ним считается,
    * бежал ли он, чтобы выносливость за бег нельзя было получить бесплатно.
    */
@@ -1204,9 +1195,10 @@ private territory = TerritoryBonuses.getInstance();
       crouch: data.crouch === true,
     });
     // Куда смотрит (§355): та же посылка, что и позиция. Направление
-    // нормализуется правилом, здесь храним как пришло.
+    // хранится в DefenseStates рядом с позицией — его читают обе ветви боя:
+    // удары игрока здесь и удары монстров в тике GameLoop.
     if (data.direction && Number.isFinite(data.direction.x) && Number.isFinite(data.direction.z)) {
-      this.playerFacing.set(characterId, { x: data.direction.x, z: data.direction.z });
+      this.defenseStates.setFacing(characterId, { x: data.direction.x, z: data.direction.z });
     }
     if (заметил?.id !== былЗамечен) {
       this.spottedGuards.set(characterId, заметил?.id ?? null);
@@ -2219,7 +2211,7 @@ private territory = TerritoryBonuses.getInstance();
     const вСпину = isBasicPvP && !result.isDodged && !!attackerPosPvP && !!targetPosPvP &&
       isBehindTarget(
         { x: targetPosPvP.x, z: targetPosPvP.z },
-        this.playerFacing.get(target.id) ?? null,
+        this.defenseStates.getFacing(target.id),
         { x: attackerPosPvP.x, z: attackerPosPvP.z },
       );
     if (вСпину) result.damage = Math.floor(result.damage * BACK_STRIKE_MULT);
@@ -3434,9 +3426,7 @@ private territory = TerritoryBonuses.getInstance();
     this.spottedGuards.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
-    // Направление взгляда умерло вместе с сокетом: вернувшийся игрок стоит
-    // столбом, пока не пошлёт пакет движения, и спины не открывает (§355).
-    this.playerFacing.delete(socket.characterId);
+
     // Состояние смерти здесь НЕ снимаем: страховочный таймер обязан
     // доработать и записать респавн в БД сам — иначе вышедший посреди
     // смерти вернулся бы в трупе (hp = 0) и не смог бы ничего сделать.

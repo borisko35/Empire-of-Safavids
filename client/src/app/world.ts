@@ -1326,6 +1326,8 @@ function wireSocket(): void {
   socket.on('combat:hit', (r: { damage: number; isDodged: boolean; isBlocked: boolean; isParried?: boolean; reflected?: number; hp: number; maxHp: number; debuff?: { id: string; kind: string; durationMs: number } | null;
     /** Удар стража, а не монстра */
     guardStrike?: boolean;
+    /** Точный удар (§356): монстр ударил в спину — стоит повернуться лицом */
+    isPrecise?: boolean;
     /** Имя стража для подписи, чтобы игрок знал, кто ударил */
     guardName?: string;
     /** Изменение кармы за удар. Минус - город загоняет тёмного глубже */
@@ -1345,7 +1347,10 @@ function wireSocket(): void {
       } else if (r.isDodged) {
         world.addFloater(me.pos.x, me.pos.z - 1, t('world.dodge'), '#cfe3f0');
       } else {
-        world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}`, '#ff8d7e', true);
+        // Точный удар по мне (§356): та же пометка ✧, что у моих ударов в
+        // спину, — игрок понимает, почему удар был больнее, и видит выход:
+        // повернуться лицом.
+        world.addFloater(me.pos.x, me.pos.z - 1, `-${r.damage}${r.isPrecise ? ' ✧' : ''}`, r.isPrecise ? '#9ec8e8' : '#ff8d7e', true);
         audio.hit();
         // Удар стража: кроме урона уезжает карма, и без этой строки игрок
         // видел бы минус 60 и не понимал бы, за что. Имя стража и потеря

@@ -73,6 +73,13 @@ export class DefenseStates {
   private states = new Map<string, DefenseState>();
   /** Позиции для проверки досягаемости. Ставит сокет-обработчик из пакетов позиции. */
   private positions = new Map<string, { x: number; y: number; z: number }>();
+  /**
+   * Куда персонаж смотрит (§355). Ставится из того же пакета движения, что и
+   * позиция. Живёт здесь, а не в сокет-обработчике, потому что спину читают
+   * обе стороны боя: удары игрока (сокет-путь) и удары монстров (тик
+   * GameLoop), которому сокет-карта недоступна.
+   */
+  private facings = new Map<string, { x: number; z: number }>();
 
   static getInstance(): DefenseStates {
     if (!DefenseStates.instance) {
@@ -171,6 +178,23 @@ export class DefenseStates {
     return this.positions.get(characterId) ?? null;
   }
 
+  /**
+   * Запомнить направление взгляда (§355): та же посылка, что и позиция.
+   * Значение хранится как пришло — нормализует правило, а не хранение.
+   */
+  setFacing(characterId: string, facing: { x: number; z: number }): void {
+    this.facings.set(characterId, facing);
+  }
+
+  /**
+   * Куда персонаж смотрит. null — направления нет: игрок ещё не шёл или
+   * только переподключился. Спину такое не открывает — сомнение против
+   * атакующего.
+   */
+  getFacing(characterId: string): { x: number; z: number } | null {
+    return this.facings.get(characterId) ?? null;
+  }
+
   /** Рывок сейчас на откате? */
   isDodgeOnCooldown(characterId: string, now = Date.now()): boolean {
     const st = this.states.get(characterId);
@@ -243,5 +267,6 @@ export class DefenseStates {
   cleanup(characterId: string): void {
     this.states.delete(characterId);
     this.positions.delete(characterId);
+    this.facings.delete(characterId);
   }
 }

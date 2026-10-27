@@ -114,12 +114,12 @@ describe('Проводка: множитель и в уроне, и в анти�
   });
 
   it('направление игрока живёт, умирает и берётся из пакета движения', () => {
-    must(/playerFacing\.set\(characterId, \{ x: data\.direction\.x, z: data\.direction\.z \}\)/.test(обработчик),
+    // §356: карта направлений переехала в DefenseStates — её читают обе
+    // ветви боя. Здесь проверяется запись; чистка и чтение тиком — ниже.
+    must(/setFacing\(characterId, \{ x: data\.direction\.x, z: data\.direction\.z \}\)/.test(обработчик),
       'направление не пишется из пакета движения');
-    must(/playerFacing\.delete\(socket\.characterId\)/.test(обработчик),
-      'направление не чистится при отключении: ушедший игрок оставляет открытую спину');
-    must(/this\.playerFacing\.get\(target\.id\) \?\? null/.test(обработчик),
-      'PvP берёт направление не из карты направлений');
+    must(/defenseStates\.getFacing\(target\.id\)/.test(обработчик),
+      'PvP берёт направление не из DefenseStates');
     must(/getPosition\(attacker\.id\)/.test(обработчик) && /getPosition\(characterId: string\)/.test(защита),
       'спина считается не по серверной позиции досягаемости: уязвимое место разойдётся с ударом');
   });
@@ -128,5 +128,34 @@ describe('Проводка: множитель и в уроне, и в анти�
     must(/isPrecise\?/.test(клиент), 'клиент не читает пометку точного удара');
     must(/isPrecise \? '#9ec8e8'/.test(клиент), 'у точного удара нет своего цвета: неотличим от крита');
     must(/isPrecise \? ' ✧'/.test(клиент), 'у точного удара нет своей пометки');
+  });
+});
+
+describe('Монстровая ветка: правило одно для всех (§356)', () => {
+  const обработчик = читать('server/src/socket/GameSocketHandler.ts');
+  const цикл = читать('server/src/systems/GameLoop.ts');
+  const защита = читать('server/src/systems/DefenseStates.ts');
+  const клиент2 = читать('client/src/app/world.ts');
+
+  it('тик монстров читает ту же геометрию и множит урон', () => {
+    must(/isBehindTarget\(\s*\{ x: target\.position\.x, z: target\.position\.z \},\s*this\.defenseStates\.getFacing\(target\.id\),/.test(цикл),
+      'монстровый удар считает спину не по позиции игрока и его направлению');
+    must(/if \(вСпинуИгрока\) damage = Math\.floor\(damage \* BACK_STRIKE_MULT\);/.test(цикл),
+      'монстровый удар в спину не множит урон: правило не для всех');
+  });
+
+  it('направление игрока живёт в DefenseStates и доходит до тика', () => {
+    must(/setFacing\(characterId, \{ x: data\.direction\.x, z: data\.direction\.z \}\)/.test(обработчик),
+      'направление не пишется из пакета движения в DefenseStates');
+    must(/facings\.delete\(characterId\)/.test(защита),
+      'направление не чистится вместе с состояниями: ушедший игрок оставляет открытую спину');
+    must(/getFacing\(target\.id\)/.test(цикл), 'тик не читает направление цели');
+    // Отдельной карты в сокет-обработчике больше нет: одна истина.
+    must(!/playerFacing/.test(обработчик), 'осталась отдельная карта направлений: копия разойдётся с DefenseStates');
+  });
+
+  it('полученный точный удар помечен игроку', () => {
+    must(/isPrecise: вСпинуИгрока && !isDodged/.test(цикл), 'публикация удара монстра не помечает точный удар');
+    must(/r\.isPrecise \? ' ✧' : ''/.test(клиент2), 'клиент не помечает точный удар по себе');
   });
 });
