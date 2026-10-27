@@ -60,6 +60,27 @@ npcRouter.get('/:npcId/dialog', authMiddleware, async (req: Request, res: Respon
   const memory = await memoryService.getMemory(req.params.npcId, characterId);
   const chatCount = await memoryService.getChatCount(req.params.npcId, characterId);
 
+  // Живые последствия (§359): NPC, видевший попытку кражи, перестаёт
+  // говорить. Проверка РАНЬШЕ приветствий и знакомств — обида сильнее
+  // дружбы, иначе дружеское «привет!» перебивало бы упрёк. Разговор не
+  // открывается вовсе: никакой линии, один упрёк, закрыть.
+  if ((memory.theftsSeen ?? 0) > 0) {
+    return res.json({
+      npcId: dialogue.npcId,
+      nameRu: dialogue.nameRu,
+      role: dialogue.role,
+      region: dialogue.region,
+      line: {
+        id: 'grudge_theft',
+        textRu: `Я видел твои руки у моего пояса. Уходи, пока я не позвал стражу.`,
+        choices: [],
+      },
+      memory: { chatCount, friendshipLevel: memory.friendshipLevel, tone: 'hostile' },
+      // questsCompleted нет: отказавший говорить NPC не засчитывает
+      // talk-цели — разговор не состоялся.
+    });
+  }
+
   // Разговор состоялся — засчитать talk-цели квестов сразу при открытии,
   // не дожидаясь клика по реплике (иначе стрелка-навигатор не двигалась)
   const questsCompleted = await questService.recordTalk(characterId, req.params.npcId).catch(() => []);
@@ -165,6 +186,21 @@ npcRouter.post('/:npcId/dialog', authMiddleware, async (req: Request, res: Respo
   const memory = await memoryService.getMemory(req.params.npcId, characterId);
   const chatCount = await memoryService.incrementChat(req.params.npcId, characterId);
   await memoryService.updateLastInteraction(req.params.npcId, characterId);
+
+  // Живые последствия (§359): тот же отказ, что и на открытие диалога.
+  // Без этой проверки прямой POST с lineId=hello обходил бы упрёк GET'а.
+  if ((memory.theftsSeen ?? 0) > 0) {
+    return res.json({
+      npcId: dialogue.npcId,
+      nameRu: dialogue.nameRu,
+      line: {
+        id: 'grudge_theft',
+        textRu: `Я видел твои руки у моего пояса. Уходи, пока я не позвал стражу.`,
+        choices: [],
+      },
+      memory: { chatCount, friendshipLevel: memory.friendshipLevel, tone: 'hostile' },
+    });
+  }
 
   if (choiceIndex === undefined && !lineId) {
     const line = dialogue.lines[dialogue.helloLine];

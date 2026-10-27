@@ -75,6 +75,7 @@ import {
 // и то же. WEATHER_EFFECTS - справочник модификаторов, из него берётся
 // visibilityMod.
 import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
+import { NpcMemoryService } from '../services/NpcMemoryService';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { isDeepWater } from '../utils/spawn';
@@ -183,6 +184,8 @@ export class GameSocketHandler {
    * пакетам движения - у стоящего игрока их нет.
    */
   private stealthStates = StealthStates.getInstance();
+  // Память NPC о взаимодействиях (§359): жертва кражи должна запомнить вора.
+  private npcMemory = new NpcMemoryService();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
@@ -584,9 +587,17 @@ private territory = TerritoryBonuses.getInstance();
 
     // Дотянулись, но не вышло: либо заметили, либо не присел.
     if (!canPickpocket(вор, цель, ctx)) {
+      const причина = где.crouch ? 'seen' : 'too_loud';
+      // Живые последствия (§359): цель ВИДЕЛА попытку — и запомнила вора.
+      // 'too_loud' не двигает память: промахнулся в неприседе мог и за
+      // спиной, где жертва ничего не видела. Мир не реагирует на то,
+      // чего не видел. void: отказ кражи не должен ждать записи в Redis.
+      if (причина === 'seen') {
+        void this.npcMemory.rememberTheft(цель.id, characterId);
+      }
       socket.emit(SOCKET_EVENTS.STEAL_RESULT, {
         ok: false,
-        reason: где.crouch ? 'seen' : 'too_loud',
+        reason: причина,
         targetId: цель.id,
         nameRu: цель.nameRu,
       });

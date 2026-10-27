@@ -79,7 +79,10 @@ describe('Оверрайд времени суток: подменяется ф�
     must(ночьВБурю.timeOfDay === 'night' && ночьВБурю.weather === 'sandstorm', 'оверарайды времени и погоды затирают друг друга');
     must(ночьВБурю.speedMod === WEATHER_EFFECTS.sandstorm.speedMod, 'в буре в ночь speedMod не от погоды');
     sys.setTimeOverride(null);
-    must(sys.getCurrentWorldTime().timeOfDay !== 'night', 'снятие оверрайда не вернуло часы');
+    // Сравнение с настоящими часами, а не с «не ночью»: тест, запущенный
+    // ночью, иначе требовал бы, чтобы снятие оверрайда отменило и полночь.
+    must(sys.getCurrentWorldTime().timeOfDay === worldTimeAt(Date.now()).timeOfDay,
+      'снятие оверрайда не вернуло часы');
     sys.setWeatherOverride(null);
   });
 });

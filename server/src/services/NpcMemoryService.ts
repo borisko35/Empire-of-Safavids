@@ -13,13 +13,25 @@ export interface NpcMemory {
   friendshipLevel: number;
   playerNotes: string[];
   tone: 'neutral' | 'friendly' | 'hostile';
+  /**
+   * Сколько попыток кражи этот NPC ВИДЕЛ (§359).
+   *
+   * Удачная кража счёт не двигает: жертва о ней не знает, и мир не может
+   * реагировать на то, чего не видел. Событие ставит сокет-обработчик
+   * через rememberTheft.
+   */
+  theftsSeen: number;
+  lastTheftSeenAt: number;
   firstMeetingPhrases?: string[];
   /** подсказка для LLM — генерируется на лету, не хранится */
   llmHint?: string;
 }
 
 /** Тон по уровню дружбы: 0-1 нейтральный, 2-3 дружелюбный, 0 враждебный при отрицательных нотах */
-export function toneByFriendship(level: number, notes: string[]): 'neutral' | 'friendly' | 'hostile' {
+export function toneByFriendship(level: number, notes: string[], theftsSeen = 0): 'neutral' | 'friendly' | 'hostile' {
+  // Живые последствия (§359): NPC, видевший кражу, враждебен независимо от
+  // дружбы. Друг может простить слово — попытку обокрасть не забывает.
+  if (theftsSeen > 0) return 'hostile';
   const hostile = notes.some(n => /угроз|предал|обман/i.test(n));
   if (hostile) return 'hostile';
   if (level >= 3) return 'friendly';
@@ -29,7 +41,7 @@ export function toneByFriendship(level: number, notes: string[]): 'neutral' | 'f
 
 /** Короткая LLM-подсказка для генерации реплики — без внешнего LLM, правило-шаблон */
 export function buildLlmHint(npcId: string, nameRu: string, memory: NpcMemory): string {
-  const tone = toneByFriendship(memory.friendshipLevel, memory.playerNotes);
+  const tone = toneByFriendship(memory.friendshipLevel, memory.playerNotes, memory.theftsSeen ?? 0);
   const last = memory.playerNotes[memory.playerNotes.length - 1] ?? '';
   const base = tone === 'friendly' ? `Ты дружелюбно относишься к игроку, помнишь его помощь` : tone === 'hostile' ? `Ты насторожен, помнишь обиду` : `Ты нейтрален, оцениваешь игрока`;
   return `[LLM hint] NPC ${nameRu} (${npcId}) tone=${tone} friendship=${memory.friendshipLevel} lastNote="${last}". ${base}. Отвечай в стиле эпохи Сефевидов, коротко, ветвящимся выбором.`;
@@ -43,6 +55,8 @@ const DEFAULT_MEMORY: NpcMemory = {
   friendshipLevel: 0,
   playerNotes: [],
   tone: 'neutral',
+  theftsSeen: 0,
+  lastTheftSeenAt: 0,
 };
 
 /** Потолок дружбы. Дальше NPC не становится «дружественнее», только тише. */
@@ -67,7 +81,7 @@ export class NpcMemoryService {
       try { mem = JSON.parse(raw) as NpcMemory; } catch { mem = { ...DEFAULT_MEMORY }; }
     }
     // авто-тон по дружбе + LLM-хинт (не персистим, считаем на лету)
-    mem.tone = toneByFriendship(mem.friendshipLevel, mem.playerNotes);
+    mem.tone = toneByFriendship(mem.friendshipLevel, mem.playerNotes, mem.theftsSeen ?? 0);
     mem.llmHint = buildLlmHint(npcId, npcId, mem);
     return mem;
   }
@@ -123,7 +137,7 @@ export class NpcMemoryService {
     memory.friendshipLevel = after;
     // Пересчитываем тон сразу: реплики NPC выбираются по нему, и без
     // пересчёта следующая фраза была бы старой
-    memory.tone = toneByFriendship(after, memory.playerNotes);
+    memory.tone = toneByFriendship(after, memory.playerNotes, memory.theftsSeen ?? 0);
     await this.saveMemory(npcId, characterId, memory);
     return { level: after, leveledUp: after > before };
   }
@@ -131,6 +145,25 @@ export class NpcMemoryService {
   async setTone(npcId: string, characterId: string, tone: NpcMemory['tone']): Promise<void> {
     const memory = await this.getMemory(npcId, characterId);
     memory.tone = tone;
+    await this.saveMemory(npcId, characterId, memory);
+  }
+
+  /**
+   * NPC видел попытку кражи (§359) и запомнил вора.
+   *
+   * Событие ставит сокет-обработчик, когда цель ВИДЕЛА попытку (reason
+   * 'seen'): удачная кража обиды не оставляет — жертва ни о чём не знает,
+   * а мир не реагирует на то, чего не видел. Счётчик двигает тон, заметка
+   * даёт диалогу живой текст.
+   */
+  async rememberTheft(npcId: string, characterId: string, now: number = Date.now()): Promise<void> {
+    const memory = await this.getMemory(npcId, characterId);
+    memory.theftsSeen = (memory.theftsSeen ?? 0) + 1;
+    memory.lastTheftSeenAt = now;
+    const заметка = 'пытался обчистить мои карманы';
+    if (!memory.playerNotes.includes(заметка) && memory.playerNotes.length < 5) {
+      memory.playerNotes.push(заметка);
+    }
     await this.saveMemory(npcId, characterId, memory);
   }
 
