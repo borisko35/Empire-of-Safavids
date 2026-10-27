@@ -16,7 +16,7 @@
 // против атакующего, иначе бонус собирался бы из воздуха.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_COS } from '../../../shared/backStrike';
+import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_COS, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { AISystem, type AIContext } from '../systems/AISystem';
 import { MONSTERS_DATABASE } from '../data/monsters';
 
@@ -157,5 +157,34 @@ describe('Монстровая ветка: правило одно для все
   it('полученный точный удар помечен игроку', () => {
     must(/isPrecise: вСпинуИгрока && !isDodged/.test(цикл), 'публикация удара монстра не помечает точный удар');
     must(/r\.isPrecise \? ' ✧' : ''/.test(клиент2), 'клиент не помечает точный удар по себе');
+  });
+});
+
+describe('Короткое обездвиживание (§357)', () => {
+  const обработчик = читать('server/src/socket/GameSocketHandler.ts');
+  const цикл = читать('server/src/systems/GameLoop.ts');
+
+  it('корень короче парирования и всё же заметен', () => {
+    // Рамки те же, что у парирования: заметно (>= 0.5 с), но мягче награды
+    // за тайминг щита (1.5 с) — спину добыть проще, чем поймать замах.
+    must(BACK_STRIKE_ROOT_MS >= 500 && BACK_STRIKE_ROOT_MS < 1500,
+      `корень спины ${BACK_STRIKE_ROOT_MS} мс вне рамок: либо незаметен, либо сильнее парирования`);
+  });
+
+  it('все три ветви боя сковывают пойманную в спину цель', () => {
+    must(/if \(вСпину\) ai\.stun\(monsterCtx\.instanceId, BACK_STRIKE_ROOT_MS\);/.test(обработчик),
+      'PvE не сковывает монстра: обездвиживание объявлено и не применяется');
+    must((обработчик.match(/debuffId: 'backstrike_root'/g) ?? []).length === 1,
+      'PvP ставит не один корень (или чужой дебафф переименован)');
+    must(/if \(вСпину\) \{\s*void this\.debuffs\.apply\(target\.id, \{\s*debuffId: 'backstrike_root',\s*kind: 'stun',/.test(обработчик),
+      'PvP корень не kind stun: оглушённый бил бы в ответ');
+    must(/if \(вСпинуИгрока && !isDodged\) \{\s*await this\.debuffService\.apply\(target\.id, \{\s*debuffId: 'backstrike_root',/.test(цикл),
+      'тик монстров не сковывает игрока: разворот к монстру остался бесплатным');
+    must(/BACK_STRIKE_ROOT_MS/.test(цикл), 'тик берёт длительность не из shared: копия числа разойдётся');
+  });
+
+  it('уклонившийся не скован', () => {
+    must(/вСпинуИгрока && !isDodged\) \{\s*await this\.debuffService/.test(цикл),
+      'уклонение не спасает от корня: удара не было, а игрок стоит');
   });
 });

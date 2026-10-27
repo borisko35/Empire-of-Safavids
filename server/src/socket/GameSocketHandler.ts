@@ -76,7 +76,7 @@ import {
 // visibilityMod.
 import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
-import { isBehindTarget, BACK_STRIKE_MULT } from '../../../shared/backStrike';
+import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -2275,6 +2275,20 @@ private territory = TerritoryBonuses.getInstance();
       isPrecise: вСпину,
     });
 
+    // Короткое обездвиживание (§357): тот же kind 'stun', что у парирования,
+    // — оглушённый не бьёт, не уклоняется и не ставит щит. void, а не await:
+    // как у парирования, задержка ответа не должна ждать записи дебаффа.
+    if (вСпину) {
+      void this.debuffs.apply(target.id, {
+        debuffId: 'backstrike_root',
+        kind: 'stun',
+        durationMs: BACK_STRIKE_ROOT_MS,
+        magnitude: 0,
+        tickDamage: 0,
+        tickMs: 0,
+      }, null);
+    }
+
     const targetSocket = this.activePlayers.get(target.id);
     targetSocket?.emit(SOCKET_EVENTS.COMBAT_HIT, {
       attackerId: attacker.id, ...result, hp: applied.hp, maxHp: applied.maxHp,
@@ -2451,6 +2465,13 @@ private territory = TerritoryBonuses.getInstance();
     }
 
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
+
+    // Короткое обездвиживание (§357): точный удар застигает цель врасплох.
+    // Тот же стан, что от парирования: оглушённый монстр стоит и не
+    // действует (проверено поведением в parryStun.test.ts). Цепочке не даёт
+    // развернуться: ударивший в спину уже замечен — монстр повернётся на
+    // него, и следующей спины не будет.
+    if (вСпину) ai.stun(monsterCtx.instanceId, BACK_STRIKE_ROOT_MS);
 
     // Удар по площади. Раньше поля aoe и aoeRadius были в данных и не читались
     // никем: «Дождь Стрел» с радиусом 6, «Гнев Шаха» с 5, «Экстаз Света» с 15 и

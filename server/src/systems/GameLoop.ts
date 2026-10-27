@@ -31,7 +31,7 @@ import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
 import { activeGuardPosts, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
 // Точный удар (§356): правило спины в shared, монстровая ветка того же права.
-import { isBehindTarget, BACK_STRIKE_MULT } from '../../../shared/backStrike';
+import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -487,6 +487,21 @@ private soldiers = soldiers;
             }
           ).catch(() => {});
         }
+      }
+
+      // Короткое обездвиживание (§357): монстр ударил в спину — игрок на миг
+      // скован. Разворот к монстру становится решением с ценой, а не
+      // бесплатностью: пока разворачиваешься, следующего удара в спину нет.
+      // Уклонившийся не сковывается: удара не было.
+      if (вСпинуИгрока && !isDodged) {
+        await this.debuffService.apply(target.id, {
+          debuffId: 'backstrike_root',
+          kind: 'stun',
+          durationMs: BACK_STRIKE_ROOT_MS,
+          magnitude: 0,
+          tickDamage: 0,
+          tickMs: 0,
+        }, atk.instanceId);
       }
 
       // Эффект из данных монстра. Раньше `effect` и `effectDuration` были
