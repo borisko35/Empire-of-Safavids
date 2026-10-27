@@ -1650,8 +1650,10 @@ function wireSocket(): void {
   // введёт здесь "а если crouch - не показывать", не заведя правила в
   // shared/, проверка это не заметит, а игрок получит обещание, которого
   // правило не держит.
-  socket.on('guard:spotted', (payload: { postId: string; nameRu: string }) => {
-    const key = 'stealth.spotted';
+  socket.on('guard:spotted', (payload: { postId: string; nameRu: string; wanted?: boolean }) => {
+    // Розыск (§360): своя строка, когда стража знает в лицо, — иначе игрок
+    // не поймёт, почему присед перестал прятать.
+    const key = payload.wanted ? 'stealth.spotted_wanted' : 'stealth.spotted';
     const pattern = t(key);
     // t() при отсутствии ключа возвращает сам путь - тогда показываем имя
     // с сервера, но никогда не путь ключа (как в обработчике зоны выше).

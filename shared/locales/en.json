@@ -1956,7 +1956,8 @@
     "document_seen": "The guard spotted you at the desk. Get out of sight",
     "document_done": "You already have the dossiers — there is nothing left to take",
     "strike": "{name} is hitting you",
-    "strike_karma": "Karma: −{karma}"
+    "strike_karma": "Karma: −{karma}",
+    "spotted_wanted": "{name} knows your face — crouching will not hide you"
   },
   "soldiers": {
     "title": "Recruitment",

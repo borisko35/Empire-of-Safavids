@@ -28,6 +28,13 @@ export interface StealthState extends Point {
 export class StealthStates {
   private static instance: StealthStates;
   private states = new Map<string, StealthState>();
+  /**
+   * Розыск: characterId -> до какого времени стража знает игрока в лицо
+   * (§360). Ставит тик стражи в момент УДАРА: замеченного страж бил, значит
+   * видел, значит запомнил. Пока метка жива, приседание больше не прячет:
+   * знакомый с вором страж приглядывается, а не смотрит мимо.
+   */
+  private wanted = new Map<string, number>();
 
   static getInstance(): StealthStates {
     if (!StealthStates.instance) {
@@ -46,8 +53,25 @@ export class StealthStates {
     return this.states.get(characterId) ?? null;
   }
 
+  /** Пометить «стража знает в лицо» до указанного времени (§360). */
+  markWanted(characterId: string, until: number): void {
+    this.wanted.set(characterId, until);
+  }
+
+  /** Стража помнит игрока в лицо? Истёкшая метка — не помнит. */
+  isWanted(characterId: string, now: number = Date.now()): boolean {
+    const until = this.wanted.get(characterId);
+    if (until === undefined) return false;
+    if (until <= now) {
+      this.wanted.delete(characterId);
+      return false;
+    }
+    return true;
+  }
+
   /** Забыть игрока. Вызывается на выходе из сессии. */
   cleanup(characterId: string): void {
     this.states.delete(characterId);
+    this.wanted.delete(characterId);
   }
 }

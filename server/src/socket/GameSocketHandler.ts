@@ -1190,10 +1190,13 @@ private territory = TerritoryBonuses.getInstance();
     // владелец: «пыльная буря ухудшает обзор, но скрывает игрока в стелсе».
     const время = GameLoop.getInstance().getWorldTime();
     const ночь = nightFactor(время.timeOfDay);
+    // Розыск (§360): стража, ударившая игрока, знает его в лицо — приседание
+    // больше не прячет. Тот же признак читает тик GameLoop.
+    const розыск = this.stealthStates.isWanted(characterId);
     // activeGuardPosts, а не GUARD_POSTS напрямую: ночью к караулу
     // присоединяется ночной патруль, днём его в правиле не существует.
     const заметил = spottedBy(data.position, activeGuardPosts(ночь), {
-      crouch: data.crouch === true,
+      crouch: data.crouch === true && !розыск,
       night: ночь,
       visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
     }, Date.now());
@@ -1217,6 +1220,8 @@ private territory = TerritoryBonuses.getInstance();
         socket.emit(SERVER_EVENTS.GUARD_SPOTTED, {
           postId: заметил.id,
           nameRu: заметил.nameRu,
+          // Розыск (§360): игрок должен знать, почему присед перестал прятать.
+          wanted: розыск,
         });
       }
     }

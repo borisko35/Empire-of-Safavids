@@ -1956,7 +1956,8 @@
     "document_seen": "Страж заметил тебя у стола. Отойди из поля зрения",
     "document_done": "Донесения уже у тебя — второй раз брать нечего",
     "strike": "{name} бьёт тебя",
-    "strike_karma": "Карма: −{karma}"
+    "strike_karma": "Карма: −{karma}",
+    "spotted_wanted": "{name} знает тебя в лицо — приседай зря"
   },
   "soldiers": {
     "title": "Вербовка караула",

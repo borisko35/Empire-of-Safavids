@@ -29,7 +29,7 @@ import { soldiers } from '../services/SoldierService';
 import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
-import { activeGuardPosts, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
+import { activeGuardPosts, GUARD_GRUDGE_MS, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
 // Точный удар (§356): правило спины в shared, монстровая ветка того же права.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { logger } from '../utils/logger';
@@ -590,6 +590,14 @@ private soldiers = soldiers;
       night: nightFactor(время.timeOfDay),
       visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
     };
+    // Розыск (§360): приседание не прячет от стражи, которая знает в лицо.
+    // Складывается с сокет-путём: правило одно, обе стороны считают одно.
+    const розыск = new Set<string>();
+    for (const игроки of nearbyPlayers.values()) {
+      for (const игрок of игроки) {
+        if (this.stealthStates.isWanted(игрок.id, теперь)) розыск.add(игрок.id);
+      }
+    }
 
     for (const [ключ, игроки] of nearbyPlayers) {
       if (!игроки.length) continue;
@@ -609,7 +617,7 @@ private soldiers = soldiers;
         const пост = strikingGuard(
           игрок.position,
           activeGuardPosts(ctx.night),
-          { crouch: скрытность?.crouch === true, ...ctx },
+          { crouch: скрытность?.crouch === true && !розыск.has(игрок.id), ...ctx },
           теперь,
         );
         if (!пост) continue;
@@ -617,6 +625,12 @@ private soldiers = soldiers;
         // Кулдаун ставим ДО похода в базу: если запрос упадёт, игрок всё равно
         // не должен получить серию ударов в следующем тике.
         this.guardLastStrike.set(игрок.id, теперь);
+
+        // Живые последствия (§360): страж УДАРИЛ — значит видел, значит
+        // запомнил. Теперь приседание не прячет: знающий в лицо страж
+        // приглядывается. Метка в общем StealthStates — её читает и
+        // сокет-путь обнаружения.
+        this.stealthStates.markWanted(игрок.id, теперь + GUARD_GRUDGE_MS);
 
         // Ключ nearbyPlayers устроен как «шард:регион». Регион нужен системе
         // кармы для её правила PvP-зон, а шард - каналу публикации.

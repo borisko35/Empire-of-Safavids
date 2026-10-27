@@ -1956,7 +1956,8 @@
     "document_seen": "Qarəvul səni masada gördü. Görüşdən çıx",
     "document_done": "Dönələr artıq səndədir — ikinci dəfə götürməyə bir şey yoxdur",
     "strike": "{name} səni vurur",
-    "strike_karma": "Karma: −{karma}"
+    "strike_karma": "Karma: −{karma}",
+    "spotted_wanted": "{name} üzünü tanıyır — yıxılmaq səni gizlətməyəcək"
   },
   "soldiers": {
     "title": "Əsgər toplamaq",
