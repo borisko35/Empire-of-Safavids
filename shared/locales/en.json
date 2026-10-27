@@ -1702,7 +1702,8 @@
     "choose": "Choose a poem to assemble:",
     "lines": "{n} lines",
     "hint": "Difficulty: {diff} · Lines: {n}",
-    "correct": "Correct! The poem is assembled! ◉"
+    "correct": "Correct! The poem is assembled! ◉",
+    "grudge": "The mystics turned away from you. They will not listen"
   },
   "chronicles": {
     "cat_history": "📜 History",
@@ -1987,6 +1988,7 @@
       "levy": "No armour, plenty of numbers. Cheap and many, but he is weak.",
       "veteran": "Walked the caravan and kept his trade. Costly, but he takes the blow.",
       "elite": "A personal guard. Hits harder than his master and costs like a roof."
-    }
+    },
+    "hire_grudge": "The Order does not serve its enemy"
   }
 }

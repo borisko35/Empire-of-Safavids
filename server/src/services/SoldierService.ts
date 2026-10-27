@@ -22,6 +22,7 @@
 // остальное состояние.
 import { DatabaseService } from './DatabaseService';
 import { CharacterService } from './CharacterService';
+import { ReputationService } from './ReputationService';
 import {
   SOLDIERS,
   SOLDIER_TIERS,
@@ -49,7 +50,7 @@ export interface SoldierView extends SoldierRow {
 
 export interface HireResult {
   ok: boolean;
-  reason?: 'no_gold' | 'limit' | 'unknown_tier' | 'level';
+  reason?: 'no_gold' | 'limit' | 'unknown_tier' | 'level' | 'qizilbash_grudge';
   /** Сколько осталось золота после найма. */
   gold?: number;
   soldier?: SoldierView;
@@ -71,6 +72,7 @@ const ОТДЫХ_ПОРОГ_MS = 60_000;
 export class SoldierService {
   private db = DatabaseService.getInstance();
   private characters = new CharacterService();
+  private репутация = new ReputationService();
 
   /**
    * Привести здоровье к состоянию «сколько он намотан сейчас».
@@ -121,6 +123,13 @@ export class SoldierService {
     const персонаж = await this.characters.getCharacterById(characterId).catch(() => null);
     if (!персонаж) return { ok: false, reason: 'unknown_tier' };
     if (персонаж.level < def.minLevel) return { ok: false, reason: 'level' };
+
+    // Враг Ордена (§364): красноголовые не служат тому, кто заработал их
+    // враждебность. Отказ ДО списания золота и до проверки лимита — услуга
+    // не существует для врага, а не «кончилась».
+    if (await this.репутация.isHostile(characterId, 'qizilbash')) {
+      return { ok: false, reason: 'qizilbash_grudge' };
+    }
 
     const свои = await this.список(characterId);
     if (свои.length >= MAX_SOLDIERS) return { ok: false, reason: 'limit' };

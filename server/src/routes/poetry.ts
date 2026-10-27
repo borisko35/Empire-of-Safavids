@@ -9,6 +9,8 @@ import { DatabaseService } from '../services/DatabaseService';
 import { LeaderboardService } from '../services/LeaderboardService';
 import { AchievementService } from '../services/AchievementService';
 import { logger } from '../utils/logger';
+import { CharacterService } from '../services/CharacterService';
+import { ReputationService } from '../services/ReputationService';
 
 const router = Router();
 const poetry = getPoetryGame();
@@ -33,7 +35,20 @@ router.get('/challenges', authMiddleware, (_req, res) => {
 });
 
 // Начать игру
-router.post('/start', authMiddleware, (req: any, res) => {
+router.post('/start', authMiddleware, async (req: any, res) => {
+  // Живые последствия (§364): сошедший с Пути не слушает мистиков.
+  // Персонаж обязателен: репутация живёт на персонаже, а не на аккаунте.
+  const characterId = String(req.body?.characterId ?? '');
+  if (!characterId) { res.status(400).json({ error: 'characterId is required' }); return; }
+  const персонаж = await new CharacterService().getCharacterById(characterId).catch(() => null);
+  if (!персонаж || персонаж.userId !== req.userId) {
+    res.status(403).json({ error: 'not_your_character' });
+    return;
+  }
+  if (await new ReputationService().isHostile(characterId, 'sufi')) {
+    res.status(403).json({ error: 'sufi_grudge' });
+    return;
+  }
   try {
     // challengeId — чтобы игрок начинал именно то стихотворение, которое
     // выбрал в списке. Раньше выбор строки в списке ни на что не влиял:

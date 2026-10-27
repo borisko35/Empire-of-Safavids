@@ -2178,7 +2178,7 @@ async function loadPoetry(): Promise<void> {
   async function startPoetryGame(challenge: typeof challenges[0]): Promise<void> {
     box.innerHTML = '';
     try {
-      const data = await api.poetryStart(challenge.difficulty);
+      const data = await api.poetryStart(challenge.difficulty, cid());
       let selectedIndices: number[] = [];
 
       const titleEl = document.createElement('h3');
@@ -2284,8 +2284,16 @@ async function loadPoetry(): Promise<void> {
       backBtn.addEventListener('click', () => void loadPoetry());
       box.append(backBtn);
 
-    } catch {
-      box.innerHTML = `<div class="lb-empty">${t('chess.start_error')}</div>`;
+    } catch (err) {
+      // Сошедший с Пути (§364): причина отказа названа честно, а не
+      // «ошибка старта».
+      const code = String((err as { code?: string })?.code ?? '');
+      if (code === 'sufi_grudge') {
+        toast(t('poetry.grudge'), 'error');
+        box.innerHTML = `<div class="lb-empty">${t('poetry.grudge')}</div>`;
+      } else {
+        box.innerHTML = `<div class="lb-empty">${t('chess.start_error')}</div>`;
+      }
     }
   }
 }
@@ -2949,7 +2957,8 @@ async function loadSoldiers(): Promise<void> {
           кнопка.disabled = true;
           try {
             const r = await api.soldierHire(characterId, def.id);
-            if (!r.success) toast(t('soldiers.hire_failed'), 'error');
+            // Враг Ордена (§364): причина названа честно, а не «не вышло».
+            if (!r.success) toast(r.reason === 'qizilbash_grudge' ? t('soldiers.hire_grudge') : t('soldiers.hire_failed'), 'error');
             else toast(t('soldiers.hired_toast'), 'success');
             await loadSoldiers();
             refreshBars();

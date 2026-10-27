@@ -177,12 +177,22 @@ export class ReputationService {
    * Купцы помнят врага: и в каталоге, и в оплате должен стоять один
    * множитель, иначе витрина врала бы о цене.
    */
-  async shopPriceMultiplier(characterId: string): Promise<number> {
-    const merchants = await this.db.queryOne<{ reputation: number }>(
+  /**
+   * Враждебна ли фракция персонажу (§363): репутация ниже нуля.
+   *
+   * Единственное место, где «ниже нуля» превращается в «враждебна»: свои
+   * запросы в каждом следствии разъехались бы при смене порога.
+   */
+  async isHostile(characterId: string, factionId: string): Promise<boolean> {
+    const row = await this.db.queryOne<{ reputation: number }>(
       'SELECT reputation FROM character_reputation WHERE character_id = $1 AND faction = $2',
-      [characterId, 'merchants']
+      [characterId, factionId]
     );
-    return (merchants?.reputation ?? 0) < 0 ? HOSTILE_PRICE_MULT : 1;
+    return (row?.reputation ?? 0) < 0;
+  }
+
+  async shopPriceMultiplier(characterId: string): Promise<number> {
+    return (await this.isHostile(characterId, 'merchants')) ? HOSTILE_PRICE_MULT : 1;
   }
 
   private getRankForRep(faction: Faction, rep: number): { name: string; nameRu: string } {

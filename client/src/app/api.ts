@@ -908,9 +908,9 @@ export const api = {
       '/api/poetry/challenges',
     ),
 
-  poetryStart: (difficulty?: string) =>
+  poetryStart: (difficulty?: string, characterId?: string) =>
     req<{ gameId: string; challenge: { id: string; title: string; titleRu: string; difficulty: string; lineCount: number }; options: { text: string; textRu: string }[] }>(
-      '/api/poetry/start', { method: 'POST', body: JSON.stringify({ difficulty }) },
+      '/api/poetry/start', { method: 'POST', body: JSON.stringify({ difficulty, characterId }) },
     ),
 
   poetrySelect: (gameId: string, lineIndex: number) =>

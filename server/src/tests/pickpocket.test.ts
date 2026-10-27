@@ -203,8 +203,9 @@ describe('Кража: подключена с обеих сторон', () => {
     // Именно addGoldReward, а не addGold: прямая награда в GameSocketHandler
     // запрещена правилом проекта, иначе игрок крадёт мимо сезонного бонуса.
     must(
-      /addGoldReward\(\s*characterId\s*,\s*THEFT_GOLD\s*\)/.test(socket),
-      'золото за кражу идёт не через addGoldReward: игрок получает меньше, чем за любую другую награду'
+      /addGoldReward\(\s*characterId\s*,\s*награда\s*\)/.test(socket) &&
+      /const награда = Math\.floor\(THEFT_GOLD \* \(тень \? THEFT_MARKED_MULT : 1\)\);/.test(socket),
+      'золото за кражу идёт не через addGoldReward от THEFT_GOLD: игрок получает меньше, чем за любую другую награду'
     );
   });
 

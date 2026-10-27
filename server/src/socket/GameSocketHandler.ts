@@ -65,7 +65,7 @@ import {
 // Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
 // то же самое. Расхождение двух копий уже стоило бага с дверями.
 import {
-  spottedBy, activeGuardPosts, nightFactor,
+  spottedBy, activeGuardPosts, nightFactor, THEFT_MARKED_MULT,
   canPickpocket, distanceSq, PICKPOCKET_TARGETS, THEFT_REACH, THEFT_GOLD,
   fortEntrance, checkEntrance,
   canTakeDocument, DOCUMENT_ITEM_ID, DOCUMENT_SPOTS, DOCUMENT_REACH,
@@ -76,6 +76,7 @@ import {
 // visibilityMod.
 import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
 import { NpcMemoryService } from '../services/NpcMemoryService';
+import { ReputationService } from '../services/ReputationService';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { isDeepWater } from '../utils/spawn';
@@ -186,6 +187,7 @@ export class GameSocketHandler {
   private stealthStates = StealthStates.getInstance();
   // Память NPC о взаимодействиях (§359): жертва кражи должна запомнить вора.
   private npcMemory = new NpcMemoryService();
+  private репутация = new ReputationService();
   private karmaSystem = new KarmaSystem();
   private questService = new QuestService();
   private equipment = EquipmentCache.getInstance();
@@ -609,10 +611,14 @@ private territory = TerritoryBonuses.getInstance();
     // сезон ивента, получил бы меньше, чем за любую другую награду. Правило
     // держит проверка «все источники золотой награды переведены на новый
     // метод», и первая версия шага 3 её на себе и упала.
-    const всего = await this.characterService.addGoldReward(characterId, THEFT_GOLD);
+    // Тень отступилась (§364): помеченный Тенью светится, и успех кражи
+    // стоит вдвое дешевле. Множитель из shared рядом с THEFT_GOLD.
+    const тень = await this.репутация.isHostile(characterId, 'assassins');
+    const награда = Math.floor(THEFT_GOLD * (тень ? THEFT_MARKED_MULT : 1));
+    const всего = await this.characterService.addGoldReward(characterId, награда);
     socket.emit(SOCKET_EVENTS.STEAL_RESULT, {
       ok: true,
-      gold: THEFT_GOLD,
+      gold: награда,
       total: всего,
       targetId: цель.id,
       nameRu: цель.nameRu,

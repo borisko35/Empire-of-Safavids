@@ -1702,7 +1702,8 @@
     "choose": "Yığmaq üçün şeir seçin:",
     "lines": "{n} sətir",
     "hint": "Çətinlik: {diff} · Sətir: {n}",
-    "correct": "Doğru! Şeir toplandı! ◉"
+    "correct": "Doğru! Şeir toplandı! ◉",
+    "grudge": "Mistlər səndən üz döndərdi. Onlar dinləməyəcək"
   },
   "chronicles": {
     "cat_history": "📜 Tarix",
@@ -1987,6 +1988,7 @@
       "levy": "Zirh yoxdur, say çoxdur. Ucuzdur, amma zəifdir.",
       "veteran": "Karvanı keçdi, işini bilir. Bahalıdır, amma zərbəni özünə götürür.",
       "elite": "Şahın şəxsi qvardiyası. Sahibindən güclü vurur, qiyməti damdan aşıqdır."
-    }
+    },
+    "hire_grudge": "Qızılbaşlar düşməninə xidmət etmir"
   }
 }
