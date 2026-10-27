@@ -1541,10 +1541,18 @@ private roll = 0;
     // НПС с квестами» были бы просто фигурками, к которым не подойти.
     const hits = ray.intersectObjects(
       [...this.npcs.clickTargets, ...this.roadTraffic.clickTargets], true);
-    if (!hits.length || hits[0].distance > 22) return false;
-    const panel = hits[0].object.userData.npcPanel as string | undefined;
-    const name = hits[0].object.userData.npcName as string | undefined;
-    const npcId = hits[0].object.userData.npcId as string | undefined;
+    // Невидимые фигуры не кликабельны: луч three.js не смотрит на visible,
+    // и ночной патруль днём перехватывал бы клик, стоя перед видимым NPC.
+    const видимые = hits.filter((h) => {
+      for (let o: THREE.Object3D | null = h.object; o; o = o.parent) {
+        if (!o.visible) return false;
+      }
+      return true;
+    });
+    if (!видимые.length || видимые[0].distance > 22) return false;
+    const panel = видимые[0].object.userData.npcPanel as string | undefined;
+    const name = видимые[0].object.userData.npcName as string | undefined;
+    const npcId = видимые[0].object.userData.npcId as string | undefined;
     if (!panel) return false;
     this.callbacks?.onNpc?.(panel, name ?? '', npcId ?? '');
     return true;
@@ -2629,7 +2637,7 @@ if (isMe && moving) {
     this.fauna.update(dt, now);
     // Звери вне фауны (вол у склада, лошадь конюшни): их миксеры тикают здесь.
     тикатьЗверей(dt);
-    this.npcs.update(dt, now, this.camera.position);
+    this.npcs.update(dt, now, this.camera.position, night);
     // Позиция игрока нужна горожанам, чтобы они его обходили, а не шли сквозь него.
     // night — тот же фактор, что у sky и roadTraffic: к ночи город расходится
     // по домам (§351).

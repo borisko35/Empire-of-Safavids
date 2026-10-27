@@ -65,7 +65,7 @@ import {
 // Шаг 1 стелса: правило обнаружения живёт в shared/, чтобы клиент считал
 // то же самое. Расхождение двух копий уже стоило бага с дверями.
 import {
-  spottedBy, GUARD_POSTS, nightFactor,
+  spottedBy, activeGuardPosts, nightFactor,
   canPickpocket, distanceSq, PICKPOCKET_TARGETS, THEFT_REACH, THEFT_GOLD,
   fortEntrance, checkEntrance,
   canTakeDocument, DOCUMENT_ITEM_ID, DOCUMENT_SPOTS, DOCUMENT_REACH,
@@ -1176,9 +1176,12 @@ private territory = TerritoryBonuses.getInstance();
     // сокращает обзор стража с 20 до 6 единиц - ровно то, что просил
     // владелец: «пыльная буря ухудшает обзор, но скрывает игрока в стелсе».
     const время = GameLoop.getInstance().getWorldTime();
-    const заметил = spottedBy(data.position, GUARD_POSTS, {
+    const ночь = nightFactor(время.timeOfDay);
+    // activeGuardPosts, а не GUARD_POSTS напрямую: ночью к караулу
+    // присоединяется ночной патруль, днём его в правиле не существует.
+    const заметил = spottedBy(data.position, activeGuardPosts(ночь), {
       crouch: data.crouch === true,
-      night: nightFactor(время.timeOfDay),
+      night: ночь,
       visibility: WEATHER_EFFECTS[время.weather]?.visibilityMod ?? 1,
     }, Date.now());
     const былЗамечен = this.spottedGuards.get(characterId) ?? null;

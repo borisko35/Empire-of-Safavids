@@ -29,7 +29,7 @@ import { soldiers } from '../services/SoldierService';
 import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
 import { REDIS_CHANNELS } from '../../../shared/constants';
-import { GUARD_POSTS, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
+import { activeGuardPosts, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -570,9 +570,12 @@ private soldiers = soldiers;
         // Приседание знает только сокет-обработчик: пакет движения - единственный
         // источник, которому можно верить (и он уже прошёл античит).
         const скрытность = this.stealthStates.get(игрок.id);
+        // activeGuardPosts, а не GUARD_POSTS напрямую: список постов зависит
+        // от времени суток (ночной патруль §352), и удар по игроку обязан
+        // исходить от стража, который в этот час существует.
         const пост = strikingGuard(
           игрок.position,
-          GUARD_POSTS,
+          activeGuardPosts(ctx.night),
           { crouch: скрытность?.crouch === true, ...ctx },
           теперь,
         );

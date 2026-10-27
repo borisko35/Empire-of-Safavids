@@ -23,8 +23,13 @@ const GATE_LZ = GATE.z - CITY.z;
 export interface NpcDef {
   id: string;
   nameRu: string;
-  /** Панель HUD, которую открывает клик по NPC */
-  panel: string;
+  /**
+   * Панель HUD, которую открывает клик по NPC.
+   *
+   * Необязательна: ночной патруль (§352) — караул на марше, а не окно
+   * обслуживания, кликать в него нечего.
+   */
+  panel?: string;
   /** Квестодатель: рисуем золотой маркер «!» */
   quest: boolean;
   /** Смещение от origin поселения */
@@ -107,6 +112,10 @@ export const NPC_GROUPS: NpcGroup[] = [
       { id: 'npc_caravan_master', nameRu: 'Караван-баши Юсуф', panel: 'panel-trade', quest: true, dx: -4, dz: 22, look: { robe: 0x9c6b2f, robeDark: 0x6e4a20, hat: 'turban', hatColor: 0xb59d72, weapon: 'sword', scale: 1.02 } },
       { id: 'npc_poet', nameRu: 'Поэт Хафиз', panel: 'panel-quests', quest: false, dx: 6, dz: -20, look: { robe: 0xe8e0d0, robeDark: 0xbdb4a2, hat: 'turban', hatColor: 0x2e8b8b, weapon: 'none', scale: 0.96 } },
       { id: 'npc_guard_gate', nameRu: 'Привратник', panel: 'panel-party', quest: false, dx: 26, dz: 6, look: GUARD(0x50565e) },
+      // Ночной патруль (§352): пост в shared/stealth.ts живёт только ночью,
+      // и фигура обязана подчиняться тому же правилу. Панели у него нет —
+      // караул на марше не открывает окон.
+      { id: 'npc_night_patrol', nameRu: 'Ночной патруль', quest: false, dx: -4, dz: -10, look: GUARD(0x2e3440) },
   // ── Стражники городских ворот (проход на юго-западе) ──
   { id: 'npc_gate_guard_l', nameRu: 'Стражник Фарид', panel: 'panel-dungeons', quest: false, dx: GATE_LX + 5.1, dz: GATE_LZ - 1.0, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
   { id: 'npc_gate_guard_r', nameRu: 'Стражник Кавус', panel: 'panel-dungeons', quest: false, dx: GATE_LX + 0.9, dz: GATE_LZ + 4.6, look: { robe: 0x8b1a1a, robeDark: 0x5e1212, hat: 'helmet', hatColor: 0xb2b8c4, weapon: 'sword', shield: true, scale: 1.04 } },
@@ -282,7 +291,7 @@ export interface NpcsHandle {
    * во весь экран. Если камеры не передали (отдельные пробники сцены),
    * имена остаются видимыми.
    */
-  update(dt: number, now: number, камера?: THREE.Vector3): void;
+  update(dt: number, now: number, камера?: THREE.Vector3, night?: number): void;
   /** Меши для луча клика (по userData.npcPanel и userData.npcName) */
   clickTargets: THREE.Object3D[];
   dispose(): void;
@@ -294,11 +303,18 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
   const markers: { sprite: THREE.Sprite; phase: number; baseY: number }[] = [];
   // Имена NPC и знаки «!»: спрайты мирового размера, которые надо гасить
   // в упор, иначе они занимают пол-экрана (см. spriteClamp и textSprite).
-  const names: { sprite: THREE.Sprite; worldSize: number; x: number; y: number; z: number }[] = [];
+  const names: { sprite: THREE.Sprite; worldSize: number; x: number; y: number; z: number; ночью?: boolean }[] = [];
   // Сторожевые посты с маршрутом: их тело двигает update, а логика на сервере
   // считает ту же позицию. Список берётся из shared/stealth.ts, поэтому новый
   // патруль не требует правок клиента - модель найдётся по id NPC.
-  const walkers: { post: GuardPost; group: THREE.Group }[] = [];
+  // Коллайдер и имя-спрайт идут с постом: раньше они оставались на старте
+  // маршрута, и по дороге стража стояла невидимая стена и висело чужое имя.
+  const walkers: {
+    post: GuardPost;
+    group: THREE.Group;
+    коллайдер: { x: number; z: number; r: number } | null;
+    имя: (typeof names)[number] | null;
+  }[] = [];
 
   // ── Хранилище для реальных моделей NPC: ключ = npcId ──
   const realModels = new Map<string, {
@@ -492,7 +508,6 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       const rig = buildHumanoid(def.look);
       rig.group.position.set(x, y, z);
       const post = GUARD_POSTS.find((p) => p.id === def.id && p.patrol);
-      if (post) walkers.push({ post, group: rig.group });
       rig.group.rotation.y = Math.atan2(origin.x - x, origin.z - z) + Math.PI;
       rig.group.traverse(o => {
         o.userData.npcPanel = def.panel;
@@ -509,6 +524,20 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       name.position.set(x, y + 2.35, z);
       group.add(name);
       names.push({ sprite: name, worldSize: 0.78, x, y: y + 2.35, z });
+
+      // Патрульный пост получает ссылки на своё имя и свой коллайдер:
+      // update ведёт их за стражем. nightOnly-пост днём невидим, и имя его
+      // обязано гаснуть вместе с телом.
+      if (post) {
+        const записьИмени = names[names.length - 1];
+        if (post.nightOnly) записьИмени.ночью = true;
+        walkers.push({
+          post,
+          group: rig.group,
+          коллайдер: COLLIDERS[COLLIDERS.length - 1],
+          имя: записьИмени,
+        });
+      }
 
       // Маркер квеста «!»
       if (def.quest) {
@@ -529,7 +558,7 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
 
   scene.add(group);
 
-  function update(dt: number, now: number, камера?: THREE.Vector3): void {
+  function update(dt: number, now: number, камера?: THREE.Vector3, night?: number): void {
     // Обновляем AnimationMixer для реальных моделей (близкие NPC)
     for (const [npcId, realModel] of realModels) {
       const rigEntry = rigs.find(r => r.npcId === npcId);
@@ -550,7 +579,11 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
     // его имя во весь экран. Потолок один на все надписи — spriteClamp.
     // Без камеры (отдельные пробники сцены) ничего не гасим: гасить нечем.
     if (камера) {
+      const ночь = (night ?? 0) >= 1;
       for (const n of names) {
+        // Имя ночного стража гаснет вместе с ним: правило видимости имени
+        // то же, что у тела поста (§352).
+        if (n.ночью && !ночь) { n.sprite.visible = false; continue; }
         const d = Math.hypot(n.x - камера.x, n.y - камера.y, n.z - камера.z);
         n.sprite.visible = spriteVisible(n.worldSize, d);
       }
@@ -562,7 +595,8 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
     // двери интерьеров, когда координаты комнат жили в двух списках.
     for (const w of walkers) {
       const где = postPosition(w.post, now);
-      w.group.position.set(где.x, groundHeight(где.x, где.z), где.z);
+      const gy = groundHeight(где.x, где.z);
+      w.group.position.set(где.x, gy, где.z);
       // Лицом по ходу движения. Направление берём из разницы позиций за
       // миллисекунду: та же формула, значит на развороте маршрута страж
       // развернётся сам, без отдельного условия по фазе.
@@ -572,6 +606,24 @@ export function createNpcs(scene: THREE.Scene): NpcsHandle {
       if (Math.hypot(dx, dz) > 1e-6) {
         w.group.rotation.y = Math.atan2(dx, dz);
       }
+      // Имя и коллайдер идут со стражем. Раньше оба оставались на стартовой
+      // точке маршрута: по дороге к привратнику стояла невидимая стена, а его
+      // имя висело над пустым местом.
+      if (w.имя) {
+        w.имя.sprite.position.set(где.x, gy + 2.35, где.z);
+        w.имя.x = где.x;
+        w.имя.y = gy + 2.35;
+        w.имя.z = где.z;
+      }
+      if (w.коллайдер) {
+        w.коллайдер.x = где.x;
+        w.коллайдер.z = где.z;
+        // Ночной страж днём невидим — и не должен быть стеной на тропе.
+        w.коллайдер.r = w.post.nightOnly && (night ?? 0) < 1 ? 0 : 0.55;
+      }
+      // nightOnly-пост существует на картинке только ночью — тот же час,
+      // в который activeGuardPosts пускает его в правило детекции (§352).
+      if (w.post.nightOnly) w.group.visible = (night ?? 0) >= 1;
     }
     // ── Переходные зоны: кто сейчас на тропе ──
     // Позиция и присутствие берутся из того же расписания, что и правила

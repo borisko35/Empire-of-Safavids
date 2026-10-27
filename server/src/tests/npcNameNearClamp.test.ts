@@ -90,9 +90,11 @@ describe('Все четыре надписи под потолком', () => {
       'имя NPC не гасится по потолку');
     must(/Math\.hypot\(n\.x - камера\.x, n\.y - камера\.y, n\.z - камера\.z\)/.test(npc),
       'расстояние считается не от камеры — имя будет гаснуть не там');
-    must(/update\(dt: number, now: number, камера\?: THREE\.Vector3\): void/.test(npc),
+    // Сигнатура выросла в §352: четвёртым параметром пришла ночь для
+    // ночного патруля. Камера — по-прежнему третий, и это проверяется.
+    must(/update\(dt: number, now: number, камера\?: THREE\.Vector3, night\?: number\): void/.test(npc),
       'сигнатура update не приняла камеру');
-    must(/this\.npcs\.update\(dt, now, this\.camera\.position\)/.test(world3d),
+    must(/this\.npcs\.update\(dt, now, this\.camera\.position, night\)/.test(world3d),
       'вызов из world3d не передаёт камеру: гасить не с чем сравнивать');
   });
 
