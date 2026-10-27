@@ -19,7 +19,7 @@ import { CharacterService } from '../services/CharacterService';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
 import { GameLoop } from '../systems/GameLoop';
-import type { Weather } from '../systems/WorldTimeSystem';
+import type { Weather, TimeOfDay } from '../systems/WorldTimeSystem';
 import { playerFunnel, isoDay } from '../services/playerFunnel';
 import { combatLog } from '../services/CombatLogService';
 import { isUuid } from '../utils/uuid';
@@ -124,6 +124,26 @@ adminRouter.post('/weather', adminCheck, asyncHandler(async (req: Request, res: 
   // Сразу рассылаем — иначе клиенты увидят погоду только через минуту
   await sys.broadcastWorldTime();
   return res.json({ success: true, weather: raw });
+}));
+
+// ============================================================
+// POST /api/admin/time — Ручное время суток (tod='auto' — вернуть часы)
+// Зеркало /weather (§353): ночь, рассвет и сумерки по расписанию ждать
+// нельзя — сутки игры идут 24 реальных минуты, и ночная механика (горожане,
+// ночной патруль, скрытность) была непроверяема вживую днём.
+// ============================================================
+const TOD_KINDS = ['dawn', 'morning', 'noon', 'afternoon', 'dusk', 'night', 'midnight'];
+
+adminRouter.post('/time', adminCheck, asyncHandler(async (req: Request, res: Response) => {
+  const raw = String(req.body?.tod ?? 'auto');
+  if (raw !== 'auto' && !TOD_KINDS.includes(raw)) {
+    return res.status(400).json({ error: `Unknown time of day: ${raw}` });
+  }
+  const sys = GameLoop.getInstance().getWorldTimeSystem();
+  sys.setTimeOverride(raw === 'auto' ? null : (raw as TimeOfDay));
+  // Сразу рассылаем — иначе клиенты увидят ночь только в следующий слот
+  await sys.broadcastWorldTime();
+  return res.json({ success: true, tod: raw });
 }));
 
 // ============================================================

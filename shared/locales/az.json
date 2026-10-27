@@ -1006,7 +1006,10 @@
     "funnel_active_title": "Günlərə görə aktiv oyunçular: forma girişləri / oyuna girişlər",
     "funnel_active_row": "giriş {logins}, oyun {sessions}",
     "funnel_data_missing": "Bu hadisələr heç vaxt qeydə alınmayıb, ona görə addımları sıfır göstərir — səbəb oyunçular deyil: {events}",
-    "funnel_data_since": "Oyuna giriş {day} tarixindən qeydə alınır. Ondan əvvəlki kohortalar qeyri-tam məlumata əsaslanır."
+    "funnel_data_since": "Oyuna giriş {day} tarixindən qeydə alınır. Ondan əvvəlki kohortalar qeyri-tam məlumata əsaslanır.",
+    "time": "Günün vaxtı",
+    "time_auto": "Avtomatik",
+    "time_auto_done": "Vaxt yenə saatla gedir"
   },
   "story": {
     "title": "Hekayə",

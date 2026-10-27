@@ -3840,6 +3840,26 @@ export async function loadAdmin(): Promise<void> {
   }));
   box.append(weatherRow);
 
+  // ── Время суток: переключение вручную (§353) ──
+  // Зеркало погоды: ночь, рассвет и сумерки по расписанию ждать нельзя —
+  // сутки игры идут 24 реальных минуты, и ночная механика (горожане по
+  // домам, ночной патруль, скрытность) днём непроверяема. Подписи кнопок —
+  // те же worldclock.*, что в часах на экране.
+  adminSub(box, t('admin.time'));
+  const timeRow = rowEl('inv-item');
+  for (const tod of ['dawn', 'morning', 'noon', 'afternoon', 'dusk', 'night', 'midnight']) {
+    const label = t(`worldclock.${tod}`);
+    timeRow.append(actionButton(label, async () => {
+      await api.adminTime(tod);
+      toast(`${t('admin.time')}: ${label}`, 'success');
+    }));
+  }
+  timeRow.append(actionButton(t('admin.time_auto'), async () => {
+    await api.adminTime('auto');
+    toast(t('admin.time_auto_done'), 'success');
+  }));
+  box.append(timeRow);
+
   if (!isSenior()) return;
 
   // ── Деньги (senior+) ──

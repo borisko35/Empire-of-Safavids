@@ -357,6 +357,11 @@ export const api = {
       method: 'POST', body: JSON.stringify({ kind }),
     }),
 
+  adminTime: (tod: string) =>
+    req<{ success: boolean; tod: string }>('/api/admin/time', {
+      method: 'POST', body: JSON.stringify({ tod }),
+    }),
+
   adminGiveGold: (characterId: string, amount: number) =>
     req<{ success: boolean }>('/api/admin/give-gold', {
       method: 'POST', body: JSON.stringify({ characterId, amount }),

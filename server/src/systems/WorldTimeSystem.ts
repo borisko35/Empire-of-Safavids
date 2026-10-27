@@ -106,7 +106,7 @@ export const SEASONAL_EVENTS: Record<Season, {
  * считать дату должна быть возможность без Redis, иначе проверка даты
  * требовала бы живого соединения.
  */
-export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null): WorldTime {
+export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null, timeOverride?: TimeOfDay | null): WorldTime {
   const elapsedMinutes = Math.max(0, (nowMs - GAME_EPOCH_MS) / 60000);
   const totalGameHours = Math.floor(elapsedMinutes / REAL_MINUTES_PER_GAME_HOUR);
 
@@ -114,8 +114,8 @@ export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null): Wo
   const totalDays = Math.floor(totalGameHours / 24);
   const gameDay   = (totalDays % 30) + 1;
   const totalMonths = Math.floor(totalDays / 30);
-  const gameMonth = (totalMonths % 12) + 1;
-  const gameYear  = GAME_START_YEAR + Math.floor(totalMonths / 12);
+  const gameMonth  = (totalMonths % 12) + 1;
+  const gameYear   = GAME_START_YEAR + Math.floor(totalMonths / 12);
 
   const погода = weatherOverride ?? currentWeather(nowMs);
 
@@ -124,7 +124,10 @@ export function worldTimeAt(nowMs: number, weatherOverride?: Weather | null): Wo
     gameDay,
     gameMonth,
     gameYear,
-    timeOfDay:  timeOfDayOf(gameHour),
+    // Ручное время суток из админки (§353) важнее часов: без него ночь и
+    // рассвет приходилось ждать по расписанию, а проверить ночных горожан,
+    // ночной патруль и ночную скрытность вживую было нечем.
+    timeOfDay:  timeOverride ?? timeOfDayOf(gameHour),
     season:     seasonOf(gameMonth),
     weather:    погода,
     speedMod:   WEATHER_EFFECTS[погода].speedMod,
@@ -158,11 +161,12 @@ export class WorldTimeSystem {
   private redis = RedisService.getInstance();
 
   getCurrentWorldTime(): WorldTime {
-    // Ручная погода админа важнее расписания, поэтому передаём её дальше.
-    // Забыть здесь про weatherOverride - значит тихо вернуть поломку, которую
-    // чинили в прошлый раз: кнопка «снег» в админке нажимается, а в игре
-    // продолжает идти дождь.
-    return worldTimeAt(Date.now(), this.weatherOverride);
+    // Ручная погода и ручное время суток админа важнее расписания, поэтому
+    // передаём их дальше. Забыть здесь про weatherOverride - значит тихо
+    // вернуть поломку, которую чинили в прошлый раз: кнопка «снег» в админке
+    // нажимается, а в игре продолжает идти дождь. То же про время (§353):
+    // кнопка «ночь» нажимается, а на улице продолжается день.
+    return worldTimeAt(Date.now(), this.weatherOverride, this.timeOverride);
   }
 
   /**
@@ -179,6 +183,23 @@ export class WorldTimeSystem {
 
   getWeatherOverride(): Weather | null {
     return this.weatherOverride;
+  }
+
+  /**
+   * Ручное время суток из админ-панели (§353) — зеркало weatherOverride.
+   * Часы и календарь остаются настоящими: подменяется только фаза суток,
+   * из которой стороны считают ночь (свет, скрытность, горожане, ночной
+   * патруль, спавн).
+   */
+  private timeOverride: TimeOfDay | null = null;
+
+  setTimeOverride(tod: TimeOfDay | null): void {
+    this.timeOverride = tod;
+    logger.info(`[WorldTime] Время суток: ${tod ?? 'авто (по часам)'}`);
+  }
+
+  getTimeOverride(): TimeOfDay | null {
+    return this.timeOverride;
   }
 
   async broadcastWorldTime(): Promise<void> {

@@ -1006,7 +1006,10 @@
     "funnel_active_title": "Active players by day: form logins / world entries",
     "funnel_active_row": "logins {logins}, world {sessions}",
     "funnel_data_missing": "These events were never recorded, so their steps show zero for reasons that are not about players: {events}",
-    "funnel_data_since": "World entry has been recorded since {day}. Cohorts before that date rely on incomplete data."
+    "funnel_data_since": "World entry has been recorded since {day}. Cohorts before that date rely on incomplete data.",
+    "time": "Time of day",
+    "time_auto": "Auto",
+    "time_auto_done": "Time back on the clock"
   },
   "story": {
     "title": "Story",
