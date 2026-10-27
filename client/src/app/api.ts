@@ -581,6 +581,9 @@ export const api = {
       serverTime: number;
     }>(`/api/game/trade/contracts?characterId=${encodeURIComponent(characterId)}`),
 
+  observations: (characterId: string) =>
+    req<{ top: string | null; counts: Record<string, number> }>(`/api/game/observations?characterId=${encodeURIComponent(characterId)}`),
+
   tradeAccept: (characterId: string, contractId: string) =>
     req<{ success: boolean }>('/api/game/trade/accept', {
       method: 'POST',

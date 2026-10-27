@@ -1990,5 +1990,14 @@
       "elite": "A personal guard. Hits harder than his master and costs like a roof."
     },
     "hire_grudge": "The Order does not serve its enemy"
+  },
+  "observations": {
+    "title": "The world noticed",
+    "monsterKill": "you are a field hunter above all — {n} kills",
+    "dungeonClear": "dungeons are your trade — {n} descents",
+    "questDone": "you walk the story — {n} quests",
+    "pvpWin": "you strike players — {n} victories",
+    "auctionSale": "you trade on the auction — {n} sales",
+    "tradeDone": "the road is your element — {n} deals"
   }
 }

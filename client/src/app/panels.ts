@@ -2577,6 +2577,24 @@ async function loadTasks(): Promise<void> {
     stats.className = 'lb-my-rank';
     stats.textContent = `${t('site.tasks_done')}: ${data.completedCount}`;
     box.append(stats);
+
+    // Мир заметил (§365): профиль привычек — фундамент личных квестов.
+    // Своя попытка со своим catch: наблюдение — украшение, панель задач
+    // не должна умереть из-за него.
+    try {
+      const obs = await api.observations(charId);
+      if (obs.top) {
+        const заметка = document.createElement('div');
+        заметка.className = 'lb-empty';
+        const шаблон = t(`observations.${obs.top}`);
+        // t() при отсутствии ключа отдаёт путь: показываем тогда просто
+        // топ без подписи, никогда не путь.
+        заметка.textContent = шаблон.includes('.')
+          ? `${t('observations.title')}`
+          : `${t('observations.title')}: ${шаблон.replace('{n}', String(obs.counts[obs.top] ?? 0))}`;
+        box.append(заметка);
+      }
+    } catch { /* наблюдение не обязано доезжать */ }
     if (!data.tasks.length) {
       const empty = document.createElement('div');
       empty.className = 'lb-empty';

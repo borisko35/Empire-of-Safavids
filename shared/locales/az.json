@@ -1990,5 +1990,14 @@
       "elite": "Şahın şəxsi qvardiyası. Sahibindən güclü vurur, qiyməti damdan aşıqdır."
     },
     "hire_grudge": "Qızılbaşlar düşməninə xidmət etmir"
+  },
+  "observations": {
+    "title": "Dünya gördü",
+    "monsterKill": "ən çox tarlada ovçusan — {n} dəfə",
+    "dungeonClear": "sənin işin zindanlardır — {n} eniş",
+    "questDone": "hekatəyi izləyirsən — {n} tapşırıq",
+    "pvpWin": "oyunçulara vurursan — {n} qələbə",
+    "auctionSale": "hərracda ticarət edirsən — {n} satış",
+    "tradeDone": "yol sənin üslubundur — {n} sövdələşmə"
   }
 }

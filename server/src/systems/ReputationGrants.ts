@@ -17,6 +17,8 @@
 // месте: фракция, за что и сколько.
 
 import { ReputationService } from '../services/ReputationService';
+// Слой наблюдений (§365): те же шесть дел, одна точка, одна истина.
+import { наблюдения } from './PlayerObservations';
 
 const reputation = new ReputationService();
 
@@ -60,6 +62,12 @@ export async function grantReputation(
   onRankUp?: (factionId: string, rankRu: string) => void,
 ): Promise<void> {
   const { faction, amount } = REP[kind];
+  // Наблюдение (§365) ставится рядом с репутацией: то же дело, та же точка.
+  // void и отдельный catch: наблюдение — не оплата, срыв записи не должен
+  // ломать ни бой, ни само начисление.
+  void наблюдения.observe(characterId, kind).catch((error) => {
+    console.warn('[Observations] not recorded:', error);
+  });
   try {
     const res = await reputation.addReputation(characterId, faction, amount);
     if (res.rankUp && res.newRank) onRankUp?.(faction, res.newRank);

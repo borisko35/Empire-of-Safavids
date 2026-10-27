@@ -10,6 +10,7 @@ import { pvpArena } from '../systems/PvpArenaService';
 import { GuildService } from '../services/GuildService';
 import { NPC_SHOPS } from '../services/AuctionService';
 import { ReputationService } from '../services/ReputationService';
+import { наблюдения } from '../systems/PlayerObservations';
 import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
 import { DUNGEONS_DATABASE, getDungeonsByLevel } from '../data/dungeons';
 import { getWorldBosses } from '../data/monsters';
@@ -1542,6 +1543,20 @@ gameRouter.post('/dungeons/status', secureMiddleware, requireCharacterOwnership(
 // ============================================================
 // ТОРГОВЫЕ КОНТРАКТЫ (Шёлковый путь)
 // ============================================================
+
+// GET /api/game/observations — что мир заметил за персонажем (§365).
+// Профиль привычек: шесть счётчиков и верхний. Фундамент личных квестов.
+gameRouter.get('/observations', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+    const свой = await characterService.getCharacterById(characterId).catch(() => null);
+    if (!свой || свой.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    return res.json(await наблюдения.profile(characterId));
+  })
+);
 
 // GET /api/game/trade/contracts — список маршрутов + состояние своего каравана
 gameRouter.get('/trade/contracts', secureMiddleware,
