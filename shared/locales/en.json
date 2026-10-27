@@ -1190,7 +1190,11 @@
       "blade": "Blade",
       "assassin": "Assassin",
       "master": "Master",
-      "phantom": "Phantom"
+      "phantom": "Phantom",
+      "enemy_of_the_order": "Enemy of the Order",
+      "fallen_from_the_path": "Fallen from the Path",
+      "guild_enemy": "Guild Enemy",
+      "marked_by_the_shadow": "Marked by the Shadow"
     }
   },
   "dialogue": {

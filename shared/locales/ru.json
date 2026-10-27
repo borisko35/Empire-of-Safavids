@@ -1190,7 +1190,11 @@
       "blade": "Клинок",
       "assassin": "Ассасин",
       "master": "Мастер",
-      "phantom": "Фантом"
+      "phantom": "Фантом",
+      "enemy_of_the_order": "Враг Ордена",
+      "fallen_from_the_path": "Сошедший с Пути",
+      "guild_enemy": "Враг Гильдии",
+      "marked_by_the_shadow": "Помеченный Тенью"
     }
   },
   "dialogue": {

@@ -1190,7 +1190,11 @@
       "blade": "Qılınc",
       "assassin": "Assasin",
       "master": "Ustad",
-      "phantom": "Xəyal"
+      "phantom": "Xəyal",
+      "enemy_of_the_order": "Ordenin Düşməni",
+      "fallen_from_the_path": "Yoldan düşmüş",
+      "guild_enemy": "Cəmiyyətin düşməni",
+      "marked_by_the_shadow": "Kölgə tərəfindən işarələnmiş"
     }
   },
   "dialogue": {

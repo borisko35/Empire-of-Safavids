@@ -156,6 +156,10 @@ export const AUCTION_LISTING_FEE_SILVER = 10;
  * убийства монстров и данжи.
  */
 export const AUCTION_DUTY_STEPS: readonly { minRep: number; rate: number }[] = [
+  // Враг Гильдии (§363) платит ставку выше княжеской: худшие условия в
+  // лестнице. Логика «последний пройденный порог» работает и с отрицательным
+  // первым шагом: репутация ниже нуля не проходит порог 0 и остаётся на 10%.
+  { minRep: -300, rate: 0.10 },
   { minRep: 0, rate: 0 },
   { minRep: 100, rate: 0.01 },
   { minRep: 300, rate: 0.03 },

@@ -466,7 +466,8 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ itemId }) },
     ),
 
-  shops: () => req<{ shops: { id: string; nameRu: string; items: { itemId: string; nameRu: string; price: number; currency: string; minLevel?: number }[] }[] }>('/api/game/shops'),
+  shops: (characterId?: string) =>
+    req<{ shops: { id: string; nameRu: string; items: { itemId: string; nameRu: string; price: number; currency: string; minLevel?: number }[] }[] }>(`/api/game/shops${characterId ? `?characterId=${encodeURIComponent(characterId)}` : ''}`),
 
   shopBuy: (shopId: string, characterId: string, itemId: string, currency: 'gold' | 'azens' | 'silver' | 'syrian' = 'gold', quantity = 1) =>
     req<{ success: boolean; itemId: string; quantity: number; goldSpent: number; azensSpent: number; silverSpent: number; syrianSpent: number; gold?: number; azens?: number; silver?: number; syrian?: number }>(

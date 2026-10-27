@@ -810,7 +810,8 @@ async function loadBattlepass(box: HTMLElement): Promise<void> {
 export async function loadShop(): Promise<void> {
   if (!session.character) return;
   try {
-    const { shops } = await api.shops();
+    // Цены персонажные (§363): враг Гильдии видит в витрине свою цену.
+    const { shops } = await api.shops(cid());
     const box = $('shop-list');
     if (!box) return;
     box.innerHTML = '';
@@ -1667,7 +1668,8 @@ export async function loadMounts(): Promise<void> {
     }
 
     // ── Конюшня ──
-    const { shops } = await api.shops();
+    // Цены персонажные (§363): враг Гильдии видит в витрине свою цену.
+    const { shops } = await api.shops(cid());
     const stableShop = shops.find(s => s.id === 'shop_isfahan_stable');
     if (!stableShop) return;
 

@@ -9,6 +9,7 @@ import { startPvpArena } from '../systems/PvpArenaFlow';
 import { pvpArena } from '../systems/PvpArenaService';
 import { GuildService } from '../services/GuildService';
 import { NPC_SHOPS } from '../services/AuctionService';
+import { ReputationService } from '../services/ReputationService';
 import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
 import { DUNGEONS_DATABASE, getDungeonsByLevel } from '../data/dungeons';
 import { getWorldBosses } from '../data/monsters';
@@ -189,6 +190,8 @@ const karmaSystem = new KarmaSystem();
 const tradeService = new TradeService();
 // Засады на караваны — Шёлковый путь (ROADMAP §179)
 const ambushService = new AmbushService();
+// Репутация (§363): враг Гильдии платит в лавках больше — и в витрине, и в чеке.
+const reputationService = new ReputationService();
 const premiumSystem = new PremiumSystem();
 const paymentService = new PaymentService();
 // Для вебхука Xsolla user_validation: он спрашивает, существует ли игрок.
@@ -365,17 +368,30 @@ gameRouter.get('/auction/mine', secureMiddleware,
 // МАГАЗИНЫ
 // ============================================================
 
-gameRouter.get('/shops', (_req: Request, res: Response) => {
+gameRouter.get('/shops', secureMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  // Цены персонажные (§363): враг Гильдии видит в витрине ту же цену, что
+  // заплатит. Без characterId (пробники, гости) — базовые.
+  const characterId = String(req.query.characterId ?? '');
+  let множитель = 1;
+  if (characterId) {
+    const свой = await characterService.getCharacterById(characterId).catch(() => null);
+    if (!свой || свой.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    множитель = await reputationService.shopPriceMultiplier(characterId);
+  }
   const shops = Object.entries(NPC_SHOPS).map(([id, shop]) => ({
     id,
     nameRu: shop.nameRu,
     items: shop.items.map((item) => ({
       ...item,
+      // Округление вниз, как и в оплате: витрина и чек обязаны сойтись.
+      price: Math.floor(item.price * множитель),
       nameRu: ITEMS_DATABASE[item.itemId]?.nameRu ?? item.itemId,
     })),
   }));
   return res.json({ shops });
-});
+}));
 
 gameRouter.get('/shops/:shopId', (req: Request, res: Response) => {
   const shop = NPC_SHOPS[req.params.shopId];
@@ -421,7 +437,10 @@ gameRouter.post('/shops/:shopId/buy', secureMiddleware, requireCharacterOwnershi
     // Округление вниз: цена должна быть целой, а округление вверх при скидке
     // в 1% на дешёвом товаре означало бы «скидку» ценой в золото.
     const prof = await professionOf(value.characterId);
-    const priceMult = professionBonuses(prof?.id ?? null, prof?.level ?? 0).price;
+    // Гильдейский множитель (§363) в тот же продукт: враг Гильдии платит
+    // больше и в витрине, и в чеке — два множителя не живут по отдельности.
+    const гильдия = await reputationService.shopPriceMultiplier(value.characterId);
+    const priceMult = professionBonuses(prof?.id ?? null, prof?.level ?? 0).price * гильдия;
     const totalCost = Math.max(1, Math.floor(entry.price * value.quantity * priceMult));
     let gold: number | undefined;
     let azens: number | undefined;

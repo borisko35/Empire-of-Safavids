@@ -164,7 +164,8 @@ describe('Репутация: переводы', () => {
       const faction = rep.faction as Dict;
       const rank = rep.rank as Dict;
       expect({ lang, фракций: Object.keys(faction).length, рангов: Object.keys(rank).length })
-        .toEqual({ lang, фракций: 4, рангов: 20 });
+        // 20 → 24: четыре враждебных ранга на дне лестниц (§363).
+        .toEqual({ lang, фракций: 4, рангов: 24 });
     }
   });
 
