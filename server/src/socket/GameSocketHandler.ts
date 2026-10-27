@@ -75,6 +75,8 @@ import {
 // и то же. WEATHER_EFFECTS - справочник модификаторов, из него берётся
 // visibilityMod.
 import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
+// Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
+import { isBehindTarget, BACK_STRIKE_MULT } from '../../../shared/backStrike';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -240,6 +242,15 @@ private territory = TerritoryBonuses.getInstance();
   // Откат держал только клиент, поэтому правкой клиента можно было слать
   // по 30 ударов в секунду - лимит пакетов (30/с) это пропускал.
   private lastAttackAt = new Map<string, number>();
+  /**
+   * Куда игрок смотрит: characterId -> направление из пакета движения (§355).
+   *
+   * Раньше direction только транслировался соседям и нигде не хранился,
+   * и у сервера не было ни одного уязвимого места: удар в спину нечем было
+   * бы посчитать. Приходит из того же пакета, что уже прошёл античит.
+   * Направления нет у игрока, который ещё не шёл, — его спина не открыта.
+   */
+  private playerFacing = new Map<string, { x: number; z: number }>();
   /**
    * Позиция игрока на прошлом тике регенерации и время: по ним считается,
    * бежал ли он, чтобы выносливость за бег нельзя было получить бесплатно.
@@ -1192,6 +1203,11 @@ private territory = TerritoryBonuses.getInstance();
       z: data.position.z,
       crouch: data.crouch === true,
     });
+    // Куда смотрит (§355): та же посылка, что и позиция. Направление
+    // нормализуется правилом, здесь храним как пришло.
+    if (data.direction && Number.isFinite(data.direction.x) && Number.isFinite(data.direction.z)) {
+      this.playerFacing.set(characterId, { x: data.direction.x, z: data.direction.z });
+    }
     if (заметил?.id !== былЗамечен) {
       this.spottedGuards.set(characterId, заметил?.id ?? null);
       if (заметил) {
@@ -2192,6 +2208,22 @@ private territory = TerritoryBonuses.getInstance();
     // честнее, чем 23 → 18 → «защита −5».
     result.damage = Math.floor(result.damage * (terrЗащитник?.def ?? 1));
 
+    // Точный удар (§355): удар в спину игрока. Только обычный удар — навыки
+    // бьют издали и по площади. Направление цели — из её пакета движения;
+    // цель, которая ещё не шла, спины не открывает (нет данных — нет бонуса).
+    // Позиции — серверные: атакующего из той же карты, что для досягаемости,
+    // цели — из Redis, как для проверки досягаемости в PvE.
+    const isBasicPvP = action.actionType === 'attack' && !action.skillId;
+    const targetPosPvP = await this.redis.getPlayerPosition(target.id) as { x: number; y: number; z: number } | null;
+    const attackerPosPvP = this.defenseStates.getPosition(attacker.id);
+    const вСпину = isBasicPvP && !result.isDodged && !!attackerPosPvP && !!targetPosPvP &&
+      isBehindTarget(
+        { x: targetPosPvP.x, z: targetPosPvP.z },
+        this.playerFacing.get(target.id) ?? null,
+        { x: attackerPosPvP.x, z: attackerPosPvP.z },
+      );
+    if (вСпину) result.damage = Math.floor(result.damage * BACK_STRIKE_MULT);
+
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
       return;
@@ -2203,10 +2235,12 @@ private territory = TerritoryBonuses.getInstance();
     // (1.25) и у захвата «Орлиный взор» (8) отношение урона к базе доходило
     // до 21 при пороге 15 — и один законный крит объявлялся подделкой урона с
     // мерой 3, то есть перманентным баном.
+    // Точный удар входит в ту же базу: без него честный удар в спину (1.5)
+    // выглядел бы как подделка урона.
     const damageCheck = this.antiCheat.validateDamage(
       attacker.id,
       result.damage,
-      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale)
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) * (вСпину ? BACK_STRIKE_MULT : 1)
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
@@ -2245,6 +2279,8 @@ private territory = TerritoryBonuses.getInstance();
 
     socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
       attackerId: attacker.id, targetId: target.id, ...result, targetHp: applied.hp, targetMaxHp: applied.maxHp,
+      // Точный удар (§355): награда за положение, а не за удачу.
+      isPrecise: вСпину,
     });
 
     const targetSocket = this.activePlayers.get(target.id);
@@ -2379,6 +2415,22 @@ private territory = TerritoryBonuses.getInstance();
     // Тот же бонус «+5% к урону», что и в PvP-ударе
     const dmgBuff = await this.buffs.getDamageMultiplier(attacker.id);
     result.damage = Math.floor(result.damage * dmgBuff);
+
+    // Точный удар (§355): удар в спину. Только обычный удар — навыки бьют
+    // по площади и издали, спина для них не определена. Позиция атакующего —
+    // та же серверная, по которой считалась досягаемость; направление
+    // монстра выводится из его поведения (кем занят, куда патрулирует).
+    const ai = GameLoop.getInstance().getSpawnSystem().getAI();
+    const isBasic = action.actionType === 'attack' && !action.skillId;
+    const attackerPos = this.defenseStates.getPosition(attacker.id);
+    const вСпину = isBasic && !result.isDodged && !!attackerPos &&
+      isBehindTarget(
+        { x: monsterCtx.position.x, z: monsterCtx.position.z },
+        ai.facingOf(monsterCtx),
+        { x: attackerPos.x, z: attackerPos.z },
+      );
+    if (вСпину) result.damage = Math.floor(result.damage * BACK_STRIKE_MULT);
+
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result });
       return;
@@ -2389,10 +2441,12 @@ private territory = TerritoryBonuses.getInstance();
     // (1.25) и у захвата «Орлиный взор» (8) отношение урона к базе доходило
     // до 21 при пороге 15 — и один законный крит объявлялся подделкой урона с
     // мерой 3, то есть перманентным баном.
+    // Точный удар входит в ту же базу: множитель легитимен, и без него
+    // честный удар в спину (1.5) объявлялся бы подделкой.
     const damageCheck = this.antiCheat.validateDamage(
       attacker.id,
       result.damage,
-      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale)
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) * (вСпину ? BACK_STRIKE_MULT : 1)
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
@@ -2404,7 +2458,6 @@ private territory = TerritoryBonuses.getInstance();
       }
     }
 
-    const ai = GameLoop.getInstance().getSpawnSystem().getAI();
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
 
     // Удар по площади. Раньше поля aoe и aoeRadius были в данных и не читались
@@ -2512,6 +2565,9 @@ private territory = TerritoryBonuses.getInstance();
       targetMaxHp: monsterCtx.maxHp,
       comboFinisher: comboMult > 1,
       soldiersDamage: уронКараула,
+      // Точный удар (§355): клиент отличает его от крита — награда за
+      // положение, а не за удачу.
+      isPrecise: вСпину,
     });
 
     socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
@@ -3378,6 +3434,9 @@ private territory = TerritoryBonuses.getInstance();
     this.spottedGuards.delete(socket.characterId);
     this.defenseStates.cleanup(socket.characterId);
     this.antiCheat.cleanup(socket.characterId);
+    // Направление взгляда умерло вместе с сокетом: вернувшийся игрок стоит
+    // столбом, пока не пошлёт пакет движения, и спины не открывает (§355).
+    this.playerFacing.delete(socket.characterId);
     // Состояние смерти здесь НЕ снимаем: страховочный таймер обязан
     // доработать и записать респавн в БД сам — иначе вышедший посреди
     // смерти вернулся бы в трупе (hp = 0) и не смог бы ничего сделать.

@@ -160,6 +160,17 @@ export class DefenseStates {
     this.positions.set(characterId, pos);
   }
 
+  /**
+   * Серверная позиция персонажа — та же, по которой считается досягаемость.
+   *
+   * Правилу спины (§355) нужна та же позиция, что и досягаемости: если бы
+   * спина считалась по другой карте, досягаемость и уязвимое место
+   * разошлись бы — удар «в упор сзади» был бы точным, а «с трёх шагов» нет.
+   */
+  getPosition(characterId: string): { x: number; y: number; z: number } | null {
+    return this.positions.get(characterId) ?? null;
+  }
+
   /** Рывок сейчас на откате? */
   isDodgeOnCooldown(characterId: string, now = Date.now()): boolean {
     const st = this.states.get(characterId);

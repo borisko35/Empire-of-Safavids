@@ -310,6 +310,31 @@ export class AISystem {
     }
   }
 
+  /**
+   * Куда монстр смотрит сейчас (§355, удар в спину).
+   *
+   * Направления в данных нет — оно выводится из поведения: бьющий или
+   * преследующий монстр смотрит на свою цель (значит, поймать его со спины
+   * можно, только пока он занят кем-то другим), патрулирующий — на текущую
+   * точку маршрута. Стоящий столбом спины не открывает: null честно означает
+   * «смотри кругом», как у стражей без направления в shared/stealth.ts.
+   */
+  facingOf(ctx: AIContext): { x: number; z: number } | null {
+    const цель = ctx.targetPosition;
+    if (цель) {
+      const dx = цель.x - ctx.position.x;
+      const dz = цель.z - ctx.position.z;
+      if (Math.hypot(dx, dz) > 1e-6) return { x: dx, z: dz };
+    }
+    if (ctx.state === 'patrol' && ctx.patrolPoints.length > 0) {
+      const точка = ctx.patrolPoints[ctx.patrolIndex];
+      const dx = точка.x - ctx.position.x;
+      const dz = точка.z - ctx.position.z;
+      if (Math.hypot(dx, dz) > 1e-6) return { x: dx, z: dz };
+    }
+    return null;
+  }
+
   // ============================================================
   // Выбор навыка
   // ============================================================

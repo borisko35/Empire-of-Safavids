@@ -1262,7 +1262,7 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number }) => {
+  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
     const target = world.monsters.get(r.targetId) ?? world.players.get(r.targetId);
@@ -1278,11 +1278,13 @@ function wireSocket(): void {
       } else if (r.isDodged) {
         world.addFloater(target.pos.x, target.pos.z - 1, t('world.dodge'), '#cfe3f0');
       } else {
-        world.addEffect('slash', attacker.pos.x, attacker.pos.z, target.pos.x, target.pos.z, r.isCritical ? '#F4D26C' : '#e8e2d2');
+        // Точный удар (§355) — своя пометка и свой цвет: награда за положение
+        // должна читаться отличной и от крита (золотого), и от обычного удара.
+        world.addEffect('slash', attacker.pos.x, attacker.pos.z, target.pos.x, target.pos.z, r.isPrecise ? '#9ec8e8' : r.isCritical ? '#F4D26C' : '#e8e2d2');
         world.addFloater(
           target.pos.x, target.pos.z - 1,
-          `-${r.damage}${r.isCritical ? '!' : r.isBlocked ? ' ⛨' : ''}`,
-          r.isCritical ? '#F4D26C' : '#ffffff', r.isCritical,
+          `-${r.damage}${r.isPrecise ? ' ✧' : r.isCritical ? '!' : r.isBlocked ? ' ⛨' : ''}`,
+          r.isPrecise ? '#9ec8e8' : r.isCritical ? '#F4D26C' : '#ffffff', r.isCritical,
         );
         const m = world.monsters.get(r.targetId);
         if (m && r.targetHp != null) m.hp = r.targetHp;
