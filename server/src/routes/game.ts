@@ -11,6 +11,7 @@ import { GuildService } from '../services/GuildService';
 import { NPC_SHOPS } from '../services/AuctionService';
 import { ReputationService } from '../services/ReputationService';
 import { наблюдения } from '../systems/PlayerObservations';
+import { поручения } from '../systems/PersonalErrands';
 import { QUESTS_DATABASE, getAvailableQuests } from '../data/quests';
 import { DUNGEONS_DATABASE, getDungeonsByLevel } from '../data/dungeons';
 import { getWorldBosses } from '../data/monsters';
@@ -1543,6 +1544,37 @@ gameRouter.post('/dungeons/status', secureMiddleware, requireCharacterOwnership(
 // ============================================================
 // ТОРГОВЫЕ КОНТРАКТЫ (Шёлковый путь)
 // ============================================================
+
+// GET /api/game/errand — личное поручение: предложение или прогресс (§367)
+gameRouter.get('/errand', secureMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const characterId = String(req.query.characterId ?? '');
+    if (!characterId) return res.status(400).json({ error: 'characterId is required' });
+    const свой = await characterService.getCharacterById(characterId).catch(() => null);
+    if (!свой || свой.userId !== req.userId) {
+      return res.status(403).json({ error: 'Character does not belong to you' });
+    }
+    return res.json(await поручения.status(characterId));
+  })
+);
+
+// POST /api/game/errand/accept — принять поручение по верхнему делу (§367)
+gameRouter.post('/errand/accept', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await поручения.accept(String(req.body?.characterId ?? ''));
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    return res.status(201).json({ success: true, template: result.template });
+  })
+);
+
+// POST /api/game/errand/claim — сдать поручение и забрать награду (§367)
+gameRouter.post('/errand/claim', secureMiddleware, requireCharacterOwnership(),
+  asyncHandler(async (req: Request, res: Response) => {
+    const result = await поручения.claim(String(req.body?.characterId ?? ''));
+    if (!result.ok) return res.status(400).json({ error: result.code });
+    return res.json({ success: true, gold: result.gold, exp: result.exp });
+  })
+);
 
 // GET /api/game/observations — что мир заметил за персонажем (§365).
 // Профиль привычек: шесть счётчиков и верхний. Фундамент личных квестов.

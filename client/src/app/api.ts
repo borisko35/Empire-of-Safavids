@@ -581,6 +581,19 @@ export const api = {
       serverTime: number;
     }>(`/api/game/trade/contracts?characterId=${encodeURIComponent(characterId)}`),
 
+  errand: (characterId: string) =>
+    req<{ state: 'none' | 'active' | 'done'; template: { id: string; title: string; titleRu: string; desc: string; descRu: string; npcRu: string; npc: string } | null; progress: number; target: number; rewardGold: number; rewardExp: number }>(`/api/game/errand?characterId=${encodeURIComponent(characterId)}`),
+
+  errandAccept: (characterId: string) =>
+    req<{ success: boolean }>('/api/game/errand/accept', {
+      method: 'POST', body: JSON.stringify({ characterId }),
+    }),
+
+  errandClaim: (characterId: string) =>
+    req<{ success: boolean; gold: number; exp: number }>('/api/game/errand/claim', {
+      method: 'POST', body: JSON.stringify({ characterId }),
+    }),
+
   observations: (characterId: string) =>
     req<{ top: string | null; counts: Record<string, number> }>(`/api/game/observations?characterId=${encodeURIComponent(characterId)}`),
 

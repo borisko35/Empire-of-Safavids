@@ -1999,5 +1999,12 @@
     "pvpWin": "oyunçulara vurursan — {n} qələbə",
     "auctionSale": "hərracda ticarət edirsən — {n} satış",
     "tradeDone": "yol sənin üslubundur — {n} sövdələşmə"
+  },
+  "errand": {
+    "title": "Şəxsi tapşırıq",
+    "claim": "Mükafatı götür",
+    "claimed": "+{gold} qızıl · +{exp} təcrübə",
+    "claim_failed": "Mükafat qaçdı — yenidən cəhd et",
+    "in_progress": "Yolda"
   }
 }

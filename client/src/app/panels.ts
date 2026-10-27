@@ -2578,6 +2578,52 @@ async function loadTasks(): Promise<void> {
     stats.textContent = `${t('site.tasks_done')}: ${data.completedCount}`;
     box.append(stats);
 
+    // Личное поручение (§367): предложение по верхнему делу профиля.
+    // Своя попытка со своим catch — как и наблюдение ниже: поручение не
+    // должно ронять панель задач.
+    try {
+      const e = await api.errand(charId);
+      if (e.state !== 'none' && e.template) {
+        const en2 = document.documentElement.lang === 'en';
+        const row = document.createElement('div');
+        row.className = 'friend-entry';
+        const заголовок = en2 ? e.template.title : e.template.titleRu;
+        const подпись = en2 ? e.template.desc : e.template.descRu;
+        const нпс = en2 ? e.template.npc : e.template.npcRu;
+        let текст = `<span class="friend-name">${t('errand.title')}: ${заголовок}</span>` +
+          `<span class="friend-info">${нпс} — ${подпись}</span>`;
+        if (e.state === 'active') {
+          текст += `<span class="lb-value">${e.progress}/${e.target}</span>`;
+        } else {
+          текст += `<span class="lb-value">✓</span>`;
+        }
+        row.innerHTML = текст;
+        const кнопка = document.createElement('button');
+        кнопка.type = 'button';
+        кнопка.className = 'region-travel';
+        if (e.state === 'active') {
+          кнопка.textContent = t('errand.in_progress');
+          кнопка.disabled = true;
+        } else {
+          кнопка.textContent = t('errand.claim');
+          кнопка.onclick = async () => {
+            кнопка.disabled = true;
+            try {
+              const r = await api.errandClaim(charId);
+              toast(t('errand.claimed').replace('{gold}', String(r.gold)).replace('{exp}', String(r.exp)), 'success');
+              await loadTasks();
+              refreshBars();
+            } catch {
+              toast(t('errand.claim_failed'), 'error');
+              кнопка.disabled = false;
+            }
+          };
+        }
+        row.append(кнопка);
+        box.append(row);
+      }
+    } catch { /* поручение не обязано доезжать */ }
+
     // Мир заметил (§365): профиль привычек — фундамент личных квестов.
     // Своя попытка со своим catch: наблюдение — украшение, панель задач
     // не должна умереть из-за него.

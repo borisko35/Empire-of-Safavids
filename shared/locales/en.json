@@ -1999,5 +1999,12 @@
     "pvpWin": "you strike players — {n} victories",
     "auctionSale": "you trade on the auction — {n} sales",
     "tradeDone": "the road is your element — {n} deals"
+  },
+  "errand": {
+    "title": "Personal errand",
+    "claim": "Collect reward",
+    "claimed": "+{gold} gold · +{exp} exp",
+    "claim_failed": "The reward slipped away — try again",
+    "in_progress": "In progress"
   }
 }
