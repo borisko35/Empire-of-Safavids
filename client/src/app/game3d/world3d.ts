@@ -225,6 +225,7 @@ export class World3D {
   /** Композитор для SSAO + SSR + Bloom. Без них сцена выглядит плоской. */
   private composer!: EffectComposer;
   private deferred!: DeferredPass;
+    private previousReport: { прошито: number; всего: number; мимо: string[] } | null = null;
   private ssrPass!: SSRPass;
   private bloomPass!: UnrealBloomPass;
   private sun!: THREE.DirectionalLight;
@@ -651,22 +652,29 @@ private roll = 0;
    */
   private patchWorldMaterials(): void {
     const отчёт = this.deferred.patch(this.scene);
-    // Всегда выводим отчёт, даже если всё прошито — чтобы видеть динамику
-    console.info(
-      `Otlozhennyy G-buffer: ${отчёт.прошито} iz ${отчёт.всего} materialov. `
-      + `Bez kanalov ostalis: ${отчёт.мимо.length > 0 ? отчёт.мимо.join(', ') : 'всё прошито'}`,
-    );
-    if (отчёт.всего === 0) {
-      console.warn('G-buffer patching: сцена пустая, материалы не найдены — это нормально в начале, но должено быть прошито после buildCity');
+    // Сравниваем с прошлым отчётом — логируем только при изменении
+    const изменилось = this.previousReport === null ||
+      this.previousReport.прошито !== отчёт.прошито ||
+      this.previousReport.всего !== отчёт.всего ||
+      this.previousReport.мимо.length !== отчёт.мимо.length;
+    if (изменилось) {
+      console.info(
+        `Otlozhennyy G-buffer: ${отчёт.прошито} iz ${отчёт.всего} materialov. `
+        + `Bez kanalov ostalis: ${отчёт.мимо.length > 0 ? отчёт.мимо.join(', ') : 'всё прошито'}`,
+      );
+      if (отчёт.всего === 0) {
+        console.warn('G-buffer patching: scenario empty, materials not found — this is normal at the beginning, but should be patched after buildCity');
+      }
+      // Показываем список проблемных материалов для отладки
+      if (отчёт.мимо.length > 0 && отчёт.мимо.length <= 20) {
+        отчёт.мимо.forEach((name, i) => {
+          console.debug(`  [G-buffer miss] ${name}: ${i + 1}/${отчёт.мимо.length}`);
+        });
+      } else if (отчёт.мимо.length > 20) {
+        console.debug(`  [G-buffer miss] ... и ещё ${отчёт.мимо.length - 20} материалов`);
+      }
     }
-    // Показываем список проблемных материалов для отладки
-    if (отчёт.мимо.length > 0 && отчёт.мимо.length <= 20) {
-      отчёт.мимо.forEach((name, i) => {
-        console.debug(`  [G-buffer miss] ${name}: ${i + 1}/${отчёт.мимо.length}`);
-      });
-    } else if (отчёт.мимо.length > 20) {
-      console.debug(`  [G-buffer miss] ... и ещё ${отчёт.мимо.length - 20} материалов`);
-    }
+    this.previousReport = { прошито: отчёт.прошито, всего: отчёт.всего, мимо: отчёт.мимо };
   }
 
   // ── Инициализация ────────────────────────────────────────────
