@@ -107,6 +107,18 @@ const CROUCH_SPEED = 2.2;
 const MOUNT_SPRINT_MULT = 1.4;
 const PLAYER_R = 1.0;   // радиус персонажа для столкновений
 const CAMERA_R = 0.35;  // камера может прижиматься к стене ближе, чем персонаж
+// ── Камера и стены (§369) ──
+/** Шаг сэмплирования луча «игрок → камера». ВЫБОР: меньше диаметра камеры
+ *  (2 * CAMERA_R = 0.7), чтобы стена не проскочила между пробами. */
+const CAMERA_SAMPLE_STEP = 0.4;
+/** С какой дистанции начинаем луч: ближе — камера внутри персонажа. */
+const CAMERA_SAMPLE_MIN = 1.2;
+/** Потолок дистанции в интерьерах. ВЫБОР: комната шириной 22 м, и камера
+ *  на 7.5 м в ней всегда упирается в дальнюю стену — теснее виднее. */
+const CAMERA_INDOOR_MAX = 5;
+/** Скорость сглаживания (в секунду, экспоненциально). ВЫБОР: камера
+ *  успевает уйти от стены за долю секунды и так же спокойно возвращается. */
+const CAMERA_PULL_RATE = 10;
 /**
  * Скорость доворота персонажа в направлении движения, доля пути к цели за секунду.
  *
@@ -303,7 +315,14 @@ export class World3D {
   // Камера
   private yaw = Math.PI;          // куда смотрит камера
   private pitch = 0.34;
+  /** Желаемая дистанция (колесо мыши, настройки) */
   private dist = 7.5;
+  /**
+   * Фактическая дистанция камеры (§369): сглаженно догоняет разрешённую.
+   * Желаемая и фактическая раздельны, чтобы стена не дёргала камеру кадром —
+   * она лишь ограничивает цель, а камера доезжает плавно.
+   */
+  private distCurrent = 7.5;
 /**
  * Крен камеры, радианы. Положительный — горизонт уходит влево.
  *
@@ -2206,6 +2225,47 @@ private roll = 0;
   }
 
   /** Выталкивает точку из цилиндрических коллайдеров построек (проходы — для углов) */
+  /**
+   * Проверка точки на «внутри препятствия» для луча камеры (§369).
+   *
+   * Только статичные стены: звери и горожане движутся, и камера, дёргающаяся
+   * от каждого прохожего, была бы хуже стены. КРУГЛЫЕ коллайдеры — стены
+   * вертикальны, луч в горизонтальной плоскости честен.
+   */
+  private камераЗакрыта(x: number, z: number): boolean {
+    const списки = [COLLIDERS, INTERIOR_COLLIDERS, POCKET_COLLIDERS];
+    for (const список of списки) {
+      for (const c of список) {
+        const dx = x - c.x, dz = z - c.z;
+        if (dx * dx + dz * dz < (c.r + CAMERA_R) * (c.r + CAMERA_R)) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Наибольшая дистанция камеры, на которую ничего не загораживает (§369).
+   *
+   * Луч от игрока к желаемой точке, сэмплирование с шагом
+   * CAMERA_SAMPLE_STEP. Быстрый путь: желаемая точка свободна — луч не идёт
+   * вовсе (за городом это каждый кадр).
+   */
+  private разрешённаяДистанция(игрок: { x: number; z: number }, желаемая: number): number {
+    const inside = this.interiors.isInside();
+    const потолок = inside ? Math.min(желаемая, CAMERA_INDOOR_MAX) : желаемая;
+    const dirX = Math.sin(this.yaw) * Math.cos(this.pitch);
+    const dirZ = Math.cos(this.yaw) * Math.cos(this.pitch);
+    if (!this.камераЗакрыта(игрок.x + dirX * потолок, игрок.z + dirZ * потолок)) {
+      return потолок;
+    }
+    for (let d = потолок - CAMERA_SAMPLE_STEP; d >= CAMERA_SAMPLE_MIN; d -= CAMERA_SAMPLE_STEP) {
+      if (!this.камераЗакрыта(игрок.x + dirX * d, игрок.z + dirZ * d)) {
+        return d;
+      }
+    }
+    return CAMERA_SAMPLE_MIN;
+  }
+
   private resolveCollisions(p: { x: number; z: number }, radius: number): void {
     this.resolveCircleList(p, radius, COLLIDERS);
     this.resolveCircleList(p, radius, FAUNA_COLLIDERS);
@@ -2608,10 +2668,17 @@ if (isMe && moving) {
     const targetY = this.swimming
       ? me.pos.y + 1.15                       // взгляд — на торс пловца, не над головой
       : me.pos.y + 1.55 + (this.crouch ? -0.4 : 0);
-    const camY = me.pos.y + 1.55 + swimCamOffset + Math.sin(this.pitch) * this.dist;
-    const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist;
-    const camZ = me.pos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.dist;
-    // Камера тоже не должна проникать в здания
+    // Стена ограничивает ЦЕЛЬ, камера доезжает плавно (§369): без этого
+    // упор в стену дёргал бы камеру кадром, а исчезновение стены —
+    // выстреливал бы её обратно на полную дистанцию.
+    const разрешено = this.разрешённаяДистанция(me.pos, this.dist);
+    const скорость = 1 - Math.exp(-CAMERA_PULL_RATE * dt);
+    this.distCurrent += (разрешено - this.distCurrent) * скорость;
+    const camY = me.pos.y + 1.55 + swimCamOffset + Math.sin(this.pitch) * this.distCurrent;
+    const camX = me.pos.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.distCurrent;
+    const camZ = me.pos.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.distCurrent;
+    // Страховка после сглаживания: коллайдеры — последняя инстанция, если
+    // сэмплы всё же пропустили что-то между пробами.
     const cam = { x: camX, z: camZ };
     this.resolveCollisions(cam, CAMERA_R);
     const camGround = this.interiors.isInside()
