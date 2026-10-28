@@ -1313,7 +1313,7 @@ private territory = TerritoryBonuses.getInstance();
    */
   private async refreshBoatSpeed(characterId: string): Promise<void> {
     try {
-      const { лодка, регион } = await this.boats.лодкаИРегион(characterId);
+      const { boat: лодка, region: регион } = await this.boats.лодкаИРегион(characterId);
       const бонус = await this.territory.бонусыИгрока(characterId, регион);
       this.boatSpeeds.set(characterId, {
         boatId: лодка?.id ?? '',

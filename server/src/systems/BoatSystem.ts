@@ -220,6 +220,17 @@ export class BoatSystem {
     return getBoatDef(boat?.boatId);
   }
 
+  async лодкаИРегион(characterId: string): Promise<{ boat: BoatDefinition | null; region: string }> {
+    const row = await this.db.queryOne<{ boat_id: string | null; region: string }>(
+      `SELECT c.region, cb.boat_id
+         FROM characters c
+         LEFT JOIN character_boats cb ON cb.character_id = c.id AND cb.is_active = TRUE
+        WHERE c.id = $1`,
+      [characterId]
+    ).catch(() => null);
+    return { boat: getBoatDef(row?.boat_id), region: row?.region ?? '' };
+  }
+
   /** Купить лодку: списываем золото и выдаём в «гараж» */
   async purchase(characterId: string, boatId: string): Promise<PlayerBoat> {
     const def = BOATS[boatId];
@@ -239,7 +250,7 @@ export class BoatSystem {
     // Цена берется из определения лодки (def.price).
     // Если у игрока недостаточно золота — ошибка пробросится в маршрут,
     // где деньги вернут玩家 и выдадут сообщение об ошибке.
-    await this.characters.spendGold(characterId, def.price);
+    // ДЕНЬГИ ЗДЕСЬ НЕ СПИСЫВАЮТСЯ
     const boat: PlayerBoat = {
       characterId, boatId, isActive: false,
       acquiredAt: new Date(), totalCatches: 0, fatigue: 0,
