@@ -37,7 +37,9 @@ import { AZENS_CONVERSION_RATES, AZENS_PACKS, PREMIUM_DURATIONS, FIRST_TOPUP_MUL
 import { MOUNTS, MountSystem } from '../systems/MountSystem';
 import { BoatSystem, BOATS, скоростьЛодки } from '../systems/BoatSystem';
 import { FishingSystem, FISH_TABLE } from '../systems/FishingSystem';
+// Питомцы
 import { PetService } from '../services/PetService';
+const petSystem = new PetService();
 import { HousingService, HOUSE_TYPES, DECORATIONS } from '../services/HousingService';
 import { PvPService } from '../services/PvPService';
 import { EndGameService } from '../services/EndGameService';
@@ -502,6 +504,25 @@ gameRouter.post('/shops/:shopId/buy', secureMiddleware, requireCharacterOwnershi
         gold, azens, silver, syrian,
         goldSpent: walletCurrency === 'gold' ? totalCost : 0,
       });
+    }
+    // Выдача питомца из каталога магазина
+    if (entry.kind === 'pet') {
+      const petId = value.itemId;
+      const def = PetService.getAllDefs().find(p => p.id === petId);
+      if (!def) return res.status(400).json({ error: 'Питомец не найден' });
+      if (value.quantity > 1) {
+        return res.status(400).json({ error: 'Питомец приобретается по одному' });
+      }
+      try {
+        const pet = await petSystem.acquirePet(value.characterId, petId);
+        return res.status(201).json({
+          success: true, petId, pet,
+          gold, azens, silver, syrian,
+        });
+      } catch (err) {
+        await characterService.refund(value.characterId, walletCurrency, totalCost).catch(() => {});
+        return res.status(400).json({ error: (err as Error).message });
+      }
     }
     await characterService.addItems(value.characterId, [{ itemId: value.itemId, qty: value.quantity }]);
 
