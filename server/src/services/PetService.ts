@@ -111,6 +111,6 @@ export class PetService {
     await this.db.query('DELETE FROM character_pets WHERE id = $1 AND character_id = $2', [petDbId, charId]);
   }
 
-  getAllDefs(): PetDef[] { return PETS_DATABASE; }
+  static getAllDefs(): PetDef[] { return PETS_DATABASE; }
   getDef(id: string): PetDef | undefined { return PETS_DATABASE.find(p => p.id === id); }
 }

@@ -2349,7 +2349,7 @@ gameRouter.get('/pets', secureMiddleware, requireCharacterOwnership(),
     const characterId = await bodyCharacterId(req, res);
     if (!characterId) return;
     const list = await petService.getPets(characterId);
-    res.json({ pets: list, allDefs: petService.getAllDefs() });
+    res.json({ pets: list, allDefs: PetService.getAllDefs() });
   })
 );
 

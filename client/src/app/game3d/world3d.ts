@@ -301,7 +301,7 @@ export class World3D {
   private navigator!: NavigatorHandle;
   private clockHour = 12;          // игровые сутки: 0–23
   private lastInCity = false;
-  /** Накопитель времени до следующего поиска новых материалов для G-buffer. */
+  /** Накопитель времени до следующего поиска новых materials для G-buffer. */
   private patchTimer = 0;
   /** О непрошитых материалах предупреждаем один раз, а не каждые две секунды. */
   /** Общее время воды для всех тел: секунды с запуска мира. */
@@ -644,13 +644,13 @@ private roll = 0;
    * мира, когда сцена пуста: отчёт той прошивки — «0 из 0», и у всего мира
    * каналы оставались пустыми. Внешне это почти не видно, поэтому жило долго:
    * AO умножал свет по нулевой нормали, а экранные отражения не знали, что
-   * отражать. Проверено на живом мире: 1119 материалов, прошито 0.
+   * отражать. Проверено на живом мире: 1119 materials, прошито 0.
    *
    * ПОЧЕМУ ПОВТОРЯЕТСЯ. Модели приходят позже постройки: персонаж игрока,
    * монстры, лошади, караваны. Прошивка нового материала компилирует шейдер,
    * поэтому поиск идёт раз в ПЕРИОД_ПРОШИВКИ секунд, а не в каждом кадре.
    */
-  private patchWorldMaterials(): void {
+  private patchWorldMaterials(_first?: boolean): void {
     const отчёт = this.deferred.patch(this.scene);
     // Сравниваем с прошлым отчётом — логируем только при изменении
     const изменилось = this.previousReport === null ||
@@ -660,18 +660,18 @@ private roll = 0;
     if (изменилось) {
       console.info(
         `Otlozhennyy G-buffer: ${отчёт.прошито} iz ${отчёт.всего} materialov. `
-        + `Bez kanalov ostalis: ${отчёт.мимо.length > 0 ? отчёт.мимо.join(', ') : 'всё прошито'}`,
+        + `Bez kanalov ostalis: ${отчёт.мимо.length > 0 ? отчёт.мимо.join(', ') : 'all patched'}`,
       );
       if (отчёт.всего === 0) {
         console.warn('G-buffer patching: scenario empty, materials not found — this is normal at the beginning, but should be patched after buildCity');
       }
-      // Показываем список проблемных материалов для отладки
+      // Показываем список проблемных materials для отладки
       if (отчёт.мимо.length > 0 && отчёт.мимо.length <= 20) {
         отчёт.мимо.forEach((name, i) => {
           console.debug(`  [G-buffer miss] ${name}: ${i + 1}/${отчёт.мимо.length}`);
         });
       } else if (отчёт.мимо.length > 20) {
-        console.debug(`  [G-buffer miss] ... и ещё ${отчёт.мимо.length - 20} материалов`);
+        console.debug(`  [G-buffer miss] ... and more ${отчёт.мимо.length - 20} materials`);
       }
     }
     this.previousReport = { прошито: отчёт.прошито, всего: отчёт.всего, мимо: отчёт.мимо };
@@ -1111,7 +1111,7 @@ private roll = 0;
     // не случайно: список отражающих собирается обходом готовой сцены.
     this.collectSsrReflectors();
     // И только теперь прошиваем G-buffer: до этого места сцены ещё нет.
-    this.patchWorldMaterials();
+    this.patchWorldMaterials(true);
 
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
@@ -1190,7 +1190,7 @@ private roll = 0;
     // Разрешение кадра: <1 — сжатый кадр (быстро), >1 — суперсэмплинг (красиво)
     this.renderer.setPixelRatio(Math.max(0.5, Math.min(2.5, p.pixelScale * (devicePixelRatio || 1))));
 
-    // Тени: смена режима требует пересборки материалов
+    // Тени: смена режима требует пересборки materials
     const shadowsChanged = this.renderer.shadowMap.enabled !== p.shadows;
     this.renderer.shadowMap.enabled = p.shadows;
     this.sun.castShadow = p.shadows;
@@ -3099,7 +3099,7 @@ if (isMe && moving) {
     this.patchTimer += dt;
     if (this.patchTimer >= ПЕРИОД_ПРОШИВКИ) {
       this.patchTimer = 0;
-      this.patchWorldMaterials();
+      this.patchWorldMaterials(false);
     }
     this.composer.render();
   }
@@ -3145,7 +3145,7 @@ if (isMe && moving) {
     // вызывался ниоткуда: караваны оставались в старой сцене вместе со своей
     // геометрией, материалами и текстурами. При этом `makePerson` создаёт
     // СВОЙ MeshStandardMaterial на каждый караван (роба, кожа, шляпа), так
-    // что на каждый вход в мир уезжала пачка уникальных материалов.
+    // что на каждый вход в мир уезжала пачка уникальных materials.
     this.roadTraffic?.dispose();
     // Миксеры анимации коров — двухуровневые ссылки на загруженные клипы;
     // без stop() анимации продолжают крутиться для снятых сцены моделей.
