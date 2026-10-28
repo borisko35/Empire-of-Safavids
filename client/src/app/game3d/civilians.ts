@@ -105,7 +105,7 @@ const PHRASES = [
 const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b4e5a, 0x5a7a8b];
 
 /** Модели горожан — три варианта, как у игрока пять классов. */
-const CIV_MODELS = ['citizen', 'citizen2', 'citizen3'] as const;
+const CIV_MODELS = ['citizen', 'citizen2'] as const;
 
 /** Клипы анимаций для горожан — стояние и ходьба. */
 const CIV_CLIP_IDLE = 'standing-idle';
