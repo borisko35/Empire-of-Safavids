@@ -4,6 +4,7 @@
 
 import { DatabaseService } from './DatabaseService';
 import { PremiumSystem } from '../systems/PremiumSystem';
+import { AchievementService } from './AchievementService';
 import { logger } from '../utils/logger';
 
 /**
@@ -305,6 +306,15 @@ export class DailyTaskService {
         logger.info(`[DailyTask] ${charId} completed: ${task.id}`);
         // За выполненную задачу — отдельная добавка очков сезона
         void this.grantSeasonPoints(charId, SEASON_POINTS_PER_TASK);
+        // Проверяем достижения после выполнения задач
+        try {
+          const unlocked = await new AchievementService().checkAll(charId);
+          if (unlocked.length > 0) {
+            logger.info(`[DailyTask] Achievements unlocked: ${unlocked.join(', ')}`);
+          }
+        } catch (e) {
+          logger.warn('[DailyTask] achievement check failed:', (e as Error).message);
+        }
         return { taskCompleted: true, taskId: task.id, gold: task.reward_gold, experience: task.reward_experience, item: task.reward_item_id };
       }
     }

@@ -8,7 +8,9 @@
 // Зачем это: вода в игре тормозит и требует выносливости. Лодка
 // снимает замедление, добавляет бонус к рыбалке и открывает рыбалку
 // в глубокой воде, куда с берега не дойти.
-
+//
+// Лодка покупается за золото: цена списывается при покупке,
+// лодка выдается только после успешного списания.
 import { DatabaseService } from '../services/DatabaseService';
 import { CharacterService } from '../services/CharacterService';
 import { canFloatAt } from '../utils/spawn';
@@ -111,7 +113,7 @@ export const BOATS: Record<string, BoatDefinition> = {
   },
   'boat_galley': {
     id: 'boat_galley',
-    name: 'Shah’s Galley',
+    name: 'Shah\'s Galley',
     nameRu: 'Галея Шаха',
     type: 'galley',
     waterSpeed: 1.0, swimSpeed: 7.6,
@@ -135,7 +137,7 @@ export const BOATS: Record<string, BoatDefinition> = {
  * честно едет. Расхождение здесь не «лишний запас», а бан за честную езду:
  * пять нарушений за сутки — автоматический бан.
  *
- * Проверка соответствия живёт в seaSpeedTerritory.test.ts и читает оба числа
+ * Проверка соответствия живёт в seaSpeedTerritory.test.ts и читает oba числа
  * из исходников: разъехаться они могут молча, и заметит об этом игрок.
  */
 export const МНОЖИТЕЛЬ_РЫВКА_НА_ВОДЕ = 1.25;
@@ -144,7 +146,7 @@ export const МНОЖИТЕЛЬ_РЫВКА_НА_ВОДЕ = 1.25;
  * Скорость лодки с учётом территории.
  *
  * ЕДИНСТВЕННОЕ место, где она считается. Её читают и клиент (ему сервер
- * отдаёт это число), и античит (ему нужен потолок не ниже фактического
+ * отдаёт это число), и античит (ему нужен потолок не выше фактического
  * движения). Два места — и никаких: разойдутся, и игрок начнёт получать
  * speed_hack за собственную лодку.
  *
@@ -163,8 +165,7 @@ export function скоростьЛодки(
   return лодка.swimSpeed * м;
 }
 
-/**
- * Потолок скорости для игрока на лодке.
+/** Потолок скорости для игрока на лодке.
  *
  * Ровно та величина, до которой античит готов счесть честной езду, и НИКАКЕ
  * больше. Образец для верхового потолок делает щедрее (12 + скорость скакуна),
@@ -193,7 +194,7 @@ export class BoatSystem {
   private db = DatabaseService.getInstance();
   private characters = new CharacterService();
 
-  /** Лодки игрока; активная — та, что сейчас под ним */
+  /** Лодки игрока; активная — та, что сейчас под ними */
   async getCharacterBoats(characterId: string): Promise<PlayerBoat[]> {
     return this.db.query<PlayerBoat>(
       'SELECT * FROM character_boats WHERE character_id = $1 ORDER BY acquired_at DESC',
@@ -209,33 +210,6 @@ export class BoatSystem {
     ).catch(() => null);
     return row ?? null;
   }
-
-/**
- * Активная лодка И текущий регион одной выборкой.
- *
- * Одной — потому что нужны оба сразу: бонус скорости зависит от региона, и
- * раздельные запросы означали бы два захода в базу там, где хватает одного.
- * На движении это ещё и заметно: пакетов десятки в секунду.
- *
- * LEFT JOIN, а не INNER: у игрока может не быть лодки вовсе, и тогда регион
- * всё равно нужен — чтобы честно вернуть «без бонуса», а не молчание.
- */
-async лодкаИРегион(
-  characterId: string,
-): Promise<{ лодка: BoatDefinition | null; регион: string }> {
-  const строка = await this.db.queryOne<{ boat_id: string | null; region: string }>(
-    `SELECT b.boat_id, c.region
-       FROM characters c
-       LEFT JOIN character_boats b
-         ON b.character_id = c.id AND b.is_active = TRUE
-      WHERE c.id = $1`,
-    [characterId],
-  ).catch(() => null);
-  return {
-    лодка: getBoatDef(строка?.boat_id ?? null),
-    регион: строка?.region ?? '',
-  };
-}
 
   /**
    * Активная лодка вместе с её характеристиками.
@@ -261,19 +235,11 @@ async лодкаИРегион(
     ).catch(() => null);
     if (already) throw new Error('Boat already owned');
 
-    // ДЕНЬГИ ЗДЕСЬ НЕ СПИСЫВАЮТСЯ, и раньше не списывались.
-    //
-    // Строка была `await this.characters.addGold(characterId, -def.price)`, но
-    // addGold приводит сумму к нулю снизу, поэтому из отрицательной цены
-    // получался ноль. Списание НИЧЕГО не делало, а выглядело как списание -
-    // и это опаснее отсутствия строки: кто-то, читая purchase, считал, что
-    // лодка оплачена здесь, и вызвал бы метод откуда-то ещё (например из
-    // награды за квест) - и отдал бы лодку бесплатно.
-    //
-    // Настоящее списание делает маршрут покупки (routes/game.ts): он берёт
-    // цену из записи магазина и списывает из кошелька, в котором эта запись
-    // продаётся, - золото, азены, серебро или сирийское золото. Поэтому
-    // здесь денег не трогаем, а контракт фиксируем явно.
+    // Списываем золото за лодку перед созданием записи.
+    // Цена берется из определения лодки (def.price).
+    // Если у игрока недостаточно золота — ошибка пробросится в маршрут,
+    // где деньги вернут玩家 и выдадут сообщение об ошибке.
+    await this.characters.spendGold(characterId, def.price);
     const boat: PlayerBoat = {
       characterId, boatId, isActive: false,
       acquiredAt: new Date(), totalCatches: 0, fatigue: 0,
@@ -298,7 +264,7 @@ async лодкаИРегион(
 
   /**
    * Активировать лодку. Встать на воду можно только там, где она есть:
-   * сервер проверяет координаты, иначе игрок «пришвартовал» бы лодку
+   * сервер проверяет координаты, иначе игрок «пришVARтовал» бы лодку
    * в пустыне и ездил на ней по суше.
    */
   async activate(characterId: string, boatId: string, position?: { x: number; z: number }): Promise<BoatDefinition> {
