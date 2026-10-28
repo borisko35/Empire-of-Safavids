@@ -188,6 +188,8 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     );
     текстура.colorSpace = THREE.LinearSRGBColorSpace;
     текстура.mapping = THREE.EquirectangularReflectionMapping;
+    текстура.minFilter = THREE.LinearFilter;
+    текстура.magFilter = THREE.LinearFilter;
     текстура.needsUpdate = true;
 
     const цель = this.pmrem.fromEquirectangular(текстура);
@@ -215,6 +217,8 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     );
     текстура.colorSpace = THREE.LinearSRGBColorSpace;
     текстура.mapping = THREE.EquirectangularReflectionMapping;
+    текстура.minFilter = THREE.LinearFilter;
+    текстура.magFilter = THREE.LinearFilter;
     текстура.needsUpdate = true;
 
     const старыйТекст = this.texture;
