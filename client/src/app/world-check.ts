@@ -84,7 +84,7 @@ interface Внутренности {
   sun: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
   clockHour: number;
-  patchWorldMaterials: (первый: boolean) => void;
+  patchWorldMaterials: () => void;
 }
 
 const в = мир as unknown as Внутренности;
@@ -177,7 +177,7 @@ function цикл(): void {
   кадров++;
   // Прошивка отложенного G-buffer: без неё кадр снят с непрошитыми
   // материалами, без карт поверхностей.
-  if (ПРОШИВКА && кадров % 30 === 0) в.patchWorldMaterials(false);
+  if (ПРОШИВКА && кадров % 30 === 0) в.patchWorldMaterials();
 
   // ЖДЁМ, ПОКА МИР ПЕРЕСТАНЕТ ДОБИРАТЬ МОДЕЛИ (§330).
   //
@@ -206,7 +206,7 @@ function цикл(): void {
 }
 
 function снять(): void {
-  if (ПРОШИВКА) в.patchWorldMaterials(false);
+  if (ПРОШИВКА) в.patchWorldMaterials();
   const данные = в.renderer.domElement.toDataURL('image/jpeg', 0.92);
   записать(`кадр готов: ${кадров} кадров, ${Math.round(данные.length / 1024)} КБ`);
   if (!ИМЯ_КАДРА) {

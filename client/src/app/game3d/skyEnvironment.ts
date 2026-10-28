@@ -85,7 +85,7 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     // приедет, он остаётся в кэше; применится при выборе нужного.
     for (const v of ALL_VARIANTS) this.hdrPromise.set(v, this.loadHdrVariant(_renderer, v));
 
-    this.rebuildFully({ sun: [0.4, 0.85, -0.3], moon: [-0.4, -0.85, 0.3], sunHeight: 0.85, night: 0, overcast: 0 });
+    this.rebuildFully({ sun: [0.4, 0.85, -0.3], moon: [-0.4, -0.85, 0.3], sunHeight: 0.85, night: 1, overcast: 0.9 });
   }
 
   get style(): SkyStyle { return this._style; }

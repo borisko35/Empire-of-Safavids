@@ -74,6 +74,8 @@ export interface World3DCallbacks {
   onDoor?: (action: 'enter' | 'exit', buildingId: string, nameRu: string, entranceId?: string) => void;
   /** Клик по интерактивному объекту: ящик, кувшин, навес. */
   onInteractive?: (kind: string, state: string, obj: THREE.Object3D) => void;
+  /** Строка подсказки для вида окружения (§370): движок не знает переводов */
+  onInteractiveHint?: (kind: string) => string;
 }
 
 /** Экипировка своего персонажа, видимая на 3D-аватаре */
@@ -301,7 +303,6 @@ export class World3D {
   /** Накопитель времени до следующего поиска новых материалов для G-buffer. */
   private patchTimer = 0;
   /** О непрошитых материалах предупреждаем один раз, а не каждые две секунды. */
-  private patchWarned = false;
   /** Общее время воды для всех тел: секунды с запуска мира. */
   private waterTime = 0;
 
@@ -437,6 +438,8 @@ private roll = 0;
   private targetRing!: THREE.Mesh;
   private targetRingTarget: string | null = null;
   private targetNameEl!: HTMLElement;
+  /** Подсказка окружения (§370): «Ящик — толкнуть» под прицелом */
+  private envHintEl: HTMLElement | null = null;
   private wasNight = false;
   private lastDir: { x: number; y: number; z: number } = { x: 0, y: 0, z: 1 };
   private callbacks: World3DCallbacks | null = null;
@@ -646,18 +649,24 @@ private roll = 0;
    * монстры, лошади, караваны. Прошивка нового материала компилирует шейдер,
    * поэтому поиск идёт раз в ПЕРИОД_ПРОШИВКИ секунд, а не в каждом кадре.
    */
-  private patchWorldMaterials(первый: boolean): void {
+  private patchWorldMaterials(): void {
     const отчёт = this.deferred.patch(this.scene);
-    if (!отчёт.мимо.length) return;
-    if (!первый && this.patchWarned) return;
-    this.patchWarned = true;
-    // Транслитерация, а не русский: клиент не переводит строки, и проверка
-    // i18n ловит хардкод. Сообщение служебное, его видит только владелец в
-    // консоли при сборке мира.
-    console.warn(
+    // Всегда выводим отчёт, даже если всё прошито — чтобы видеть динамику
+    console.info(
       `Otlozhennyy G-buffer: ${отчёт.прошито} iz ${отчёт.всего} materialov. `
-      + `Bez kanalov ostalis: ${отчёт.мимо.join(', ')}`,
+      + `Bez kanalov ostalis: ${отчёт.мимо.length > 0 ? отчёт.мимо.join(', ') : 'всё прошито'}`,
     );
+    if (отчёт.всего === 0) {
+      console.warn('G-buffer patching: сцена пустая, материалы не найдены — это нормально в начале, но должено быть прошито после buildCity');
+    }
+    // Показываем список проблемных материалов для отладки
+    if (отчёт.мимо.length > 0 && отчёт.мимо.length <= 20) {
+      отчёт.мимо.forEach((name, i) => {
+        console.debug(`  [G-buffer miss] ${name}: ${i + 1}/${отчёт.мимо.length}`);
+      });
+    } else if (отчёт.мимо.length > 20) {
+      console.debug(`  [G-buffer miss] ... и ещё ${отчёт.мимо.length - 20} материалов`);
+    }
   }
 
   // ── Инициализация ────────────────────────────────────────────
@@ -1094,7 +1103,7 @@ private roll = 0;
     // не случайно: список отражающих собирается обходом готовой сцены.
     this.collectSsrReflectors();
     // И только теперь прошиваем G-buffer: до этого места сцены ещё нет.
-    this.patchWorldMaterials(true);
+    this.patchWorldMaterials();
 
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
@@ -1136,6 +1145,9 @@ private roll = 0;
     this.targetNameEl = document.createElement('div');
     this.targetNameEl.className = 'target-name';
     container.appendChild(this.targetNameEl);
+    // Подсказка окружения (§370) — готовый элемент страницы: рисуем текст
+    // в него, а не создаём свой, чтобы стили жили в одном месте.
+    this.envHintEl = document.getElementById('env-hint');
 
     // События
     window.addEventListener('resize', this.onResize);
@@ -2226,6 +2238,47 @@ private roll = 0;
 
   /** Выталкивает точку из цилиндрических коллайдеров построек (проходы — для углов) */
   /**
+   * Подсказка окружения (§370): что под прицелом и что с ним можно делать.
+   *
+   * Луч тот же, что у клика (центр экрана), но дистанция дальше — увидеть
+   * можно раньше, чем дотянуться. Скрытый/уже не intact объект подсказки
+   * не даёт: сломанное не манипулируют. Текст — через onInteractiveHint:
+   * движок не знает переводов, строку даёт мир (как tOr для данных).
+   */
+  private updateEnvHint(): void {
+    const el = this.envHintEl;
+    if (!el) return;
+    let kind: string | null = null;
+    if (this.me && this.interactiveTargets.length) {
+      const ray = new THREE.Raycaster();
+      ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+      const hits = ray.intersectObjects(this.interactiveTargets, true);
+      const hit = hits[0];
+      if (hit && hit.distance <= 26) {
+        let target: THREE.Object3D | null = hit.object;
+        while (target && !(target.userData as { interactiveKind?: string })?.interactiveKind) {
+          target = target.parent;
+        }
+        const ud = target?.userData as { interactiveKind?: string; interactiveState?: string } | undefined;
+        if (ud?.interactiveKind && (ud.interactiveState ?? 'intact') === 'intact') {
+          kind = ud.interactiveKind;
+        }
+      }
+    }
+    if (kind === this.envHintKind) return;
+    this.envHintKind = kind;
+    if (!kind) {
+      el.classList.add('hidden');
+      return;
+    }
+    el.textContent = this.callbacks?.onInteractiveHint?.(kind) ?? '';
+    el.classList.toggle('hidden', !el.textContent);
+  }
+
+  /** Какой вид окружения сейчас под прицелом (для гашения повторных кадров) */
+  private envHintKind: string | null = null;
+
+  /**
    * Проверка точки на «внутри препятствия» для луча камеры (§369).
    *
    * Только статичные стены: звери и горожане движутся, и камера, дёргающаяся
@@ -2693,6 +2746,8 @@ if (isMe && moving) {
     );
     this.camera.position.set(cam.x, Math.max(camY, minY), cam.z);
     this.camera.lookAt(me.pos.x, targetY, me.pos.z);
+    // Подсказка окружения (§370): кадр камеры установлен — лучи честны.
+    this.updateEnvHint();
     // Крен поверх наведения. lookAt всегда ставит камеру ровно по горизонтали, поэтому
     // наклон горизонта возможен только после него, поворотом вокруг собственной оси
     // камеры. Порядок важен: наклон до lookAt стёрся бы наведением.
@@ -3036,7 +3091,7 @@ if (isMe && moving) {
     this.patchTimer += dt;
     if (this.patchTimer >= ПЕРИОД_ПРОШИВКИ) {
       this.patchTimer = 0;
-      this.patchWorldMaterials(false);
+      this.patchWorldMaterials();
     }
     this.composer.render();
   }

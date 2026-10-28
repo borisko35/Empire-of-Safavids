@@ -787,6 +787,23 @@ input, select { font: inherit; }
   padding: 4px 10px; border-radius: 999px;
 }
 
+/* Подсказка окружения (§370): имя живого объекта под прицелом.
+   Тот же стиль, что рамка цели — читается как её продолжение, а не новый
+   интерфейс. Сдвиг вниз при видимой рамке — тот же приём соседей. */
+.env-hint {
+  top: 12px; left: 50%; transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-family: Georgia, serif;
+  font-size: 12px;
+  color: var(--cream-dim, #cdc3ae);
+  pointer-events: none;
+  white-space: nowrap;
+}
+#target-frame:not(.hidden) ~ #env-hint { top: 88px; }
+
 /* ТУТ БЫЛО: .target-frame + .world-time — селектор СОСЕДНИХ элементов.
    Между рамкой цели (строка 147) и часами (строка 380) двести с лишним
    строк разметки, поэтому правило НИКОГДА не срабатывало, и часы ложились
