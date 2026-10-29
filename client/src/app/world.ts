@@ -1262,7 +1262,7 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean }) => {
+  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean; poiseDamage?: number; poisePercent?: number; staggered?: boolean; staggerUntil?: number }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
     const target = world.monsters.get(r.targetId) ?? world.players.get(r.targetId);
@@ -1286,8 +1286,28 @@ function wireSocket(): void {
           `-${r.damage}${r.isPrecise ? ' ✧' : r.isCritical ? '!' : r.isBlocked ? ' ⛨' : ''}`,
           r.isPrecise ? '#9ec8e8' : r.isCritical ? '#F4D26C' : '#ffffff', r.isCritical,
         );
+        // Poise damage floater
+        if (r.poiseDamage && r.poiseDamage > 0) {
+          world.addFloater(
+            target.pos.x, target.pos.z - 1.4,
+            `-${Math.floor(r.poiseDamage)} PO`,
+            r.staggered ? '#ff4444' : '#e8e2d2',
+            r.staggered,
+          );
+        }
         const m = world.monsters.get(r.targetId);
         if (m && r.targetHp != null) m.hp = r.targetHp;
+
+        // Poise floater for target (when we are the target or just observing)
+        if (r.poiseDamage && r.poiseDamage > 0 && r.targetId !== me?.id) {
+          world.addFloater(
+            target.pos.x, target.pos.z - 1.4,
+            `-${Math.floor(r.poiseDamage)} PO`,
+            r.staggered ? '#ff4444' : '#e8e2d2',
+            r.staggered,
+          );
+        }
+
         if (r.targetId === world.targetId && r.targetHp != null) {
           // Имя монстра переводится по ключу monsters.<id>: сорок монстров не были
         // переведены ни на одном языке, и рамка прицела показывала
