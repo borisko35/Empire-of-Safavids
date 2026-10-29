@@ -114,8 +114,8 @@ describe('Запись не утяжеляет каждый удар', () => {
     // Иначе игрок набивал бы достижение ударами вне боя.
     const обработчик = читать('server/src/socket/GameSocketHandler.ts');
     const метод = обработчик.slice(
-      обработчик.indexOf('private comboMultiplier'),
-      обработчик.indexOf('private comboMultiplier') + 400);
+      обработчик.indexOf('private comboState'),
+      обработчик.indexOf('private comboState') + 400);
     expect({ отсекает: /action\.actionType !== 'attack' \|\| action\.skillId/.test(метод) })
       .toEqual({ отсекает: true });
   });

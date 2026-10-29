@@ -1262,7 +1262,7 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean; poiseDamage?: number; poisePercent?: number; staggered?: boolean; staggerUntil?: number }) => {
+  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean; poiseDamage?: number; poisePercent?: number; staggered?: boolean; staggerUntil?: number; isFinisher?: boolean; comboCount?: number }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
     const target = world.monsters.get(r.targetId) ?? world.players.get(r.targetId);
@@ -1286,6 +1286,17 @@ function wireSocket(): void {
           `-${r.damage}${r.isPrecise ? ' ✧' : r.isCritical ? '!' : r.isBlocked ? ' ⛨' : ''}`,
           r.isPrecise ? '#9ec8e8' : r.isCritical ? '#F4D26C' : '#ffffff', r.isCritical,
         );
+        // Finisher blow floater
+        if (r.isFinisher) {
+          world.addFloater(
+            target.pos.x, target.pos.z - 1,
+            `ФИНИШАР x${r.comboCount ?? 1}`,
+            '#F4D26C',
+            true,
+          );
+          world.addEffect('slash', attacker.pos.x, attacker.pos.z, target.pos.x, target.pos.z, '#F4D26C');
+        }
+
         // Poise damage floater
         if (r.poiseDamage && r.poiseDamage > 0) {
           world.addFloater(

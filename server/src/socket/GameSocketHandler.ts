@@ -243,6 +243,10 @@ private territory = TerritoryBonuses.getInstance();
    * выдачей.
    */
   static readonly COMBO_THRESHOLD = 5;
+  /** Порог, при достижении которого следующий удар становится финальным ударом комбо */
+  static readonly COMBO_FINISHER_THRESHOLD = 5;
+  /** Множитель урона финального удара комбо */
+  static readonly COMBO_FINISHER_MULTIPLIER = 2.0;
 
   private comboChains = new Map<string, { count: number; lastAt: number }>();
   // Время последнего принятого обычного удара: characterId -> epoch ms.
@@ -1455,34 +1459,42 @@ private territory = TerritoryBonuses.getInstance();
    * Стоимость серии меняется стойкой: у «Танца серпа» третий удар бьёт в 2.25
    * (1.5 серии × 1.5 стойки) — это и есть смысл агрессивного стиля.
    */
-  private comboMultiplier(characterId: string, action: CombatAction, comboScale = 1): number {
-    if (action.actionType !== 'attack' || action.skillId) return 1;
+  /**
+   * Returns combo state for a character:
+   *   multiplier -- damage multiplier (every third hit in a series hits harder)
+   *   isFinisher -- next hit is a final combo blow
+   *   count -- current combo chain length
+   */
+  private comboState(characterId: string, action: CombatAction, comboScale = 1): { multiplier: number; isFinisher: boolean; count: number } {
+    if (action.actionType !== 'attack' || action.skillId) {
+      this.comboChains.delete(characterId);
+      return { multiplier: 1, isFinisher: false, count: 0 };
+    }
     const now = Date.now();
     const chain = this.comboChains.get(characterId);
     if (!chain || now - chain.lastAt > 4000) {
       this.comboChains.set(characterId, { count: 1, lastAt: now });
-      return 1;
+      return { multiplier: 1, isFinisher: false, count: 1 };
     }
     chain.count++;
     chain.lastAt = now;
 
-    // Отметка достижения «комбо из 5». Пишется РОВНО ОДИН РАЗ на цепочку -
-    // в момент пересечения порога, - а не на каждый удар.
-    //
-    // Почему так: comboMultiplier зовётся на каждом ударе, и запись в базу на
-    // каждом ударе сделала бы самый горячий путь игры самым тяжёлым. Письмо
-    // при chain.count === 5 даёт одну запись на серию, а GREATEST в базе не
-    // даёт рекорду ни упасть, ни сложиться.
-    //
-    // Ошибка не роняет удар: игрок бьёт, а запись - его достижение.
-    // Незаписанное достижение лучше, чем не нанесённый удар.
+    // Check if current hit is a final combo blow (reached combo threshold)
+    const isFinisher = chain.count >= GameSocketHandler.COMBO_FINISHER_THRESHOLD;
+
     if (chain.count === GameSocketHandler.COMBO_THRESHOLD) {
       void this.leaderboardService
         .recordCombo(characterId, chain.count)
-        .catch(err => logger.error('[Combo] рекорд не записан:', (err as Error).message));
+        .catch(err => logger.error('[Combo] Failed to record combo:', (err as Error).message));
     }
 
-    return chain.count % 3 === 0 ? 1.5 * comboScale : 1;
+    // After finisher, reset the combo chain
+    if (isFinisher) {
+      this.comboChains.delete(characterId);
+      return { multiplier: GameSocketHandler.COMBO_FINISHER_MULTIPLIER * comboScale, isFinisher: true, count: chain.count };
+    }
+
+    return { multiplier: chain.count % 3 === 0 ? 1.5 * comboScale : 1, isFinisher: false, count: chain.count };
   }
 
   /**
@@ -1783,14 +1795,17 @@ private territory = TerritoryBonuses.getInstance();
         }
       }
 
-      const comboMult = this.comboMultiplier(attacker.id, action, stance.combo);
+      const comboState = this.comboState(attacker.id, action, stance.combo);
+      const comboMult = comboState.multiplier;
+      const isFinisher = comboState.isFinisher;
+      const comboCount = comboState.count;
 
       // Цель — игрок? (id монстров не UUID — сразу ищем ИИ-контекст)
       if (UUID_RE.test(action.targetId)) {
         const targetRow = await this.characterService.getCharacterById(action.targetId);
         if (targetRow) {
           const target = await this.withEquipment(targetRow);
-          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult, weapon, totalDamageScale);
+          await this.combatPlayerVsPlayer(socket, attacker, target, action, comboMult, weapon, totalDamageScale, isFinisher, comboCount);
           return;
         }
       }
@@ -1798,7 +1813,7 @@ private territory = TerritoryBonuses.getInstance();
       // Цель — монстр?
       const monsterCtx = GameLoop.getInstance().getSpawnSystem().getAI().getContext(action.targetId);
       if (monsterCtx) {
-        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult, totalDamageScale);
+        await this.combatPlayerVsMonster(socket, attacker, monsterCtx, action, comboMult, totalDamageScale, isFinisher, comboCount);
         return;
       }
 
@@ -2076,6 +2091,8 @@ private territory = TerritoryBonuses.getInstance();
     // где известны обе, и сюда приходит уже готовым. Отдельный множитель
     // профессии означал бы, что о нём забывают в одной из двух ветвей боя.
     damageScale = 1,
+    isFinisher = false,
+    comboCount = 0,
   ): Promise<void> {
     if (this.deadPlayers.has(target.id)) return;
 
@@ -2318,6 +2335,8 @@ private territory = TerritoryBonuses.getInstance();
       poisePercent: this.poiseSystem.getPoisePercent(target.id),
       staggered: poiseResult.staggered,
       staggerUntil: poiseResult.staggerUntil,
+      isFinisher,
+      comboCount,
       // Точный удар (§355): награда за положение, а не за удачу.
       isPrecise: вСпину,
     });
@@ -2434,7 +2453,9 @@ private territory = TerritoryBonuses.getInstance();
     // Тот же совмещённый множитель, что и в PvP: стойка и профессия
     // складываются в один продукт, иначе одна из ветвей боя считала бы урон
     // по своим правилам.
-    damageScale = 1
+    damageScale = 1,
+    isFinisher = false,
+    comboCount = 0
   ): Promise<void> {
     if (monsterCtx.state === 'dead') return;
 
@@ -2630,7 +2651,8 @@ private territory = TerritoryBonuses.getInstance();
       poisePercent: this.poiseSystem.getPoisePercent(monsterCtx.instanceId),
       staggered: monsterPoiseResult.staggered,
       staggerUntil: monsterPoiseResult.staggerUntil,
-      comboFinisher: comboMult > 1,
+      isFinisher,
+      comboCount,
       soldiersDamage: уронКараула,
       // Точный удар (§355): клиент отличает его от крита — награда за
       // положение, а не за удачу.
