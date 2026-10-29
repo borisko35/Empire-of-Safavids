@@ -755,6 +755,7 @@ private territory = TerritoryBonuses.getInstance();
             socket.emit(SOCKET_EVENTS.COMBAT_HIT, {
               attackerId: String(msg.instanceId),
               damage: Number(msg.damage),
+              damageType: msg.damageType ?? 'blunt',
               isDodged: Boolean(msg.isDodged),
               isBlocked: Boolean(msg.isBlocked),
               // Парирование против монстра: сервер гасит удар у себя в тике,

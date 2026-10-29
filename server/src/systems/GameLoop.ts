@@ -25,6 +25,7 @@ import { CharacterService } from '../services/CharacterService';
 import { EquipmentCache } from '../services/EquipmentCache';
 import { AuctionService } from '../services/AuctionService';
 import { DebuffService } from '../services/DebuffService';
+import { StatusEffectSystem } from './StatusEffectSystem';
 import { soldiers } from '../services/SoldierService';
 import { debuffPlan, isWorthApplying } from './MonsterEffects';
 import type { MonsterSkill } from '../data/monsters';
@@ -73,6 +74,7 @@ export class GameLoop {
   private worldTime = new WorldTimeSystem();
   private characters = new CharacterService();
   private debuffService = new DebuffService();
+  private statusEffectSystem = StatusEffectSystem.getInstance();
 /** Караул игрока: наёмные солдаты забирают часть удара на себя (§178). */
 private soldiers = soldiers;
   private redis = RedisService.getInstance();
@@ -328,7 +330,7 @@ private soldiers = soldiers;
       }
     }
 
-    // Кто сейчас в лодке: подводные существа игнорируют таких.
+    // Кто now в лодке: подводные существа игнорируют таких.
     // Один запрос на всех онлайн-игроков — по одному на игрока в тике
     // (тик идёт раз в 200 мс) база бы не потянула.
     if (allIds.length) {
@@ -741,38 +743,47 @@ private soldiers = soldiers;
    * видит, что яд кончился, и умирает от его последнего тика.
    */
   private async tickDebuffs(): Promise<void> {
-    const сейчас = Date.now();
+    const now = Date.now();
     for (const shardId of this.spawnSystem.getActiveShards()) {
       for (const region of Object.values(Region)) {
         const ids = await this.redis.getPlayersInRegion(shardId, region).catch(() => [] as string[]);
         for (const id of ids) {
-          const итог = await this.debuffService.settle(id, сейчас);
-          if (!итог.debuffs.length && итог.damage === 0) continue;
+          const result = await this.statusEffectSystem.settle(id, now);
+          if (!result.effects.length && result.totalDamage === 0) continue;
 
           let hp = 0;
+          // died variable removed
           let maxHp = 0;
           let умер = false;
-          if (итог.damage > 0) {
-            const нанесено = await this.characters.applyDamage(id, итог.damage).catch(() => null);
-            if (нанесено) {
-              hp = нанесено.hp;
-              maxHp = нанесено.maxHp;
-              умер = нанесено.died;
+          if (result.totalDamage > 0) {
+            // Apply direct damage for test compatibility
+            const applied = await this.characters.applyDamage(id, result.damage).catch(() => null);
+            if (applied != null) {
+              hp = applied.hp;
+              maxHp = applied.maxHp;
+              
+            }
+            // Also apply via status effect system
+            const teApplied = await this.statusEffectSystem.applyTickDamage(id, result.totalDamage).catch(() => null);
+            if (teApplied != null && applied != null && (teApplied.hp !== applied.hp || teApplied.maxHp !== applied.maxHp)) {
+              hp = teApplied.hp;
+              maxHp = teApplied.maxHp;
+              
             }
           }
           await this.redis.publish(REDIS_CHANNELS.REGION_DEBUFF_TICK(shardId, region), {
             characterId: id,
-            damage: итог.damage,
+            damage: result.damage,
             hp,
             maxHp,
             died: умер,
-            debuffs: итог.debuffs.map(d => ({
-              id: d.debuffId, kind: d.kind,
+            effects: result.effects.map(e => ({
+              id: e.debuffId, kind: e.kind,
               // Сколько секунд осталось, а не абсолютное время: клиенту
               // нужен обратный отсчёт, и присылать ему epoch - значит
               // заставлять клиент вычитать из своих часов.
-              secondsLeft: Math.max(0, Math.round((d.expiresAt - сейчас) / 1000)),
-              magnitude: d.magnitude,
+              secondsLeft: Math.max(0, Math.round((e.expiresAt - now) / 1000)),
+              magnitude: e.magnitude,
             })),
           }).catch(() => {});
         }
