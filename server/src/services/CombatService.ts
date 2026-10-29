@@ -2,11 +2,22 @@ import { Character, CombatAction, CharacterClass } from '../types/game.types';
 import { logger } from '../utils/logger';
 import { DEFAULT_WEAPON, WeaponProfile } from './EquipmentCache';
 
+/** Урон поstance (poise) в зависимости от типа действия */
+const POISE_DAMAGE: Record<string, number> = {
+  attack: 10,
+  skill: 18,
+  ultimate: 30,
+  dodge: 0,
+  block: 2,
+};
+
 interface DamageResult {
   damage: number;
   isCritical: boolean;
   isBlocked: boolean;
   isDodged: boolean;
+  /** Урон поstance (poise), который цель получает от этого удара */
+  poiseDamage: number;
 }
 
 interface SkillDefinition {
@@ -77,16 +88,25 @@ export class CombatService {
     const baseDamage = this.getBaseDamage(attacker, action, weapon) * comboMultiplier * stanceDamage;
     const defense = this.getDefense(target);
 
+    // Урон поstance (poise) — наносится всегда, даже при блоке/уклонении
+    const poiseDamage = POISE_DAMAGE[action.actionType] ?? POISE_DAMAGE.attack;
+
     // Шанс уклонения
     const dodgeChance = target.stats.agility * 0.3;
     if (Math.random() * 100 < dodgeChance) {
-      return { damage: 0, isCritical: false, isBlocked: false, isDodged: true };
+      return { damage: 0, isCritical: false, isBlocked: false, isDodged: true, poiseDamage };
     }
 
     // Шанс блока
     const blockChance = target.class === CharacterClass.QIZILBASH ? 25 : 10;
     if (action.actionType !== 'skill' && Math.random() * 100 < blockChance) {
-      return { damage: Math.floor(baseDamage * 0.2), isCritical: false, isBlocked: true, isDodged: false };
+      return {
+        damage: Math.floor(baseDamage * 0.2),
+        isCritical: false,
+        isBlocked: true,
+        isDodged: false,
+        poiseDamage,
+      };
     }
 
     // Шанс крита
@@ -98,7 +118,7 @@ export class CombatService {
 
     logger.debug(`Combat: ${attacker.name} -> ${target.name}: ${finalDamage} dmg (crit: ${isCritical})`);
 
-    return { damage: finalDamage, isCritical, isBlocked: false, isDodged: false };
+    return { damage: finalDamage, isCritical, isBlocked: false, isDodged: false, poiseDamage };
   }
 
   private getBaseDamage(character: Character, action: CombatAction, weapon: WeaponProfile | null = null): number {

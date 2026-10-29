@@ -39,6 +39,7 @@ import { initPvpArena, announceArenaEnd } from '../systems/PvpArenaFlow';
 import { GameLoop } from '../systems/GameLoop';
 import { AIContext } from '../systems/AISystem';
 import { DefenseStates } from '../systems/DefenseStates';
+import { PoiseSystem } from '../systems/PoiseSystem';
 import { StealthStates } from '../systems/StealthStates';
 import { skillsService } from '../services/SkillsService';
 import { professionBonuses } from '../systems/ProfessionBonuses';
@@ -193,6 +194,7 @@ export class GameSocketHandler {
   private equipment = EquipmentCache.getInstance();
   private buffs = getBuffService();
   private defenseStates = DefenseStates.getInstance();
+  private poiseSystem = PoiseSystem.getInstance();
   private dungeons = DungeonService.getInstance();
   private worldEvents = WorldEventSystem.getInstance();
   private dailyTasks = new DailyTaskService();
@@ -1612,6 +1614,16 @@ private territory = TerritoryBonuses.getInstance();
     // держать боевые пакеты в очереди и применить их сразу после респавна.
     if (this.deadPlayers.has(socket.characterId)) return;
 
+    // Stagger check: cannot attack while staggered, but can dodge/block
+    if (
+      action.actionType === 'attack' || action.actionType === 'skill' || action.actionType === 'ultimate'
+    ) {
+      if (this.poiseSystem.isStaggered(socket.characterId)) {
+        socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'staggered' });
+        return;
+      }
+    }
+
     // Оглушение. Монстры с эффектом stun объявляли его в данных с самого
     // начала, и не читался ни один: удары с оглушением ничем не
     // отличались от обычных. Теперь оглушённый не может бить, уклоняться
@@ -2274,6 +2286,15 @@ private territory = TerritoryBonuses.getInstance();
     // сумму, и проверки владельца не было вовсе.
     this.grantCombatProgress(attacker.id, action, result.damage);
 
+    // Poise damage: apply poise damage to target
+    const poiseResult = this.poiseSystem.applyPoiseDamage(target.id, action.actionType);
+    if (poiseResult.staggered) {
+      // Broadcast stagger to everyone in region
+      socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {
+        attackerId: attacker.id, targetId: target.id, actionType: 'stagger',
+      });
+    }
+
     // Журнал боёв. Каждый удар между игроками пишется целиком: это и есть
     // материал для разбора споров «он меня убил нечестно». Раньше таблица
     // combat_logs существовала со всей схемой, но не записывал никто -
@@ -2293,6 +2314,10 @@ private territory = TerritoryBonuses.getInstance();
 
     socket.emit(SOCKET_EVENTS.COMBAT_RESULT, {
       attackerId: attacker.id, targetId: target.id, ...result, targetHp: applied.hp, targetMaxHp: applied.maxHp,
+      poiseDamage: poiseResult.poiseDamage,
+      poisePercent: this.poiseSystem.getPoisePercent(target.id),
+      staggered: poiseResult.staggered,
+      staggerUntil: poiseResult.staggerUntil,
       // Точный удар (§355): награда за положение, а не за удачу.
       isPrecise: вСпину,
     });
@@ -2488,6 +2513,9 @@ private territory = TerritoryBonuses.getInstance();
 
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
 
+    // Poise damage: apply poise damage to monster (monsters can be staggered too)
+    const monsterPoiseResult = this.poiseSystem.applyPoiseDamage(monsterCtx.instanceId, action.actionType);
+
     // Короткое обездвиживание (§357): точный удар застигает цель врасплох.
     // Тот же стан, что от парирования: оглушённый монстр стоит и не
     // действует (проверено поведением в parryStun.test.ts). Цепочке не даёт
@@ -2598,6 +2626,10 @@ private territory = TerritoryBonuses.getInstance();
       attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result,
       targetHp: Math.max(0, monsterCtx.currentHp),
       targetMaxHp: monsterCtx.maxHp,
+      poiseDamage: monsterPoiseResult.poiseDamage,
+      poisePercent: this.poiseSystem.getPoisePercent(monsterCtx.instanceId),
+      staggered: monsterPoiseResult.staggered,
+      staggerUntil: monsterPoiseResult.staggerUntil,
       comboFinisher: comboMult > 1,
       soldiersDamage: уронКараула,
       // Точный удар (§355): клиент отличает его от крита — награда за
