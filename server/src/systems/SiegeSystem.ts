@@ -24,6 +24,7 @@
 // данных так же давно, как и сами осады, и читает их пока только этот файл.
 
 import { TERRITORIES, GUILD_SKILLS, type TerritoryDefinition } from '../data/guilds';
+import { PER_LEVEL } from './GuildBonuses';
 import { GAME_SERVERS } from '../../../shared/constants';
 import { DatabaseService } from '../services/DatabaseService';
 import { NotificationService } from '../services/NotificationService';
@@ -525,7 +526,10 @@ export class SiegeSystem {
     // и в коде разошлись бы при правке одного из них.
     const потолок = GUILD_SKILLS.find((s) => s.id === 'guild_siege_power')?.maxLevel ?? 0;
     const действует = Math.min(уровень, потолок);
-    return Math.floor(базовый * (1 + 0.1 * действует));
+    // Множитель - из GuildBonuses.PER_LEVEL, а не своя константа: «+10%
+    // за уровень» написано один раз, и покупка навыка не может разойтись
+    // с его действием.
+    return Math.floor(базовый * (1 + PER_LEVEL.siege_damage * действует));
   }
 
   /**
