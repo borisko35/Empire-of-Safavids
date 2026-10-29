@@ -1,0 +1,67 @@
+// Character Creation Screen
+// Empire of Sefevids
+
+<div id="creation-screen" class="screen">
+  <div class="creation-container">
+    <h1>Character Creation</h1>
+    
+    <!-- Vocation Selection -->
+    <div class="vocation-selector">
+      <label for="vocation-select">Choose Vocation:</label>
+      <select id="vocation-select" class="select-input">
+        <!-- Options populated by JS -->
+      </select>
+      <button id="confirm-vocation-btn" class="btn secondary">Confirm Vocation</button>
+      <div id="vocation-description" class="vocation-description"></div>
+    </div>
+    
+    <!-- Attribute Distribution -->
+    <div class="attribute-distribution">
+      <h3>Attribute Points: <span id="attribute-points">30</span></h3>
+      
+      <div class="attribute-row">
+        <span>STR: <span id="str-points">12</span> <input type="number" id="str-input" min="1" max="20" value="12"></span>
+        <span>DEX: <span id="dex-points">8</span> <input type="number" id="dex-input" min="1" max="20" value="8"></span>
+      </div>
+      
+      <div class="attribute-row">
+        <span>INT: <span id="int-points">5</span> <input type="number" id="int-input" min="1" max="20" value="5"></span>
+        <span>CON: <span id="con-points">15</span> <input type="number" id="con-input" min="1" max="20" value="15"></span>
+      </div>
+      
+      <div class="attribute-row">
+        <span>SPR: <span id="spr-points">6</span> <input type="number" id="spr-input" min="1" max="20" value="6"></span>
+      </div>
+    </div>
+    
+    <!-- Face Customization -->
+    <div class="face-customization">
+      <h3>Face Customization</h3>
+      <div class="customization-row">
+        <label>Eye Shape: <input type="range" id="face-eye-shape" min="1" max="5" value="1"></label>
+        <label>Nose Shape: <input type="range" id="face-nose-shape" min="1" max="5" value="1"></label>
+      </div>
+      <div class="customization-row">
+        <label>Mouth Shape: <input type="range" id="face-mouth-shape" min="1" max="5" value="1"></label>
+        <label>Jaw Shape: <input type="range" id="face-jaw-shape" min="1" max="5" value="1"></label>
+      </div>
+    </div>
+    
+    <!-- Hair Customization -->
+    <div class="hair-customization">
+      <h3>Hair Customization</h3>
+      <div class="customization-row">
+        <label>Style: <input type="number" id="hair-style" min="1" max="10" value="1"></label>
+        <label>Color: <input type="color" id="hair-color" value="#000000"></label>
+      </div>
+    </div>
+    
+    <button id="create-character-btn" class="btn primary">Create Character</button>
+      <button id="pvp-arena-btn" class="btn secondary">Найти бой</button>
+  </div>
+</div>
+
+<div id="game-screen" class="screen" style="display: none;">
+  <h1>Game Screen</h1>
+  <p>Character creation complete! Welcome to Empire of Sefevids.</p>
+</div>

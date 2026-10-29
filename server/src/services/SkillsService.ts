@@ -53,6 +53,12 @@ const SKILLS: SkillDef[] = [
   { id: 'eagle_eye', name: 'eagle_eye', nameRu: 'Орлиный глаз', professionId: 'archer', level: 10, xp: 300, manaCost: 15, staminaCost: 5, cooldown: 60, damageMultiplier: 0, range: 999, aoe: false },
   { id: 'poison_arrow', name: 'poison_arrow', nameRu: 'Отравленная стрела', professionId: 'archer', level: 15, xp: 500, manaCost: 20, staminaCost: 15, cooldown: 8, damageMultiplier: 0.9, range: 12, aoe: false },
   { id: 'headshot', name: 'headshot', nameRu: 'Удар в голову', professionId: 'archer', level: 25, xp: 1000, manaCost: 35, staminaCost: 30, cooldown: 12, damageMultiplier: 4.0, range: 15, aoe: false },
+  // Mage skills
+  { id: 'fire_bolt', name: 'fire_bolt', nameRu: 'Огоньболт', professionId: 'mage', level: 1, xp: 0, manaCost: 15, staminaCost: 10, cooldown: 2, damageMultiplier: 1.5, range: 10, aoe: false },
+  { id: 'ice_spike', name: 'ice_spike', nameRu: 'Ледяной штык', professionId: 'mage', level: 5, xp: 100, manaCost: 25, staminaCost: 15, cooldown: 8, damageMultiplier: 1.2, range: 8, aoe: false },
+  { id: 'lightning_burst', name: 'lightning_burst', nameRu: 'Молния', professionId: 'mage', level: 10, xp: 300, manaCost: 35, staminaCost: 20, cooldown: 12, damageMultiplier: 2.0, range: 12, aoe: true },
+  { id: 'healing_spell', name: 'healing_spell', nameRu: 'Целительное заклинание', professionId: 'mage', level: 15, xp: 500, manaCost: 30, staminaCost: 20, cooldown: 15, damageMultiplier: 0, range: 6, aoe: false },
+  { id: 'magic_shield', name: 'magic_shield', nameRu: 'Магический щит', professionId: 'mage', level: 20, xp: 1000, manaCost: 40, staminaCost: 30, cooldown: 30, damageMultiplier: 0, range: 3, aoe: true },
   // Merchant skills
   { id: 'haggle', name: 'haggle', nameRu: 'Торг', professionId: 'merchant', level: 1, xp: 0, manaCost: 0, staminaCost: 5, cooldown: 5, damageMultiplier: 0, range: 0, aoe: false },
   { id: 'bulk_buy', name: 'bulk_buy', nameRu: 'Оптовая покупка', professionId: 'merchant', level: 5, xp: 100, manaCost: 10, staminaCost: 10, cooldown: 30, damageMultiplier: 0, range: 0, aoe: false },

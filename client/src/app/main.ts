@@ -20,6 +20,9 @@ import { captureReferralFromUrl } from './referral';
 import { textureManager, spriteManager, assetStorage } from '../assets/index';
 void textureManager; void spriteManager; void assetStorage;
 
+// Character creation system
+import { initCreationScreen } from './creation';
+
 /**
  * Отозвал ли сервер сессию.
  *
@@ -78,7 +81,15 @@ async function boot(): Promise<void> {
   // прийти к уже вошедшему игроку, и код надо запомнить до восстановления сессии
   captureReferralFromUrl();
 
-  initAuthScreen(() => void gotoCharacters());
+  // Проверяем, создавал ли игрок персонажа ранее
+  const createdChar = localStorage.getItem('created_character');
+  if (createdChar) {
+    // Персонаж уже создан — сразу к персонажам
+    await gotoCharacters();
+    return;
+  }
+
+  initAuthScreen(() => void gotoCharactersCreation());
 
   // Провайдер (Google/Facebook) вернул игрока с кодом и state — завершаем вход.
   // Проверяем ДО восстановления сессии: если игрок уже вошёл (например, как
@@ -97,7 +108,7 @@ async function boot(): Promise<void> {
   // Есть сохранённая сессия — сразу к персонажам
   if (session.token) {
     try {
-      await api.characters();
+      await api.characters(); // проверка, что сессия жива
       await gotoCharacters();
       return;
     } catch (err) {
@@ -265,7 +276,7 @@ function showConnectionLost(): void {
   wireLostRetry();
 }
 
-/** Переход к экрану персонажей (в т.ч. после reconnect-потери) */
+/** Переход к экрану персонажей */
 export async function gotoCharacters(): Promise<void> {
   if (!session.token) return;
   try {
@@ -283,7 +294,24 @@ export async function gotoCharacters(): Promise<void> {
     showScreen('screen-auth');
     return;
   }
+  // Если персонаж уже создан через creation screen, входим в мир сразу
+  const createdChar = localStorage.getItem('created_character');
+  if (createdChar) {
+    const character = JSON.parse(createdChar);
+    enterWorld(character);
+    return;
+  }
+  // Иначе показываем экран выбора/создания персонажа
   await initCharsScreen((c: Character) => void enterWorld(c));
+}
+
+/** Переход к экрану создания персонажа */
+export async function gotoCharactersCreation(): Promise<void> {
+  if (!session.token) return;
+  // Сначала показываем экран создания персонажа
+  await initCreationScreen();
+  // После создания переходим к выбору персонажа
+  await gotoCharacters();
 }
 
 /** Полный выход (из меню мира) */
