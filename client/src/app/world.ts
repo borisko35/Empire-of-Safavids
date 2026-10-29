@@ -1290,7 +1290,7 @@ function wireSocket(): void {
         if (r.isFinisher) {
           world.addFloater(
             target.pos.x, target.pos.z - 1,
-            `ФИНИШАР x${r.comboCount ?? 1}`,
+            `FINISHER x${r.comboCount ?? 1}`,
             '#F4D26C',
             true,
           );
