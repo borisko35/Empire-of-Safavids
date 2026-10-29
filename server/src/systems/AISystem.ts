@@ -6,6 +6,7 @@ import { Vector3 } from '../types/game.types';
 import { MonsterDefinition } from '../data/monsters';
 import { logger } from '../utils/logger';
 import { isDeepWater } from '../utils/spawn';
+import { combatReachMod, type Weather } from './WorldTimeSystem';
 
 export type AIState =
   | 'idle'       // Стоит на месте
@@ -118,7 +119,12 @@ export class AISystem {
   // ============================================================
   // Главный тик ИИ (200мс)
   // ============================================================
-  tick(instanceId: string, nearbyPlayers: TargetPlayer[]): AIAction {
+  /**
+   * Погода передаётся вызывающим (GameLoop), а не читается сама: у этого
+   * класса нет своих мировых часов, и вторая копия WorldTimeSystem врала бы
+   * при ручной погоде админа. undefined = ясная погода.
+   */
+  tick(instanceId: string, nearbyPlayers: TargetPlayer[], погода?: Weather): AIAction {
     const ctx = this.contexts.get(instanceId);
     if (!ctx || ctx.state === 'dead') return { type: 'idle' };
 
@@ -163,7 +169,7 @@ export class AISystem {
       ctx.lastStateChange = now;
     }
 
-    const action = this.executeState(ctx, nearbyPlayers, now);
+    const action = this.executeState(ctx, nearbyPlayers, now, погода);
 
     // Серверное движение: монстр реально приближается к цели.
     // Без этого позиция ИИ остаётся на спавне, и проверки дальности
@@ -255,7 +261,8 @@ export class AISystem {
   private executeState(
     ctx: AIContext,
     _players: TargetPlayer[],
-    now: number
+    now: number,
+    погода?: Weather
   ): AIAction {
     switch (ctx.state) {
       case 'idle':
@@ -290,7 +297,9 @@ export class AISystem {
         // Базовая атака — только вплотную. Если не достаёт ничем, монстр
         // сближается, а не бьёт через полкарты: иначе «Петля» на перезарядке
         // превращалась бы в удар кулаком с двенадцати метров.
-        if (дистанция <= ctx.definition.attackRange) {
+        // Погода в бою (§375): правило одно с игроками — в непогоду худеет
+        // дальность только стрелкового боя, клинку погода её не снимает.
+        if (дистанция <= combatReachMod(погода, ctx.definition.attackRange) * ctx.definition.attackRange) {
           return { type: 'attack', targetId: ctx.targetId ?? undefined };
         }
         return ctx.targetPosition

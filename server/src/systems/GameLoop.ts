@@ -348,7 +348,9 @@ private soldiers = soldiers;
     }
 
     // Тик ИИ + урон монстров по игрокам (публикуется в Redis, сокеты раздают подписчики)
-    const attacks = this.spawnSystem.tickAI(nearbyPlayers);
+    // Погода в бою (§375): один мир — одна погода, стрелковые монстры
+    // подчиняются ей той же combatReachMod, что и стрелки-игроки.
+    const attacks = this.spawnSystem.tickAI(nearbyPlayers, this.getWorldTime().weather);
     for (const atk of attacks) {
       const target = nearbyPlayers.get(`${atk.shardId}:${atk.region}`)?.find(p => p.id === atk.targetId);
       if (!target) continue;

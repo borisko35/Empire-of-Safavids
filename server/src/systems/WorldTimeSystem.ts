@@ -67,6 +67,31 @@ export const WEATHER_EFFECTS: Record<Weather, {
   wind:      { nameRu: 'Ветер',       visibilityMod: 0.85, speedMod: 1.0,  expMod: 1.05, spawnMod: 1.1,  specialMobs: [] },
 };
 
+/**
+ * Порог стрелкового оружия в бою (§375).
+ *
+ * ВЫБОР, не измерение. Клинковое оружие живёт в пределах 2.4–2.7 м, у
+ * стрелковых монстров attackRange 12–20 м. Порог 5 м лежит между ними:
+ * в туман и бурю стрела не видит цели, а клинку всё равно, что происходит
+ * в двух метрах. Ближней дальности погода не касается никогда.
+ */
+export const COMBAT_RANGED_THRESHOLD_M = 5;
+
+/**
+ * Множитель дальности basic-атаки по погоде (§375).
+ *
+ * Погода влияет на дальность только стрелкового боя: радиус больше порога
+ * умножается на visibilityMod - тем же полем, по которому в бурю худеет
+ * обзор стражи. Вне порога, в ясную погоду и на мусоре в данных - единица:
+ * правило не может ни удлинить руку, ни снять дальность клинку.
+ */
+export function combatReachMod(weather: Weather | null | undefined, range: number): number {
+  const модификатор = weather ? WEATHER_EFFECTS[weather]?.visibilityMod : undefined;
+  if (!Number.isFinite(модификатор)) return 1;
+  if (!Number.isFinite(range) || range <= COMBAT_RANGED_THRESHOLD_M) return 1;
+  return Math.max(0.1, модификатор as number);
+}
+
 export const SEASONAL_EVENTS: Record<Season, {
   nameRu: string;
   festivals: { name: string; nameRu: string; bonuses: string[] }[];

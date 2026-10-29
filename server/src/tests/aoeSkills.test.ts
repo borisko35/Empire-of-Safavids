@@ -291,9 +291,16 @@ describe('Дальность навыков монстров', () => {
 
   it('базовая атака — только вплотную, иначе монстр сближается', () => {
     // Иначе навык на перезарядке превращался бы в удар кулаком с 12 метров.
+    // Погода в бою (§375) вошла в ту же строку: combatReachMod умножает
+    // радиус, но для клинка (2 < порога 5) всегда единица — вплотную
+    // означает вплотную при любой погоде.
     must(
-      /if \(дистанция <= ctx\.definition\.attackRange\) \{/.test(ИИ),
+      /if \(дистанция <= combatReachMod\(погода, ctx\.definition\.attackRange\) \* ctx\.definition\.attackRange\) \{/.test(ИИ),
       'базовая атака бьёт с любой дистанции: монстр достаёт через полкарты'
+    );
+    must(
+      /export const COMBAT_RANGED_THRESHOLD_M = 5/.test(читать('server/src/systems/WorldTimeSystem.ts')),
+      'порог стрелкового боя сдвинулся — проверь, что клинки за ним'
     );
     must(
       /type: 'move', destination: ctx\.targetPosition/.test(ИИ),

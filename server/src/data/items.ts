@@ -52,7 +52,7 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     // Параметры удара: раньше у оружия не было ни урона, ни дальности,
     // ни скорости, поэтому все виды оружия били одинаково.
     weapon: { damage: 1, speed: 0.8, range: 2.4 },
-    description: 'Составной лук из рога, дерева и сухожилий. Дальность — 80 метров.',
+    description: 'Составной лук из рога, дерева и сухожилий.',
     iconPath: 'icons/weapons/composite_bow.png',
     stackable: false,
     maxStack: 1,

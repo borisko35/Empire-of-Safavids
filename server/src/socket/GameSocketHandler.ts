@@ -75,7 +75,7 @@ import {
 // так рассылает игрокам (WORLD_TIME), - чтобы клиент и правило считали одно
 // и то же. WEATHER_EFFECTS - справочник модификаторов, из него берётся
 // visibilityMod.
-import { WEATHER_EFFECTS } from '../systems/WorldTimeSystem';
+import { WEATHER_EFFECTS, combatReachMod } from '../systems/WorldTimeSystem';
 import { NpcMemoryService } from '../services/NpcMemoryService';
 import { ReputationService } from '../services/ReputationService';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
@@ -1723,6 +1723,13 @@ private territory = TerritoryBonuses.getInstance();
       // сабля и лук били одинаково.
       const weapon = await this.equipment.getWeapon(attacker.id);
 
+      // Погода в бою (§375): время и погода — серверные, из мировых часов,
+      // а не из пакета игрока. Дальностью правит visibilityMod (стрелковое —
+      // только оно, порог в combatReachMod), замахом — speedMod.
+      const время = GameLoop.getInstance().getWorldTime();
+      const погодаСкорость = Number(WEATHER_EFFECTS[время.weather]?.speedMod);
+      const погодаЗамах = Number.isFinite(погодаСкорость) ? Math.max(0.3, погодаСкорость) : 1;
+
       // Стойка определяет урон, скорость и досягаемость. Конная стрельба
       // пешком недоступна: без проверки скакуна это был бы просто «дальний
       // бой», доступный каждому.
@@ -1756,7 +1763,9 @@ private territory = TerritoryBonuses.getInstance();
         // перевернуло бы стойки наоборот: агрессивная стала бы самой медленной.
         const замедление = Math.max(0.2, Math.min(1, await this.debuffs.speedMultiplier(attacker.id).catch(() => 1)));
         const замах = ((weapon?.speed ?? DEFAULT_WEAPON.speed) * 1000) / stance.attackSpeed;
-        const откат = Math.round(Math.max(MIN_ATTACK_INTERVAL_MS, замах) / замедление);
+        // Непогода оттягивает замах тем же множителем, что и шаг (§375):
+        // в песчаную бурю машешь оружием так же тяжело, как идёшь.
+        const откат = Math.round(Math.max(MIN_ATTACK_INTERVAL_MS, замах) / (замедление * погодаЗамах));
         const last = this.lastAttackAt.get(attacker.id) ?? 0;
         if (Date.now() - last < откат) {
           socket.emit(SOCKET_EVENTS.COMBAT_ERROR, { code: 'attack_too_fast' });
@@ -1781,7 +1790,10 @@ private territory = TerritoryBonuses.getInstance();
       // Досягаемость. Проверяем по серверным позициям, а не по присланным
       // клиентом: иначе правкой клиента можно бить через полкарты, указав
       // свою позицию рядом с жертвой. Монстры - по позиции из ИИ.
-      const reach = (weapon?.range ?? DEFAULT_WEAPON.range) * totalReach;
+      // Дальностью погода правит только стрелкового бойца (§375): порог
+      // и множитель — в combatReachMod, клинку погода дальности не снимает.
+      const reach = (weapon?.range ?? DEFAULT_WEAPON.range) * totalReach *
+        combatReachMod(время.weather, weapon?.range ?? DEFAULT_WEAPON.range);
       const isBasic = action.actionType === 'attack' && !action.skillId;
       if (isBasic) {
         let targetPos: { x: number; y: number; z: number } | null = null;

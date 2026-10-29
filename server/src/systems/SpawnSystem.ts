@@ -403,13 +403,13 @@ export class SpawnSystem {
    * Тик ИИ всех активных монстров. Игроки передаются по ключу
    * «шард:регион» — монстр видит только игроков своего шарда.
    */
-  tickAI(nearbyPlayers: Map<string, TargetPlayer[]>): {
+  tickAI(nearbyPlayers: Map<string, TargetPlayer[]>, погода?: Weather): {
     shardId: string; region: Region; instanceId: string; targetId?: string; skillId?: string; type: string;
   }[] {
     const attacks: { shardId: string; region: Region; instanceId: string; targetId?: string; skillId?: string; type: string }[] = [];
     for (const ctx of this.ai.getAllInstances()) {
       const players = nearbyPlayers.get(`${ctx.shardId}:${ctx.definition.region}`) ?? [];
-      const action = this.ai.tick(ctx.instanceId, players);
+      const action = this.ai.tick(ctx.instanceId, players, погода);
       if (action.type !== 'idle') {
         this.redis.publish(`region:${ctx.shardId}:${ctx.definition.region}:ai_action`, {
           instanceId: ctx.instanceId,
