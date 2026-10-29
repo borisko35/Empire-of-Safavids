@@ -286,10 +286,24 @@ describe('Эффекты действительно применяются в б
     const начало = цикл.indexOf('private tick(): void');
     expect({ начало_найдено: начало > 0 }).toEqual({ начало_найдено: true });
     const тело = цикл.slice(начало, цикл.indexOf('\n  private ', начало + 10));
+    const дебаффы = цикл.slice(
+      цикл.indexOf('private async tickDebuffs'),
+      цикл.indexOf('\n  private ', цикл.indexOf('private async tickDebuffs') + 10),
+    );
     expect({
       вызывается: /this\.tickDebuffs\(\)/.test(тело),
-      начисляет_урон: /applyDamage\(id, итог\.damage\)/.test(цикл),
-    }).toEqual({ вызывается: true, начисляет_урон: true });
+      // Урон идёт через StatusEffectSystem.applyTickDamage. Прежняя проверка
+      // ждала applyDamage(id, ...) по форме старого кода - и рефакторинг
+      // оставил рядом с applyTickDamage прямой вызов applyDamage «для
+      // совместимости с тестом»: каждый тик применялся ДВАЖДЫ.
+      начисляет_урон: /applyTickDamage\(id, result\.totalDamage\)/.test(дебаффы),
+      // Одним путём. Прямой applyDamage в tickDebuffs рядом с
+      // applyTickDamage - это и есть двойное применение.
+      без_двойного_применения: !/this\.characters\.applyDamage\(/.test(дебаффы),
+      // Смерть от раны доходит до клиента: флаг died берётся из результата
+      // applyTickDamage, а не стоит константой false.
+      смерть_не_константа: /умер = applied\.died/.test(дебаффы),
+    }).toEqual({ вызывается: true, начисляет_урон: true, без_двойного_применения: true, смерть_не_константа: true });
   });
 
   it('эффект продлевается, а не копится', () => {

@@ -752,23 +752,18 @@ private soldiers = soldiers;
           if (!result.effects.length && result.totalDamage === 0) continue;
 
           let hp = 0;
-          // died variable removed
           let maxHp = 0;
           let умер = false;
           if (result.totalDamage > 0) {
-            // Apply direct damage for test compatibility
-            const applied = await this.characters.applyDamage(id, result.damage).catch(() => null);
+            // Урон применяется ОДИН раз, через StatusEffectSystem: тот же
+            // вызов внутри идёт в characters.applyDamage. Прямой вызов
+            // applyDamage рядом с ним применял каждый тик дважды - игрок
+            // терял за рану вдвое больше, чем обещано в описании дебаффа.
+            const applied = await this.statusEffectSystem.applyTickDamage(id, result.totalDamage).catch(() => null);
             if (applied != null) {
               hp = applied.hp;
               maxHp = applied.maxHp;
-              
-            }
-            // Also apply via status effect system
-            const teApplied = await this.statusEffectSystem.applyTickDamage(id, result.totalDamage).catch(() => null);
-            if (teApplied != null && applied != null && (teApplied.hp !== applied.hp || teApplied.maxHp !== applied.maxHp)) {
-              hp = teApplied.hp;
-              maxHp = teApplied.maxHp;
-              
+              умер = applied.died;
             }
           }
           await this.redis.publish(REDIS_CHANNELS.REGION_DEBUFF_TICK(shardId, region), {
