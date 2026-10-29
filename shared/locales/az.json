@@ -2006,5 +2006,13 @@
     "claimed": "+{gold} qızıl · +{exp} təcrübə",
     "claim_failed": "Mükafat qaçdı — yenidən cəhd et",
     "in_progress": "Yolda"
+  },
+  "env": {
+    "push": "Sandıq — itələ",
+    "ignite": "Yağ küpü — yandır",
+    "collapse": "Sutəm — yerə çək",
+    "broken": "Doğrandı",
+    "ignited": "Yağ alışdı",
+    "collapsed": "Sutəm çökdü"
   }
 }

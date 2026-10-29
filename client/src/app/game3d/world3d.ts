@@ -1725,7 +1725,9 @@ private roll = 0;
   /** Поджечь кувшин с маслом. */
   private igniteOilJug(obj: THREE.Object3D): void {
     // Проверка: есть ли у игрока огненный навык/предмет (упрощённо: всегда поджигаем при клике)
+    // interactiveState — см. комментарий в collapseAwning: заслон повторов.
     obj.userData.state = 'burning';
+    obj.userData.interactiveState = 'burning';
     // Визуал горения: добавить пламя/дым
     this.addBurningEffect(obj);
     // Через burnTime секунд — превратить в сгоревшее
@@ -1793,7 +1795,11 @@ private roll = 0;
 
   /** Обрушить навес. */
   private collapseAwning(obj: THREE.Object3D): void {
+    // Оба поля: state — старое имя, interactiveState — то, что читает
+    // колбэк и заслон повторного срабатывания. Без второго поля обрушенный
+    // навес можно было обрушать снова, горящий кувшин — поджигать заново.
     obj.userData.state = 'collapsed';
+    obj.userData.interactiveState = 'collapsed';
     // Анимация обрушения: наклонить стойки и уронить крышу
     this.animateAwningCollapse(obj);
   }

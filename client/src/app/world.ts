@@ -635,6 +635,24 @@ export async function enterWorld(character: Character): Promise<void> {
     onAttack: () => basicAttack(),
     onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
     onTargetCleared: () => hideTarget(),
+    // Пометки окружения (§370): движок знает вид объекта, строку даёт словарь.
+    // Движок не знает t() — его тесты живут без DOM, и импорт i18n туда
+    // уронил бы набор (та история с gameI18n).
+    onInteractiveHint: (kind) => {
+      const ключ: Record<string, string> = {
+        crate: 'env.push',
+        oil_jug: 'env.ignite',
+        awning: 'env.collapse',
+      };
+      return ключ[kind] ? t(ключ[kind]) : '';
+    },
+    onInteractive: (kind, state) => {
+      // Тосты только на ПЕРЕХОДЫ состояния: «толкнул» и «повредил» на
+      // каждый клик — спам, движение ящика и трещины сами говорят.
+      if (state === 'broken') toast(t('env.broken'), 'info');
+      else if (state === 'burning') toast(t('env.ignited'), 'info');
+      else if (kind === 'awning' && state === 'collapsed') toast(t('env.collapsed'), 'info');
+    },
     onNpc: (panel, name, npcId) => {
       // Клик по NPC: открыть связанную панель (кнопкой-переключателем,
       // чтобы не ломать состояние .hidden/.active)

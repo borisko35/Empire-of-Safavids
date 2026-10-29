@@ -2006,5 +2006,13 @@
     "claimed": "+{gold} gold · +{exp} exp",
     "claim_failed": "The reward slipped away — try again",
     "in_progress": "In progress"
+  },
+  "env": {
+    "push": "Crate — push",
+    "ignite": "Oil jug — light it",
+    "collapse": "Awning — bring it down",
+    "broken": "Smashed",
+    "ignited": "The oil catches fire",
+    "collapsed": "The awning comes down"
   }
 }
