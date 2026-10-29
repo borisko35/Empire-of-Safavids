@@ -52,6 +52,12 @@ export interface AIContext {
   lastTickAt?: number;                    // для расчёта dt серверного движения
   /** Оглушение (парирование игрока): до этого времени монстр не действует */
   stunnedUntil?: number;
+  /**
+   * Попаданий, принятых этим экземпляром (ломающаяся броня, §374).
+   * Живёт только пока монстр жив: смерть стирает контекст целиком, и
+   * респавн приходит с целой бронёй без отдельного кода сброса.
+   */
+  armorHits: number;
 }
 
 export interface AIAction {
@@ -101,6 +107,7 @@ export class AISystem {
       aggroTable: new Map(),
       lastStateChange: Date.now(),
       shardId,
+      armorHits: 0,
     };
 
     this.contexts.set(instanceId, ctx);
@@ -439,6 +446,9 @@ export class AISystem {
     const ctx = this.contexts.get(instanceId);
     if (!ctx || ctx.state === 'dead') return false;
     ctx.currentHp = Math.max(0, ctx.currentHp - damage);
+    // Износ брони: каждое применённое попадание считается (§374). Дошло ли
+    // оно до защиты - решает effectiveDefense при чтении, здесь только счёт.
+    ctx.armorHits += 1;
     this.addThreat(instanceId, attackerId, damage);
     if (ctx.currentHp === 0) {
       ctx.state = 'dead';

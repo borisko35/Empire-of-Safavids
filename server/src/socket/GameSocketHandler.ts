@@ -80,6 +80,7 @@ import { NpcMemoryService } from '../services/NpcMemoryService';
 import { ReputationService } from '../services/ReputationService';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
+import { effectiveDefense, armorSteps } from '../../../shared/armorBreak';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -2400,7 +2401,10 @@ private territory = TerritoryBonuses.getInstance();
         strength: monsterCtx.definition.strength,
         agility: monsterCtx.definition.agility,
         intelligence: monsterCtx.definition.intelligence,
-        endurance: Math.round(monsterCtx.definition.defense / 1.5),
+        // Ломающаяся броня (§374): защита считается с износом этого
+        // экземпляра. Обратное преобразование то же, что было: защита
+        // справочника → выносливость → getDefense()×1.5 ≈ база справочника.
+        endurance: Math.round(effectiveDefense(monsterCtx.definition.defense, monsterCtx.armorHits) / 1.5),
         charisma: 0,
       },
       hp: monsterCtx.currentHp,
@@ -2533,7 +2537,13 @@ private territory = TerritoryBonuses.getInstance();
       }
     }
 
+    // Ломающаяся броня (§374): ступень износа, пройденная этим ударом.
+    // Счётчик живёт в контексте монстра и увеличивается внутри takeDamage,
+    // поэтому «до» снимается до вызова. Ступень сообщается один раз, в момент
+    // перехода: постоянный флаг был бы спамом в каждом пакете.
+    const ступенейДо = armorSteps(monsterCtx.armorHits ?? 0);
     const died = ai.takeDamage(monsterCtx.instanceId, result.damage, attacker.id);
+    const ступеньПройдена = !died && armorSteps(monsterCtx.armorHits ?? 0) > ступенейДо;
 
     // Poise damage: apply poise damage to monster (monsters can be staggered too)
     const monsterPoiseResult = this.poiseSystem.applyPoiseDamage(monsterCtx.instanceId, action.actionType);
@@ -2658,6 +2668,8 @@ private territory = TerritoryBonuses.getInstance();
       // Точный удар (§355): клиент отличает его от крита — награда за
       // положение, а не за удачу.
       isPrecise: вСпину,
+      // Ломающаяся броня (§374): ступень пройдена — клиент называет её.
+      armorBroken: ступеньПройдена,
     });
 
     socket.to(`shard:${socket.shardId}:region:${socket.region}`).emit(SOCKET_EVENTS.COMBAT_VISUAL, {

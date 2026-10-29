@@ -228,6 +228,7 @@
     "stance_mounted_archery": "Mounted Archery",
     "stance_mounted_archery_hint": "Ranged fighting on horseback, unavailable on foot",
     "parried_by_target": "Parried by target",
+    "armor_broken": "Armor cracked",
     "parry_success": "Parried!",
     "attack_hint": "Click a monster to attack it",
     "move_hint": "WASD — move · Shift — run · Space — jump · LMB — attack · RMB — block · Mouse — camera · 1–4 — skills · M — map · F — character · G — guild · J — quests · Enter — chat",

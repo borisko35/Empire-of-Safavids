@@ -1280,7 +1280,7 @@ function wireSocket(): void {
     }
   });
 
-  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean; poiseDamage?: number; poisePercent?: number; staggered?: boolean; staggerUntil?: number; isFinisher?: boolean; comboCount?: number }) => {
+  socket.on('combat:result', (r: { attackerId: string; targetId: string; damage: number; isCritical: boolean; isBlocked: boolean; isDodged: boolean; isParried?: boolean; reflected?: number; targetHp?: number; targetMaxHp?: number; isPrecise?: boolean; armorBroken?: boolean; poiseDamage?: number; poisePercent?: number; staggered?: boolean; staggerUntil?: number; isFinisher?: boolean; comboCount?: number }) => {
     if (!world) return;
     const attacker = world.players.get(r.attackerId);
     const target = world.monsters.get(r.targetId) ?? world.players.get(r.targetId);
@@ -1326,6 +1326,12 @@ function wireSocket(): void {
         }
         const m = world.monsters.get(r.targetId);
         if (m && r.targetHp != null) m.hp = r.targetHp;
+
+        // Ломающаяся броня (§374): ступень износа называется один раз, в
+        // момент перехода — сервер шлёт armorBroken только на границе.
+        if (r.armorBroken) {
+          world.addFloater(target.pos.x, target.pos.z - 2, t('world.armor_broken'), '#c9a86a', true);
+        }
 
         // Poise floater for target (when we are the target or just observing)
         if (r.poiseDamage && r.poiseDamage > 0 && r.targetId !== me?.id) {
