@@ -26,7 +26,7 @@ function must(условие: unknown, причина: string): asserts усло
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const МИР = читать('client/src/app/game3d/world3d.ts');
 const МАНИФЕСТ = JSON.parse(читать('client/src/app/public/models/manifest.json')) as {
   decor?: { file: string; name: string; bytes: number }[];

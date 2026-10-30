@@ -132,7 +132,7 @@ describe('Слоты комнат совпадают у сервера и кли
     // пропускает настоящий разъезд: если CITY потеряется, запись уедет на
     // десятки единиц, и проверка это увидит.
     const ДОПУСК = 0.5;
-    const террейн = читать('client/src/app/game3d/terrain.ts');
+    const террейн = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
     const город = /export const CITY = \{ x: (-?\d+), z: (-?\d+)/.exec(террейн);
     must(город !== null, 'не нашёл координаты столицы CITY в terrain.ts - расчёт дверей изменился');
     const [ГОРОД_X, ГОРОД_Z] = [Number(город[1]), Number(город[2])];

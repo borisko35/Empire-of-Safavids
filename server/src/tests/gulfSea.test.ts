@@ -29,7 +29,8 @@ function must(условие: unknown, причина: string): asserts усло
 // в shared/, проверка покраснела на пяти пунктах - и это правильно: она
 // следит не за «наличием слов в файле», а за тем, что в коде написано
 // нужное. Но читать надо то место, где теперь правда.
-const РЕЛЬЕФ = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8');
+const РЕЛЬЕФ = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8') +
+  readFileSync(join(корень, 'shared/terrainHeight.ts'), 'utf-8');
 const ВОДА = readFileSync(join(корень, 'shared/water.ts'), 'utf-8');
 
 describe('Море Персидского залива: оно есть в коде', () => {

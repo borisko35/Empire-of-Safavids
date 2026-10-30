@@ -216,7 +216,7 @@ describe('Дальние края: мир не полоса на всю шири
   it('у каждого региона есть город, и стоит он в зоне этого региона', () => {
     // Без города регион - полоса земли: игрок возрождается на якоре и стоит
     // в пустом поле, как стоял до появления поселений.
-    const текст = читать('client/src/app/game3d/terrain.ts');
+    const текст = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
     const города = [...текст.matchAll(/\{ region: '([a-z_]+)', x: (-?\d+), z: (-?\d+)/g)]
       .map((м) => ({ регион: м[1], x: Number(м[2]), z: Number(м[3]) }));
     for (const регион of ['east_frontier', 'west_frontier']) {

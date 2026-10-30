@@ -33,6 +33,7 @@ import { REDIS_CHANNELS } from '../../../shared/constants';
 import { activeGuardPosts, GUARD_GRUDGE_MS, GUARD_STRIKE, strikingGuard, nightFactor } from '../../../shared/stealth';
 // Точный удар (§356): правило спины в shared, монстровая ветка того же права.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
+import { isAboveTarget, OVERHEAD_MULT } from '../../../shared/overheadStrike';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -374,6 +375,12 @@ private soldiers = soldiers;
       );
       if (вСпинуИгрока) damage = Math.floor(damage * BACK_STRIKE_MULT);
 
+      // Удар сверху (§376): правило высоты одно для всех. Монстр на склоне
+      // или уступе над игроком бьёт сверху - его позиция теперь настоящая,
+      // с рельефом из shared/terrainHeight.ts.
+      const сверхуМонстра = !!монстрCtx && isAboveTarget(монстрCtx.position, target.position);
+      if (сверхуМонстра) damage = Math.floor(damage * OVERHEAD_MULT);
+
       // Парирование: удар в первые миллисекунды щита гасится полностью.
       // Против монстров окно прежде не читалось вовсе - игрок, поймавший
       // удар таймингом, получал то же, что и держащий щит постоянно, и
@@ -536,7 +543,7 @@ private soldiers = soldiers;
         isBlocked: !isDodged && defenseMult < 1,
         // Точный удар (§356): клиент помечает ✧ — игрок понимает, почему
         // удар был больнее, и поворачивается лицом к монстру.
-        isPrecise: вСпинуИгрока && !isDodged,
+        isPrecise: (вСпинуИгрока || сверхуМонстра) && !isDodged,
         died: applied.died,
         // Имя эффекта едет вместе с ударом, а не отдельным сообщением:
         // клиенту нужно показать иконку в тот же миг, что и число урона.

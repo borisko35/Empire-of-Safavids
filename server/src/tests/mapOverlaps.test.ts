@@ -51,7 +51,7 @@ function must(условие: unknown, причина: string): asserts усло
 }
 
 const HUD = читать('client/src/app/hud.ts');
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const ВОДА = читать('shared/water.ts');
 
 // Размер холста берём из собранной разметки, как это уже делает mapLabels.test.ts:

@@ -117,7 +117,7 @@ describe('Обнаружение: посты совпадают с живыми 
   // смещение NPC. Это две копии одного факта, и ровно на этом разъехались
   // двери. Если кто-то переставит NPC на клиенте, эта проверка упадёт.
   it('каждый пост стоит там, где стоит его NPC в NPC_GROUPS', () => {
-    const terrain = читать('client/src/app/game3d/terrain.ts');
+    const terrain = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
     const npc = читать('client/src/app/game3d/npc.ts');
 
     must(npc.length > 1000, 'npc.ts не прочитан: проверка молча прошла бы вхолостую');

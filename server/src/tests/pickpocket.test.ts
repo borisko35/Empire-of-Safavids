@@ -151,7 +151,7 @@ describe('Кража: механика наконец возможна', () => {
 describe('Кража: взгляд торговца совпадает с его настоящим поворотом', () => {
   it('направление равно смещению NPC в NPC_GROUPS', () => {
     const npc = читать('client/src/app/game3d/npc.ts');
-    const terrain = читать('client/src/app/game3d/terrain.ts');
+    const terrain = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
     must(npc.length > 1000 && terrain.length > 1000, 'файлы не прочитаны: проверка молчала бы');
 
     const строка = npc.split('\n').find((l) => l.includes(`id: '${торговец.id}'`));

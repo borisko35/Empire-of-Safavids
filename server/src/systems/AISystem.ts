@@ -7,6 +7,8 @@ import { MonsterDefinition } from '../data/monsters';
 import { logger } from '../utils/logger';
 import { isDeepWater } from '../utils/spawn';
 import { combatReachMod, type Weather } from './WorldTimeSystem';
+import { groundHeight } from '../../../shared/terrainHeight';
+import { WORLD_HALF } from '../../../shared/water';
 
 export type AIState =
   | 'idle'       // Стоит на месте
@@ -91,12 +93,17 @@ export class AISystem {
       ? this.generateWaterPatrolPoints(position, 25, 4)
       : this.generatePatrolPoints(position, 15, 4);
 
+    // Настоящий рельеф (§376): монстр встаёт на землю, а не на y=0 из данных
+    // спавна. Патрульные точки наследуют тот же y - иначе первая же проба
+    // «монстр на склоне» считала бы превышение по нулям.
+    const земля = this.высотаЗемли(position.x, position.z, definition.aquatic === true);
+    const нога = земля ?? position.y;
     const ctx: AIContext = {
       monsterId: definition.id,
       instanceId,
       definition,
-      position: { ...position },
-      spawnPoint: { ...position },
+      position: { ...position, y: нога },
+      spawnPoint: { ...position, y: нога },
       currentHp: definition.hp,
       maxHp: definition.hp,
       state: 'patrol',
@@ -200,6 +207,10 @@ export class AISystem {
         } else if (!isDeepWater(nx, nz) || isDeepWater(ctx.position.x, ctx.position.z)) {
           ctx.position.x = nx;
           ctx.position.z = nz;
+          // Рельеф под ногами (§376): высота идёт за шагом, и превышение
+          // бойца на склоне становится серверным фактом, а не нулём.
+          const земля = this.высотаЗемли(ctx.position.x, ctx.position.z, false);
+          if (земля !== null) ctx.position.y = земля;
         }
       }
     }
@@ -490,6 +501,22 @@ export class AISystem {
 
   private distance(a: Vector3, b: Vector3): number {
     return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
+  }
+
+  /**
+   * Настоящая высота земли под точкой мира (§376).
+   *
+   * null - рельефа в этой точке для сервера нет: координаты карманов
+   * интерьеров (x от 4000) лежат ЗА краем мира, и clamp высотной функции
+   * вернул бы высоту края вместо пола комнаты. Там y приходит из данных,
+   * как и приходил. Подводным существам высота дна не судьба: они плавают,
+   * а не стоят.
+   */
+  private высотаЗемли(x: number, z: number, подводное: boolean): number | null {
+    if (подводное) return null;
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+    if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) return null;
+    return groundHeight(x, z);
   }
 
   private fleeDirection(from: Vector3, threat: Vector3): Vector3 {

@@ -20,7 +20,7 @@ function must(условие: unknown, причина: string): asserts усло
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const ИНТЕРЬЕРЫ = читать('client/src/app/game3d/interiors.ts');
 const ДАННЫЕ = читать('server/src/data/interiors.ts');
 

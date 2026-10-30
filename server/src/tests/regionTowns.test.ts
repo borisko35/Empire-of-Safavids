@@ -59,7 +59,9 @@ interface Город {
  * его.
  */
 function города(): Город[] {
-  const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8');
+  // §376: REGION_TOWNS переехала в shared/terrainHeight.ts - читаем оба источника.
+  const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8') +
+    readFileSync(join(корень, 'shared/terrainHeight.ts'), 'utf-8');
   const re = /\{\s*region:\s*'([a-z_]+)',\s*x:\s*(-?\d+),\s*z:\s*(-?\d+),\s*radius:\s*(\d+),\s*level:\s*(-?[\d.]+),\s*kind:\s*'([a-z]+)',\s*nameRu:\s*'([^']+)'/g;
   const найдено: Город[] = [];
   let m: RegExpExecArray | null;
@@ -233,7 +235,9 @@ describe('Города регионов: у каждого региона ест
     // зону смешивания и стояли на разной высоте: часть висела бы, часть
     // была бы вкопана. Поэтому ровняем на 2*R, и ровная зона до 1.1*R
     // покрывает все постройки с запасом.
-    const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8');
+    // §376: CITY и ровнялка городов переехали в shared/terrainHeight.ts.
+    const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8') +
+      readFileSync(join(корень, 'shared/terrainHeight.ts'), 'utf-8');
     const цикл = /for \(const t of REGION_TOWNS\) h = flatten\(h, x, z, t\.x, t\.z, ([^,]+), t\.level\)/.exec(исходник);
     must(
       цикл,
@@ -304,7 +308,9 @@ describe('Города регионов: разнесены по миру, а н
   function столица(): { x: number; z: number } {
     // Координаты столицы берутся из исходника, а не пишутся числом: число
     // в проверке разъедется со столицей молча, как уже было с якорями.
-    const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8');
+    // §376: CITY переехала в shared/terrainHeight.ts.
+    const исходник = readFileSync(join(корень, 'client/src/app/game3d/terrain.ts'), 'utf-8') +
+      readFileSync(join(корень, 'shared/terrainHeight.ts'), 'utf-8');
     const м = /export const CITY = \{ x: (-?\d+), z: (-?\d+)/.exec(исходник);
     must(м !== null, 'не нашли CITY в terrain.ts: столица переехала, проверка ослепла');
     return { x: Number((м as RegExpExecArray)[1]), z: Number((м as RegExpExecArray)[2]) };

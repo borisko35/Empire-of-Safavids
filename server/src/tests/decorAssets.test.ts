@@ -23,7 +23,7 @@ function must(условие: unknown, причина: string): asserts усло
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 // Таблица сеток воды: в ней живут шаги сетки и радиусы тел. Вынесена из
 // terrain.ts, потому что её проверяет пробник check-water-waves.ts, который
 // должен считать то же, что строит геометрию.

@@ -23,7 +23,7 @@ function должен(условие: unknown, причина: string): asserts 
 }
 
 const NPC = читать('client/src/app/game3d/npc.ts');
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 
 describe('Жители городов регионов', () => {
   it('группы жителей строятся по списку городов', () => {

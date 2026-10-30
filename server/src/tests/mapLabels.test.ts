@@ -39,7 +39,7 @@ function must(условие: unknown, причина: string): asserts усло
 }
 
 const HUD = читать('client/src/app/hud.ts');
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const ВОДА = читать('shared/water.ts');
 // WORLD_HALF живёт в shared/water.ts: вода про ширину мира знает (линия
 // берега ищется по всей ширине), а waterWaves.ts не должен импортировать

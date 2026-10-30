@@ -31,7 +31,9 @@ const INTERIORS = join(ROOT, 'client/src/app/game3d/interiors.ts');
 const INSCRIPTIONS = join(ROOT, 'client/src/app/game3d/inscriptions.ts');
 const SOCKET = join(ROOT, 'server/src/socket/GameSocketHandler.ts');
 
-const terrain = readFileSync(TERRAIN, 'utf-8');
+// §376: площадочные константы (PORT, FORT, ...) переехали в shared/terrainHeight.ts,
+// и именованные места мира теперь живут в двух файлах - читаем оба.
+const terrain = readFileSync(TERRAIN, 'utf-8') + readFileSync(join(ROOT, 'shared/terrainHeight.ts'), 'utf-8');
 const interiors = readFileSync(INTERIORS, 'utf-8');
 const inscriptions = readFileSync(INSCRIPTIONS, 'utf-8');
 const socket = readFileSync(SOCKET, 'utf-8');

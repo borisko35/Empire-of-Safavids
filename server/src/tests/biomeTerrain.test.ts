@@ -19,7 +19,9 @@ function должен(условие: unknown, причина: string): void {
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+// §376: цепочка высоты переехала в shared/terrainHeight.ts — сервер обязан
+// считать тот же y, что и клиент. Формулы читаются там, где теперь живут.
+const ТЕРРЕЙН = читать('shared/terrainHeight.ts');
 // Убираем комментарии, чтобы не ловить их вместо кода
 const КОД = ТЕРРЕЙН.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 

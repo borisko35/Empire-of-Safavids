@@ -81,6 +81,7 @@ import { ReputationService } from '../services/ReputationService';
 // Точный удар (§355): правило в shared, чтобы клиент считал ту же геометрию.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { effectiveDefense, armorSteps } from '../../../shared/armorBreak';
+import { isAboveTarget, OVERHEAD_MULT } from '../../../shared/overheadStrike';
 import { isDeepWater } from '../utils/spawn';
 import { guildMissionService } from '../services/GuildMissionService';
 
@@ -2281,6 +2282,12 @@ private territory = TerritoryBonuses.getInstance();
       );
     if (вСпину) result.damage = Math.floor(result.damage * BACK_STRIKE_MULT);
 
+    // Удар сверху (§376): превышение по высоте. y обоих приходит пакетами
+    // движения - то же доверие, что у x/z и досягаемости; множитель входит
+    // в античит-базу ниже.
+    const сверху = isBasicPvP && !result.isDodged && isAboveTarget(attackerPosPvP, targetPosPvP);
+    if (сверху) result.damage = Math.floor(result.damage * OVERHEAD_MULT);
+
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: target.id, ...result });
       return;
@@ -2297,7 +2304,8 @@ private territory = TerritoryBonuses.getInstance();
     const damageCheck = this.antiCheat.validateDamage(
       attacker.id,
       result.damage,
-      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) * (вСпину ? BACK_STRIKE_MULT : 1)
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) *
+        ((вСпину ? BACK_STRIKE_MULT : 1) * (сверху ? OVERHEAD_MULT : 1))
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
@@ -2351,8 +2359,8 @@ private territory = TerritoryBonuses.getInstance();
       staggerUntil: poiseResult.staggerUntil,
       isFinisher,
       comboCount,
-      // Точный удар (§355): награда за положение, а не за удачу.
-      isPrecise: вСпину,
+      // Точный удар (§355, §376): награда за положение, а не за удачу.
+      isPrecise: вСпину || сверху,
     });
 
     // Короткое обездвиживание (§357): тот же kind 'stun', что у парирования,
@@ -2522,6 +2530,13 @@ private territory = TerritoryBonuses.getInstance();
       );
     if (вСпину) result.damage = Math.floor(result.damage * BACK_STRIKE_MULT);
 
+    // Удар сверху (§376): голова как уязвимое место из высоты. Позиция
+    // монстра теперь настоящая - высотная цепочка в shared/terrainHeight.ts,
+    // и монстр стоит на рельефе, а не на y=0 спавна. Тот же порог доверия,
+    // что у спины: сомнение против бонуса.
+    const сверху = isBasic && !result.isDodged && isAboveTarget(attackerPos, monsterCtx.position);
+    if (сверху) result.damage = Math.floor(result.damage * OVERHEAD_MULT);
+
     if (result.isDodged) {
       socket.emit(SOCKET_EVENTS.COMBAT_RESULT, { attackerId: attacker.id, targetId: monsterCtx.instanceId, ...result });
       return;
@@ -2532,12 +2547,13 @@ private territory = TerritoryBonuses.getInstance();
     // (1.25) и у захвата «Орлиный взор» (8) отношение урона к базе доходило
     // до 21 при пороге 15 — и один законный крит объявлялся подделкой урона с
     // мерой 3, то есть перманентным баном.
-    // Точный удар входит в ту же базу: множитель легитимен, и без него
-    // честный удар в спину (1.5) объявлялся бы подделкой.
+    // Точные удары входят в ту же базу: спина (1.5) и голова сверху (1.35)
+    // легитимны, и без них честный удар объявлялся бы подделкой.
     const damageCheck = this.antiCheat.validateDamage(
       attacker.id,
       result.damage,
-      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) * (вСпину ? BACK_STRIKE_MULT : 1)
+      this.combatService.getBaseDamageForAnticheat(attacker, action, weapon, comboMult, damageScale) *
+        ((вСпину ? BACK_STRIKE_MULT : 1) * (сверху ? OVERHEAD_MULT : 1))
     );
     if (!damageCheck.valid) {
       if (this.isStaff(socket)) {
@@ -2677,9 +2693,9 @@ private territory = TerritoryBonuses.getInstance();
       isFinisher,
       comboCount,
       soldiersDamage: уронКараула,
-      // Точный удар (§355): клиент отличает его от крита — награда за
-      // положение, а не за удачу.
-      isPrecise: вСпину,
+      // Точный удар (§355, §376): клиент отличает его от крита — награда за
+      // положение (спина или голова сверху), а не за удачу.
+      isPrecise: вСпину || сверху,
       // Ломающаяся броня (§374): ступень пройдена — клиент называет её.
       armorBroken: ступеньПройдена,
     });

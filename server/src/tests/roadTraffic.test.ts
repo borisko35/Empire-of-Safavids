@@ -31,7 +31,7 @@ const repoRoot = join(__dirname, '..', '..', '..');
 const read = (p: string): string => readFileSync(join(repoRoot, p), 'utf-8');
 
 const traffic = stripComments(read('client/src/app/game3d/roadTraffic.ts'));
-const terrain = stripComments(read('client/src/app/game3d/terrain.ts'));
+const terrain = stripComments(read('client/src/app/game3d/terrain.ts') + read('shared/terrainHeight.ts'));
 
 describe('Путник знает свою дорогу', () => {
   it('дорога присваивается, а не «приводится типом»', () => {

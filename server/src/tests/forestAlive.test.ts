@@ -33,7 +33,7 @@ function must(условие: unknown, причина: string): asserts усло
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРАЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРАЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const ФАУНА = читать('client/src/app/game3d/fauna.ts');
 
 /** Вырезать тело функции из исходника и выполнить его вместе с зависимостями.
@@ -49,10 +49,25 @@ function вычислить(имена: string[]): Record<string, (x: number, z:
   for (const имя of имена) {
     const начало = ТЕРРАЙН.search(new RegExp(`(^|\\n)(export )?function ${имя}\\s*\\(`));
     must(начало >= 0, `не нашёл функцию ${имя} в terrain.ts - проверка мерит не тот код`);
-    const конец = ТЕРРАЙН.indexOf('\n}', начало);
-    must(конец > начало, `функция ${имя} не закрылась - вид исходника изменился`);
+    // Конец функции - по балансу скобок, а не по первому "\n}": однострочные
+    // хелперы (fract, smoothstep) не содержат "\n}" внутри, и старый срез
+    // захватывал следующую функцию целиком - вместе с её 'export', на котором
+    // new Function падал.
+    const фигурная = ТЕРРАЙН.indexOf('{', начало);
+    must(фигурная > начало, `у функции ${имя} не найдено тело`);
+    let глубина = 0;
+    let конец = -1;
+    for (let i = фигурная; i < ТЕРРАЙН.length; i++) {
+      const с = ТЕРРАЙН[i];
+      if (с === '{') глубина++;
+      else if (с === '}') {
+        глубина--;
+        if (глубина === 0) { конец = i; break; }
+      }
+    }
+    must(конец > фигурная, `функция ${имя} не закрылась - вид исходника изменился`);
     // Ключевое слово export убирается: Function() про него не знает.
-    куски.push(ТЕРРАЙН.slice(начало, конец + 2).replace('export ', ''));
+    куски.push(ТЕРРАЙН.slice(начало, конец + 1).replace('export ', ''));
   }
   const js = ts.transpileModule(куски.join('\n'), {
     compilerOptions: { target: ts.ScriptTarget.ES2020, removeComments: false },

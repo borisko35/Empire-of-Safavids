@@ -26,7 +26,7 @@ function должен(условие: unknown, причина: string): asserts 
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const ЖИТЕЛИ = читать('client/src/app/game3d/townfolk.ts');
 
 interface Город {

@@ -27,7 +27,7 @@ function must(условие: unknown, причина: string): asserts усло
   if (!условие) throw new Error(причина);
 }
 
-const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts');
+const ТЕРРЕЙН = читать('client/src/app/game3d/terrain.ts') + читать('shared/terrainHeight.ts');
 const МИР = читать('client/src/app/game3d/world3d.ts');
 const МАНИФЕСТ = JSON.parse(читать('client/src/app/public/models/manifest.json')) as {
   decor?: { file: string; name: string; bytes: number }[];
@@ -411,10 +411,14 @@ describe('Статуя: стоит у базара', () => {
   it('коллайдер один и он по плите постамента, а не по фигуре', () => {
     // Ставь коллайдер в placeDecor с нулём, а не здесь второй раз: два
     // коллайдера в одной точке — игрок упирается в невидимую стену.
-    const блок = ТЕРРЕЙН.slice(
-      ТЕРРЕЙН.indexOf('export function buildBazaarStatue'),
-      ТЕРРЕЙН.indexOf('export const REGION_TOWNS'),
-    );
+    // Граница - СЛЕДУЮЩИЙ export после статуи, а не имя: REGION_TOWNS
+    // переехала в shared/terrainHeight.ts (§376), и срез по имени ушёл бы
+    // до конца файла, насчитав чужие коллайдеры.
+    const началоCтатуи = ТЕРРЕЙН.indexOf('export function buildBazaarStatue');
+    // Ищем перенос строки перед 'export ', а не просто 'export': начало
+    // среза само начинается с 'export ', и без якоря indexOf нашёл бы его же.
+    const граница = ТЕРРЕЙН.indexOf('\nexport ', началоCтатуи + 10);
+    const блок = ТЕРРЕЙН.slice(началоCтатуи, граница > началоCтатуи ? граница : undefined);
     const здесь = (блок.match(/addCollider\(/g) || []).length;
     const вДекоре = (блок.match(/placeDecor\(/g) || []).length;
     must(здесь === 1, `коллайдеров статуи ${здесь}, ждали один`);
