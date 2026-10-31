@@ -6,7 +6,7 @@ export interface Attributes {
   int: number;
   con: number;
   spr: number;
-};
+}
 
 export interface VocationDefinition {
   id: Vocation;
@@ -18,7 +18,7 @@ export interface VocationDefinition {
   startingEquipment: string[];
   startingSkills: string[];
   skillTree: string[];
-};
+}
 
 export const VOCATIONS: Record<Vocation, VocationDefinition> = {
   warrior: {
@@ -69,7 +69,7 @@ export interface CharacterCreationForm {
     color: string;
   };
   attributes: Attributes;
-};
+}
 
 export interface CreatedCharacter {
   id: string;
@@ -84,4 +84,4 @@ export interface CreatedCharacter {
   level: number;
   currentXp: number;
   maxXp: number;
-};
+}
