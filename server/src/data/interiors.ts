@@ -38,6 +38,16 @@ const ROOM_CZ = 4000;
 // повторять число 16 у себя.
 export const ROOM_HALF = 16;
 
+/**
+ * Пол комнат интерьеров, в метрах.
+ *
+ * Значение - из клиентской раскладки (client/src/app/game3d/interiors.ts,
+ * FLOOR_Y = 0.4): комнаты плоские, и серверу конверта высоты (§377) нужен
+ * тот же уровень пола, на котором стоит игрок. Сторож сверяет числа в
+ * обоих файлах - разъехаться молча не выйдет.
+ */
+export const FLOOR_Y = 0.4;
+
 export const INTERIORS: Record<string, InteriorDef> = {
   stable: {
     id: 'stable', roomCx: 4000, roomCz: ROOM_CZ, roomHalf: ROOM_HALF,

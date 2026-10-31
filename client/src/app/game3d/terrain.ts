@@ -119,7 +119,7 @@ export const СТЕНА_НАРУЖНАЯ = CITY.radius + СТЕНА_ГЛУБИН
 import {
   LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS, WORLD_HALF,
   seaMask, seaIslandAt, waterMask, isWater, isDeepWater, canFloatAt,
-  bridgeDeckY, BRIDGE_DECK_END, BRIDGE_SPAN,
+  BRIDGE_DECK_END, BRIDGE_SPAN,
 } from '../../../../shared/water';
 export {
   LAKE, POND, RIVER_A, RIVER_B, BRIDGES, SEA, SEA_ISLANDS,
@@ -137,7 +137,7 @@ import {
   СТАРЫЙ_МИР, CITY, CAMP, PORT, CARAVANSERAI, VILLAGE, FORT, PALACE,
   CUSTOMS, WEAVER, SHRINE, HANZA, TOMB, CATACOMBS, PALACE_DUNGEON,
   KHORASAN_CAVES, CAUCASUS_FORT, BAGHDAD_CITADEL, SIMURGH_TEMPLE,
-  REGION_TOWNS, TERRAIN_SEG, type RegionTownDef,
+  REGION_TOWNS, TERRAIN_SEG, bridgeAt, waterSurfaceY, type RegionTownDef,
 } from '../../../../shared/terrainHeight';
 export {
   terrainHeight, meshHeight, groundHeight, desertMask, forestMask, ridgeMask,
@@ -145,7 +145,7 @@ export {
   СТАРЫЙ_МИР, CITY, CAMP, PORT, CARAVANSERAI, VILLAGE, FORT, PALACE,
   CUSTOMS, WEAVER, SHRINE, HANZA, TOMB, CATACOMBS, PALACE_DUNGEON,
   KHORASAN_CAVES, CAUCASUS_FORT, BAGHDAD_CITADEL, SIMURGH_TEMPLE,
-  REGION_TOWNS, type RegionTownDef,
+  REGION_TOWNS, TERRAIN_SEG, bridgeAt, waterSurfaceY, type RegionTownDef,
 };
 
 export const WATERFALL = { x: -352, z: -568, width: 11, height: 15 };
@@ -153,18 +153,6 @@ export const WATERFALL = { x: -352, z: -568, width: 11, height: 15 };
 
 /** Проверяет, находится ли точка на мосту. Возвращает высоту настила
  *  (по дуге - см. bridgeDeckY) или null, если моста нет */
-export function bridgeAt(x: number, z: number): number | null {
-  for (const b of BRIDGES) {
-    // Преобразуем точку в локальные координаты моста
-    const lx = (x - b.x) * b.dx + (z - b.z) * b.dz;   // вдоль моста
-    const lz = -(x - b.x) * b.dz + (z - b.z) * b.dx;  // поперёк моста
-    if (Math.abs(lx) < b.length / 2 && Math.abs(lz) < b.width / 2) {
-      return bridgeDeckY(b, lx);
-    }
-  }
-  return null;
-}
-
 // ── Поселения (координаты мировые) ───────────────────────────
 
 // Дворец. Площадка ровная — по той же причине, что и у караван-сарая: под
@@ -848,26 +836,6 @@ export { addCollider };
 
 
 
-/** Уровень поверхности воды в точке или null, если суша.
- *  Озеро и реки — на уровне LAKE, пруд — на своём. */
-export function waterSurfaceY(x: number, z: number): number | null {
-  // Море проверяется первым: его уровень ниже, чем у озера и пруда, и
-  // подстановка общей LAKE.level утащила бы гладь на полметра вверх.
-  //
-  // Порог 0.45 - тот же, что у biomeAt для биома 'water'. Пока маска
-  // меньше половины, точка считается берегом: на прибрежной полосе маска
-  // ещё мала, а земля уже выше уровня воды, и объявлять такую точку водой
-  // значило бы отдавать отрицательную глубину (пленка воды над склоном).
-  if (seaMask(x, z) > 0.45) return SEA.level;
-  // Прибрежная полоса залива: маска моря ещё есть, но воды по признаку
-  // поверхности тут нет. Возвращать уровень озера здесь нельзя - точка у
-  // залива не в озере, и такая подмена отдавала бы берегу высоту чужой
-  // воды (замерено: surf = -2.0 при ground = -0.2, то есть вода выше
-  // земли наоборот).
-  if (seaMask(x, z) > 0.05) return null;
-  if (waterMask(x, z) <= 0.05) return null;
-  return Math.hypot(x - POND.x, z - POND.z) < POND.r ? POND.level : LAKE.level;
-}
 
 
 

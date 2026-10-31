@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { DatabaseService } from '../services/DatabaseService';
 import { RedisService } from '../services/RedisService';
 import { Vector3 } from '../types/game.types';
+import { MAX_RISE_SPEED_MS } from '../../../shared/verticality';
 
 export type ViolationType =
   | 'speed_hack'
@@ -86,9 +87,17 @@ export class AntiCheatSystem {
         return { valid: false, reason: `Teleport detected: ${distance.toFixed(1)}m in ${dt.toFixed(2)}s @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
       }
 
-      // Проверка speed hack
-      if (distance / dt > maxSpeed * 1.3) { // +30% толерантность
-        return { valid: false, reason: `Speed hack: ${(distance / dt).toFixed(1)} u/s (max ${maxSpeed.toFixed(1)}) @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
+      // Проверка speed hack - по ГОРИЗОНТАЛИ (§377). Раньше скорость
+      // считалась по 3D-дистанции, и падение со стены города (12 м)
+      // разгоняло вертикаль до 20+ м/с: честное падение наказывалось
+      // как speed hack. Падение вниз не ограничивается вовсе, подъём
+      // ограничен прыжком (MAX_RISE_SPEED_MS из shared/verticality).
+      const горизонталь = Math.hypot(dx, dz);
+      if (горизонталь / dt > maxSpeed * 1.3) { // +30% толерантность
+        return { valid: false, reason: `Speed hack: ${(горизонталь / dt).toFixed(1)} u/s (max ${maxSpeed.toFixed(1)}) @(${newPos.x.toFixed(0)},${newPos.z.toFixed(0)})` };
+      }
+      if (dy > 0 && dy / dt > MAX_RISE_SPEED_MS) {
+        return { valid: false, reason: `Vertical hack: rise ${(dy / dt).toFixed(1)} m/s (max ${MAX_RISE_SPEED_MS.toFixed(1)})` };
       }
     }
 

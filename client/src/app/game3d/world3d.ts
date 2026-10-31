@@ -100,8 +100,9 @@ export interface LocalGear {
  */
 const ЗАМАХ_ПУСТЫМИ_РУКАМИ = 0.45;
 
-const GRAVITY = 20;
-const JUMP_V = 7.6;
+// Гравитация и прыжок - из shared/verticality.ts (§377): сервер считает
+// теми же числами, и полёт выше апекса невозможен.
+import { GRAVITY, JUMP_V } from '../../../../shared/verticality';
 const WALK_SPEED = 4.2;
 const RUN_SPEED = 7.6;
 const CROUCH_SPEED = 2.2;

@@ -33,6 +33,7 @@ function must(условие: unknown, причина: string): asserts усло
 
 const интерьеры = читать('client/src/app/game3d/interiors.ts');
 const мир = читать('client/src/app/game3d/world3d.ts');
+const sharedВертикаль = читать('shared/verticality.ts');
 const разрушаемое = читать('client/src/app/game3d/destructible.ts');
 
 function блок(source: string, якорь: string, причина: string): string {
@@ -136,11 +137,12 @@ describe('Расстановка разрушаемого и мезонинов'
   });
 
   it('плату с пола не допрыгнуть - только залезть по лестнице', () => {
-    // Прыжок: v^2/(2g) - цифры читаются из world3d, а не вписываются:
-    // если JUMP_V/GRAVITY поменяют, порог двинется сам.
-    const v = /const JUMP_V = ([\d.]+);/.exec(мир);
-    const g = /const GRAVITY = ([\d.]+);/.exec(мир);
-    must(v !== null && g !== null, 'не нашёл JUMP_V/GRAVITY в world3d.ts');
+    // Прыжок: v^2/(2g) - цифры читаются из shared/verticality (§377):
+    // константы переехали туда, чтобы сервер считал тем же числом,
+    // и порог «не допрыгнуть» двинется сам при их правке.
+    const v = /export const JUMP_V = ([\d.]+);/.exec(sharedВертикаль);
+    const g = /export const GRAVITY = ([\d.]+);/.exec(sharedВертикаль);
+    must(v !== null && g !== null, 'не нашёл JUMP_V/GRAVITY в shared/verticality.ts');
     const прыжок = Number(v![1]) ** 2 / (2 * Number(g![1]));
     for (const п of планыМезонинов()) {
       must(п.h > прыжок + 0.05,

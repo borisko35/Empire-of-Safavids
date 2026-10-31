@@ -16,7 +16,7 @@
 //
 // Вода - уже в shared/water.ts: контуры водоёмов когда-то разъехались
 // между клиентом и сервером, и повторять ту историю с рельефом не стоит.
-import { WORLD_HALF, SEA, LAKE, seaMask, waterMask } from './water';
+import { WORLD_HALF, SEA, LAKE, POND, BRIDGES, bridgeDeckY, seaMask, waterMask } from './water';
 
 // ── Площадки ровнялок и ориентиры мира ──────────────────────
 // Каждая константа - площадка, которую terrainHeight выравнивает flatten().
@@ -418,4 +418,68 @@ export function groundHeight(x: number, z: number): number {
     h = Math.max(h, h * (1 - t) + plazaTop * t);
   }
   return h;
+}
+
+/** Уровень поверхности воды в точке или null, если суша.
+ *  Озеро и реки — на уровне LAKE, пруд — на своём. */
+export function waterSurfaceY(x: number, z: number): number | null {
+  // Море проверяется первым: его уровень ниже, чем у озера и пруда, и
+  // подстановка общей LAKE.level утащила бы гладь на полметра вверх.
+  //
+  // Порог 0.45 - тот же, что у biomeAt для биома 'water'. Пока маска
+  // меньше половины, точка считается берегом: на прибрежной полосе маска
+  // ещё мала, а земля уже выше уровня воды, и объявлять такую точку водой
+  // значило бы отдавать отрицательную глубину (пленка воды над склоном).
+  if (seaMask(x, z) > 0.45) return SEA.level;
+  // Прибрежная полоса залива: маска моря ещё есть, но воды по признаку
+  // поверхности тут нет. Возвращать уровень озера здесь нельзя - точка у
+  // залива не в озере, и такая подмена отдавала бы берегу высоту чужой
+  // воды (замерено: surf = -2.0 при ground = -0.2, то есть вода выше
+  // земли наоборот).
+  if (seaMask(x, z) > 0.05) return null;
+  if (waterMask(x, z) <= 0.05) return null;
+  return Math.hypot(x - POND.x, z - POND.z) < POND.r ? POND.level : LAKE.level;
+}
+
+/** Настил моста в точке, или null - мостов здесь нет (из terrain.ts, §376). */
+export function bridgeAt(x: number, z: number): number | null {
+  for (const b of BRIDGES) {
+    // Преобразуем точку в локальные координаты моста
+    const lx = (x - b.x) * b.dx + (z - b.z) * b.dz;   // вдоль моста
+    const lz = -(x - b.x) * b.dz + (z - b.z) * b.dx;  // поперёк моста
+    if (Math.abs(lx) < b.length / 2 && Math.abs(lz) < b.width / 2) {
+      return bridgeDeckY(b, lx);
+    }
+  }
+  return null;
+}
+
+/** Что находится под ногами в точке мира (§377). */
+export interface ПоддержкаМира {
+  kind: 'ground' | 'water';
+  /** Высота опоры: земля или настил моста. */
+  y: number;
+  /** Для воды - уровень поверхности; пловец меряется от него, а не от дна. */
+  surface?: number;
+}
+
+/**
+ * Опора под точкой мира: земля, настил моста или вода.
+ *
+ * null - точка вне мира (карманы интерьеров, x от 4000): там опору знает
+ * раскладка комнат, а clamp высотной функции вернул бы край мира.
+ * Вода узнаётся по поверхности: если дно ниже поверхности, точка - вода,
+ * и конверт меряется от поверхности, а не от дна.
+ */
+export function supportHeightAt(x: number, z: number): ПоддержкаМира | null {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+  if (Math.abs(x) > WORLD_HALF || Math.abs(z) > WORLD_HALF) return null;
+  const земля = groundHeight(x, z);
+  const мост = bridgeAt(x, z);
+  const опора = мост !== null ? Math.max(мост, земля) : земля;
+  const поверхность = waterSurfaceY(x, z);
+  if (поверхность !== null && опора < поверхность) {
+    return { kind: 'water', y: опора, surface: поверхность };
+  }
+  return { kind: 'ground', y: опора };
 }

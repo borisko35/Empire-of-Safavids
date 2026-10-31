@@ -1,4 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { INTERIOR_CEILING_M, SWIM_BAND_LOW_M, BOAT_HEADROOM_M, verticalEnvelopeOk } from '../../../shared/verticality';
+import { supportHeightAt } from '../../../shared/terrainHeight';
 import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -58,7 +60,7 @@ import { combatLog, buildCombatLogEntry } from '../services/CombatLogService';
 import { Character, CombatAction, Region } from '../types/game.types';
 import type { AISystem } from '../systems/AISystem';
 import { ITEMS_DATABASE } from '../data/items';
-import { getInterior, canEnter, isInsideRoom, INTERIORS } from '../data/interiors';
+import { getInterior, canEnter, isInsideRoom, INTERIORS, FLOOR_Y } from '../data/interiors';
 import {
   SOCKET_EVENTS, SERVER_EVENTS, REDIS_CHANNELS, CHAT_LIMITS, GAME_SERVERS, getRegionSpawn,
   DEATH, RESPAWN_TYPES, RESPAWN_REJECT, spotRespawnCost, type RespawnType, STAMINA,
@@ -1174,6 +1176,35 @@ private territory = TerritoryBonuses.getInstance();
       } else {
         await this.punish(socket, 'speed_hack', moveCheck.reason ?? 'invalid movement', 2);
         socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: moveCheck.reason });
+        return;
+      }
+    }
+
+    // Конверт высоты (§377): прыжок и вертикальная физика - на клиенте,
+    // но сервер теперь знает опору под ногами и апекс прыжка из тех же
+    // констант. Полёт - позиция выше опоры плюс апекс - не наказывается
+    // (наказание - после живой обкатки tolerances), а ЛОМАЕТСЯ: позиция
+    // не принимается, клиенту уходит отказ, и трекинг откатывается к
+    // последней легальной точке. Лодка качается на волне - её конверт
+    // не меряет; комната интерьера меряется от пола с потолком мезонина.
+    if (!this.boatSpeeds.get(characterId)?.boatId) {
+      const px = data.position.x, py = data.position.y, pz = data.position.z;
+      const комната = Object.values(INTERIORS).find((d) => isInsideRoom(d, px, pz));
+      let конвертОк = true;
+      if (комната) {
+        конвертОк = verticalEnvelopeOk(py, FLOOR_Y, INTERIOR_CEILING_M);
+      } else {
+        const поддержка = supportHeightAt(px, pz);
+        if (поддержка?.kind === 'water') {
+          const поверхность = поддержка.surface ?? 0;
+          конвертОк = py >= поверхность - SWIM_BAND_LOW_M && py <= поверхность + BOAT_HEADROOM_M;
+        } else if (поддержка) {
+          конвертОк = verticalEnvelopeOk(py, поддержка.y);
+        }
+      }
+      if (!конвертОк) {
+        logger.warn(`[Move] vertical envelope: ${characterId} @(${px.toFixed(0)},${py.toFixed(1)},${pz.toFixed(0)})`);
+        socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: 'vertical' });
         return;
       }
     }
