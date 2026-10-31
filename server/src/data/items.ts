@@ -51,8 +51,10 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     stats: { agility: 30, strength: 8 },
     // Параметры удара: раньше у оружия не было ни урона, ни дальности,
     // ни скорости, поэтому все виды оружия били одинаково.
-    weapon: { damage: 1, speed: 0.8, range: 2.4 },
-    description: 'Составной лук из рога, дерева и сухожилий.',
+    // Дальность 18 м (§386): настоящий стрелковый бой. Порог стрелкового
+    // боя 5 м (§375) пройден - погода режет дальность лука сама.
+    weapon: { damage: 1, speed: 0.8, range: 18 },
+    description: 'Составной лук из рога, дерева и сухожилий. Дальность — 18 метров.',
     iconPath: 'icons/weapons/composite_bow.png',
     stackable: false,
     maxStack: 1,
@@ -703,8 +705,8 @@ export const ITEMS_DATABASE: Record<string, Item> = {
     stats: { agility: 65, strength: 20, intelligence: 15 },
     // Параметры удара: раньше у оружия не было ни урона, ни дальности,
     // ни скорости, поэтому все виды оружия били одинаково.
-    weapon: { damage: 1.05, speed: 0.75, range: 2.4 },
-    description: 'Лучший лук в империи. Создан мастерами Исфахана из тиса и сухожилий.',
+    weapon: { damage: 1.05, speed: 0.75, range: 18 },
+    description: 'Лучший лук в империи. Создан мастерами Исфахана из тиса и сухожилий. Дальность — 18 метров.',
     iconPath: 'icons/weapons/bow_isfahan.png',
     stackable: false,
     maxStack: 1,
