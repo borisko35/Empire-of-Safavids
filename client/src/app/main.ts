@@ -20,9 +20,6 @@ import { captureReferralFromUrl } from './referral';
 import { textureManager, spriteManager, assetStorage } from '../assets/index';
 void textureManager; void spriteManager; void assetStorage;
 
-// Character creation system
-import { initCreationScreen } from './creation';
-
 /**
  * Отозвал ли сервер сессию.
  *
@@ -81,15 +78,22 @@ async function boot(): Promise<void> {
   // прийти к уже вошедшему игроку, и код надо запомнить до восстановления сессии
   captureReferralFromUrl();
 
-  // Проверяем, создавал ли игрок персонажа ранее
+  // Обновление страницы во время игры: персонаж уже создан и сессия жива -
+  // сразу к персонажам, который сам войдёт в мир. Без проверки сессии
+  // выход из игры с последующим F5 приводил сюда с пустым токеном,
+  // gotoCharacters молча возвращался, и игрок оставался на пустом экране:
+  // ни входа, ни мира (§378).
   const createdChar = localStorage.getItem('created_character');
-  if (createdChar) {
-    // Персонаж уже создан — сразу к персонажам
+  if (createdChar && session.token) {
     await gotoCharacters();
     return;
   }
 
-  initAuthScreen(() => void gotoCharactersCreation());
+  // Вход ведёт к ВЫБОРУ персонажей (§378): там и список, и серверное
+  // создание. Форма создания из параллельной работы персонажа на сервере
+  // не создавала вовсе (id генерился Math.random), и сокет отвечал
+  // «Character not found» - воронка регистрации была мертва.
+  initAuthScreen(() => void gotoCharacters());
 
   // Провайдер (Google/Facebook) вернул игрока с кодом и state — завершаем вход.
   // Проверяем ДО восстановления сессии: если игрок уже вошёл (например, как
@@ -294,24 +298,27 @@ export async function gotoCharacters(): Promise<void> {
     showScreen('screen-auth');
     return;
   }
-  // Если персонаж уже создан через creation screen, входим в мир сразу
+  // Обновление страницы в мире: сохранённый персонаж входит сразу. id
+  // настоящего персонажа - uuidv4 с сервера; в localStorage могли остаться
+  // локальные id формы создания (9 символов, Math.random) - с ними сокет
+  // отвечал «Character not found» и игрок крутился на одном экране. Такой
+  // хвост стирается, и игрок попадает на выбор (§378).
   const createdChar = localStorage.getItem('created_character');
   if (createdChar) {
-    const character = JSON.parse(createdChar);
-    enterWorld(character);
-    return;
+    try {
+      const character = JSON.parse(createdChar);
+      if (character && typeof character.id === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(character.id)) {
+        enterWorld(character);
+        return;
+      }
+    } catch {
+      // битый JSON - хвост, подлежащий стиранию
+    }
+    localStorage.removeItem('created_character');
   }
-  // Иначе показываем экран выбора/создания персонажа
+  // Экран выбора/создания персонажа: список с сервера и серверное создание
   await initCharsScreen((c: Character) => void enterWorld(c));
-}
-
-/** Переход к экрану создания персонажа */
-export async function gotoCharactersCreation(): Promise<void> {
-  if (!session.token) return;
-  // Сначала показываем экран создания персонажа
-  await initCreationScreen();
-  // После создания переходим к выбору персонажа
-  await gotoCharacters();
 }
 
 /** Полный выход (из меню мира) */

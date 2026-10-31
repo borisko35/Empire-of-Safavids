@@ -179,4 +179,8 @@ export function clearAuth(): void {
   localStorage.removeItem('eos_user_id');
   localStorage.removeItem('eos_username');
   localStorage.removeItem('eos_guest');
+  // §378: созданный персонаж - свойство СЕССИИ, а не браузера. Хвост
+  // пережил бы выход и вход ДРУГИМ аккаунтом, и тот вошёл бы в мир с
+  // чужим персонажем (сокет честно отверг, но экран уже был сломан).
+  localStorage.removeItem('created_character');
 }

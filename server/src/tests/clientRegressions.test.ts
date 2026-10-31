@@ -18,6 +18,8 @@ const traffic = код('client/src/app/game3d/roadTraffic.ts');
 const fauna = код('client/src/app/game3d/fauna.ts');
 const interiors = код('client/src/app/game3d/interiors.ts');
 const hud = код('client/src/app/hud.ts');
+const mainApp = код('client/src/app/main.ts');
+const stateApp = код('client/src/app/state.ts');
 
 describe('Коллайдеры не растут при каждом входе в мир', () => {
   it('списки чистятся в самом начале постройки мира', () => {
@@ -189,5 +191,40 @@ describe('FX читается по номеру, а не по индексу', (
     // Комментарий — часть правки: по проекту решение обязано быть записано
     // там, где оно принято, иначе через месяц вернут индекс «для простоты».
     expect(world3d).toMatch(/порядковому номеру/);
+  });
+});
+describe('Воронка входа ведёт в мир (§378)', () => {
+  // Форма создания из параллельной работы персонажа на сервере НЕ создавала:
+  // id генерился Math.random().toString(36), имя бралось через prompt(), и
+  // ни один запрос к /api/characters не уходил. Сокет отвечает на такой id
+  // «Character not found», и игрок никогда не входит в мир. Все, кто входил
+  // по почте или OAuth, стояли в этой воронке.
+
+  it('вход по почте и OAuth ведёт к ВЫБОРУ персонажей, а не к форме', () => {
+    // Рабочая воронка уже была: экран выбора со списком с сервера и
+    // серверным созданием (screens/chars.ts, createCharacterWithReferral).
+    expect(mainApp.includes('initAuthScreen(() => void gotoCharacters())')).toBe(true);
+    expect(mainApp.includes('gotoCharactersCreation')).toBe(false);
+    expect(mainApp.includes("from './creation'")).toBe(false);
+  });
+
+  it('сохранённый персонаж работает только с живой сессией', () => {
+    // Выход из игры с последующим F5 приводил в boot с пустым токеном:
+    // gotoCharacters молча возвращался, и игрок оставался на пустом экране
+    // - ни входа, ни мира.
+    expect(/if \(createdChar && session\.token\) \{/.test(mainApp)).toBe(true);
+  });
+
+  it('хвост чужой сессии самолечится по форме id', () => {
+    // id настоящего персонажа - uuidv4 с сервера. Локальный id формы
+    // (9 символов Math.random) стирался, а игрок попадал на выбор.
+    expect(/\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}/.test(mainApp)).toBe(true);
+    expect(mainApp.includes("localStorage.removeItem('created_character')")).toBe(true);
+  });
+
+  it('созданный персонаж умирает вместе с сессией', () => {
+    // clearAuth без этой строки оставлял created_character в браузере:
+    // следующий аккаунт того же браузера получал чужого персонажа.
+    expect(stateApp.includes("localStorage.removeItem('created_character')")).toBe(true);
   });
 });
