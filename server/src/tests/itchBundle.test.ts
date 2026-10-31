@@ -181,7 +181,12 @@ describe('Что мы выкладываем на itch.io', () => {
       // привычек для строки «Мир заметил».
       // 224 → 227 при поручениях (§367): api.errand / errandAccept /
       // errandClaim — предложение, приём и награда.
-      обращений_к_api: 227,
+      // 227 → 221 при уборке мёртвого API (§383): шесть обёрток без
+      // вызывающих — tasksProgress, chessState (маршрута не было вовсе),
+      // tutorialSteps, getProfessionSkills, bountyOn, petsActive. Живые
+      // двойники остались: api.tasks, bountyPlace, petActivate,
+      // getAvailableSkills, tutorialProgress.
+      обращений_к_api: 221,
       socket_io_есть: true,
     });
   });

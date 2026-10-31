@@ -136,7 +136,8 @@ describe('GET-маршруты: персонаж берётся из query, а �
   it('пострадавшие GET-маршруты действительно стоят на этой проверке', () => {
     // Петля обратной связи: если маршрут перестанет проверять принадлежность,
     // тест выше продолжит проходить, а дыра в безопасности вернётся
-    for (const path of ['/pets', '/pets/active', '/house', '/pvp/me', '/pvp/history']) {
+    // /pets/active удалён (§383): дубль — список /pets уже несёт is_active.
+    for (const path of ['/pets', '/house', '/pvp/me', '/pvp/history']) {
       const re = new RegExp(`gameRouter\\.get\\('${path.replace(/[/]/g, '\\$&')}'[^\\n]*requireCharacterOwnership\\(\\)`);
       expect({ path, guarded: re.test(gameRoute) }).toEqual({ path, guarded: true });
     }

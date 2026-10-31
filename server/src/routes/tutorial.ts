@@ -10,11 +10,6 @@ import { asyncHandler } from '../utils/asyncHandler';
 export const tutorialRouter = Router();
 const tutorialService = new TutorialService();
 
-// GET /api/tutorial/steps — все шаги туториала
-tutorialRouter.get('/steps', secureMiddleware, asyncHandler(async (_req: Request, res: Response) => {
-  return res.json({ steps: tutorialService.getAllSteps(), totalSteps: tutorialService.totalSteps });
-}));
-
 // GET /api/tutorial/:characterId — прогресс туториала
 // totalSteps отдаём, чтобы клиент не держал свою копию числа шагов:
 // раньше оно было зашито как 9, и расходилось с сервером при любой правке

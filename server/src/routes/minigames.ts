@@ -181,38 +181,6 @@ router.post('/move', authMiddleware, async (req: any, res) => {
   }
 });
 
-// Текущая партия. Ищем и в памяти, и в базе: после перезапуска в памяти
-// пусто, а партия с заложенным жива.
-router.get('/state/:gameId', authMiddleware, async (req, res) => {
-  const персонаж = await свойПерсонаж(req, res);
-  if (!персонаж) return;
-  const game = chess.getGame(req.params.gameId);
-  if (game) {
-    res.json({
-      board: game.board,
-      turn: game.turn,
-      status: game.status,
-      moveCount: game.moveHistory.length,
-      betGold: game.betGold,
-    });
-    return;
-  }
-  const изБазы = await bets.findPlaying(персонаж);
-  if (!изБазы || изБазы.gameId !== req.params.gameId || !изБазы.state) {
-    res.status(404).json({ error: 'game_not_found' });
-    return;
-  }
-  восстановить(изБазы.state);
-  res.json({
-    board: изБазы.state.board,
-    turn: изБазы.state.turn,
-    status: изБазы.state.status,
-    moveCount: изБазы.state.moveHistory?.length ?? 0,
-    betGold: изБазы.betGold,
-    restored: true,
-  });
-});
-
 // Незакрытая партия игрока: клиент зовёт это при входе, чтобы вернуть
 // игрока к доске, а не выбрасывать из партии с заложенным.
 router.get('/current', authMiddleware, async (req, res) => {

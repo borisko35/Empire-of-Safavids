@@ -311,10 +311,6 @@ export class SkillsService {
     return { ...prof, level: 1, xp: 0 };
   }
 
-  async getProfessionSkills(professionId: string): Promise<SkillDef[]> {
-    return SKILLS.filter(s => s.professionId === professionId);
-  }
-
   /**
    * Множители от пассивных навыков персонажа.
    *

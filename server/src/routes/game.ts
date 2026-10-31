@@ -1954,17 +1954,6 @@ gameRouter.post('/guilds/:guildId/withdraw-item', secureMiddleware, requireChara
 // GET /api/game/bounty?characterId=... — активная награда за голову.
 // Нужна, чтобы имя игрока с наградой подсвечивалось в мире: цель должна
 // знать, что за ней охотятся, до того как её убьют.
-gameRouter.get(
-  '/bounty',
-  secureMiddleware,
-  asyncHandler(async (req: Request, res: Response) => {
-    const id = String(req.query.characterId ?? '');
-    if (!id) return res.status(400).json({ error: 'character_id_required' });
-    const amount = await karmaSystem.getBounty(id).catch(() => 0);
-    res.json({ characterId: id, amount });
-  })
-);
-
 // POST /api/game/bounty — поставить награду { characterId, targetId, amount }.
 //
 // ЗОЛОТО СПИСЫВАЕТСЯ НАМЕРТВО. Раньше UPDATE с условием `gold >= amount`
@@ -2350,15 +2339,6 @@ gameRouter.get('/pets', secureMiddleware, requireCharacterOwnership(),
     if (!characterId) return;
     const list = await petService.getPets(characterId);
     res.json({ pets: list, allDefs: PetService.getAllDefs() });
-  })
-);
-
-gameRouter.get('/pets/active', secureMiddleware, requireCharacterOwnership(),
-  asyncHandler(async (req: Request, res: Response) => {
-    const characterId = await bodyCharacterId(req, res);
-    if (!characterId) return;
-    const pet = await petService.getActivePet(characterId);
-    res.json({ pet });
   })
 );
 

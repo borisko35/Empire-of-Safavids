@@ -326,9 +326,6 @@ export const api = {
       method: 'POST', body: JSON.stringify({ characterId, professionId }),
     }),
 
-  getProfessionSkills: (professionId: string) =>
-    req<{ skills: any[] }>(`/api/skills/professions/${professionId}/skills`),
-
   adminSearch: (q: string) =>
     req<{ results: { id: string; name: string; class: string; level: number; region: string; user_id: string; email: string; is_banned: boolean }[] }>(`/api/admin/search?q=${encodeURIComponent(q)}`),
 
@@ -565,9 +562,6 @@ export const api = {
       '/api/game/dungeons/status',
       { method: 'POST', body: JSON.stringify({ characterId }) },
     ),
-
-  bountyOn: (characterId: string) =>
-    req<{ characterId: string; amount: number }>(`/api/game/bounty?characterId=${characterId}`),
 
   bountyPlace: (placerId: string, targetId: string, amount: number) =>
     req<{ ok: true }>('/api/game/bounty', {
@@ -889,9 +883,6 @@ export const api = {
   leaderboardMe: (type: string, characterId: string) =>
     req<{ rank: { rank: number; value: number } | null }>(`/api/leaderboard/${type}/me?characterId=${characterId}`),
 
-  tutorialSteps: () =>
-    req<{ steps: TutorialStepApi[]; totalSteps: number }>('/api/tutorial/steps'),
-
   tutorialProgress: (characterId: string) =>
     req<{ progress: { step: number; completed: boolean }; currentStep: TutorialStepApi | null; totalSteps: number }>(`/api/tutorial/${characterId}`),
 
@@ -909,11 +900,6 @@ export const api = {
   chessMove: (characterId: string, gameId: string, from: { row: number; col: number }, to: { row: number; col: number }) =>
     req<{ board: (string | null)[][]; turn: string; status: string; result?: { winner: string; goldWon: number; messageRu: string } }>(
       '/api/chess/move', { method: 'POST', body: JSON.stringify({ characterId, gameId, from, to }) },
-    ),
-
-  chessState: (characterId: string, gameId: string) =>
-    req<{ board: (string | null)[][]; turn: string; status: string; moveCount: number; betGold: number }>(
-      `/api/chess/state/${gameId}?characterId=${characterId}`,
     ),
 
   chessResign: (characterId: string, gameId: string) =>
@@ -1059,15 +1045,12 @@ export const api = {
       `/api/progression/achievements?characterId=${characterId}`),
   tasks: (characterId: string) =>
     req<{ tasks: any[]; completedCount: number }>(`/api/progression/tasks?characterId=${characterId}`),
-  tasksProgress: (characterId: string) =>
-    req<{ completedCount: number }>(`/api/progression/tasks/progress?characterId=${characterId}`),
   reputation: (characterId: string) =>
     req<{ reputation: { faction: string; reputation: number; rank_title: string }[] }>(
       `/api/progression/reputation?characterId=${characterId}`),
   factions: () => req<{ factions: any[] }>('/api/progression/reputation/factions'),
 
   pets: (characterId: string) => req<{ pets: any[]; allDefs: any[] }>(`/api/game/pets?characterId=${characterId}`),
-  petsActive: (characterId: string) => req<{ pet: any }>(`/api/game/pets/active?characterId=${characterId}`),
   petAcquire: (characterId: string, petId: string) =>
     req<{ success: boolean; pet: any }>('/api/game/pets/acquire', { method: 'POST', body: JSON.stringify({ characterId, petId }) }),
   petActivate: (characterId: string, petDbId: number) =>

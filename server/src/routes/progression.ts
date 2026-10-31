@@ -89,13 +89,6 @@ router.get('/tasks', authMiddleware, async (req: any, res) => {
   res.json({ tasks, completedCount });
 });
 
-router.get('/tasks/progress', authMiddleware, async (req: any, res) => {
-  const characterId = String(req.query.characterId ?? '');
-  if (!characterId) return res.status(400).json({ error: 'characterId is required' });
-  const completedCount = await dailyTasks.getCompletedCount(characterId);
-  res.json({ completedCount });
-});
-
 // ── Reputation ──────────────────────────────────────────
 // ТУТ БЫЛА ТА ЖЕ ОШИБКА, ЧТО И С ЗАДАЧАМИ ДНЯ. Маршрут отдавал сервису
 // req.userId — идентификатор АККАУНТА, а ReputationService ищет по

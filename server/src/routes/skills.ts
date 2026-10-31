@@ -101,13 +101,4 @@ skillsRouter.post('/professions/unlock', authMiddleware, async (req: Request, re
   }
 });
 
-skillsRouter.get('/professions/:id/skills', authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const skills = await skillsService.getProfessionSkills(req.params.id);
-    res.json({ skills });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
 // Маршрута POST /xp больше нет — см. объяснение выше у GET /progress.

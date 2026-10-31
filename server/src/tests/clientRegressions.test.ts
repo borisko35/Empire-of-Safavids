@@ -307,3 +307,40 @@ describe('Блокировка друга доходит до игрока (§38
     }
   });
 });
+
+describe('Мёртвое API убрано, живые двойники на месте (§383)', () => {
+  // Шесть обёрток api.ts не имели вызывающих. Четыре дублировали живые
+  // пути, chessState указывал на несуществующий маршрут (404), petsActive
+  // дубль списка /pets. Удаление с сохранением двойников.
+
+  it('обёрток больше нет', () => {
+    const apiКод = код('client/src/app/api.ts');
+    for (const имя of ['tasksProgress', 'chessState', 'tutorialSteps', 'getProfessionSkills', 'bountyOn', 'petsActive']) {
+      expect({ имя, есть: apiКод.includes(имя + ':') }).toEqual({ имя, есть: false });
+    }
+  });
+
+  it('маршруты-дубли сняты, живые на месте', () => {
+    const game = код('server/src/routes/game.ts');
+    const progression = код('server/src/routes/progression.ts');
+    const skills = код('server/src/routes/skills.ts');
+    const tutorial = код('server/src/routes/tutorial.ts');
+    expect(game.includes("'/pets/active'")).toBe(false);
+    // GET /bounty снят: литерал '/bounty' в файле остаётся один — у POST.
+    expect(game.split("'/bounty'").length - 1).toBe(1);
+    expect(progression.includes("'/tasks/progress'")).toBe(false);
+    expect(skills.includes("'/professions/:id/skills'")).toBe(false);
+    expect(tutorial.includes("'/steps'")).toBe(false);
+    // POST /bounty жив: награду за голову можно поставить.
+    expect(game.includes("gameRouter.post('/bounty'")).toBe(true);
+  });
+
+  it('живые двойники не пострадали', () => {
+    const apiКод = код('client/src/app/api.ts');
+    for (const имя of ['tasks:', 'chessStart:', 'chessMove:', 'chessResign:', 'tutorialProgress:', 'tutorialAdvance:', 'getAvailableSkills:', 'bountyPlace:', 'petActivate:', 'pets:']) {
+      expect({ имя, есть: apiКод.includes(имя) }).toEqual({ имя, есть: true });
+    }
+    const панели = код('client/src/app/panels.ts');
+    expect(панели.includes('api.getAvailableSkills(charId, profId)')).toBe(true);
+  });
+});
