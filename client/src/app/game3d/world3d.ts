@@ -339,6 +339,9 @@ private roll = 0;
   private vy = 0;
   private grounded = true;
   private crouch = false;
+  private wasCrouch = false;
+  /** Подкат (§385): остаток времени скольжения после приседа на ходу. */
+  private slideTimer = 0;
   private block = false;
   private swimming = false;
   /** Высота ног локального игрока с предыдущего кадра (физика, а не ландшафт) */
@@ -1879,6 +1882,30 @@ private roll = 0;
    * пола (1.44 м) до платы 2.6 м не долетаешь, ходить ПОД платформой
    * можно свободно, а вот падение на плиту и шаг по ней засчитываются.
    */
+  /**
+   * Верх целого ящика под ногами (§385), или null.
+   *
+   * Правило ступней то же, что у мезонина: ступни на верхней грани или
+   * чуть ниже - прыгнувший снизу опору не получает. Сломанный ящик
+   * опорой не служит: под ногами обломки, а не настил. Позиция живая -
+   * толкнутый ящик увозит опору с собой.
+   */
+  private crateTopAt(x: number, z: number, feetY: number): number | null {
+    if (!this.interiors.isInside()) return null;
+    let верх: number | null = null;
+    for (const obj of this.interactiveTargets) {
+      const ud = obj.userData as { kind?: string; state?: string; size?: { w: number; h: number; d: number } };
+      if (ud?.kind !== 'crate' || ud.state !== 'intact' || !ud.size) continue;
+      const полШирины = ud.size.w / 2 + 0.25;
+      const полГлубины = ud.size.d / 2 + 0.25;
+      if (Math.abs(x - obj.position.x) > полШирины || Math.abs(z - obj.position.z) > полГлубины) continue;
+      const верхЯщика = obj.position.y + ud.size.h / 2;
+      if (feetY < верхЯщика - 0.55) continue;
+      верх = верх !== null ? Math.max(верх, верхЯщика) : верхЯщика;
+    }
+    return верх;
+  }
+
   private platformTopAt(x: number, z: number, feetY: number): number | null {
     if (!this.interiors.isInside()) return null;
     const room = this.interiors.rooms.get(String(this.interiors.insideId() ?? ''));
@@ -2403,6 +2430,14 @@ private roll = 0;
     if (this.keys.has('KeyV')) this.roll += dt * ROLL_RATE;
     this.roll = Math.min(ROLL_LIMIT, Math.max(-ROLL_LIMIT, this.roll));
     this.crouch = !session.dead && (this.keys.has('KeyC') || this.keys.has('ControlLeft'));
+    // Подкат (§385): присед НА ХОДУ - короткое скольжение на беговой
+    // скорости, которая сама по себе в пределах античита. Стоя подкат
+    // не включается: буст без движения был бы обходом медленного приседа.
+    if (this.crouch && !this.wasCrouch && this.grounded && !this.swimming && !this.climb) {
+      this.slideTimer = 0.7;
+    }
+    this.wasCrouch = this.crouch;
+    if (this.slideTimer > 0) this.slideTimer = Math.max(0, this.slideTimer - dt);
 
     // ── Лестницы (§324): удержание W рядом с лестницей в интерьере ──
     // цепляет к ней. Дальше движение вертикальное: W вверх, S вниз.
@@ -2468,7 +2503,7 @@ private roll = 0;
     const landRun = (this.mountSpeed > 0 ? this.mountSpeed * MOUNT_SPRINT_MULT : RUN_SPEED) * this.speedMod;
     const speed = (this.swimming
       ? (shifting ? Math.max(swimSprint, boatSpeed * 1.25) : Math.max(swimSpeed, boatSpeed))
-      : this.crouch ? CROUCH_SPEED : shifting ? landRun : landWalk)
+      : this.slideTimer > 0 ? landRun : this.crouch ? CROUCH_SPEED : shifting ? landRun : landWalk)
       * (wading ? wadeMult : 1);
     // Направление камеры в мире (нужно и для поворота рига ниже)
     // Пока идёт рывок, ходьба не применяется: рывок идёт отдельным
@@ -2535,11 +2570,17 @@ private roll = 0;
     const groundY = this.interiors.isInside()
       ? this.interiors.floorY()
       : pocketY ?? groundHeight(me.pos.x, me.pos.z);
+    // Верх ящика (§385): толкаемый ящик - опора паркура. Прыжок с него
+    // (0.75 + 1.44) до мезонина (2.6) не достаёт - лестница остаётся
+    // единственным путём наверх, инвариант §324 держится.
+    const ящик = this.crateTopAt(me.pos.x, me.pos.z, me.pos.y);
     // Платформа засчитывается, только пока она действительно выше пола
     // комнаты: иначе она «пересекла» бы пол.
-    const подНогами = платформа !== null && this.interiors.isInside() && платформа > groundY
-      ? платформа
-      : groundY;
+    const подНогами = Math.max(
+      платформа !== null && this.interiors.isInside() && платформа > groundY ? платформа : 0,
+      ящик ?? 0,
+      groundY,
+    );
     const bridgeY = bridgeAt(me.pos.x, me.pos.z);
     // Невидимый пол у поверхности (wadeFloor) убран: в мелкой воде ступни
     // стоят на НАСТОЯЩЕМ дне, и игрок реально идёт по пояс в воде, а не

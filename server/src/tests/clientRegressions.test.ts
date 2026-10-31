@@ -11,6 +11,7 @@ const читать = (p: string): string => readFileSync(join(корень, p), 
 const код = (p: string): string => stripComments(читать(p));
 
 const world = код('client/src/app/game3d/world3d.ts');
+import { JUMP_APEX_M } from '../../../shared/verticality';
 const world3d = читать('client/src/app/game3d/world3d.ts');
 const net = код('client/src/app/net.ts');
 const worldApp = код('client/src/app/world.ts');
@@ -342,5 +343,40 @@ describe('Мёртвое API убрано, живые двойники на ме
     }
     const панели = код('client/src/app/panels.ts');
     expect(панели.includes('api.getAvailableSkills(charId, profId)')).toBe(true);
+  });
+});
+
+describe('Паркур-надстройка: ящик-опора и подкат (§385)', () => {
+  // Прыжок был, но стоять на толкаемом ящике физика не умела: опорой были
+  // только земля, мост и мезонин. Ящик - первая ступень паркура.
+
+  it('ящик несёт габариты, опора читает верх целого ящика', () => {
+    const интер = код('client/src/app/game3d/interactive.ts');
+    const мир = код('client/src/app/game3d/world3d.ts');
+    expect(интер.includes('size: { w, h, d },')).toBe(true);
+    expect(/private crateTopAt\(x: number, z: number, feetY: number\)/.test(мир)).toBe(true);
+    // Сломанный ящик опорой не служит.
+    expect(/state !== 'intact'/.test(мир)).toBe(true);
+    // Правило ступней то же, что у мезонина: прыгнувший снизу опору не получает.
+    expect(/feetY < верхЯщика - 0\.55/.test(мир)).toBe(true);
+    // Опора входит в максимум под ногами, а не заменяет мезонин.
+    expect(/Math\.max\([\s\S]*?ящик \?\? 0/.test(мир)).toBe(true);
+  });
+
+  it('подкат: присед на ходу скользит на беговой скорости', () => {
+    const мир = код('client/src/app/game3d/world3d.ts');
+    // Триггер - на НАЧАЛЕ приседа, на земле, не в воде и не на лестнице.
+    expect(/this\.crouch && !this\.wasCrouch && this\.grounded && !this\.swimming && !this\.climb/.test(мир)).toBe(true);
+    // Скольжение бежит БЕГОМ, а не медленным приседом.
+    expect(/this\.slideTimer > 0 \? landRun : this\.crouch \? CROUCH_SPEED/.test(мир)).toBe(true);
+    // Затухание есть: подкат кончается, а не длится вечно.
+    expect(/this\.slideTimer = Math\.max\(0, this\.slideTimer - dt\)/.test(мир)).toBe(true);
+  });
+
+  it('инвариант мезонина цел: ящик + прыжок не достают до платы', () => {
+    // Верх ящика на полу 0.4 + 0.35 = 0.75; апекс 1.444. Сумма меньше
+    // нижней платы мезонина (2.6) - лестница остаётся единственным путём.
+    const верхЯщика = 0.4 + 0.35;
+    expect(верхЯщика + JUMP_APEX_M).toBeLessThan(2.6);
   });
 });

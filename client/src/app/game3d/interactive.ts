@@ -18,6 +18,8 @@ export interface InteractiveData {
   kind: InteractiveKind;
   state: 'intact' | 'burning' | 'collapsed' | 'broken';
   mass?: number;           // для ящиков
+  /** Габариты ящика (§385): верх ящика - опора паркура. */
+  size?: { w: number; h: number; d: number };
   burnTime?: number;       // для кувшинов
   collapseForce?: number;  // для навесов
 }
@@ -60,6 +62,7 @@ export function createCrate(
     kind: 'crate',
     state: 'intact',
     mass: 50,
+    size: { w, h, d },
   } as InteractiveData;
 
   return g;
