@@ -226,3 +226,4 @@ tools/surface-thumbs/
 
 # Скриншоты визуальной проверки игры (§347): артефакт процесса, а не игра.
 /gui-test-screenshots/
+.kilo/
