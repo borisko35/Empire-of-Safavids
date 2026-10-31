@@ -2601,7 +2601,21 @@ async function loadTasks(): Promise<void> {
         const кнопка = document.createElement('button');
         кнопка.type = 'button';
         кнопка.className = 'region-travel';
-        if (e.state === 'active') {
+        if (e.state === 'offer') {
+          // Предложение (§379): НПС предлагает работу по верхнему делу.
+          // Раньше это состояние не рисовалось вовсе, кнопка приёма была
+          // мертва, и §367 не доходил до игрока.
+          кнопка.textContent = t('errand.accept');
+          кнопка.onclick = async () => {
+            кнопка.disabled = true;
+            try {
+              await api.errandAccept(charId);
+            } catch {
+              кнопка.disabled = false;
+            }
+            await loadTasks();
+          };
+        } else if (e.state === 'active') {
           кнопка.textContent = t('errand.in_progress');
           кнопка.disabled = true;
         } else {

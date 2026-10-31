@@ -58,8 +58,13 @@ function шаблон(kind: string): ErrandTemplate | null {
 }
 
 export interface ErrandStatus {
-  /** Поручения нет: новичок или всё сдано — можно предложить новое */
-  state: 'none' | 'active' | 'done';
+  /**
+   * 'offer' - поручения нет, но верхнее дело профиля знает шаблон: игроку
+   * показывается предложение с кнопкой приёма. Выводится тем же кодом,
+   * что и accept (§379): раньше клиент получал 'none' без шаблона и
+   * предложение нарисовать было не из чего - кнопка приёма была мертва.
+   */
+  state: 'none' | 'offer' | 'active' | 'done';
   template: ErrandTemplate | null;
   progress: number;
   target: number;
@@ -72,6 +77,26 @@ export class PersonalErrands {
   private characters = new CharacterService();
 
   /** Текущее состояние поручения персонажа. */
+  /**
+   * Предложение по верхнему делу: ТО ЖЕ выведение, что и в accept().
+   * Разъехались бы - игрок принял бы не то, что ему показывали. null -
+   * предлагать нечего: профиля нет или по верхнему делу нет шаблона.
+   */
+  private async предложение(characterId: string): Promise<ErrandStatus | null> {
+    const профиль = await наблюдения.profile(characterId);
+    if (!профиль.top) return null;
+    const шаблонP = шаблон(профиль.top);
+    if (!шаблонP) return null;
+    return {
+      state: 'offer',
+      template: шаблонP,
+      progress: 0,
+      target: шаблонP.target,
+      rewardGold: шаблонP.rewardGold,
+      rewardExp: шаблонP.rewardExp,
+    };
+  }
+
   async status(characterId: string): Promise<ErrandStatus> {
     const rows = await this.db.query<{ kind: string; target: number; base_count: number }>(
       'SELECT kind, target, base_count FROM personal_errands WHERE character_id = $1',
@@ -79,14 +104,16 @@ export class PersonalErrands {
     );
     const строка = rows[0];
     if (!строка) {
-      return { state: 'none', template: null, progress: 0, target: 0, rewardGold: 0, rewardExp: 0 };
+      return (await this.предложение(characterId))
+        ?? { state: 'none', template: null, progress: 0, target: 0, rewardGold: 0, rewardExp: 0 };
     }
     const шаблонP = шаблон(строка.kind);
     if (!шаблонP) {
       // Данные шаблона ушли вперёд строк в базе: поручение зависло бы
       // вечно. Честно снять его — игрок примет новое.
       await this.db.query('DELETE FROM personal_errands WHERE character_id = $1', [characterId]);
-      return { state: 'none', template: null, progress: 0, target: 0, rewardGold: 0, rewardExp: 0 };
+      return (await this.предложение(characterId))
+        ?? { state: 'none', template: null, progress: 0, target: 0, rewardGold: 0, rewardExp: 0 };
     }
     const профиль = await наблюдения.profile(characterId);
     const progress = Math.max(0, (профиль.counts[строка.kind] ?? 0) - строка.base_count);

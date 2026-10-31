@@ -2002,6 +2002,7 @@
     "tradeDone": "yol sənin üslubundur — {n} sövdələşmə"
   },
   "errand": {
+    "accept": "Qəbul et",
     "title": "Şəxsi tapşırıq",
     "claim": "Mükafatı götür",
     "claimed": "+{gold} qızıl · +{exp} təcrübə",

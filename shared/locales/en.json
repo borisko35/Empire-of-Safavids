@@ -2002,6 +2002,7 @@
     "tradeDone": "the road is your element — {n} deals"
   },
   "errand": {
+    "accept": "Accept",
     "title": "Personal errand",
     "claim": "Collect reward",
     "claimed": "+{gold} gold · +{exp} exp",
