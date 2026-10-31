@@ -629,6 +629,8 @@
     "quest_karma_too_low": "Sənə hələ bu cür işi verməyəcək qədər etibar etmirlər"
   },
   "panels": {
+    "chest": "Sandıq",
+    "meters": "m",
     "character": "Personaj",
     "char_class": "Sinif",
     "char_level": "Səviyyə",
@@ -1358,7 +1360,11 @@
   "dungeon": {
     "attempts_over": "Bugün cəhd bitdi. Sabah yenilənir.",
     "completed": "Dungeon bitdi: {name}",
-    "completed_generic": "Dungeon bitdi"
+    "completed_generic": "Dungeon bitdi",
+    "chests": "Sandıqlar",
+    "chest_open": "Aç",
+    "chest_failed": "Sandıq vermədi — yaxınlaş",
+    "chest_looted": "Açıldı: +{gold} qızıl · +{exp} XP"
   },
   "karma": {
     "status_changed": "Reputasiyan dəyişdi: {status}",

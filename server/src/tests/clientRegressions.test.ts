@@ -228,3 +228,34 @@ describe('Воронка входа ведёт в мир (§378)', () => {
     expect(stateApp.includes("localStorage.removeItem('created_character')")).toBe(true);
   });
 });
+
+describe('Сундуки данжа доходят до игрока (§380)', () => {
+  // Спавн и вскрытие жили на сервере (маршруты /dungeons/chests), а клиент
+  // ни списка, ни кнопки не имел: лут данжей был недостижим, и шесть
+  // сундуков катакомб были декорацией.
+
+  it('панель активного захода запрашивает сундуки и рисует их', () => {
+    expect(hud).toBe(hud); // якорь на использование переменных файла
+    const панели = код('client/src/app/panels.ts');
+    expect(панели.includes('api.dungeonChests(cid())')).toBe(true);
+    expect(панели.includes('api.dungeonChestOpen(cid(), с.id, с.x, с.z)')).toBe(true);
+    // Открытый сундук не даёт кнопку вскрытия: двойное вскрытие сервер
+    // отвергает, но и кнопка не должна обещать.
+    expect(/if \(с\.opened\) \{[\s\S]{0,80}кнопка\.disabled = true/.test(панели)).toBe(true);
+  });
+
+  it('дистанция считается по позиции игрока, а не выдумана', () => {
+    const панели = код('client/src/app/panels.ts');
+    expect(/Math\.hypot\(с\.x - session\.selfPos\.x, с\.z - session\.selfPos\.z\)/.test(панели)).toBe(true);
+  });
+
+  it('ключи сундуков на трёх языках', () => {
+    for (const язык of ['ru', 'en', 'az'] as const) {
+      const словарь = JSON.parse(читать(`shared/locales/${язык}.json`));
+      for (const ключ of ['chests', 'chest_open', 'chest_failed', 'chest_looted']) {
+        expect(typeof (словарь.dungeon ?? {})[ключ]).toBe('string');
+        expect((словарь.dungeon ?? {})[ключ].length).toBeGreaterThan(0);
+      }
+    }
+  });
+});

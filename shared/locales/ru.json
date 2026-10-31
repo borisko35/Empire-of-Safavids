@@ -629,6 +629,8 @@
     "quest_karma_too_low": "Тебе ещё не доверяют настолько, чтобы дать такой заказ"
   },
   "panels": {
+    "chest": "Сундук",
+    "meters": "м",
     "character": "Персонаж",
     "char_class": "Класс",
     "char_level": "Уровень",
@@ -1358,7 +1360,11 @@
   "dungeon": {
     "attempts_over": "Попытки на сегодня закончились. Обновятся завтра.",
     "completed": "Подземелье пройдено: {name}",
-    "completed_generic": "Подземелье пройдено"
+    "completed_generic": "Подземелье пройдено",
+    "chests": "Сундуки",
+    "chest_open": "Вскрыть",
+    "chest_failed": "Сундук не поддался — подойди ближе",
+    "chest_looted": "Вскрыто: +{gold} золота · +{exp} опыта"
   },
   "karma": {
     "status_changed": "Репутация изменилась: {status}",

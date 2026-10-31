@@ -135,6 +135,52 @@ export async function loadDungeons(): Promise<void> {
         await loadDungeons();
       }));
       box.append(st);
+
+      // Сундуки захода (§380): спавн и вскрытие жили на сервере, а клиент
+      // ни списка, ни кнопки не имел - лут данжей был недостижим.
+      try {
+        const сундуки = await api.dungeonChests(cid());
+        if (сундуки.chests.length) {
+          const открыто = сундуки.chests.filter((c) => c.opened).length;
+          const шапка = document.createElement('div');
+          шапка.className = 'lb-my-rank';
+          шапка.textContent = `${t('dungeon.chests')}: ${открыто}/${сундуки.chests.length}`;
+          box.append(шапка);
+          for (const с of сундуки.chests) {
+            const ряд = document.createElement('div');
+            ряд.className = 'friend-entry';
+            // Дистанция до сундука по позиции игрока: навигатор, а не сырые
+            // координаты. Сервер всё равно меряет сам при вскрытии.
+            const дист = Math.round(Math.hypot(с.x - session.selfPos.x, с.z - session.selfPos.z));
+            const подпись = document.createElement('span');
+            подпись.className = 'friend-info';
+            подпись.textContent = `${t('panels.chest')} №${с.id.slice(-3)} — ${дист} ${t('panels.meters')}`;
+            ряд.append(подпись);
+            const кнопка = document.createElement('button');
+            кнопка.type = 'button';
+            кнопка.className = 'region-travel';
+            if (с.opened) {
+              кнопка.textContent = '✓';
+              кнопка.disabled = true;
+            } else {
+              кнопка.textContent = t('dungeon.chest_open');
+              кнопка.onclick = async () => {
+                кнопка.disabled = true;
+                try {
+                  const r = await api.dungeonChestOpen(cid(), с.id, с.x, с.z);
+                  toast(t('dungeon.chest_looted').replace('{gold}', String(r.gold)).replace('{exp}', String(r.experience)), 'success');
+                } catch {
+                  toast(t('dungeon.chest_failed'), 'error');
+                  кнопка.disabled = false;
+                }
+                await loadDungeons();
+              };
+            }
+            ряд.append(кнопка);
+            box.append(ряд);
+          }
+        }
+      } catch { /* сундуки не обязаны доезжать */ }
     }
 
     if (!dungeons.length) {

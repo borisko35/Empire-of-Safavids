@@ -629,6 +629,8 @@
     "quest_karma_too_low": "You are not yet trusted enough for such a job"
   },
   "panels": {
+    "chest": "Chest",
+    "meters": "m",
     "character": "Character",
     "char_class": "Class",
     "char_level": "Level",
@@ -1358,7 +1360,11 @@
   "dungeon": {
     "attempts_over": "No attempts left today. They reset tomorrow.",
     "completed": "Dungeon cleared: {name}",
-    "completed_generic": "Dungeon cleared"
+    "completed_generic": "Dungeon cleared",
+    "chests": "Chests",
+    "chest_open": "Open",
+    "chest_failed": "The chest resisted — come closer",
+    "chest_looted": "Opened: +{gold} gold · +{exp} XP"
   },
   "karma": {
     "status_changed": "Your standing has changed: {status}",
