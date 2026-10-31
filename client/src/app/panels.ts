@@ -2024,6 +2024,20 @@ async function loadFriends(): Promise<void> {
           void loadFriends();
         });
         actionsEl.append(removeBtn);
+        // Блокировка (§382): дружба стирается, и новые заявки от этого
+        // игрока сервер отвергает ('user_blocked'). Раньше маршрут и
+        // обёртка жили без кнопки - защищаться от навязчивых друзей было
+        // нечем, только удалять и ждать новой заявки.
+        const blockBtn = document.createElement('button');
+        blockBtn.className = 'friend-btn friend-btn--danger';
+        blockBtn.textContent = '⛔';
+        blockBtn.title = t('panels.friend_block');
+        blockBtn.addEventListener('click', async () => {
+          await api.friendBlock(f.friendId);
+          toast(t('panels.friend_blocked'), 'info');
+          void loadFriends();
+        });
+        actionsEl.append(blockBtn);
         row.append(actionsEl);
         box.append(row);
       }

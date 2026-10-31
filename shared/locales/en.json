@@ -634,6 +634,7 @@
     "quest_karma_too_low": "You are not yet trusted enough for such a job"
   },
   "panels": {
+    "friend_block": "Block: friendship ends, new requests from this player will be rejected",
     "chest": "Chest",
     "meters": "m",
     "character": "Character",

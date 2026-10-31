@@ -283,3 +283,27 @@ describe('История PvP доходит до игрока (§381)', () => {
     }
   });
 });
+
+describe('Блокировка друга доходит до игрока (§382)', () => {
+  // Маршрут /friends/block и обёртка жили без кнопки: от навязчивых
+  // друзей можно было только избавиться, но не защититься от новых заявок
+  // - удалённый друг тут же присылал следующую.
+
+  it('в строке друга есть блокировка рядом с удалением', () => {
+    const панели = код('client/src/app/panels.ts');
+    expect(панели.includes('api.friendBlock(f.friendId)')).toBe(true);
+    expect(панели.includes("t('panels.friend_block')")).toBe(true);
+    // Блокировка стирает дружбу: после неё список перечитывается.
+    expect(/blockBtn\.addEventListener\('click'[^}]*void loadFriends\(\)/.test(панели)).toBe(true);
+  });
+
+  it('ключи блокировки на трёх языках', () => {
+    for (const язык of ['ru', 'en', 'az'] as const) {
+      const словарь = JSON.parse(читать(`shared/locales/${язык}.json`));
+      for (const ключ of ['friend_block', 'friend_blocked']) {
+        expect(typeof (словарь.panels ?? {})[ключ]).toBe('string');
+        expect((словарь.panels ?? {})[ключ].length).toBeGreaterThan(0);
+      }
+    }
+  });
+});

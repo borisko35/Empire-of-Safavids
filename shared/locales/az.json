@@ -634,6 +634,7 @@
     "quest_karma_too_low": "Sənə hələ bu cür işi verməyəcək qədər etibar etmirlər"
   },
   "panels": {
+    "friend_block": "Blokla: dostluq bitər, bu oyunçunun yeni sorğuları rədd edilər",
     "chest": "Sandıq",
     "meters": "m",
     "character": "Personaj",
