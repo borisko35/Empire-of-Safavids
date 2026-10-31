@@ -3469,6 +3469,32 @@ async function loadPvP(): Promise<void> {
       }
     });
     box.append(cancelBtn);
+
+    // История боёв (§380): маршрут и сервис жили, потребителя не было -
+    // игрок не видел ни своих побед, ни соперников.
+    try {
+      const история = await api.pvpHistory(cid());
+      const завершённые = история.history.filter((m: { status: string }) =>
+        m.status === 'finished' || m.status === 'draw');
+      if (завершённые.length) {
+        const заголовок = document.createElement('div');
+        заголовок.className = 'panel-subhead';
+        заголовок.textContent = t('pvp.history');
+        box.append(заголовок);
+        for (const m of завершённые.slice(0, 5)) {
+          const ряд = document.createElement('div');
+          ряд.className = 'friend-entry';
+          const соперник = m.player1_id === cid() ? m.player2_name : m.player1_name;
+          const итог = m.status === 'draw'
+            ? t('pvp.draw_short')
+            : m.winner_id === cid() ? t('pvp.win') : t('pvp.loss');
+          ряд.innerHTML = `<span class="friend-name">${t('pvp.vs')} ${соперник ?? '—'}</span>` +
+            `<span class="lb-value">${итог}</span>`;
+          box.append(ряд);
+        }
+      }
+    } catch { /* история не обязана доезжать */ }
+
     // Топ-10
     const title = document.createElement('div');
     title.className = 'panel-subhead';

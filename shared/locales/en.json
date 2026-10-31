@@ -99,6 +99,11 @@
     "delete_failed": "Could not delete"
   },
   "pvp": {
+    "history": "Recent fights",
+    "win": "Win",
+    "loss": "Loss",
+    "draw_short": "Draw",
+    "vs": "vs",
     "searching": "Looking for an opponent…",
     "not_found": "No opponent found",
     "fight_hint": "Attack your opponent. Whoever keeps more health wins.",

@@ -157,3 +157,13 @@ describe('PvP: переводы', () => {
     });
   }
 });
+
+describe('История с именами соперников (§381)', () => {
+  it('getMatchHistory JOIN-ит characters: панель рисует имя, а не uuid', () => {
+    const svc = read('server/src/services/PvPService.ts');
+    const блок = svc.slice(svc.indexOf('getMatchHistory'), svc.indexOf('async cancelMatch'));
+    expect(/c1\.name AS player1_name/.test(блок)).toBe(true);
+    expect(/c2\.name AS player2_name/.test(блок)).toBe(true);
+    expect(/LEFT JOIN characters/.test(блок)).toBe(true);
+  });
+});

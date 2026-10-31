@@ -259,3 +259,27 @@ describe('Сундуки данжа доходят до игрока (§380)', (
     }
   });
 });
+
+describe('История PvP доходит до игрока (§381)', () => {
+  // Маршрут /pvp/history и сервис жили, потребителя не было: игрок не видел
+  // ни своих побед, ни соперников.
+
+  it('панель PvP зовёт историю и различает исходы', () => {
+    const панели = код('client/src/app/panels.ts');
+    expect(панели.includes('api.pvpHistory(cid())')).toBe(true);
+    expect(/m\.status === 'draw'/.test(панели)).toBe(true);
+    expect(/m\.winner_id === cid\(\) \? t\('pvp\.win'\) : t\('pvp\.loss'\)/.test(панели)).toBe(true);
+    // Ожидающие и отменённые матчи в истории не рисуются.
+    expect(/status === 'finished' \|\| m\.status === 'draw'/.test(панели)).toBe(true);
+  });
+
+  it('ключи истории на трёх языках', () => {
+    for (const язык of ['ru', 'en', 'az'] as const) {
+      const словарь = JSON.parse(читать(`shared/locales/${язык}.json`));
+      for (const ключ of ['history', 'win', 'loss', 'draw_short', 'vs']) {
+        expect(typeof (словарь.pvp ?? {})[ключ]).toBe('string');
+        expect((словарь.pvp ?? {})[ключ].length).toBeGreaterThan(0);
+      }
+    }
+  });
+});

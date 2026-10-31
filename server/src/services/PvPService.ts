@@ -15,6 +15,9 @@ export interface PvPMatch {
   p1_confirmed?: string | null;
   /** Что назвал второй игрок */
   p2_confirmed?: string | null;
+  /** Имена из characters (§381): история рисует соперника по имени */
+  player1_name?: string | null;
+  player2_name?: string | null;
   /** До какого момента ждём второго подтверждения */
   settle_after?: Date | string | null;
 }
@@ -302,10 +305,15 @@ export class PvPService {
   }
 
   async getMatchHistory(charId: string, limit = 20): Promise<PvPMatch[]> {
+    // Имена соперников приходят вместе с матчем (§381): панель истории
+    // рисует «Вы vs Имя», а не голые uuid - имена живет в characters.
     return this.db.query<PvPMatch>(
-      `SELECT * FROM pvp_arena
-       WHERE player1_id = $1 OR player2_id = $1
-       ORDER BY started_at DESC LIMIT $2`,
+      `SELECT m.*, c1.name AS player1_name, c2.name AS player2_name
+       FROM pvp_arena m
+       LEFT JOIN characters c1 ON c1.id = m.player1_id
+       LEFT JOIN characters c2 ON c2.id = m.player2_id
+       WHERE m.player1_id = $1 OR m.player2_id = $1
+       ORDER BY m.started_at DESC LIMIT $2`,
       [charId, limit]
     );
   }

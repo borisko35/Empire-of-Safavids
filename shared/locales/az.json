@@ -99,6 +99,11 @@
     "delete_failed": "Silmək olmadı"
   },
   "pvp": {
+    "history": "Son döyüşlər",
+    "win": "Qələbə",
+    "loss": "Məğlubiyyət",
+    "draw_short": "Bərabər",
+    "vs": "əleyhinə",
     "searching": "Rəqib axtarılır…",
     "not_found": "Rəqib tapılmadı",
     "fight_hint": "Rəqibə hücum et. Kim daha çox sağlamlıq saxlayır, o qalibdir.",
