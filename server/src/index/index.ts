@@ -1,6 +1,5 @@
+import '../env.ts'; // первым импортом: до сервисов, которым нужен DB_*/REDIS_*/PORT
 import xsollaExchangeRouter from '../routes/xsolla';
-// .env должен загрузиться ДО импортов сервисов: они создают пул БД на этапе импорта
-import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
 import express from 'express';
