@@ -117,3 +117,19 @@ export class PartySystem {
     await this.redis.publish(REDIS_CHANNELS.PARTY_MEMBER_JOINED, { partyId, characterId: targetId });
     logger.info(`${targetId} joined party ${partyId}`);
   }
+
+  /** Распределение опыта в партии с бонусом за рефералов */
+  distributeExp(baseExp: number, partySize: number, referralCount: number = 0): number {
+    // Бонус за партию: +20% за каждого дополнительного члена
+    const partyBonus = 1 + (partySize - 1) * 0.2;
+    
+    // Бонус за рефералов: +15% если в-party 3 и более друга
+    // "3 друга в отряде → множитель" (roadmap пункт 7)
+    const referralBonus = referralCount >= 3 ? 1.15 : 1.0;
+    
+    const totalBonus = partyBonus * referralBonus;
+    const perPlayerExp = Math.floor((baseExp * totalBonus) / partySize);
+    
+    logger.debug(`EXP distribute: base=${baseExp}, partySize=${partySize}, referralCount=${referralCount}, partyBonus=${partyBonus}, referralBonus=${referralBonus}, totalBonus=${totalBonus}, perPlayer=${perPlayerExp}`);
+    return perPlayerExp;
+  }
