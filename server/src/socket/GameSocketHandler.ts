@@ -1,5 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { INTERIOR_CEILING_M, SWIM_BAND_LOW_M, BOAT_HEADROOM_M, verticalEnvelopeOk } from '../../../shared/verticality';
+import { INTERIOR_CEILING_M, SWIM_BAND_LOW_M, BOAT_HEADROOM_M, FLIGHT_PUNISH_WINDOW_MS, FLIGHT_PUNISH_THRESHOLD, verticalEnvelopeOk } from '../../../shared/verticality';
 import { supportHeightAt } from '../../../shared/terrainHeight';
 import { logger } from '../utils/logger';
 import { RedisService } from '../services/RedisService';
@@ -280,6 +280,8 @@ private territory = TerritoryBonuses.getInstance();
    * ограничить возраст записи, чем перечислить все поводы.
    */
   private boatSpeeds = new Map<string, { boatId: string; speed: number; в: number }>();
+  /** Отказы конверта высоты (§389): минутное окно на персонажа. */
+  private вертикальныеНарушения = new Map<string, { начало: number; отказы: number }>();
   // Откуда отсчитывать путь для опыта скакуна: characterId -> позиция
   private mountExpAt = new Map<string, { x: number; z: number }>();
   // Игроки, вошедшие в игру внутри здания: им прощается первый пакет
@@ -1203,6 +1205,22 @@ private territory = TerritoryBonuses.getInstance();
         }
       }
       if (!конвертОк) {
+        // Наказание (§389): отказы копятся в минутном окне. Порог - три
+        // секунды непрерывного полёта; единичный отказ наказан не бывает.
+        const счёт = this.вертикальныеНарушения.get(characterId);
+        const now = Date.now();
+        const окно = счёт && now - счёт.начало < FLIGHT_PUNISH_WINDOW_MS
+          ? счёт
+          : { начало: now, отказы: 0 };
+        окно.отказы += 1;
+        this.вертикальныеНарушения.set(characterId, окно);
+        if (окно.отказы >= FLIGHT_PUNISH_THRESHOLD) {
+          this.вертикальныеНарушения.delete(characterId);
+          logger.warn(`[Move] sustained flight: ${characterId} ×${окно.отказы}/мин`);
+          await this.punish(socket, 'speed_hack', 'sustained flight (vertical envelope)', 2);
+          socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: 'vertical' });
+          return;
+        }
         logger.warn(`[Move] vertical envelope: ${characterId} @(${px.toFixed(0)},${py.toFixed(1)},${pz.toFixed(0)})`);
         socket.emit(SOCKET_EVENTS.MOVE_REJECTED, { reason: 'vertical' });
         return;

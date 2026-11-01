@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { AntiCheatSystem } from '../systems/AntiCheatSystem';
 import {
   GRAVITY, JUMP_V, JUMP_APEX_M, MAX_RISE_SPEED_MS, verticalEnvelopeOk,
-  FALL_TOLERANCE_M, AIR_TOLERANCE_M,
+  FALL_TOLERANCE_M, AIR_TOLERANCE_M, FLIGHT_PUNISH_WINDOW_MS, FLIGHT_PUNISH_THRESHOLD,
 } from '../../../shared/verticality';
 import { supportHeightAt, groundHeight } from '../../../shared/terrainHeight';
 import { LAKE, WORLD_HALF } from '../../../shared/water';
@@ -159,13 +159,38 @@ describe('Проводка обработчика', () => {
       'комната интерьера не меряется от пола с потолком мезонина');
     must(/MOVE_REJECTED, \{ reason: 'vertical' \}/.test(обработчик),
       'отказ полёта не уходит клиенту');
-    must(!/punish\(socket, 'speed_hack'[\s\S]{0,80}vertical/.test(обработчик),
-      'конверт наказывает с первого пакета - обкатка tolerances ждёт');
+    // §389: обкатка допусков прошла (две выкатки), порог назван - наказание
+    // включено, но ТОЛЬКО за устойчивый полёт: punish стоит ниже порога.
+    must(
+      обработчик.indexOf('if (окно.отказы >= FLIGHT_PUNISH_THRESHOLD) {') <
+        обработчик.indexOf("await this.punish(socket, 'speed_hack', 'sustained flight"),
+      'наказание стоит до порога: единичный отказ наказан',
+    );
   });
 
   it('лодка конвертом не меряется: она качается на волне', () => {
     must(/if \(!this\.boatSpeeds\.get\(characterId\)\?\.boatId\) \{/.test(обработчик),
       'конверт меряет лодку - качка выкидывает пассажира');
+  });
+
+  it('наказание только за устойчивый полёт: порог из shared (§389)', () => {
+    expect({ окно: FLIGHT_PUNISH_WINDOW_MS, порог: FLIGHT_PUNISH_THRESHOLD })
+      .toEqual({ окно: 60000, порог: 30 });
+    must(
+      обработчик.includes('if (окно.отказы >= FLIGHT_PUNISH_THRESHOLD) {') &&
+      обработчик.includes("await this.punish(socket, 'speed_hack', 'sustained flight (vertical envelope)', 2)"),
+      'устойчивый полёт не наказывается',
+    );
+    must(
+      обработчик.includes('this.вертикальныеНарушения.delete(characterId);'),
+      'окно отказов не обнуляется после наказания',
+    );
+    // Единичный отказ наказан не бывает: punish стоит НИЖЕ порога.
+    must(
+      обработчик.indexOf("await this.punish(socket, 'speed_hack', 'sustained flight") >
+        обработчик.indexOf('if (окно.отказы >= FLIGHT_PUNISH_THRESHOLD) {'),
+      'единичный отказ наказан - обкатка допусков кончилась раньше порога',
+    );
   });
 
   it('пол комнаты: сервер знает число клиента, и оно одно', () => {
