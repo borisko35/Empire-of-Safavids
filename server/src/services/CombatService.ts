@@ -3,7 +3,7 @@ import { logger } from '../utils/logger';
 import { DEFAULT_WEAPON, WeaponProfile } from './EquipmentCache';
 import { STANCE_ABILITIES, type StanceAbility, type CombatStance } from '../systems/CombatStance';
 
-/** Урон поstance (poise) в зависимости от типа действия */
+/** Урон poise в зависимости от типа действия */
 const POISE_DAMAGE: Record<string, number> = {
   attack: 10,
   skill: 18,
@@ -17,7 +17,7 @@ interface DamageResult {
   isCritical: boolean;
   isBlocked: boolean;
   isDodged: boolean;
-  /** Урон поstance (poise), который цель получает от этого удара */
+  /** Урон poise, который цель получает от этого удара */
   poiseDamage: number;
 }
 
