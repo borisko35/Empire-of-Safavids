@@ -202,7 +202,7 @@ export function surfaceMaterial(
     color: opts.color ?? 0xffffff,
     roughness: opts.roughness ?? 0.92,
     metalness: opts.metalness ?? 0,
-    side: opts.side,
+    side: opts.side ?? THREE.FrontSide,
   });
   applySurface(материал, id, opts);
   return материал;
