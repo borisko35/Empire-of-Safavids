@@ -219,6 +219,9 @@ export function ветерСилы(weather: string): number {
   }
 }
 
+/** Один кадр отрисовки: точка, где тяжёлая постройка уступает экран. */
+const кадр = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+
 export class World3D {
   private renderer!: THREE.WebGLRenderer;
   private scene!: THREE.Scene;
@@ -682,7 +685,28 @@ private roll = 0;
   }
 
   // ── Инициализация ────────────────────────────────────────────
-  init(container: HTMLElement, callbacks: World3DCallbacks): void {
+  /**
+   * Поколение постройки (§390): каждая постройка мира и каждый dispose
+   * увеличивают счётчик. Точки ожидания внутри постройки сверяют своё
+   * поколение и бросают, если мир успели покинуть (выход/смерть во время
+   * загрузки) - иначе недостроенный мир продолжал бы строиться поверх
+   * нового входа.
+   */
+  private initПоколение = 0;
+
+  async init(
+    container: HTMLElement,
+    callbacks: World3DCallbacks,
+    onProgress?: (fraction: number) => void,
+  ): Promise<void> {
+    const поколение = ++this.initПоколение;
+    // Точка ожидания: отдать кадр экрану (бар и надписи живут), сверить
+    // поколение и отчитаться прогрессом.
+    const пауза = async (fraction: number): Promise<void> => {
+      await кадр();
+      if (поколение !== this.initПоколение) throw new Error('world_init_aborted');
+      onProgress?.(fraction);
+    };
     this.container = container;
     this.callbacks = callbacks;
 
@@ -850,10 +874,13 @@ private roll = 0;
     // Теперь их загрузка начинается до постройки мира: те же шесть
     // соединений занимают сначала люди, а декор доезжает следом. Игрок
     // видит живой город сразу, а дробности декора подождут.
+    await пауза(0.25);
     preloadModels(['guard', 'merchant', 'citizen', 'citizen2', 'citizen3', 'crier', 'scholar', 'archer', 'warrior']);
 
     // Мир
+    await пауза(0.3);
     buildTerrain(this.scene);
+    await пауза(0.36);
     buildScatter(this.scene);
     buildRoads(this.scene);
     const city = buildCity(this.scene);
@@ -870,6 +897,7 @@ private roll = 0;
       this.torches.push({ light, base: 1.6, phase: i * 2.4 });
     }
     for (const d of buildTownBuildings(this.scene)) this.doorTargets.push(d);
+    await пауза(0.48);
     buildCamp(this.scene);
     buildWater(this.scene);
     // Поселения: порт, караван-сарай, деревня, форт.
@@ -896,6 +924,7 @@ private roll = 0;
       this.scene.add(light);
       this.torches.push({ light, base: 1.6, phase: i * 2.4 + 0.7 });
     }
+    await пауза(0.6);
     // Указатели сбоку от дорог: «здесь начинается путь к порту».
     buildSignposts(this.scene);
     // Стол с доской во дворе караван-сарая: караван ждёт утра, люди играют.
@@ -1067,6 +1096,7 @@ private roll = 0;
     this.sky = createSky(this.scene);
     // чтобы первый кадр не показал мир без освещения.
     this.env = new SkyEnvironment(this.scene, this.renderer);
+    await пауза(0.72);
     this.fauna = createFauna(this.scene);
     this.npcs = createNpcs(this.scene);
     this.civilians = createCivilians(this.scene);
@@ -1104,6 +1134,7 @@ private roll = 0;
     // Птицы над пустыней и городом (§259): небо не должно быть пустым.
     this.птицы = createBirds(this.scene);
     this.weather = createWeather(this.scene, audio);
+    await пауза(0.8);
     this.interiors = createInteriors(this.scene);
     for (const d of this.interiors.clickTargets) this.doorTargets.push(d);
     // Интерьерные цели (интерактивы, разрушаемое, лестницы) больше не
@@ -3155,6 +3186,7 @@ if (isMe && moving) {
   private attackAnim = false;
 
   dispose(): void {
+    this.initПоколение++;
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('mouseup', this.onMouseUp);

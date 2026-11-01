@@ -28,7 +28,7 @@ describe('Коллайдеры не растут при каждом входе 
     // список не обнулялся, а СОХРАНЯЛСЯ целиком и возвращался обратно —
     // вместе с коллайдерами города от прошлого мира. Каждый повторный вход
     // примерно удваивал список, а он проверяется в каждом кадре трижды.
-    const начало = world.indexOf('init(container: HTMLElement');
+    const начало = world.indexOf('async init(');
     expect(начало).toBeGreaterThan(-1);
     const префикс = world.slice(начало, начало + 2500);
     expect(префикс).toMatch(/COLLIDERS\.length = 0/);
@@ -38,7 +38,7 @@ describe('Коллайдеры не растут при каждом входе 
     // Ломка: очистка только COLLIDERS оставила бы POCKET_COLLIDERS
     // (невидимый забор кармана), INTERIOR_COLLIDERS, FAUNA_COLLIDERS и
     // CIV_COLLIDERS расти от входа к входу.
-    const начало = world.indexOf('init(container: HTMLElement');
+    const начало = world.indexOf('async init(');
     const префикс = world.slice(начало, начало + 2500);
     for (const имя of ['COLLIDERS', 'POCKET_COLLIDERS', 'INTERIOR_COLLIDERS', 'FAUNA_COLLIDERS', 'CIV_COLLIDERS']) {
       expect(префикс).toMatch(new RegExp(`${имя}\\.length = 0`));
@@ -378,5 +378,29 @@ describe('Паркур-надстройка: ящик-опора и подкат
     // нижней платы мезонина (2.6) - лестница остаётся единственным путём.
     const верхЯщика = 0.4 + 0.35;
     expect(верхЯщика + JUMP_APEX_M).toBeLessThan(2.6);
+  });
+});
+
+describe('Постройка мира уступает экран (§390)', () => {
+  // Вся сборка мира была одним синхронным блоком: секунды без единого кадра.
+  // Бар загрузки и надписи замирали на 20%, дальше - чёрный фриз, который
+  // игрок честно называл «тормозит при входе».
+
+  it('init асинхронный и отдаёт экран на границах этапов', () => {
+    expect(/async init\(/.test(world)).toBe(true);
+    // Семь точек ожидания: препроцесс, террейн, дорога, город+вода,
+    // указатели, фауна, интерьеры.
+    expect((world.match(/await пауза\(/g) ?? []).length).toBe(7);
+    // Каждая точка сверяет поколение: мир, покинутый посреди загрузки,
+    // не достраивается поверх нового входа.
+    expect(/initПоколение\) throw new Error\('world_init_aborted'\)/.test(world)).toBe(true);
+    expect(new RegExp('dispose\\(\\): void \\{\\s*' +
+      'this\\.initПоколение\\+\\+').test(world)).toBe(true);
+  });
+
+  it('enterWorld ждёт постройку и ведёт бар честным прогрессом', () => {
+    expect(/await world3d\.init\(/.test(worldApp)).toBe(true);
+    expect(/\(f\) => markLoading\(f, t\('loading\.building'\)\)/.test(worldApp)).toBe(true);
+    expect(/world_init_aborted/.test(worldApp)).toBe(true);
   });
 });

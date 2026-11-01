@@ -628,10 +628,13 @@ export async function enterWorld(character: Character): Promise<void> {
 
   world = new World();
   world3d = new World3D();
-  // Сборка мира тяжёлая (~сотни тысяч вершин) — отдаём кадр на отрисовку
+  // Сборка мира тяжёлая (~сотни тысяч вершин). Она идёт этапами с
+  // покадровой отдачей (§390): бар и надписи живут на всём протяжении,
+  // вместо черного фриза на одной цифре.
   markLoading(0.2, t('loading.building'));
   await nextPaint();
-  world3d.init(document.getElementById('game3d-root') as HTMLElement, {
+  try {
+    await world3d.init(document.getElementById('game3d-root') as HTMLElement, {
     onAttack: () => basicAttack(),
     onTarget: (name, hp, maxHp) => showTarget(name, hp, maxHp),
     onTargetCleared: () => hideTarget(),
@@ -673,7 +676,13 @@ export async function enterWorld(character: Character): Promise<void> {
         .catch((e) => console.warn('[dialogue] pre-dialogue step failed', e));
     },
     onDoor: (action, buildingId, nameRu, entranceId) => void enterOrExitBuilding(action, buildingId, nameRu, entranceId),
-  });
+  }, (f) => markLoading(f, t('loading.building')));
+  } catch (e) {
+    // Мир покинули посреди постройки (выход/смерть во время загрузки):
+    // недостроенный мир не продолжается, остальное обрабатывается как раньше.
+    if ((e as Error).message !== 'world_init_aborted') throw e;
+    return;
+  }
 
   // Память о местности — по персонажу: у другого героя карта своя, и чужая
   // память была бы подменой. Загрузка идёт здесь, а не при создании персонажа
