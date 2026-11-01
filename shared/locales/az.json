@@ -1718,7 +1718,20 @@
     "correct": "Doğru! Şeir toplandı! ◉",
     "grudge": "Mistlər səndən üz döndərdi. Onlar dinləməyəcək"
   },
+  "npc_roles": {
+      "commander": "Komandir",
+      "craftsman": "Sənətkar",
+      "guard": "Mühafizə",
+      "guide": "Bələdçi",
+      "healer": "Şəfa verən",
+      "merchant": "Tacir",
+      "mystic": "Mistik",
+      "quest_giver": "Tapşırık verən",
+      "scout": "Kəşfiyyatçı",
+      "villager": "Sakin"
+  },
   "chronicles": {
+    "npcs": "İmperiya sakinləri",
     "cat_history": "📜 Tarix",
     "cat_culture": "🎭 Mədəniyyət",
     "cat_geography": "🗺️ Coğrafiya",

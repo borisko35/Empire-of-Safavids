@@ -2495,6 +2495,28 @@ async function loadChronicles(): Promise<void> {
       box.append(prog);
     }
 
+    // Жители империи (§388): справочник НПС. Маршрут /npc/info жил без
+    // потребителя - имя, роль и регион героям негде было прочитать.
+    try {
+      const жители = (await api.npcInfo()).npcs;
+      if (жители.length) {
+        const шапка = document.createElement('div');
+        шапка.className = 'panel-subhead';
+        шапка.textContent = t('chronicles.npcs');
+        box.append(шапка);
+        const список = document.createElement('div');
+        список.className = 'chronicles-grid';
+        for (const нпс of жители) {
+          const ряд = document.createElement('div');
+          ряд.className = 'friend-entry';
+          ряд.innerHTML = `<span class="friend-name">${tOr(`npc_names.${нпс.npcId}`, нпс.nameRu)}</span>` +
+            `<span class="friend-info">${t(`npc_roles.${нпс.role}`) || нпс.role} · ${regionName(нпс.region)}</span>`;
+          список.append(ряд);
+        }
+        box.append(список);
+      }
+    } catch { /* справочник не обязан доезжать */ }
+
     renderChronicles(listEl, data.entries, '');
   } catch {
     box.innerHTML = `<div class="lb-empty">${t('chronicles.unavailable')}</div>`;
