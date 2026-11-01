@@ -253,7 +253,7 @@ function makePerson(idx: number): Walker {
   return w;
 }
 
-const ПУТНИКИ_МОДЕЛИ = ['citizen', 'citizen2', 'citizen3'] as const;
+const ПУТНИКИ_МОДЕЛИ = ['citizen'] as const;
 
 /** Собрать одного путника: подгонка, чистка дорожек, клон скелета, миксер. */
 async function собратьПутника(
