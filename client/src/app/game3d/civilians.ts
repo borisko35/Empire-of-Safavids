@@ -104,8 +104,9 @@ const PHRASES = [
 
 const TUNICS = [0x8b6f4e, 0x4e6f8b, 0x7a4e6e, 0x4e8b6f, 0x9c8a5a, 0x6e4e8b, 0x8b4e5a, 0x5a7a8b];
 
-/** Модели горожан — три варианта, как у игрока пять классов. */
-const CIV_MODELS = ['citizen', 'citizen2'] as const;
+/** Модели горожан — один рабочий вариант: citizen2 лишился animation-треков (165→0, «костей нет»),
+ *  как и citizen3 до него; вариант удалён по образцу коммита 9fc233b. */
+const CIV_MODELS = ['citizen'] as const;
 
 /** Клипы анимаций для горожан — стояние и ходьба. */
 const CIV_CLIP_IDLE = 'standing-idle';
