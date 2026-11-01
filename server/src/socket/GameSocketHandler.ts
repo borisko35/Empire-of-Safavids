@@ -2481,6 +2481,7 @@ private territory = TerritoryBonuses.getInstance();
     if (!action.skillId) return [];
     const навык = this.combatService.getSkill(attacker.class, action.skillId);
     if (!навык?.aoe || !навык.aoeRadius) return [];
+    const времяПогоды = GameLoop.getInstance().getWorldTime().weather;
 
     const найденные: { ctx: AIContext; расстояние: number }[] = [];
     for (const ctx of ai.getAllInstances()) {
@@ -2493,7 +2494,9 @@ private territory = TerritoryBonuses.getInstance();
         ctx.position.x - центр.position.x,
         ctx.position.z - центр.position.z,
       );
-      if (расстояние > навык.aoeRadius) continue;
+      // Погода в навыках (§387): радиус площади в непогоду уже - та же
+      // combatReachMod, что у стрелков и у площади монстров.
+      if (расстояние > навык.aoeRadius * combatReachMod(времяПогоды, навык.aoeRadius)) continue;
       найденные.push({ ctx, расстояние });
     }
     найденные.sort((a, b) => a.расстояние - b.расстояние);

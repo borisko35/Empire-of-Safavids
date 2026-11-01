@@ -147,6 +147,29 @@ describe('AISystem: погода — поведение, а не поле', () =
       ai.removeInstance(ctx.instanceId);
     }
   });
+
+  it('навыки ИИ: дальний навык в бурю не выбирается, монстр сближается', () => {
+    // Синтетический стрелок: один навык с дальностью 15 и перезарядкой 0.
+    // В ясную погоду он бьёт с 10 м; в бурю эффективная дальность 4.5 -
+    // навык не выбирается, и монстр идёт сближаться базовой атакой.
+    const стрел = стрелок();
+    const со_навыком = { ...стрел, skills: [{ id: 'test_bolt', name: 'Bolt', nameRu: 'Болт', damage: 5, cooldown: 0, range: 15, aoe: false }] } as unknown as MonsterDefinition;
+    const ctx = ai.spawnMonster(со_навыком, { x: 0, y: 0, z: 0 });
+    try {
+      ctx.state = 'attack';
+      ctx.targetId = 'p1';
+      ctx.targetPosition = { x: 10, y: 0, z: 0 };
+      ctx.aggroTable.set('p1', 100);
+      const ясный = ai.tick(ctx.instanceId, игрок(10), 'clear');
+      must(ясный.type === 'skill' && ясный.skillId === 'test_bolt',
+        `в ясную погоду ждали навыка, получили ${ясный.type}`);
+      const буря = ai.tick(ctx.instanceId, игрок(10), 'sandstorm');
+      must(буря.type !== 'skill',
+        `в бурю навык бьёт с 10 м при эффективных 4.5 (${буря.type})`);
+    } finally {
+      ai.removeInstance(ctx.instanceId);
+    }
+  });
 });
 
 describe('Проводка боевых путей', () => {
@@ -194,6 +217,23 @@ describe('Проводка боевых путей', () => {
       /export function combatReachMod/.test(читать('server/src/systems/WorldTimeSystem.ts')),
       'combatReachMod не объявлен рядом с WEATHER_EFFECTS',
     );
+  });
+
+  it('погода проходит в выбор навыка и радиусы площади по исходнику', () => {
+    const ии = читать('server/src/systems/AISystem.ts');
+    const цикл = читать('server/src/systems/GameLoop.ts');
+    const обработчикПогоды = читать('server/src/socket/GameSocketHandler.ts');
+    must(/skill\.range \* combatReachMod\(погода, skill\.range\)/.test(ии),
+      'выбор навыка не режется погодой');
+    must(/this\.maxSkillRange\(ctx, now, погода\)/.test(ии) &&
+         /this\.evaluateState\(ctx, hpPercent, nearbyPlayers, now, погода\)/.test(ии),
+      'погода не проходит от тика к выбору навыка');
+    must(/эффективная = skill\.range \* combatReachMod\(погода, skill\.range\)/.test(ии),
+      'порог сближения не считает погодную дальность');
+    must(/monsterAoeRadius\(atk\) \*[\s\S]{0,80}combatReachMod/.test(цикл),
+      'площадь монстра не режется погодой');
+    must(/навык\.aoeRadius \* combatReachMod\(времяПогоды, навык\.aoeRadius\)/.test(обработчикПогоды),
+      'площадь игрока не режется погодой');
   });
 
   it('описание лука больше не обещает дальность, которой нет', () => {

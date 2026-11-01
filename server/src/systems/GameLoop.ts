@@ -34,6 +34,7 @@ import { activeGuardPosts, GUARD_GRUDGE_MS, GUARD_STRIKE, strikingGuard, nightFa
 // Точный удар (§356): правило спины в shared, монстровая ветка того же права.
 import { isBehindTarget, BACK_STRIKE_MULT, BACK_STRIKE_ROOT_MS } from '../../../shared/backStrike';
 import { isAboveTarget, OVERHEAD_MULT } from '../../../shared/overheadStrike';
+import { combatReachMod } from './WorldTimeSystem';
 import { logger } from '../utils/logger';
 
 const TICK_INTERVAL_MS = 1000;
@@ -454,7 +455,11 @@ private soldiers = soldiers;
       // Центр — цель, а не сам монстр: удар накрывает то место, куда бьют.
       // Эффект (замедление, яд, оглушение) остаётся только на цели: применять
       // его по всей группе — отдельное решение владельца.
-      const радиусПлощади = this.monsterAoeRadius(atk);
+      // Погода в навыках (§387): площадь элитных и боссов в непогоду уже -
+      // та же combatReachMod, что у стрелков; и группа, и босс прячутся от
+      // бури одинаково.
+      const радиусПлощади = this.monsterAoeRadius(atk) *
+        combatReachMod(this.getWorldTime().weather, this.monsterAoeRadius(atk));
       if (радиусПлощади > 0) {
         const список = nearbyPlayers.get(`${atk.shardId}:${atk.region}`) ?? [];
         for (const сосед of список) {

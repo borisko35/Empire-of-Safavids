@@ -253,12 +253,17 @@ describe('Площадь монстров: решение владельца', (
 
 describe('Дальность навыков монстров', () => {
   it('навык выбирается под расстояние, а не «какой сильнее»', () => {
+    // §387: и навык, и «в ближнем бою достаёт всё» режутся погодой -
+    // иначе дальний монстр стрелял бы сквозь бурю, которую его база не видит.
     must(
-      /return расстояние <= Math\.max\(skill\.range, ctx\.definition\.attackRange\);/.test(ИИ),
+      new RegExp('return расстояние <= Math\\.max\\(\\s*' +
+        'skill\\.range \\* combatReachMod\\(погода, skill\\.range\\),\\s*' +
+        'ctx\\.definition\\.attackRange \\* combatReachMod\\(погода, ctx\\.definition\\.attackRange\\),\\s*\\);').test(ИИ),
       'навык выбирается без учёта расстояния: «Петля» с 8 метров сработает вплотную'
     );
     must(
-      /this\.selectSkill\(ctx, now, дистанция\)/.test(ИИ),
+      // §387: погода входит в выбор последним аргументом.
+      /this\.selectSkill\(ctx, now, дистанция, погода\)/.test(ИИ),
       'выбор навыка не получает расстояние до цели'
     );
   });
@@ -284,7 +289,8 @@ describe('Дальность навыков монстров', () => {
 
   it('бой начинается на расстоянии готового навыка, а не вплотную', () => {
     must(
-      /Math\.max\(ctx\.definition\.attackRange, this\.maxSkillRange\(ctx, now\)\)/.test(ИИ),
+      // §387: погода входит и в порог сближения.
+      /Math\.max\(ctx\.definition\.attackRange, this\.maxSkillRange\(ctx, now, погода\)\)/.test(ИИ),
       'состояние боя начинается только на attackRange: дальности навыков не значили ничего'
     );
   });

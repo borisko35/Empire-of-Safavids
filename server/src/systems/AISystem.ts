@@ -170,7 +170,7 @@ export class AISystem {
     }
 
     // Смена состояния
-    const newState = this.evaluateState(ctx, hpPercent, nearbyPlayers, now);
+    const newState = this.evaluateState(ctx, hpPercent, nearbyPlayers, now, погода);
     if (newState !== ctx.state) {
       ctx.state = newState;
       ctx.lastStateChange = now;
@@ -228,7 +228,8 @@ export class AISystem {
     players: TargetPlayer[],
     // Время нужно ради готовности навыков: состояние боя начинается на
     // расстоянии того из них, что сейчас не на перезарядке.
-    now: number
+    now: number,
+    погода?: Weather
   ): AIState {
     const aquatic = ctx.definition.aquatic === true;
     // Подводное существо не отступает на сушу: там ему некуда деваться
@@ -250,7 +251,7 @@ export class AISystem {
         // монстр должен сближаться. Раньше здесь стоял только attackRange (2 у
         // всех монстров), и дальности навыков в данных не значили ничего:
         // «Петля» с 8 метров и «Буря Горизонта» с 12 срабатывали вплотную.
-        const дистанцияБоя = Math.max(ctx.definition.attackRange, this.maxSkillRange(ctx, now));
+        const дистанцияБоя = Math.max(ctx.definition.attackRange, this.maxSkillRange(ctx, now, погода));
         return dist <= дистанцияБоя ? 'attack' : 'chase';
       }
     }
@@ -300,7 +301,7 @@ export class AISystem {
         const дистанция = игрок
           ? this.distance(ctx.position, игрок.position)
           : ctx.definition.attackRange;
-        const skill = this.selectSkill(ctx, now, дистанция);
+        const skill = this.selectSkill(ctx, now, дистанция, погода);
         if (skill) {
           ctx.lastAttackTime[skill.id] = now;
           return { type: 'skill', targetId: ctx.targetId ?? undefined, skillId: skill.id };
@@ -365,7 +366,7 @@ export class AISystem {
   // ============================================================
   // Выбор навыка
   // ============================================================
-  private selectSkill(ctx: AIContext, now: number, расстояние: number) {
+  private selectSkill(ctx: AIContext, now: number, расстояние: number, погода?: Weather) {
     // Монстр без навыков — законное состояние: запасной удар для такого
     // монстра собирается отдельно, и раньше выбор навыков просто не
     // выполнялся. Читаем список один раз и подстраховываемся пустым.
@@ -380,7 +381,15 @@ export class AISystem {
       // десять способностей с range: 0 — призыв, ярость, восстановление,
       // «Землетрясение» — стали бы недостижимы навсегда: ноль в данных у них
       // означает «у самой земли под ногами», а не «слишком далеко».
-      return расстояние <= Math.max(skill.range, ctx.definition.attackRange);
+      // Погода в навыках (§387): дальний навык в непогоду не достаёт - та
+      // же combatReachMod, что у стрелков. «В ближнем бою достаёт всё»
+      // тоже режется погодой: иначе дальний монстр с подрезанной базовой
+      // атакой стрелял бы навыком сквозь бурю, которую его база не видит.
+      // Клинковым (range до 5) погода дальности не снимает вовсе.
+      return расстояние <= Math.max(
+        skill.range * combatReachMod(погода, skill.range),
+        ctx.definition.attackRange * combatReachMod(погода, ctx.definition.attackRange),
+      );
     });
     if (available.length === 0) return null;
     if (available.length === 1) return available[0];
@@ -419,14 +428,17 @@ export class AISystem {
    * Если готовых навыков нет, возвращается ноль — и монстр идёт вплотную,
    потому что иначе с навыком на перезарядке он бил бы издалека.
    */
-  private maxSkillRange(ctx: AIContext, now: number): number {
+  private maxSkillRange(ctx: AIContext, now: number, погода?: Weather): number {
     let дальность = 0;
     // Пустой список — не ошибка: у монстра просто нет способностей, и он
     // дерётся вплотную базовой атакой.
     for (const skill of ctx.definition.skills ?? []) {
       const lastUsed = ctx.lastAttackTime[skill.id] ?? 0;
-      if (now - lastUsed >= skill.cooldown * 1000 && skill.range > дальность) {
-        дальность = skill.range;
+      // Погода в навыках (§387): в непогоду монстр сближается на глубину
+      // погодной дальности, а не мечтает о выстреле сквозь бурю.
+      const эффективная = skill.range * combatReachMod(погода, skill.range);
+      if (now - lastUsed >= skill.cooldown * 1000 && эффективная > дальность) {
+        дальность = эффективная;
       }
     }
     return дальность;
