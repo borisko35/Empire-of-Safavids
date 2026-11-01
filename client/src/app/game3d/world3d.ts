@@ -875,7 +875,7 @@ private roll = 0;
     // соединений занимают сначала люди, а декор доезжает следом. Игрок
     // видит живой город сразу, а дробности декора подождут.
     await пауза(0.25);
-    preloadModels(['guard', 'merchant', 'citizen', 'citizen2', 'citizen3', 'crier', 'scholar', 'archer', 'warrior']);
+    preloadModels(['guard', 'merchant', 'citizen', 'crier', 'scholar', 'archer', 'warrior']);
 
     // Мир
     await пауза(0.3);
