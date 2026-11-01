@@ -1148,6 +1148,17 @@ private roll = 0;
     // И только теперь прошиваем G-buffer: до этого места сцены ещё нет.
     this.patchWorldMaterials(true);
 
+    // Прогрев графики (§391): компиляция шейдеров всей сцены и первая
+    // выкладка текстур в GPU - самый тяжёлый первый кадр. compileAsync
+    // строит программы параллельно (KHR_parallel_shader_compile) и не
+    // блокирует главный поток, поэтому бар жив. Без прогрева игрок стоял
+    // на «Готово» с «страница не отвечает»: вся компиляция ждала его
+    // ПОСЛЕ скрытия загрузки.
+    await пауза(0.9);
+    await this.renderer.compileAsync(this.scene, this.camera);
+    onProgress?.(0.97);
+    this.composer.render();
+
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);
     this.debugColliders = new THREE.Group();

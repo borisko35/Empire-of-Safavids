@@ -128,8 +128,11 @@ describe('Отложенный G-buffer включён и прошит', () => {
     // Персонаж, монстры, лошади и караваны грузятся моделями уже после
     // постройки мира. Без повторной прошивки они навсегда остаются без
     // каналов — без AO и без участия в отражениях.
-    const iПовтор = world3d.indexOf('this.patchWorldMaterials(false)');
-    const iРендер = world3d.indexOf('this.composer.render()');
+    // §391: у композера появился прогревочный кадр в постройке мира, поэтому
+    // оба индекса снимаются внутри update() - там идёт настоящий цикл.
+    const цикл = world3d.slice(world3d.indexOf('update(dt: number, now: number, night: number)'));
+    const iПовтор = цикл.indexOf('this.patchWorldMaterials(false)');
+    const iРендер = цикл.indexOf('this.composer.render()');
     must(iПовтор > 0, 'новые материалы не прошиваются повторно');
     must(
       iПовтор < iРендер,
