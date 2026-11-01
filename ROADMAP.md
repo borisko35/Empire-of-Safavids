@@ -25596,5 +25596,5 @@ clientRegressions: порядок строго возрастает (пауза 
 ### Проверено
 
 464 набора / 4832 теста - зелёные; tsc клиента и сервера чист; vite
-build ОК. Выкачано на прод: коммит `f41e3b9`, бандл index-CIPz6cpe.js,
-sha256 90a3e7a360616e5a, RESULT: PASS, /health 0.5.0.
+build ОК. Выкачано на prod: коммит `2394a9d`, бандл index-a8Z_WZmK.js,
+sha256 a192d689d48b1764, RESULT: PASS, /health 0.5.0.
