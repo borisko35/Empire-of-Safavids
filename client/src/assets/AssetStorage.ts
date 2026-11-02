@@ -114,6 +114,35 @@ export const ASSET_BUNDLES: Record<string, AssetBundle> = {
     cdnUrl: 'https://cdn.empire-of-safavids.com/bundles/vfx/',
     requiredDiskSpace: 500 * 1024 * 1024,
   },
+
+  'bundle_safavid_assets': {
+    id: 'bundle_safavid_assets',
+    name: 'Safavid Historical Assets',
+    nameRu: 'Исторические активы Сефевидов',
+    nameAz: 'Seferavid tarixi aktivləri',
+    version: '1.0.0',
+    priority: 'normal',
+    sizeBytes: 150 * 1024 * 1024,
+    checksum: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    dependsOn: ['bundle_core'],
+    contains: {
+      textures: [],
+      sprites: [],
+      models: [
+        'safavid_qaba_royal',
+        'safavid_turban_safavid',
+        'safavid_chogha_outer',
+        'safavid_zireh_mail',
+        'safavid_kolah_khud_helmet',
+        'safavid_shamshir_persian',
+        'safavid_qame_persian',
+        'safavid_mace_safavid',
+        'safavid_bow_persian',
+      ],
+    },
+    cdnUrl: 'https://cdn.empire-of-safavids.com/bundles/safavid-assets/',
+    requiredDiskSpace: 200 * 1024 * 1024,
+  },
 };
 
 // ============================================================
