@@ -29,6 +29,15 @@ const createCharacterSchema = Joi.object({
   // Код приглашения из ссылки ?ref=. Разрешаем пустой: приглашение
   // необязательно, и его отсутствие — не ошибка
   referralCode: Joi.string().trim().uppercase().allow('', null).max(16).default(''),
+  // Экипировка Сефевидов: одежда, доспехи, оружие по слотам
+  equipment: Joi.object({
+    robe: Joi.string().allow('', null),
+    turban: Joi.string().allow('', null),
+    coat: Joi.string().allow('', null),
+    mail: Joi.string().allow('', null),
+    helmet: Joi.string().allow('', null),
+    weapon: Joi.string().allow('', null),
+  }).default({}),
 });
 
 // GET /api/characters/:id/stance — какая стойка сохранена у персонажа.
@@ -86,6 +95,7 @@ characterRouter.post('/', secureMiddleware, asyncHandler(async (req: Request, re
   try {
     const character = await characterService.createCharacter(
       req.userId!, value.name, value.class, value.serverId, value.referralCode,
+      value.equipment,
     );
     return res.status(201).json({ character });
   } catch (err) {

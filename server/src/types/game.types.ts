@@ -63,6 +63,19 @@ export interface CharacterStats {
   charisma: number;      // Харизма — торговля, дипломатия
 }
 
+/** Слоты экипировки персонажа */
+export type EquipmentSlot = 'robe' | 'turban' | 'coat' | 'mail' | 'helmet' | 'weapon';
+
+/** Надетые предметы по слотам */
+export interface CharacterEquipment {
+  robe?: string;     // ID костюма/халата (из SAFADIV_AVATAR_ASSETS)
+  turban?: string;   // ID тюрбана
+  coat?: string;     // ID верхнего плаща
+  mail?: string;     // ID кольчуги
+  helmet?: string;   // ID шлема
+  weapon?: string;   // ID оружия (шамшир, кинжал, булава, лук)
+}
+
 export interface Character {
   id: string;
   userId: string;
@@ -91,6 +104,8 @@ export interface Character {
   isfahanSilver?: number;
   /** Сирийское золото — бесплатно в квестах, торговле, ивентах */
   syrianGold?: number;
+  /** Надетые предметы Сефевидов (одежда, доспехи, оружие) */
+  equipment?: CharacterEquipment;
   createdAt: Date;
   updatedAt: Date;
 }
