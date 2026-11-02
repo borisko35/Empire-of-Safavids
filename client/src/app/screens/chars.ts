@@ -11,6 +11,7 @@ import { toast } from '../hud';
 import { createCharacterWithReferral } from '../referral';
 import { attachClassPreview, stopClassPreviews } from './classPreview';
 import { spriteSource } from '../sprites';
+import { safavidEquipment } from './safavidEquipment';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 
@@ -66,6 +67,9 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
   await buildServerPicker();
   await refreshList(onEnter);
 
+  // Панель экипировки Сефевидов: одежда, доспехи, оружие
+  safavidEquipment.render('safavid-equipment-container');
+
   ($('form-create') as HTMLFormElement).onsubmit = async (e) => {
     e.preventDefault();
     const name = ($('new-name') as HTMLInputElement).value.trim();
@@ -74,7 +78,8 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
     err?.classList.add('hidden');
     try {
       // Создаём через обёртку: она приложит код приглашения и потратит его
-      const { character } = await createCharacterWithReferral(name, selectedClass, serverId);
+      const equipment = safavidEquipment.getSelection();
+      const { character } = await createCharacterWithReferral(name, selectedClass, serverId, equipment);
       ($('new-name') as HTMLInputElement).value = '';
       // В игру — без пяти живых превью за спиной.
       stopClassPreviews();

@@ -80,9 +80,10 @@ export async function createCharacterWithReferral(
   name: string,
   characterClass: string,
   serverId: string,
+  equipment?: Record<string, string | null>,
 ): Promise<{ character: Awaited<ReturnType<typeof api.createCharacter>>['character']; invited: boolean }> {
   const code = savedReferralCode();
-  const res = await api.createCharacter(name, characterClass, serverId, code ?? undefined);
+  const res = await api.createCharacter(name, characterClass, serverId, code ?? undefined, equipment);
   // Приглашение засчитано сервером, код отработал — убираем, чтобы второй
   // персонаж того же аккаунта не принёс награду повторно
   if (code) {

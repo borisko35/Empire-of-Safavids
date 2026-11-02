@@ -2686,3 +2686,56 @@ body.cursor-free .panel-toggles button { box-shadow: 0 0 0 2px rgba(245,200,92,0
   transform: translateY(-1px) scale(1.05);
   box-shadow: 0 4px 12px rgba(245,200,92,0.4);
 }
+
+/* ═══ Экипировка Сефевидов ═══ */
+
+#safavid-equipment-panel h3 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 18px;
+  margin: 0 0 16px 0;
+  color: #00d4aa;
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+#safavid-equipment-panel h4 {
+  margin: 14px 0 8px 0;
+  color: #888;
+  grid-column: 1 / -1;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+#safavid-equipment-panel label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #2a221a;
+  border: 1px solid #3a2e22;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 13px;
+}
+
+#safavid-equipment-panel label:hover {
+  border-color: #4a3e30;
+  background: #33281c;
+}
+
+#safavid-equipment-panel label input[type="radio"] {
+  accent-color: #00d4aa;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+#safavid-equipment-panel label input[type="radio"]:checked + span,
+#safavid-equipment-panel label:has(input[type="radio"]:checked) {
+  border-color: #00d4aa;
+  background: #3a2e22;
+  box-shadow: 0 0 10px rgba(0, 212, 170, 0.2);
+}

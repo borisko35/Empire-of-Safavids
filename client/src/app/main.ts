@@ -18,6 +18,7 @@ import { captureReferralFromUrl } from './referral';
 // TODO: preload critical bundles (bundle_core) here when CDN is live; currently procedural
 // textures and file-based PNG sprites are used as fallback.
 import { textureManager, spriteManager, assetStorage } from '../assets/index';
+import { loadSafavidAssets } from './game3d/safavidLoader';
 void textureManager; void spriteManager; void assetStorage;
 
 /**
@@ -62,6 +63,15 @@ async function boot(): Promise<void> {
     await loadLocale(detectLocale());
   } catch {
     console.warn('[i18n] failed to load locale, falling back to markup');
+  }
+
+  // Загружаем исторические ассеты Сефевидов (одежда, доспехи, оружие из Blender)
+  // Чтобы они были готовы к созданию персонажа и входу в мир.
+  try {
+    await loadSafavidAssets();
+    console.log('[Safavid] Historical assets loaded');
+  } catch (err) {
+    console.warn('[Savfid] Failed to load historical assets:', err);
   }
 
   // Индикатор состояния соединения

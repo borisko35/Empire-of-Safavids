@@ -396,12 +396,13 @@ export const api = {
 
   characters: () => req<{ characters: Character[] }>('/api/characters'),
 
-  createCharacter: (name: string, characterClass: string, serverId: string, referralCode?: string) =>
+  createCharacter: (name: string, characterClass: string, serverId: string, referralCode?: string, equipment?: Record<string, string | null>) =>
     req<{ character: Character }>('/api/characters', {
       method: 'POST',
       body: JSON.stringify({
         name, class: characterClass, serverId,
         ...(referralCode ? { referralCode } : {}),
+        ...(equipment ? { equipment } : {}),
       }),
     }),
 
