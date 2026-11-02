@@ -626,6 +626,21 @@ export async function enterWorld(character: Character): Promise<void> {
   void loadQuests();
   void startVoteReminder(character.id);
 
+  // Сначала загружаем экипировку с сервера (если есть токен), чтобы не
+  // задерживать вход в мир после тяжелой сборки 3D.
+  // ЧТО БЫЛО. Экипировка загружалась после world3d.init(), что означало,
+  // что общее время загрузки было world3d_init_time + api_equipment_time.
+  // Теперь мы тянем экипировку заранее: общее время станет
+  // max(world3d_init_time, api_equipment_time).
+  let eqStateFromApi = null;
+  if (session.token) {
+    try {
+      eqStateFromApi = await api.equipment(character.id);
+    } catch (e) {
+      console.warn("[enterWorld] Failed to load equipment early", e);
+    }
+  }
+
   world = new World();
   world3d = new World3D();
   // Сборка мира тяжёлая (~сотни тысяч вершин). Она идёт этапами с
@@ -702,22 +717,22 @@ export async function enterWorld(character: Character): Promise<void> {
   world.players.set(me.id, me);
   world3d.attach(world, me);
 // Восстанавливаем экипировку после инициализации мира
-if (session.token) {
+// (данные уже были получены ранее, применяем готовое состояние)
+if (session.token && eqStateFromApi) {
   try {
-    const eqState = await api.equipment(character.id);
     const gear: World3D.LocalGear = {
-      weapon: eqState.bonus?.waterSpeed !== undefined,
-      armorColor: eqState.stats?.["rarity"] ? 0xff0000 : null,
+      weapon: eqStateFromApi.bonus?.waterSpeed !== undefined,
+      armorColor: eqStateFromApi.stats?.["rarity"] ? 0xff0000 : null,
       swingSeconds: undefined,
-      mail: !!eqState.items?.find(i => i.slot === "mail"),
-      helmet: !!eqState.items?.find(i => i.slot === "helmet"),
-      robe: !!eqState.items?.find(i => i.slot === "robe"),
-      turban: !!eqState.items?.find(i => i.slot === "turban"),
-      coat: !!eqState.items?.find(i => i.slot === "coat"),
+      mail: !!eqStateFromApi.items?.find(i => i.slot === "mail"),
+      helmet: !!eqStateFromApi.items?.find(i => i.slot === "helmet"),
+      robe: !!eqStateFromApi.items?.find(i => i.slot === "robe"),
+      turban: !!eqStateFromApi.items?.find(i => i.slot === "turban"),
+      coat: !!eqStateFromApi.items?.find(i => i.slot === "coat"),
     };
     World3D.setLocalGear(gear);
   } catch (e) {
-    console.warn("[enterWorld] Failed to load equipment", e);
+    console.warn("[enterWorld] Failed to apply equipment after init", e);
   }
 }
 
