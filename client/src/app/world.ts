@@ -701,6 +701,26 @@ export async function enterWorld(character: Character): Promise<void> {
   };
   world.players.set(me.id, me);
   world3d.attach(world, me);
+// Восстанавливаем экипировку после инициализации мира
+if (session.token) {
+  try {
+    const eqState = await api.equipment(character.id);
+    const gear: World3D.LocalGear = {
+      weapon: eqState.bonus?.waterSpeed !== undefined,
+      armorColor: eqState.stats?.["rarity"] ? 0xff0000 : null,
+      swingSeconds: undefined,
+      mail: !!eqState.items?.find(i => i.slot === "mail"),
+      helmet: !!eqState.items?.find(i => i.slot === "helmet"),
+      robe: !!eqState.items?.find(i => i.slot === "robe"),
+      turban: !!eqState.items?.find(i => i.slot === "turban"),
+      coat: !!eqState.items?.find(i => i.slot === "coat"),
+    };
+    World3D.setLocalGear(gear);
+  } catch (e) {
+    console.warn("[enterWorld] Failed to load equipment", e);
+  }
+}
+
   // Восстановить состояние «внутри здания» по позиции спавна.
   //
   // ЧТО БЫЛО. Метод enterBuildingLocalAt был написан с этой самой целью и
