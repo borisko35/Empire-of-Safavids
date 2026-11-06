@@ -278,11 +278,20 @@ input, select { font: inherit; }
   padding: 26px;
   backdrop-filter: blur(8px);
   margin: 20px 0;
+  position: relative;
+  min-height: 600px;
 }
 
 .chars-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 16px; }
 .chars-head h1 { font-family: Georgia, serif; font-weight: 400; font-size: 24px; }
 .user-badge { color: var(--gold-light); font-size: 14px; }
+
+/* Кнопка входа с существующего персонажа — всегда видна в шапке экрана */
+#btn-enter {
+  display: inline-block;
+  min-width: 140px;
+  text-align: center;
+}
 
 .char-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
 
