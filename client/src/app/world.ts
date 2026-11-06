@@ -273,14 +273,16 @@ function nextPaint(): Promise<void> {
  * экран, пока не пройдёт это время. Если загрузка реально дольше
  * (слабый ПК, медленная сеть) — ждём её, а не обрываем.
  */
-const MIN_LOADING_MS = 10_500;
+const MIN_LOADING_MS = 25_000;
 /** Подсказки, которые сменяются на экране загрузки */
 const LOADING_TIPS = [
   'loading.tip_1', 'loading.tip_2', 'loading.tip_3',
   'loading.tip_4', 'loading.tip_5', 'loading.tip_6',
+  'loading.tip_7', 'loading.tip_8', 'loading.tip_9',
+  'loading.tip_10', 'loading.tip_11', 'loading.tip_12',
 ];
 /** Как часто меняется подсказка, мс */
-const TIP_EVERY_MS = 1900;
+const TIP_EVERY_MS = 2200;
 
 let loadingStart = 0;
 let loadingShown = 0;
@@ -296,6 +298,8 @@ function setLoading(fraction: number, text: string): void {
   if (fill) fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
   const label = $('loading-text');
   if (label) label.textContent = text;
+  const progress = $('loading-progress');
+  if (progress) progress.textContent = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
 }
 
 /**
