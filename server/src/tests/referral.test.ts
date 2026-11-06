@@ -160,7 +160,11 @@ describe('Приглашения: клиент', () => {
   });
 
   it('создание персонажа идёт через обёртку с приглашением', () => {
-    expect(clientChars).toMatch(/createCharacterWithReferral\(name, selectedClass, serverId\)/);
+    // Четвёртым аргументом обёртка теперь принимает выбор экипировки
+    // Сефевидов (safavidEquipment.getSelection): персонаж создаётся сразу
+    // в исторической одежде. Шаблон не требует аргумента наизусть —
+    // важно, что создание идёт через обёртку, а не через api напрямую.
+    expect(clientChars).toMatch(/createCharacterWithReferral\(name, selectedClass, serverId/);
     expect(clientChars).not.toMatch(/api\.createCharacter\(/);
   });
 

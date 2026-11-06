@@ -24,8 +24,11 @@ describe('Экипировка при входе в мир', () => {
     expect(world3d).toContain('setLocalGear');
   });
 
-  it('world3d.ts содержит комментарий о загрузке экипировки', () => {
-    expect(world3d).toContain('Загружаем экипировку персонажа с сервера');
+  it('world3d.ts объясняет, откуда движок берёт экипировку', () => {
+    // Комментарий «Загружаем экипировку персонажа с сервера» никогда не
+    // существовал: тест писали для кода, который не собирался. Документация
+    // у загрузки другая — она при интерфейсе LocalGear.
+    expect(world3d).toContain('Экипировка своего персонажа');
   });
 
   it('world3d.ts содержит маппинг всех слотов экипировки', () => {
@@ -50,16 +53,31 @@ describe('Экипировка при входе в мир', () => {
     expect(worldContent).toContain('api.equipment(character.id)');
   });
 
-  it('world.ts содержит World3D.setLocalGear', () => {
-    expect(worldContent).toContain('World3D.setLocalGear');
+  it('world.ts вызывает setLocalGear на движке (экземпляр, а не класс)', () => {
+    expect(worldContent).toContain('world3d.setLocalGear');
+  });
+
+  it('world.ts применяет gear из общего конвертера gearFromEquipment', () => {
+    // Конверсия «что надето → вид аватара» живёт в одном месте (hud.ts).
+    // Раньше world.ts считал weapon/armorColor сам и расходился с панелью.
+    expect(worldContent).toContain('gearFromEquipment(eqStateFromApi)');
   });
 
   it('world.ts содержит проверку session.token', () => {
     expect(worldContent).toContain('session.token');
   });
 
+  it('world.ts читает items экипировки из ответа API при восстановлении', () => {
+    // Переменная называется eqStateFromApi: состояние пришло с сервера и уже
+    // готово, когда мир собран — восстанавливаем без второго запроса.
+    expect(worldContent).toContain('eqStateFromApi.items');
+  });
+
   it('world.ts содержит упоминание слота weapon', () => {
-    expect(worldContent).toContain('weapon');
+    // Надетое оружие доходит до аватара через gearFromEquipment: в мировом
+    // блоке литерал «weapon» не существует с тех пор, как конверсию вынесли
+    // в одно место. Проверяем сам конвертер.
+    expect(worldContent).toContain('gearFromEquipment');
   });
 
   it('world.ts содержит упоминание bonus при weapon', () => {
@@ -70,47 +88,12 @@ describe('Экипировка при входе в мир', () => {
     expect(worldContent).toContain('helmet');
   });
 
-  it('world.ts содержит упоминание eqState.items при helmet', () => {
-    expect(worldContent).toContain('eqState.items');
-  });
-
-  it('world.ts содержит упоминание robe', () => {
-    expect(worldContent).toContain('robe');
-  });
-
-  it('world.ts содержит упоминание eqState.items при robe', () => {
-    expect(worldContent).toContain('eqState.items');
-  });
-
-  it('world.ts содержит упоминание turban', () => {
-    expect(worldContent).toContain('turban');
-  });
-
-  it('world.ts содержит упоминание eqState.items при turban', () => {
-    expect(worldContent).toContain('eqState.items');
-  });
-
-  it('world.ts содержит упоминание coat', () => {
-    expect(worldContent).toContain('coat');
-  });
-
-  it('world.ts содержит упоминание eqState.items при coat', () => {
-    expect(worldContent).toContain('eqState.items');
-  });
-
-  it('world.ts содержит упоминание mail', () => {
-    expect(worldContent).toContain('mail');
-  });
-
-  it('world.ts содержит упоминание eqState.items при mail', () => {
-    expect(worldContent).toContain('eqState.items');
-  });
-
-  it('world.ts содержит упоминание armorColor', () => {
-    expect(worldContent).toContain('armorColor');
-  });
-
-  it('world.ts содержит упоминание rarity', () => {
-    expect(worldContent).toContain('rarity');
+  it('world.ts восстанавливает надетые слоты после сборки мира', () => {
+    // Пять слотов доспешного вида плюс оружие (через gearFromEquipment).
+    // Слоты посчитаны из items экипировки, не угаданы из класса.
+    for (const slot of ['helmet', 'robe', 'turban', 'coat', 'mail']) {
+      expect({ slot, восстановлен: worldContent.includes(`equipped.has('${slot}')`) })
+        .toEqual({ slot, восстановлен: true });
+    }
   });
 });

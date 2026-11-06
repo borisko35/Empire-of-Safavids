@@ -85,16 +85,20 @@ describe('Экипировка: броня видна на аватаре', () =
   });
 
   it('цвет брони берётся из редкости доспеха', () => {
-    expect(hud).toMatch(/armorColor: armor \? parseInt\(/);
-    expect(hud).toMatch(/RARITY_COLOR\[armor\.rarity\]/);
+    // Конверсия вынесена в gearFromEquipment (hud.ts): и панель, и вход в мир
+    // считают цвет одинаково — раньше места считали по-разному.
+    expect(hud).toMatch(/armorColor: withRarity\s*\? parseInt\(/);
+    expect(hud).toMatch(/RARITY_COLOR\[withRarity\.rarity\]/);
   });
 });
 
 describe('Экипировка: состояние доходит до 3D-слоя', () => {
   it('renderEquipment кладёт экипировку в сессию', () => {
     // renderEquipment вызывается при надевании, снятии и открытии инвентаря —
-    // это единственное место, где состояние точно правильное
-    expect(hud).toMatch(/session\.gear = \{/);
+    // это единственное место, где состояние точно правильное. Конверсия
+    // в сессию идёт через общий gearFromEquipment: у входа в мир и панели
+    // нет шансов разойтись.
+    expect(hud).toMatch(/session\.gear = gearFromEquipment\(/);
     expect(hud).toMatch(/weapon: equipped\.has\('weapon'\)/);
   });
 
@@ -103,9 +107,12 @@ describe('Экипировка: состояние доходит до 3D-сло
   });
 
   it('экипировка загружается при входе в игру', () => {
-    // Иначе до первого открытия инвентаря аватар носил классовое оружие
+    // Иначе до первого открытия инвентаря аватар носил классовое оружие.
+    // Надетое тянется при входе дважды: рано (eqStateFromApi — до сборки
+    // мира) и в инвентарь (loadInventory) — сразу после восстановления.
     const enter = world.slice(world.indexOf('export async function enterWorld'));
-    expect(enter.slice(0, 4000)).toMatch(/loadInventory\(\)/);
+    expect(enter).toMatch(/api\.equipment\(character\.id\)/);
+    expect(enter).toMatch(/void loadInventory\(\)/);
   });
 });
 
