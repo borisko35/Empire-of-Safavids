@@ -26,6 +26,7 @@ const CLASS_SPRITE: Record<string, string> = {
 
 let selectedClass = 'qizilbash';
 let spritesReady = false;
+let existingCharacters: Character[] = [];
 
 /**
  * Спрайты классов нужны иконкам выбора.
@@ -63,6 +64,17 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
   stopClassPreviews();
   $('chars-username').textContent = session.username;
   showScreen('screen-chars');
+  // Вход с существующего персонажа — кнопка над селектором серверов.
+  const btnEnter = $('btn-enter') as HTMLButtonElement | null;
+  if (btnEnter) {
+    btnEnter.style.display = existingCharacters.length > 0 ? '' : 'none';
+    btnEnter.addEventListener('click', () => {
+      if (existingCharacters.length > 0) {
+        stopClassPreviews();
+        onEnter(existingCharacters[0]);
+      }
+    });
+  }
   // Форма создания должна быть видна сразу, без прокрутки: панель экипировки
   // уехала вниз, а имя и кнопка «Создать» — наверх.
   requestAnimationFrame(() => {
@@ -166,6 +178,12 @@ async function refreshList(onEnter: (c: Character) => void): Promise<void> {
   const seq = ++refreshListSeq;
   try {
     const { characters } = await api.characters();
+    existingCharacters = characters;
+    // Кнопка входа с существующего персонажа — выше селектора серверов.
+    const btnEnter = $('btn-enter') as HTMLButtonElement | null;
+    if (btnEnter) {
+      btnEnter.style.display = characters.length > 0 ? '' : 'none';
+    }
     // Второй параллельный вызов (двойной клик по «Войти») — старый молча выходит,
     // иначе два ответа interleaving дают задвоенные строки (1 персонаж = 2).
     if (seq !== refreshListSeq) return;
