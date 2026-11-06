@@ -1,9 +1,8 @@
 import { Character, CombatAction, CharacterClass } from '../types/game.types';
 import { logger } from '../utils/logger';
 import { DEFAULT_WEAPON, WeaponProfile } from './EquipmentCache';
-import { STANCE_ABILITIES, type StanceAbility, type CombatStance } from '../systems/CombatStance';
 
-/** Урон poise в зависимости от типа действия */
+/** Урон поstance (poise) в зависимости от типа действия */
 const POISE_DAMAGE: Record<string, number> = {
   attack: 10,
   skill: 18,
@@ -17,7 +16,7 @@ interface DamageResult {
   isCritical: boolean;
   isBlocked: boolean;
   isDodged: boolean;
-  /** Урон poise, который цель получает от этого удара */
+  /** Урон поstance (poise), который цель получает от этого удара */
   poiseDamage: number;
 }
 
@@ -68,63 +67,158 @@ const CLASS_SKILLS: Record<CharacterClass, SkillDefinition[]> = {
   ],
 };
 
-// ── Новые способности, привязанные к стойкам ──────────────────────────────
-/**
- * Применяет эффекты способности, привязанной к стойке.
- * Возвращает дополнительный урон, специальные эффекты (block, i-frames) и
- * статусные эффекты (стамина, скорость).
- */
-function applyStanceAbilityEffects(
-  action: CombatAction,
-  attacker: Character,
-  target: Character,
-  stance: CombatStance,
-  weapon: WeaponProfile | null
-): { extraDamageMultiplier: number; specialEffect: 'parry' | 'dodge' | 'block_boost' | null; statusEffect: 'stamina_boost' | 'speed_boost' | null } {
-  const abilities = STANCE_ABILITIES[stance] ?? [];
-  const ability = abilities.find(a => a.id === action.stanceAbilityId);
+export class CombatService {
+  /**
+   * comboMultiplier — множитель цепочки лёгких атак (каждый третий удар
+   * серии бьёт тяжелее). Передаётся сокет-обработчиком, у монстров и PvP
+   * он одинаково легитимен: состояние серии считает сервер.
+   *
+   * weapon — оружие «в руках». Раньше его не существовало: урон целиком
+   * считался из характеристик, поэтому шамшир, сабля и лук били одинаково.
+   * Теперь множитель предмета входит в базу удара.
+   */
+  calculateDamage(
+    attacker: Character,
+    target: Character,
+    action: CombatAction,
+    comboMultiplier = 1,
+    weapon: WeaponProfile | null = null,
+    stanceDamage = 1
+  ): DamageResult {
+    const baseDamage = this.getBaseDamage(attacker, action, weapon) * comboMultiplier * stanceDamage;
+    const defense = this.getDefense(target);
 
-  if (!ability) {
-    return { extraDamageMultiplier: 1, specialEffect: null, statusEffect: null };
+    // Урон поstance (poise) — наносится всегда, даже при блоке/уклонении
+    const poiseDamage = POISE_DAMAGE[action.actionType] ?? POISE_DAMAGE.attack;
+
+    // Шанс уклонения
+    const dodgeChance = target.stats.agility * 0.3;
+    if (Math.random() * 100 < dodgeChance) {
+      return { damage: 0, isCritical: false, isBlocked: false, isDodged: true, poiseDamage };
+    }
+
+    // Шанс блока
+    const blockChance = target.class === CharacterClass.QIZILBASH ? 25 : 10;
+    if (action.actionType !== 'skill' && Math.random() * 100 < blockChance) {
+      return {
+        damage: Math.floor(baseDamage * 0.2),
+        isCritical: false,
+        isBlocked: true,
+        isDodged: false,
+        poiseDamage,
+      };
+    }
+
+    // Шанс крита
+    const critChance = attacker.stats.agility * 0.5;
+    const isCritical = Math.random() * 100 < critChance;
+    const critMultiplier = isCritical ? 1.5 : 1.0;
+
+    const finalDamage = Math.max(1, Math.floor((baseDamage - defense) * critMultiplier));
+
+    logger.debug(`Combat: ${attacker.name} -> ${target.name}: ${finalDamage} dmg (crit: ${isCritical})`);
+
+    return { damage: finalDamage, isCritical, isBlocked: false, isDodged: false, poiseDamage };
   }
 
-  // Особая обработка в зависимости от типа способности
-  switch (ability.id) {
-    case 'sd_quick_step':
-      // Quick Step — это движение, дающее i-frame на 0.3 сек
-      return { extraDamageMultiplier: 1, specialEffect: 'dodge', statusEffect: null };
+  private getBaseDamage(character: Character, action: CombatAction, weapon: WeaponProfile | null = null): number {
+    const weaponDamage = weapon?.damage ?? DEFAULT_WEAPON.damage;
+    const statDamage = (character.stats.strength * 2 + character.stats.agility) * weaponDamage;
 
-    case 'ss_perfect_block':
-      // Идеальный блок: гарантированный блок на 1 сек
-      return { extraDamageMultiplier: 1, specialEffect: 'block_boost', statusEffect: null };
+    if (action.actionType === 'skill' && action.skillId) {
+      const skills = CLASS_SKILLS[character.class];
+      const skill = skills.find(s => s.id === action.skillId);
+      if (skill) return statDamage * skill.damageMultiplier;
+    }
 
-    case 'sd_lunging_strike':
-      // Удар с ускорением — добавляем проникающий урон
-      return { extraDamageMultiplier: ability.damageMultiplier, specialEffect: null, statusEffect: null };
+    return statDamage;
+  }
 
-    case 'ss_counter_thrust':
-      // Контратака: урон множитель + возможность парирования
-      return { extraDamageMultiplier: ability.damageMultiplier, specialEffect: 'parry', statusEffect: null };
+  private getDefense(character: Character): number {
+    return character.stats.endurance * 1.5;
+  }
 
-    case 'ma_rapid_shoot':
-      // Скорострел — небольшой proцент additional damage
-      return { extraDamageMultiplier: ability.damageMultiplier, specialEffect: null, statusEffect: null };
+  /**
+   * Защита персонажа для внешних механик (абордаж).
+   *
+   * Публичный доступ к ТОЙ ЖЕ формуле, а не её копия. Копия разошлась бы при
+   * первой же правке баланса: бой считал бы по одной, палуба по другой, и
+   * «кто сильнее» означал бы разное в двух местах.
+   */
+  getDefenseFor(character: Character): number {
+    return this.getDefense(character);
+  }
 
-    case 'ma_spread_shot':
-      // Расстрельный выстрел — AOE, обрабатывается клиентом/рендерером
-      return { extraDamageMultiplier: ability.damageMultiplier, specialEffect: null, statusEffect: null };
+  getClassSkills(characterClass: CharacterClass): SkillDefinition[] {
+    return CLASS_SKILLS[characterClass];
+  }
 
-    case 'blk_stamina_boost':
-      // Бонус к стамине на несколько секунд
-      return { extraDamageMultiplier: 1, specialEffect: null, statusEffect: 'stamina_boost' };
+  /** Найти навык по ID (среди навыков класса персонажа) */
+  getSkill(characterClass: CharacterClass, skillId: string): SkillDefinition | undefined {
+    return CLASS_SKILLS[characterClass]?.find(s => s.id === skillId);
+  }
 
-    case 'blk_speed_boost':
-      // Бонус к скорости на несколько секунд
-      return { extraDamageMultiplier: 1, specialEffect: null, statusEffect: 'speed_boost' };
+  /** Лечащие навыки имеют отрицательный damageMultiplier */
+  isHealSkill(characterClass: CharacterClass, skillId: string): boolean {
+    const skill = this.getSkill(characterClass, skillId);
+    return !!skill && skill.damageMultiplier < 0;
+  }
 
-    default:
-      return { extraDamageMultiplier: ability.damageMultiplier, specialEffect: null, statusEffect: null };
+  /** Базовый урон персонажа (до множителей) — используется для лечения и анти-чита */
+  getBaseDamageFor(character: Character): number {
+    return this.getBaseDamage(character, { actionType: 'attack' } as CombatAction);
+  }
+
+  /**
+   * База анти-чита с учётом оружия.
+   *
+   * Анти-чит сравнивает урон с базой и отбрасывает слишком большой. Если бы
+   * база осталась без множителя оружия, то клинок Шаха (1.25) выглядел бы
+   * как законный урон в 1.25 раза больше базы - и на трёхсотом ударе
+   * сработал бы порог. Поэтому база считается тем же способом, что и урон.
+   */
+  getBaseDamageWithWeapon(
+    character: Character,
+    weapon: WeaponProfile | null,
+    action?: CombatAction
+  ): number {
+    return this.getBaseDamage(
+      character,
+      action ?? ({ actionType: 'attack' } as CombatAction),
+      weapon
+    );
+  }
+
+  /**
+   * База анти-чита: ровно то, из чего считался урон.
+   *
+   * Должна быть тем же самым, что и сам урон, — та же формула, тот же
+   * навык, то же оружие, та же цепочка ударов и та же стойка с профессией.
+   * Иначе анти-чит сравнивает урон с другой величиной и объявляет подделкой
+   * законный удар.
+   *
+   * Что было не так, обе разницы измерены на настоящих таблицах:
+   *
+   *  - оружие не учитывалось: база бралась как удар без оружия (1.0), а
+   *    урон считался с клинком Исмаила (1.4) — в 1.4 раза меньше;
+   *  - навык не учитывалось: база бралась как обычная атака, а множитель
+   *    навыка берётся только при actionType === "skill". «Орлиный взор» с
+   *    множителем 8 давал отношение 8, а с критом, зикром, едой и клинком —
+   *    до 21.84 при пороге MAX_DAMAGE_MULTIPLIER = 15, то есть перманентный
+   *    бан за честный удар.
+   *
+   * После правки отношение честного удара — крит да баффы, около 1.95, а
+   * порог 15 продолжает ловить настоящую подделку.
+   */
+  getBaseDamageForAnticheat(
+    character: Character,
+    action: CombatAction,
+    weapon: WeaponProfile | null = null,
+    comboMultiplier = 1,
+    damageScale = 1
+  ): number {
+    return (
+      this.getBaseDamageWithWeapon(character, weapon, action) * comboMultiplier * damageScale
+    );
   }
 }
-
-// Навыки по классам
