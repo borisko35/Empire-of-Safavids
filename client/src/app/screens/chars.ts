@@ -63,6 +63,12 @@ export async function initCharsScreen(onEnter: (c: Character) => void): Promise<
   stopClassPreviews();
   $('chars-username').textContent = session.username;
   showScreen('screen-chars');
+  // Форма создания должна быть видна сразу, без прокрутки: панель экипировки
+  // уехала вниз, а имя и кнопка «Создать» — наверх.
+  requestAnimationFrame(() => {
+    const form = $('form-create') as HTMLElement | null;
+    form?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
   await buildClassPicker();
   await buildServerPicker();
   await refreshList(onEnter);
