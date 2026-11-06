@@ -31,6 +31,13 @@ export class SafavidEquipmentPanel {
     const parent = document.getElementById(parentId);
     if (!parent) return;
 
+    // Экран выбора персонажа показывается без перезагрузки страницы —
+    // выход из игры ведёт ровно сюда, и render зовётся при каждом таком
+    // показе. Контейнер — собственность панели, вычищаем после прошлого
+    // показа: иначе панели накапливаются одна под другой, а радиокнопки
+    // с одинаковыми name в двух панелях делят один выбор на обе.
+    parent.replaceChildren();
+
     this.container = document.createElement('div');
     this.container.id = 'safavid-equipment-panel';
     this.container.style.cssText = `
