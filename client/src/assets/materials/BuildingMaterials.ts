@@ -19,7 +19,12 @@ export type MaterialCategory =
   | 'detail' 
   | 'window' 
   | 'door' 
-  | 'decoration';
+  | 'decoration'
+  /**
+   * Несущие элементы (балки, опоры): не стена и не пол, а каркас.
+   * wood_beams живёт в этой категории.
+   */
+  | 'structural';
 
 export type BuildingMaterialType = 
   | 'stone' 

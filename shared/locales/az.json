@@ -884,7 +884,14 @@
     "tip_3": "Karvanlar uzun yol gedir — amma Təbrizdə tapılmayanı daşıyır",
     "tip_4": "Balıq gün batanda tutur. Balıqçının ən yüksək qəniməti səbrdir",
     "tip_5": "Dənizçi çarıqları adi çarıqlar islananda da quru qalır",
-    "tip_6": "Təbriz gölü təhlükəlidir: dərinliyində yaşayanlar zarafa atmır"
+    "tip_6": "Təbriz gölü təhlükəlidir: dərinliyində yaşayanlar zarafa atmır",
+    "subtitle": "Şahların, karvanların və qızılbaşların dövrü",
+    "tip_7": "Qızılbaş üslubları döyüşü dəyişir: «oraq rəqsi» sürətlidir, amma qorunmasız",
+    "tip_8": "Zəncirin üçüncü zərbəsi ağırdır — zənciri kəsmə",
+    "tip_9": "Sandıqları itələ, yağ qablarını yandır: hər əşyanın əhəmiyyəti var",
+    "tip_10": "Əyılanı gözlər gec tutur — çadırların arxasında gizlən",
+    "tip_11": "Silahı dəyiş, avatar onu əlinə alır",
+    "tip_12": "Gücün həm qaçışda, həm üzgüçülükdə azalır — quruda dinlən"
   },
   "nav": {
     "m": "m"
@@ -1719,16 +1726,16 @@
     "grudge": "Mistlər səndən üz döndərdi. Onlar dinləməyəcək"
   },
   "npc_roles": {
-      "commander": "Komandir",
-      "craftsman": "Sənətkar",
-      "guard": "Mühafizə",
-      "guide": "Bələdçi",
-      "healer": "Şəfa verən",
-      "merchant": "Tacir",
-      "mystic": "Mistik",
-      "quest_giver": "Tapşırık verən",
-      "scout": "Kəşfiyyatçı",
-      "villager": "Sakin"
+    "commander": "Komandir",
+    "craftsman": "Sənətkar",
+    "guard": "Mühafizə",
+    "guide": "Bələdçi",
+    "healer": "Şəfa verən",
+    "merchant": "Tacir",
+    "mystic": "Mistik",
+    "quest_giver": "Tapşırık verən",
+    "scout": "Kəşfiyyatçı",
+    "villager": "Sakin"
   },
   "chronicles": {
     "npcs": "İmperiya sakinləri",

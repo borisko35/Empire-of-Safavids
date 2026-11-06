@@ -884,7 +884,14 @@
     "tip_3": "Caravans take long — but they carry what you cannot find in Tabriz",
     "tip_4": "Fish bite at sunset. Patience is the fisherman's finest trophy",
     "tip_5": "Seafarer's boots stay dry where ordinary ones already soaked through",
-    "tip_6": "Lake Tabriz is dangerous: what swims in its depths does not jest"
+    "tip_6": "Lake Tabriz is dangerous: what swims in its depths does not jest",
+    "subtitle": "The age of shahs, caravans and qizilbash",
+    "tip_7": "The qizilbash stances change combat: the sickle dance is swift but near defenseless",
+    "tip_8": "The third hit of a combo strikes heavier — keep the chain going",
+    "tip_9": "Push crates, ignite oil jugs: every object matters",
+    "tip_10": "A crouching player is noticed later — hide behind awnings",
+    "tip_11": "Change your weapon and the avatar takes it in hand",
+    "tip_12": "Stamina drains both while sprinting and swimming — rest on dry land"
   },
   "nav": {
     "m": "m"
@@ -1719,16 +1726,16 @@
     "grudge": "The mystics turned away from you. They will not listen"
   },
   "npc_roles": {
-      "commander": "Commander",
-      "craftsman": "Craftsman",
-      "guard": "Guard",
-      "guide": "Guide",
-      "healer": "Healer",
-      "merchant": "Merchant",
-      "mystic": "Mystic",
-      "quest_giver": "Quest giver",
-      "scout": "Scout",
-      "villager": "Villager"
+    "commander": "Commander",
+    "craftsman": "Craftsman",
+    "guard": "Guard",
+    "guide": "Guide",
+    "healer": "Healer",
+    "merchant": "Merchant",
+    "mystic": "Mystic",
+    "quest_giver": "Quest giver",
+    "scout": "Scout",
+    "villager": "Villager"
   },
   "chronicles": {
     "npcs": "People of the empire",

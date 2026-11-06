@@ -6,8 +6,9 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { SAFADIV_AVATAR_ASSETS, getSafavidAsset, type SafavidAssetDef } from '../assets/safavid/SafavidAssets';
-import { BuildingMaterials, getBuildingMaterial, type BuildingMaterialDef } from '../assets/materials/BuildingMaterials';
+import { сВходом } from './modelAccess';
+import { SAFADIV_AVATAR_ASSETS, type SafavidAssetDef } from '../../assets/safavid/SafavidAssets';
+import { getBuildingMaterial, type BuildingMaterialDef } from '../../assets/materials/BuildingMaterials';
 
 export type SafavidLoadedAsset = {
   id: string;
@@ -41,12 +42,16 @@ export async function loadSafavidAssets(): Promise<void> {
   isLoading = true;
   loadPromise = (async () => {
     try {
-      const gltf = await loader.loadAsync(MODEL_BASE + 'safavid_assets.glb');
+      // Заголовок входа ставится перед КАЖДОЙ загрузкой, а не один раз при
+      // создании загрузчика: игрок может выйти и войти другим аккаунтом без
+      // перезагрузки страницы, и загрузчик со старым токеном молча перестал
+      // бы отдавать модели (§ вход моделей закрыт auth_request в nginx).
+      const gltf = await сВходом(loader).loadAsync(MODEL_BASE + 'safavid_assets.glb');
 
       // Индексируем загруженные объекты по имени
       const objectsByName = new Map<string, THREE.Object3D>();
       gltf.scene.traverse((child) => {
-        if (child.isMesh || child.isGroup) {
+        if (child instanceof THREE.Mesh || child instanceof THREE.Group) {
           objectsByName.set(child.name, child);
         }
       });
@@ -63,17 +68,19 @@ export async function loadSafavidAssets(): Promise<void> {
           continue;
         }
 
-        // Клонируем 그룹 и меш
+        // Клонируем группу и меш
         const group = source.clone() as THREE.Group;
         group.name = id;
 
-        // Найдём меш в клонированном gruppo
+        // Найдём меш в клонированной группе
         let mesh: THREE.Mesh | null = null;
         group.traverse((child) => {
-          if (child.isMesh && !mesh) mesh = child as THREE.Mesh;
+          if (child instanceof THREE.Mesh && !mesh) mesh = child;
         });
 
-        if (!mesh) {
+        // Замыкание выше не сужает тип: TS считает mesh всегда null.
+        const finalMesh = mesh as THREE.Mesh | null;
+        if (!finalMesh) {
           console.warn(`[SafavidLoader] No mesh found for asset "${id}"`);
           continue;
         }
@@ -84,20 +91,20 @@ export async function loadSafavidAssets(): Promise<void> {
           materialDef = getBuildingMaterial(def.materialRef);
           if (materialDef) {
             const pbr = materialDef.pbrSettings;
-            const meshMaterial = new THREE.MeshStandardMaterial({
+            finalMesh.material = new THREE.MeshStandardMaterial({
               color: pbr.color ?? def.defaultColor ?? 0xffffff,
               roughness: pbr.roughness ?? 0.7,
               metalness: pbr.metalness ?? 0.0,
               transparent: pbr.transparent ?? false,
               opacity: pbr.opacity ?? 1.0,
             });
-            mesh.material = meshMaterial;
           }
         }
 
         // Если нет материала, используем цвет по умолчанию
-        if (!mesh.material || mesh.material === (source as THREE.Mesh).material) {
-          mesh.material = new THREE.MeshStandardMaterial({
+        const current = finalMesh.material as THREE.MeshStandardMaterial | undefined;
+        if (!current || current === (source as THREE.Mesh).material) {
+          finalMesh.material = new THREE.MeshStandardMaterial({
             color: def.defaultColor ?? 0xffffff,
           });
         }
@@ -106,7 +113,7 @@ export async function loadSafavidAssets(): Promise<void> {
           id,
           def,
           group,
-          mesh,
+          mesh: finalMesh,
           material: materialDef,
         });
       }
@@ -137,11 +144,15 @@ export function getSafavidAssetInstance(id: string): THREE.Group | null {
 
   // Клонируем меш и материал для независимости
   instance.traverse((child) => {
-    if (child.isMesh) {
-      const mesh = child as THREE.Mesh;
-      mesh.geometry = mesh.geometry.clone();
-      mesh.material = mesh.material.clone();
-      mesh.material.name = `${id}_material`;
+    if (child instanceof THREE.Mesh) {
+      child.geometry = child.geometry.clone();
+      const mat = child.material;
+      child.material = Array.isArray(mat) ? mat.map((m) => m.clone()) : mat.clone();
+      if (Array.isArray(child.material)) {
+        child.material.forEach((m) => { m.name = `${id}_material`; });
+      } else {
+        child.material.name = `${id}_material`;
+      }
     }
   });
 

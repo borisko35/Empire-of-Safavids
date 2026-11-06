@@ -10,6 +10,8 @@ export interface AssetBundle {
   id: string;
   name: string;
   nameRu: string;
+  /** Азербайджанское имя у исторических бандлов; у остальных опционально */
+  nameAz?: string;
   version: string;             // semver бандла
   priority: BundlePriority;    // critical — грузится при первом запуске
   sizeBytes: number;

@@ -198,7 +198,6 @@ export const SAFADIV_AVATAR_ASSETS: Record<string, SafavidAssetDef> = {
     type: 'weapon',
     category: 'bow',
     modelPath: '/assets/models/safavid/safavid_assets.glb#Bow_Stave',
-    materialRef: null,
     defaultColor: 0x8B4513,
     description: 'Traditional Persian composite bow used by Safavid archers.',
     descriptionRu: 'Традиционный персидский композитный лук, используемый сефевидскими лучниками.',

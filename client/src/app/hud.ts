@@ -559,6 +559,33 @@ function invBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement 
   return b;
 }
 
+/**
+ * Экипировка → вид аватара (weapon/цвет груди/замах).
+ * Общая функция для hud-панели и для восстановления экипировки при входе
+ * в мир: раньше оба места считали это по-разному и расходились.
+ */
+export function gearFromEquipment(equipment: {
+  items: {
+    slot: string;
+    /** Время одного замаха в секундах; есть только у оружия */
+    swingSeconds?: number;
+  }[];
+}): { weapon: boolean; armorColor: number | null; swingSeconds: number | null } {
+  const equipped = new Map(equipment.items.map(i => [i.slot, i] as const));
+  const withRarity = equipment.items.find(i => i.slot === 'armor') as { rarity: string } | undefined;
+  return {
+    weapon: equipped.has('weapon'),
+    // Время замаха приходит из данных предмета вместе с экипировкой.
+    // Без него замах в 3D шёл бы по вбитому 0.45, и смена оружия на
+    // более быстрое ничего бы не меняла.
+    swingSeconds: equipped.get('weapon')?.swingSeconds ?? null,
+    // Цвет груди — по редкости доспеха: замена брони должна быть видна
+    armorColor: withRarity
+      ? parseInt((RARITY_COLOR[withRarity.rarity] ?? RARITY_COLOR.common).slice(1), 16)
+      : null,
+  };
+}
+
 export function renderEquipment(equipment: {
   items: {
     slot: string;
@@ -576,17 +603,7 @@ export function renderEquipment(equipment: {
   // от надетого: оружие и щит выводились из класса, так что смена доспеха
   // была видна только в панели. Именно сюда приходит экипировка и при
   // надевании, и при снятии, и при открытии инвентаря.
-  const equipped = new Map(equipment.items.map(i => [i.slot, i]));
-  const armor = equipped.get('armor');
-  session.gear = {
-    weapon: equipped.has('weapon'),
-    // Время замаха приходит из данных предмета вместе с экипировкой.
-    // Без него замах в 3D шёл бы по вбитому 0.45, и смена оружия на
-    // более быстрое ничего бы не меняла.
-    swingSeconds: equipped.get('weapon')?.swingSeconds ?? null,
-    // Цвет груди — по редкости доспеха: замена брони должна быть видна
-    armorColor: armor ? parseInt((RARITY_COLOR[armor.rarity] ?? RARITY_COLOR.common).slice(1), 16) : null,
-  };
+  session.gear = gearFromEquipment(equipment);
 
   const box = $('equipment-summary');
   if (!box) return;

@@ -5,23 +5,14 @@
 // при создании персонажа: халат, тюрбан, кольчуга, шлем, меч,
 // кинжал, булава, лук. Каждый предмет — 3D-модель из Blender.
 
+import * as THREE from 'three';
 import {
-  SAFADIV_AVATAR_ASSETS,
-  getSafavidAsset,
   getSafavidAssetsByType,
-  type SafavidAssetType,
   type SafavidAssetDef,
-} from '../assets/safavid/SafavidAssets';
-import { getSafavidAssetInstance, isSafavidAssetLoaded } from '../app/game3d/safavidLoader';
+} from '../../assets/safavid/SafavidAssets';
+import { getSafavidAssetInstance } from '../game3d/safavidLoader';
 
 export type EquipmentSlot = 'robe' | 'turban' | 'coat' | 'mail' | 'helmet' | 'weapon';
-
-/** Какие слоты есть у каждого типа */
-const TYPE_SLOTS: Record<SafavidAssetType, EquipmentSlot[]> = {
-  clothing: ['robe', 'turban', 'coat'],
-  armor: ['mail', 'helmet'],
-  weapon: ['weapon'],
-};
 
 /** Текущий выбор экипировки */
 export class SafavidEquipmentPanel {
@@ -65,14 +56,14 @@ export class SafavidEquipmentPanel {
     const armorAssets = getSafavidAssetsByType('armor');
     const weaponAssets = getSafavidAssetsByType('weapon');
 
-    this.renderCategory('clothing', 'Одежда', clothingAssets);
-    this.renderCategory('armor', 'Доспехи', armorAssets);
-    this.renderCategory('weapon', 'Оружие', weaponAssets);
+    this.renderCategory('Одежда', clothingAssets);
+    this.renderCategory('Доспехи', armorAssets);
+    this.renderCategory('Оружие', weaponAssets);
 
     parent.appendChild(this.container);
   }
 
-  private renderCategory(type: SafavidAssetType, label: string, assets: SafavidAssetDef[]): void {
+  private renderCategory(label: string, assets: SafavidAssetDef[]): void {
     if (!this.container) return;
 
     // Заголовок категории
@@ -191,7 +182,7 @@ export class SafavidEquipmentPanel {
     const equipmentGroup = new THREE.Group();
     equipmentGroup.name = 'safavid-equipment';
 
-    for (const [slot, assetId] of Object.entries(this.selected)) {
+    for (const assetId of Object.values(this.selected)) {
       if (!assetId) continue;
       const instance = getSafavidAssetInstance(assetId);
       if (instance) {

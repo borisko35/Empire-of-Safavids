@@ -24,6 +24,7 @@ import {
   getSettings, updateSettings, applyDisplayMode, onSettingsChange,
   type DisplayMode, type GraphicsLevel,
 } from './settings';
+import { gearFromEquipment } from './hud';
 import {
   chatMessage, chatVisible, closeChat, hideTarget, loadInventory, loadQuests, loadRegions, updateMinimap, renderUnreadBadge,
   refreshDailyTasksBadge,
@@ -720,25 +721,19 @@ export async function enterWorld(character: Character): Promise<void> {
   };
   world.players.set(me.id, me);
   world3d.attach(world, me);
-// Восстанавливаем экипировку после инициализации мира
-// (данные уже были получены ранее, применяем готовое состояние)
-if (session.token && eqStateFromApi) {
-  try {
-    const gear: World3D.LocalGear = {
-      weapon: eqStateFromApi.bonus?.waterSpeed !== undefined,
-      armorColor: eqStateFromApi.stats?.["rarity"] ? 0xff0000 : null,
-      swingSeconds: undefined,
-      mail: !!eqStateFromApi.items?.find(i => i.slot === "mail"),
-      helmet: !!eqStateFromApi.items?.find(i => i.slot === "helmet"),
-      robe: !!eqStateFromApi.items?.find(i => i.slot === "robe"),
-      turban: !!eqStateFromApi.items?.find(i => i.slot === "turban"),
-      coat: !!eqStateFromApi.items?.find(i => i.slot === "coat"),
-    };
-    World3D.setLocalGear(gear);
-  } catch (e) {
-    console.warn("[enterWorld] Failed to apply equipment after init", e);
+  // Восстанавливаем экипировку после инициализации мира
+  // (данные уже были получены ранее, применяем готовое состояние)
+  if (session.token && eqStateFromApi) {
+    const equipped = new Set(eqStateFromApi.items.map((i) => i.slot));
+    world3d.setLocalGear({
+      ...gearFromEquipment(eqStateFromApi),
+      mail: equipped.has('mail'),
+      helmet: equipped.has('helmet'),
+      robe: equipped.has('robe'),
+      turban: equipped.has('turban'),
+      coat: equipped.has('coat'),
+    });
   }
-}
 
   // Восстановить состояние «внутри здания» по позиции спавна.
   //
