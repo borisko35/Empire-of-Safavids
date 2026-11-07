@@ -1796,7 +1796,12 @@ export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
     if (isRoad(x, z)) tmp.lerp(cRoad, 0.75);
     // Лёгкая пестрота
     const n = 0.92 + hash2(x * 3.1, z * 2.7) * 0.16;
-    colors[i * 3] = tmp.r * n; colors[i * 3 + 1] = tmp.g * n; colors[i * 3 + 2] = tmp.b * n;
+    // Пятна биомов (пачка «В»): низкочастотный шум (~22 м) собирает ровные
+    // поля в лоскуты — там, где трава переходила в песок одной ровной
+    // заливкой, теперь рваные кромки, как у настоящего степного грунта.
+    const пятно = 0.9 + vnoise(x * 0.045, z * 0.045) * 0.2;
+    const итог = n * пятно;
+    colors[i * 3] = tmp.r * итог; colors[i * 3 + 1] = tmp.g * итог; colors[i * 3 + 2] = tmp.b * итог;
   }
   const цветАтрибут = new THREE.BufferAttribute(colors, 3);
   geo.setAttribute('color', цветАтрибут);
@@ -1832,7 +1837,9 @@ export function buildTerrain(scene: THREE.Scene): THREE.Mesh {
   applySurface(материал, 'sand_01', {
     repeat: повтор,
     colorMap: false,
-    normalScale: 0.55,
+    // 0.8 вместо 0.55: рябь песка читается с двух-трёх метров, а не
+    // растворяется в ровном поле (пачка «В» аудита).
+    normalScale: 0.8,
   });
   материалЗемли = материал;
   // Атрибут вершинных цветов: по нему снег белит землю (§262).
