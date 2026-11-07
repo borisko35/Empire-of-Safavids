@@ -173,13 +173,17 @@ export function createSky(scene: THREE.Scene): SkyHandle {
     cover: number;
   }
   const WEATHER_LOOK: Record<WeatherKind, SkyLook> = {
+    // dark — насколько тучи темнеют (0.97 старой бури красил облака почти
+    // в чёрное: кадр в грозу распадался в чернильный суп, и единственным
+    // светлым пятном оставался белый дождь-штрих). Реальная гроза — свинец,
+    // а не ночь: темнеем ровно настолько, чтобы читалась погода.
     clear:     { overcast: 0.00, dark: 0.00, speed: 1.0, low: 0.00, cover: 0.60 },
-    cloudy:    { overcast: 0.55, dark: 0.30, speed: 1.3, low: 0.15, cover: 0.78 },
-    rain:      { overcast: 0.90, dark: 0.62, speed: 1.9, low: 0.42, cover: 1.00 },
-    storm:     { overcast: 1.00, dark: 0.97, speed: 3.2, low: 0.62, cover: 1.00 },
-    fog:       { overcast: 0.80, dark: 0.40, speed: 0.5, low: 0.50, cover: 0.90 },
+    cloudy:    { overcast: 0.55, dark: 0.22, speed: 1.3, low: 0.15, cover: 0.78 },
+    rain:      { overcast: 0.90, dark: 0.45, speed: 1.9, low: 0.42, cover: 1.00 },
+    storm:     { overcast: 1.00, dark: 0.78, speed: 3.2, low: 0.62, cover: 1.00 },
+    fog:       { overcast: 0.80, dark: 0.30, speed: 0.5, low: 0.50, cover: 0.90 },
     sandstorm: { overcast: 0.88, dark: 0.28, speed: 2.6, low: 0.20, cover: 0.70 },
-    snow:      { overcast: 0.95, dark: 0.45, speed: 1.2, low: 0.50, cover: 1.00 },
+    snow:      { overcast: 0.95, dark: 0.32, speed: 1.2, low: 0.50, cover: 1.00 },
     wind:      { overcast: 0.40, dark: 0.08, speed: 2.9, low: 0.10, cover: 0.50 },
   };
   /** Пасмурная палитра — к ней подмешивается обычная, по времени суток */
@@ -285,11 +289,13 @@ export function createSky(scene: THREE.Scene): SkyHandle {
       c.group.position.y = c.baseY * (1 - look.low * 0.45);
       c.group.scale.setScalar(c.baseScale * (1 + overcastK * 0.6));
     }
-    // Цвет туч: ночью темнее, в дожде сизо-серые, в буре почти чёрные
+    // Цвет туч: ночью темнее, в дожде сизо-серые, в буре свинцовые.
+    // emissive поднят до 0.3: совсем чёрные тучи на фоне тёмного неба
+    // сливались с ним в одно пятно — силуэт города пропадал.
     const dark = Math.max(nightK * 0.8, look.dark);
     cloudMat.color.setRGB(1 - dark * 0.93, 1 - dark * 0.94, 1 - dark * 0.88);
     if (weatherKind === 'sandstorm') cloudMat.color.lerp(SANDY, 0.45);
-    cloudMat.emissiveIntensity = 0.24 * (1 - overcastK * 0.85);
+    cloudMat.emissiveIntensity = 0.30 * (1 - overcastK * 0.75);
   }
 
   function dispose(): void {

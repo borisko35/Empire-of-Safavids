@@ -293,7 +293,10 @@ export function createWeather(scene: THREE.Scene, audio: typeof audioType): Weat
       const raining = kind === 'rain' || kind === 'storm';
       const snowing = kind === 'snow';
       rain.visible = raining;
-      rainMat.opacity = kind === 'storm' ? 0.85 : 0.65;
+      // 0.55/0.38 вместо 0.85/0.65: непрозрачные белые штрихи читались
+      // «расчёской» поверх кадра. Настоящий дождь — полупрозрачные нити,
+      // заметные в движении, а не сетка поверх всего мира.
+      rainMat.opacity = kind === 'storm' ? 0.55 : 0.38;
       snow.visible = snowing;
       snowMat.opacity = 0.9;
       audio.setRainLevel(raining ? (kind === 'storm' ? 1 : 0.6) : 0);
