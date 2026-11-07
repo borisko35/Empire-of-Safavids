@@ -470,6 +470,21 @@ export class World3D {
   private lastInCity = false;
   /** Накопитель времени до следующего поиска новых materials для G-buffer. */
   private patchTimer = 0;
+
+  // ── FPS-сторож (жалоба владельца 7.11.2026: «FPS слишком низкий») ──
+  //
+  // Автопонижение по первому кадру (§394) спасало только от SSR/bloom:
+  // на уровне 'good' сторож молчал, и слабая машина оставалась на 15-20
+  // FPS навсегда. Теперь кривая честная: каждые 10 секунд — окно FPS;
+  // три окна подряд ниже 22 кадров — уровень падает на шаг (good →
+  // medium → low) через updateSettings: подписчик применяет его к
+  // движку и сохраняет. Реальному GPU (60+) порог не грозит; владелец
+  // может поднять уровень обратно в настройках — сторож считается
+  // только на «низкий FPS», а не на единичный провал.
+  private fpsFrames = 0;
+  private fpsWindowStart = 0;
+  private fpsWindows: number[] = [];
+  private fpsLastDrop = 0;
   /** О непрошитых материалах предупреждаем один раз, а не каждые две секунды. */
   /** Общее время воды для всех тел: секунды с запуска мира. */
   private waterTime = 0;
@@ -3419,6 +3434,26 @@ if (isMe && moving) {
     if (this.patchTimer >= ПЕРИОД_ПРОШИВКИ) {
       this.patchTimer = 0;
       this.patchWorldMaterials(false);
+    }
+    // FPS-сторож: окна по 10 секунд, три подряд ниже 22 — шаг вниз.
+    this.fpsFrames++;
+    const nowFps = performance.now();
+    if (this.fpsWindowStart === 0) this.fpsWindowStart = nowFps;
+    if (nowFps - this.fpsWindowStart >= 10000) {
+      const fps = Math.round(this.fpsFrames * 1000 / (nowFps - this.fpsWindowStart));
+      this.fpsWindows.push(fps);
+      if (this.fpsWindows.length > 3) this.fpsWindows.shift();
+      this.fpsFrames = 0;
+      this.fpsWindowStart = nowFps;
+      const slowFor3 = this.fpsWindows.length === 3 && this.fpsWindows.every((f) => f < 22);
+      const cur = getSettings().graphics;
+      const canDrop = cur !== 'low' && !(cur === 'medium');
+      if (slowFor3 && canDrop && nowFps - this.fpsLastDrop > 30000) {
+        const next: GraphicsLevel = cur === 'good' ? 'medium' : 'low';
+        console.debug('[world3d.fpswatch]', `slow ${this.fpsWindows.join('/')} fps — dropping ${cur} -> ${next}`);
+        this.fpsLastDrop = nowFps;
+        updateSettings({ graphics: next });
+      }
     }
     this.composer.render();
   }

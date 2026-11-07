@@ -4663,6 +4663,45 @@ function brickHouse(
   plinth.castShadow = true;
   house.add(plinth);
 
+  // ── Окна и дверь на фасадах (жалоба владельца 7.11.2026: «дома без
+  // настоящих окон и дверей») ──
+  //
+  // У GLB-модели persian-house НЕТ ни двери, ни настоящих окон: только
+  // щели-слоты у самого основания (замер по материалам: Glass лежит на
+  // Y −1.74..0.06 от своего пола). Крепим процедурные окна (windowPane:
+  // рама + стекло + средник) и дверь к ГРУППЕ дома — они живут и после
+  // подмены на GLB. Масштаб GLB совпадает с плейсхолдером, поэтому
+  // фасады на ±d/2 совпадают с моделью.
+  const окноY = h * 0.56;
+  house.add(
+    windowPane(-w / 4, окноY, d / 2 + 0.03, 0, 1.1, 1.5),
+    windowPane(w / 4, окноY, d / 2 + 0.03, 0, 1.1, 1.5),
+    windowPane(-w / 4, окноY, -d / 2 - 0.03, Math.PI, 1.1, 1.5),
+    windowPane(w / 4, окноY, -d / 2 - 0.03, Math.PI, 1.1, 1.5),
+    windowPane(w / 2 + 0.03, окноY, 0, Math.PI / 2, 1.1, 1.5),
+    windowPane(-w / 2 - 0.03, окноY, 0, Math.PI / 2, 1.1, 1.5),
+  );
+  // Дверь: наличник тем же профилем, что у окна, полотно тёмное, ручка
+  // золотая. Ставится на переднем фасаде по центру.
+  const дверь = new THREE.Group();
+  const полотно = new THREE.Mesh(new THREE.BoxGeometry(1.24, 2.26, 0.1), MAT.plinth);
+  полотно.castShadow = true;
+  дверь.add(полотно);
+  const t = 0.1;
+  const двернаяРама = [
+    new THREE.Mesh(new THREE.BoxGeometry(1.24 + t * 2, t, 0.16), MAT.windowFrame),
+    new THREE.Mesh(new THREE.BoxGeometry(t, 2.26, 0.16), MAT.windowFrame),
+    new THREE.Mesh(new THREE.BoxGeometry(t, 2.26, 0.16), MAT.windowFrame),
+  ];
+  двернаяРама[0].position.y = 2.26 / 2 + t / 2;
+  двернаяРама[1].position.set(-1.24 / 2 - t / 2, 0, 0);
+  двернаяРама[2].position.set(1.24 / 2 + t / 2, 0, 0);
+  const ручка = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 6), MAT.gold);
+  ручка.position.set(0.42, 0, 0.09);
+  дверь.add(...двернаяРама, ручка);
+  дверь.position.set(0, 1.13, d / 2 + 0.05);
+  house.add(дверь);
+
   // Асинхронная подмена на GLB-модель
   void подменитьНаGLB(house, placeholder, modelName, w, h, d, x, z);
 
@@ -4959,9 +4998,12 @@ function жилыеУлицы(
       let прошлый: { вдоль: number; w: number } | null = null;
       for (let т = НАЧАЛО + 4; т <= КОНЕЦ - 2; т += ШАГ) {
         const вдоль = т + (hash2(т * 1.7, угол * 3.1 + сторона) - 0.5) * 1.4;
-        const w = 6.2 + hash2(вдоль * 2.3, сторона * 5.1) * 2.6;
+        // Дома КРУПНЕЕ (жалоба «великан» 7.11.2026): при h 3.4-5.0
+        // GLB-дом был чуть выше человека, и игрок 1.9 м читался
+        // великаном. Теперь надземная часть 4.5-6.2 м — двухэтажка.
+        const w = 7.8 + hash2(вдоль * 2.3, сторона * 5.1) * 2.8;
         const d = w * 0.9;
-        const h = 3.4 + hash2(угол * 5.7, вдоль * 1.3) * 1.6;
+        const h = 5.2 + hash2(угол * 5.7, вдоль * 1.3) * 1.8;
         const отступ = ФАСАД + d / 2;
         const cx = ux * вдоль + px * сторона * отступ;
         const cz = uz * вдоль + pz * сторона * отступ;
@@ -5047,9 +5089,9 @@ function жилыеУлицы(
       for (let радиус = 30; радиус < CITY.radius - 26; радиус += 15) {
         const дист = радиус * Math.sin(зазор / 2);
         if (дист < 12) continue;
-        const w = 6.2 + hash2(радиус * 3.1, середина * 2.3) * 2.6;
+        const w = 7.8 + hash2(радиус * 3.1, середина * 2.3) * 2.8;
         const d = w * 0.9;
-        const h = 3.4 + hash2(радиус * 7.7, середина * 1.3) * 1.6;
+        const h = 5.2 + hash2(радиус * 7.7, середина * 1.3) * 1.8;
         if (hash2(радиус * 11, середина * 4.1) > 0.45) {
           for (const сторонаДома of [-1, 1] as const) {
             const смещение = сторонаДома * (3.5 + d / 2);
@@ -10902,7 +10944,7 @@ export function buildRegionTowns(scene: THREE.Scene): { x: number; y: number; z:
       if (Math.abs(a - Math.PI / 2) < 0.55) continue; // проход к воротам
       const r = t.radius * (0.58 + rnd() * 0.2);
       const rx = Math.cos(a) * r, rz = Math.sin(a) * r;
-      brickHouse(g, rx, rz, 4 + rnd() * 2.4, 3.4 + rnd() * 2.2, {
+      brickHouse(g, rx, rz, 5.6 + rnd() * 2.4, 4.9 + rnd() * 1.9, {
         dome: rnd() > 0.72,
         badgirH: rnd() > 0.6 ? 2.6 + rnd() * 1.6 : undefined,
         // «Дома по кольцу лицом к центру»: фасад с входом смотрит внутрь.
