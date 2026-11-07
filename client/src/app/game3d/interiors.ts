@@ -33,6 +33,10 @@ import { buildHumanoid, HumanoidCfg, ПРЕДМЕТ } from './rig';
 // Настоящие модели стражей: общий загрузчик realRig и клонирование скелета.
 import { загрузитьСцену, загрузитьКлип, подогнать, безМёртвыхДорожек } from './realRig';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
+// Настоящие PBR-поверхности (пачка «Д» аудита 3D-реализма): дерево, крыша,
+// камень и стены интерьеров поднимаются с процедурных заглушек на наборы
+// Poly Haven (CC0), которые уже скачаны для города и земли.
+import { applySurface } from './surfaces';
 // Фигура стража внутри крепости. Без неё пост в правиле был бы невидимым глазом:
 // игрок не понимает, откуда его заметили. Импорт добавлен вместе с постом,
 // а не отдельно.
@@ -1502,6 +1506,22 @@ export const M = {
   purple: new THREE.MeshStandardMaterial({ color: 0x7a5fd0, roughness: 0.5, map: clothTexture('#7a5fd0', 4) }),
   green: new THREE.MeshStandardMaterial({ color: 0x4a6a38, roughness: 1, map: foliageTexture('#4a6a38', 3), normalMap: foliageNormalTexture(3), normalScale: new THREE.Vector2(0.7, 0.7) }),
 };
+
+// ── Настоящие поверхности в интерьерах (пачка «Д» аудита 3D-реализма) ──
+//
+// ЧТО БЫЛО. Дерево, крыша, камень и стены комнат рисовались canvas-картами:
+// фактура была, но волокна дерева шли ровными дугами, а черепица — клеткой.
+// Наборы Poly Haven (те же, что на фасадах города) дают настоящее волокно,
+// черепицу и камень с нормалями и шероховатостью.
+//
+// Цвет остаётся прежним: карта умножается на него, и палитра комнаты
+// не меняется — меняется МАТЕРИАЛ под краской. Повтор 2 на грань:
+// UV интерьеров целые (0..1), и повтор 2 даёт доску разумной ширины,
+// а не растянутый холст.
+applySurface(M.wood, 'wood_planks', { repeat: 2, normalScale: 0.9 });
+applySurface(M.roof, 'clay_roof_tiles', { repeat: 2, normalScale: 1.0 });
+applySurface(M.stone, 'sandstone_blocks_05', { repeat: 2, normalScale: 1.0 });
+applySurface(M.wall, 'plastered_wall_02', { repeat: 2, normalScale: 0.9 });
 
 function box(w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, ry = 0): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
