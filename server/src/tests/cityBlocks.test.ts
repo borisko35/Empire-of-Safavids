@@ -100,7 +100,9 @@ describe('Жилые улицы', () => {
 describe('Фасад дома (GLB, §336)', () => {
   it('brickHouse использует GLB-модель персидского дома', () => {
     const дом = тело('brickHouse');
-    должны(/подменитьНаGLB\(house, placeholder, modelName, w, h, d\);/.test(дом),
+    // Сигнатура с x, z (пачка «Б» аудита 3D-реализма): координаты нужны
+    // вариации цвета дома по месту (раскраситьПоМесту).
+    должны(/подменитьНаGLB\(house, placeholder, modelName, w, h, d, x, z\);/.test(дом),
       'brickHouse не вызывает подменитьНаGLB для загрузки persian-house GLB');
     должны(/metricBoxUV\(new THREE\.BoxGeometry\(w, h, d\)/.test(дом),
       'нет плейсхолдера: дом не отобразится до загрузки GLB');
