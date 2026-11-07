@@ -72,7 +72,9 @@ const PROFILES: Record<GraphicsLevel, GraphicsProfile> = {
 const KEY = 'eos_settings_v1';
 
 const DEFAULTS: GameSettings = {
-  graphics: 'high',
+  // Фактический заводской уровень выдаёт defaultGraphics() (адаптивный);
+  // значение здесь — только для полноты типа.
+  graphics: 'good',
   display: 'borderless',
   music: 50,
   sfx: 70,
@@ -81,6 +83,43 @@ const DEFAULTS: GameSettings = {
   fog: true,
   autobattle: false,
 };
+
+// Заводская графика — АДАПТИВНАЯ, а не один «high» на всех.
+//
+// ЧТО БЫЛО. Уровень по умолчанию был зашит 'high': SSR + bloom + тени
+// 2048 + pixelScale 1.2 у каждого нового игрока. 7.11.2026 владелец вошёл
+// в мир и не смог играть: замер на живом входе показал первый кадр
+// композера 27.5 секунд ОДНИМ синхронным таском, после чего поток не
+// брал новых задач — SSR-пайплайн не оставлял окну шанса ни на одном
+// кадре. Игрок видел «тормозит, невозможно сдвинуться».
+//
+// КАК ТЕПЕРЬ. Детект железа один раз за сессию: софтверный GL
+// (SwiftShader, llvmpipe) не тянет даже средний пайплайн — ему 'low';
+// до четырёх ядер — 'medium'; остальным — 'good': тени и SSAO на месте,
+// а SSR и bloom игрок включает сам, когда убедится, что его машина их
+// тянет. Сохранённые настройки уважаются: детект работает только для
+// тех, кто ещё не выбирал уровень руками.
+let заводскаяГрафика: GraphicsLevel | null = null;
+function defaultGraphics(): GraphicsLevel {
+  if (заводскаяГрафика) return заводскаяГрафика;
+  let level: GraphicsLevel = 'good';
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = (canvas.getContext('webgl2') ?? canvas.getContext('webgl')) as WebGLRenderingContext | null;
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const renderer = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+      if (/swiftshader|llvmpipe|software|basic render/i.test(renderer)) level = 'low';
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    }
+    if (level === 'good' && (navigator.hardwareConcurrency ?? 8) <= 4) level = 'medium';
+  } catch {
+    // Детект не удался — остаёмся на консервативном 'good': игра должна
+    // запуститься у всех, красоту добирают в настройках.
+  }
+  заводскаяГрафика = level;
+  return level;
+}
 
 function isGraphics(v: unknown): v is GraphicsLevel {
   return typeof v === 'string' && (GRAPHICS_LEVELS as string[]).includes(v);
@@ -106,7 +145,7 @@ export function getSettings(): GameSettings {
     raw = {};
   }
   cached = {
-    graphics: isGraphics(raw.graphics) ? raw.graphics : DEFAULTS.graphics,
+    graphics: isGraphics(raw.graphics) ? raw.graphics : defaultGraphics(),
     display: isDisplay(raw.display) ? raw.display : DEFAULTS.display,
     music: pct(raw.music, DEFAULTS.music),
     sfx: pct(raw.sfx, DEFAULTS.sfx),

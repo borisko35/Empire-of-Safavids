@@ -63,7 +63,7 @@ import { createNavigator, NavigatorHandle, NavTarget } from './navigator';
 import { chopFor } from './waterWaves';
 import { audio } from '../audio';
 import { session } from '../state';
-import { getSettings, graphicsProfile, type GraphicsLevel } from '../settings';
+import { getSettings, graphicsProfile, updateSettings, type GraphicsLevel } from '../settings';
 import { chatVisible } from '../hud';
 
 export interface World3DCallbacks {
@@ -1048,12 +1048,27 @@ private roll = 0;
     preloadModels(['guard', 'merchant', 'citizen', 'crier', 'scholar', 'archer', 'warrior']);
 
     // Мир
+    // ЗАМЕР ЭТАПОВ. Фриз «невозможно сдвинуться» (7.11.2026) случился между
+    // отчётами прогресса, и без per-этапных таймингов виновника приходилось
+    // искать перебором четырёх строителей. Строка в консоли на этап —
+    // следующая жалоба на тормоза входа отвечает сразу, кто ел время.
+    const stageLog = (name: string, started: number): void => {
+      console.debug('[world3d.stage]', name, Math.round(performance.now() - started) + 'ms');
+    };
     await пауза(0.3);
+    let stageT0 = performance.now();
     buildTerrain(this.scene);
+    stageLog('buildTerrain', stageT0);
     await пауза(0.36);
+    stageT0 = performance.now();
     buildScatter(this.scene);
+    stageLog('buildScatter', stageT0);
+    stageT0 = performance.now();
     buildRoads(this.scene);
+    stageLog('buildRoads', stageT0);
+    stageT0 = performance.now();
     const city = buildCity(this.scene);
+    stageLog('buildCity', stageT0);
     for (const [i, l] of (city.userData.lights as { x: number; z: number }[]).entries()) {
       const light = new THREE.PointLight(0xffa04a, 0, 20, 1.8);
       light.position.set(l.x, (l as { y?: number }).y ?? groundHeight(l.x, l.z) + 5.2, l.z);
@@ -1067,7 +1082,9 @@ private roll = 0;
       this.torches.push({ light, base: 1.6, phase: i * 2.4 });
     }
     for (const d of buildTownBuildings(this.scene)) this.doorTargets.push(d);
+    stageLog('buildTownBuildings+lights', stageT0);
     await пауза(0.48);
+    stageT0 = performance.now();
     buildCamp(this.scene);
     buildWater(this.scene);
     // Поселения: порт, караван-сарай, деревня, форт.
@@ -1094,6 +1111,7 @@ private roll = 0;
       this.scene.add(light);
       this.torches.push({ light, base: 1.6, phase: i * 2.4 + 0.7 });
     }
+    stageLog('buildCamp+Water+Settlements+RegionTowns', stageT0);
     await пауза(0.6);
     // Указатели сбоку от дорог: «здесь начинается путь к порту».
     buildSignposts(this.scene);
@@ -1316,7 +1334,9 @@ private roll = 0;
     // не случайно: список отражающих собирается обходом готовой сцены.
     this.collectSsrReflectors();
     // И только теперь прошиваем G-buffer: до этого места сцены ещё нет.
+    stageT0 = performance.now();
     this.patchWorldMaterials(true);
+    stageLog('patchWorldMaterials', stageT0);
 
     // Прогрев графики (§391): компиляция шейдеров всей сцены и первая
     // выкладка текстур в GPU - самый тяжёлый первый кадр. compileAsync
@@ -1325,9 +1345,33 @@ private roll = 0;
     // на «Готово» с «страница не отвечает»: вся компиляция ждала его
     // ПОСЛЕ скрытия загрузки.
     await пауза(0.9);
+    stageT0 = performance.now();
     await this.renderer.compileAsync(this.scene, this.camera);
+    stageLog('compileAsync', stageT0);
     onProgress?.(0.97);
+    stageT0 = performance.now();
     this.composer.render();
+    stageLog('composer first frame', stageT0);
+
+    // АВТОПОНИЖЕНИЕ ГРАФИКИ по факту, а не по ярлыку машины.
+    //
+    // Первый кадр композера — самый тяжёлый синхронный таск входа. Если он
+    // занял больше пяти секунд, машина явно не тянет текущий уровень, и
+    // игрок стоит в «страница не отвечает» (замер 7.11.2026: 27.5с на 'high'
+    // со SSR). Один шаг вниз — с сохранением в настройки: игрок видит в
+    // панели, что уровень сменился, и может поднять обратно, если уверен
+    // в своей машине. Реальный GPU строит первый кадр за доли секунды —
+    // порог в пять секунд его не задевает.
+    const firstFrameMs = performance.now() - stageT0;
+    if (firstFrameMs > 5000) {
+      const level = getSettings().graphics;
+      const profile = graphicsProfile(level);
+      if (profile.ssr || profile.bloom) {
+        const cheaper: GraphicsLevel = level === 'ultra' ? 'epic' : level === 'epic' ? 'high' : 'good';
+        console.debug('[world3d.autodrop]', `first frame ${Math.round(firstFrameMs)}ms — dropping ${level} -> ${cheaper}`);
+        updateSettings({ graphics: cheaper });
+      }
+    }
 
     // DEBUG: визуализация коллайдеров (нажмите Z для включения/выключения)
     console.log(`[Collision] Total colliders: ${COLLIDERS.length}`);

@@ -549,15 +549,20 @@ export class CharacterService {
     stamina: number; maxStamina: number; level: number; experience: number; gold: number;
   } | null> {
     // В воде расход за бег не имеет смысла: там своя, более дорогая строка.
+    // $3 и $5 — дробные доли расхода (0.25, 0.35...), и без явного ::numeric
+    // Postgres выводит их тип из соседней integer-колонки: «0.25» не парсится
+    // как integer, тик падает 22P02 целиком — стамина при спринте и плавании
+    // не менялась вовсе (бесплатный спринт). Замечено 7.11.2026 в логе
+    // нативного dev-сервера, воспроизводится на любом спринтящемся игроке.
     const бег = inWater ? false : sprinting === true;
     const row = await this.db.queryOne<Record<string, number>>(
       `UPDATE characters SET
          hp      = LEAST(max_hp,      hp + GREATEST(1, FLOOR(max_hp * 0.012) * 5)),
          mana    = LEAST(max_mana,    mana + GREATEST(1, FLOOR(max_mana * 0.02) * 5)),
          stamina = CASE WHEN $2::boolean
-                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $3) * 5))
+                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $3::numeric) * 5))
                         WHEN $4::boolean
-                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $5) * 5))
+                        THEN GREATEST(0, stamina - GREATEST(1, FLOOR(max_stamina * $5::numeric) * 5))
                         ELSE LEAST(max_stamina, stamina + GREATEST(1, FLOOR(max_stamina * 0.04) * 5))
                    END,
          updated_at = NOW()
