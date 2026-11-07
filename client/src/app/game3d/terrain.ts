@@ -1569,14 +1569,20 @@ const MAT = {
   // repeat = 1 у тех материалов, чья геометрия получила метрический UV:
   // иначе поверхность повторилась бы ещё раз поверх метров.
   houseWall: surfaceMaterial('plastered_wall_02', {
-    color: 0xe6d2a8, roughness: 0.94, normalScale: 0.85,
+    // normalScale 1.15 (было 0.85): на игровой дистанции 0.85 читался
+    // «крашеной плоскостью» — фактура штукатурки не доходила до глаза.
+    color: 0xe6d2a8, roughness: 0.94, normalScale: 1.15,
   }),
   houseWallOchre: surfaceMaterial('yellow_plaster', {
-    color: 0xe8cfa0, roughness: 0.95, normalScale: 0.9,
+    color: 0xe8cfa0, roughness: 0.95, normalScale: 1.2,
   }),
   houseWallClay: surfaceMaterial('clay_plaster', {
-    color: 0xd9c09a, roughness: 0.97, normalScale: 0.9,
+    color: 0xd9c09a, roughness: 0.97, normalScale: 1.2,
   }),
+  // Цоколь: тёмная грязная полоса у земли. Реальные глинобитные стены
+  // темнеют от брызг и касания рук — без этой полосы дом «плывёт» над
+  // землёй, и ни одна тень его к ней не прибивает.
+  plinth: new THREE.MeshStandardMaterial({ color: 0x8a714f, roughness: 1 }),
   // Кровля плоская: глиняная обмазка, а не штукатурка стены. Без неё верх
   // дома — светлая плита: с высоты город читался белыми квадратами, и
   // сводные пятна крыш съедали всю работу фасада.
@@ -4642,8 +4648,16 @@ function brickHouse(
   placeholder.receiveShadow = true;
   house.add(placeholder);
 
+  // Цоколь у земли (пачка «Б»): прибивает дом к земле. Чуть шире стен,
+  // чтобы вылезал за фасад и читался с любой стороны.
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(w + 0.35, 0.6, d + 0.35), MAT.plinth);
+  plinth.position.y = 0.28;
+  plinth.receiveShadow = true;
+  plinth.castShadow = true;
+  house.add(plinth);
+
   // Асинхронная подмена на GLB-модель
-  void подменитьНаGLB(house, placeholder, modelName, w, h, d);
+  void подменитьНаGLB(house, placeholder, modelName, w, h, d, x, z);
 
   // Кровный скарб (кувшины, лестница) оставляем процедурным — детали на крыше
   кровельныйСкарб(house, w, d, h, x * 3.1 + z * 1.7);
@@ -4660,6 +4674,7 @@ function подменитьНаGLB(
   placeholder: THREE.Mesh,
   modelName: string,
   w: number, h: number, d: number,
+  x = 0, z = 0,
 ): void {
   // ПУТЬ БЕЗ models/ (§338). loadDecorModel сам подставляет `/game/models/`,
   // а §336 передавал ещё и `models/`, получалось `/game/models/models/decor/…`
@@ -4669,6 +4684,8 @@ function подменитьНаGLB(
     if (!модель) return;
     house.remove(placeholder);
     const вещь = модель.clone();
+    // Вариация тона по месту: иначе все дома — один цвет (см. раскраситьПоМесту).
+    раскраситьПоМесту(вещь, x, z);
 
     // Базовые размеры модели: ~8.36 x 10.42 x 9.02 (base), масштабируем под w, h, d
     const baseW = modelName === 'persian-house-compact' ? 6.27 : 8.36;
@@ -9073,6 +9090,65 @@ const AQUEDUCT_MODEL = 'decor/aqueduct-seg.glb';
  */
 const decorCache = new Map<string, Promise<THREE.Group | null>>();
 
+/**
+ * Вариация цвета по месту установки (пачка «Б» аудита 3D-реализма).
+ *
+ * ЧТО БЫЛО. Все копии декора делили ОДИН материал кэша: двести домов
+ * Исфахана были выкрашены в один тон, и город читался типовой застройкой.
+ *
+ * ЧТО ДЕЛАЕТ. На установке материалы клонируются (кэш больше не делится)
+ * и цвет сдвигается на доли: оттенок ±0.015, насыщенность и светлота —
+ * на глаз. Сдвиг детерминирован координатами: у дома один и тот же оттенок
+ * при каждом входе в мир, «город не перерисовывается за спиной».
+ */
+function раскраситьПоМесту(вещь: THREE.Object3D, x: number, z: number): void {
+  const h1 = hash2(Math.round(x * 10), Math.round(z * 10));
+  const h2 = hash2(Math.round(z * 10), Math.round(x * 10) + 7919);
+  const сдвигH = (h1 - 0.5) * 0.03;
+  const сдвигSL = (h2 - 0.5) * 0.1;
+  вещь.traverse((o) => {
+    const меш = o as THREE.Mesh;
+    if (!меш.isMesh) return;
+    const мат = меш.material as THREE.MeshStandardMaterial;
+    if (!мат || !мат.isMeshStandardMaterial || !мат.color) return;
+    меш.material = мат.clone();
+    (меш.material as THREE.MeshStandardMaterial).color.offsetHSL(сдвигH, сдвигSL * 0.6, сдвигSL);
+  });
+}
+
+/**
+ * Материальная гигиена декора (пачка «Б» аудита 3D-реализма, 7.11.2026).
+ *
+ * ЧТО БЫЛО. GLB-декор приезжал с материалами конвертера: roughness
+ * случайно 0.1-1.0 (пластик или зеркало), flat-нормали давали гранёный
+ * «мультяшный» вид, и ВСЕ копии дома были одного цвета — город читался
+ * гипсовым поселком из одинаковых коробок.
+ *
+ * ЧТО ДЕЛАЕТ. Один проход по материалам при ЗАГРУЗКЕ (кэш общий —
+ * делается один раз на модель):
+ *  - roughness зажимается в [0.55, 0.97]: штукатурка и дерево шершавые,
+ *    ничего не блестит как пластик;
+ *  - flatShading выключен: силуэты сглаживаются, грань исчезает;
+ *  - metalness выше 0.4 только у того, что названо металлом — иначе
+ *    конвертерные нули-единицы красят глину зеркалом.
+ *
+ * Вариация цвета — НЕ здесь: кэш общий, перекраска одной вещи испортила
+ * бы все копии. Её делает место установки (placeDecor/decorВещь).
+ */
+function причесатьМатериалыДекора(корень: THREE.Object3D): void {
+  корень.traverse((o) => {
+    const меш = o as THREE.Mesh;
+    if (!меш.isMesh) return;
+    const mat = меш.material as THREE.MeshStandardMaterial;
+    if (!mat || !mat.isMeshStandardMaterial) return;
+    mat.roughness = Math.min(0.97, Math.max(0.55, mat.roughness));
+    mat.flatShading = false;
+    const названМеталлом = /metal|iron|steel|bronze|brass|gold/i.test(меш.name || '');
+    if (!названМеталлом) mat.metalness = Math.min(mat.metalness, 0.25);
+    mat.needsUpdate = true;
+  });
+}
+
 export function loadDecorModel(path: string): Promise<THREE.Group | null> {
   // ЛИШНИЙ ПРЕФИКС models/ СНИМАЕТСЯ (§339).
   //
@@ -9100,7 +9176,10 @@ export function loadDecorModel(path: string): Promise<THREE.Group | null> {
       l.setDRACOLoader(декодерDraco());
       l.load(
         `/game/models/${path}`,
-        (gltf) => готово((gltf.scene as THREE.Group) ?? null),
+        (gltf) => {
+          if (gltf.scene) причесатьМатериалыДекора(gltf.scene);
+          готово((gltf.scene as THREE.Group) ?? null);
+        },
         undefined,
         () => готово(null),
       );
@@ -9128,6 +9207,7 @@ function placeDecor(
   void loadDecorModel(path).then((модель) => {
     if (!модель) return;
     const вещь = модель.clone();
+    раскраситьПоМесту(вещь, px, pz);
     вещь.position.set(px, groundHeight(px, pz) + lift, pz);
     вещь.rotation.y = ry;
     вещь.scale.setScalar(scale);
@@ -9339,6 +9419,8 @@ export function decorВещь(
     for (const ч of части) {
       вещь.add(new THREE.Mesh(ч.гео, ч.материал));
     }
+    // Вариация тона по месту — до явного tint вызывающего (тот умножит сверху).
+    раскраситьПоМесту(вещь, x, z);
     const py = opts.y !== undefined ? opts.y : groundHeight(x, z) + (opts.lift ?? 0);
     вещь.position.set(x, py, z);
     вещь.rotation.y = opts.ry ?? 0;
