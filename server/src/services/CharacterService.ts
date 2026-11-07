@@ -136,11 +136,17 @@ export class CharacterService {
       updatedAt: new Date(),
     };
 
+    // Плейсхолдеров 22 — ровно по числу колонок и значений. c4d93b23
+    // дописал $23 при 22 колонках: Postgres отклонял вставку целиком,
+    // и персонажей нельзя было создать никому и ни под каким именем.
+    // Комментарий стоит НАД стейтментом: сторож baseMaxHp.test.ts
+    // разбирает этот текст регуляркой и требует между ")" и "VALUES ("
+    // только пробелы.
     await this.db.query(
       `INSERT INTO characters
         (id, user_id, name, class, level, experience, stats, hp, max_hp, base_max_hp,
          mana, max_mana, stamina, max_stamina, position, region, zone, server_id, gold, equipment, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
       [
         character.id, character.userId, character.name, character.class,
         character.level, character.experience, JSON.stringify(character.stats),
