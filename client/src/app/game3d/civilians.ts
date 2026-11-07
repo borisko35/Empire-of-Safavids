@@ -216,6 +216,22 @@ function loadCivModel(c: Civilian, modelName: string, ткань: THREE.Color): 
           // Одежда поверх модели (§300): перевязь, пояс и тюрбан — на костях,
           // чтобы при ходьбе они ходили вместе с телом.
           одетьГорожанина(cloned, ткань);
+          // Халат и штаны в цвет ткани гражданина (пачка «Г» аудита
+          // 3D-реализма). Модель у всех одна — citizen, — и без перекраски
+          // толпа читалась рядом клонов. Конвертер назвал ткань по-английски:
+          // Top и Bottom; их красим в ткань этого горожанина, а кожа
+          // (Body), борода, усы и обувь остаются собой. Клон материала
+          // обязателен: шаблон общий на весь город.
+          cloned.traverse((o) => {
+            const m = o as THREE.Mesh;
+            if (!m.isMesh) return;
+            const мат = m.material as THREE.MeshStandardMaterial;
+            if (!мат?.isMeshStandardMaterial) return;
+            const имя = (мат.name || '').toLowerCase();
+            if (имя !== 'top' && имя !== 'bottom') return;
+            m.material = мат.clone();
+            (m.material as THREE.MeshStandardMaterial).color.lerp(ткань, 0.72);
+          });
           // Включаем idle-анимацию по умолчанию
           const idleAction = c.миксер.clipAction(cleanIdle);
           idleAction.play();
