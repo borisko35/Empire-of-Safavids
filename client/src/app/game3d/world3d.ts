@@ -33,7 +33,7 @@ buildCaravanseraiTorches, buildVillageSwords, buildBazaarChests,
   buildVillageArchway, buildChurchDoorway, buildOnionDomeTower, buildGallows,
   buildMarketCart, buildGallowsPalisade, buildPortRoadBarricade, buildCaravanseraiWindmill,
   buildMillPlough, buildVillageGrindstone,
-  bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS,
+  bridgeAt, waterSurfaceY, WORLD_HALF, CITY, CAMP, LAKE, COLLIDERS, FAUNA_COLLIDERS, CIV_COLLIDERS, MAT,
 } from './terrain';
 import { waterMaterials, followSeaToCamera, качающиеся, setGroundState, setSnowOnSurfaces, setPuddles, дымныеТрубы, лодкиУПира, чайкиНаПричале, hash2, огниФонарей } from './terrain';
 import { createSky, SkyHandle, SKY_RADIUS } from './sky';
@@ -3213,19 +3213,27 @@ if (isMe && moving) {
     // в мировом нуле, - иначе, отойдя на лодке вдоль берега, он оказывается в
     // крупных треугольниках, где волну рисовать нечем.
     followSeaToCamera(this.camera.position.x);
-    // Баланс света (замерян по кадрам суток, §221): днём почти всё светит
-    // солнце (~3.2), полусфера лишь подсвечивает тени (~0.13), а HDRI-небо
-    // даёт мягкие отражения (~0.25). Раньше полусфера и env давали 0.83 /
-    // 0.46 — кадр «плыл» пасмурной серостью даже в ясный полдень.
-    // Ночь заметно темнее сумерек: луна 0.12, а не 0.32.
+    // Баланс света (замерян по кадрам суток, §221; поправлен по приёмке
+    // владельца 7.11.2026 — шесть ночных кадров): ночью сцена была
+    // ЧЁРНОЙ — луна 0.12 и полусфера 0.05 не давали разглядеть улицу,
+    // и единственным светлым пятном оставались синие окна-плиты.
+    // Ночь читаемая: луна 0.5 (холодный заполняющий), полусфера 0.26
+    // ночью / 0.9 днём — земля и стены различимы, солнце днём по-прежнему
+    // главный источник (~3.2).
     const dim = 1 - this.sky.overcast * 0.45;
-    this.sun.intensity = (useMoon ? 0.12 : 0.25 + dayI * 2.95) * dim;
-    this.hemi.intensity = (0.05 + dayI * 0.08) * (1 - this.sky.overcast * 0.3);
+    this.sun.intensity = (useMoon ? 0.5 : 0.25 + dayI * 2.95) * dim;
+    this.hemi.intensity = (0.26 + dayI * 0.64) * (1 - this.sky.overcast * 0.3);
     this.sun.color.setHex(useMoon ? 0x9db4e8 : night > 0.4 ? 0xffc98a : 0xffe8c0);
     if (this.sky.overcast > 0.3) {
       // В дождь и бурю свет холоднее — тучи отражают серое небо
       this.sun.color.lerp(new THREE.Color(0xb8c4d2), (this.sky.overcast - 0.3) / 0.7 * 0.5);
     }
+    // Окна ночью горят ТЁПЛЫМ светом изнутри (приёмка 7.11.2026: окна
+    // светились холодными СИНИМИ плитами — emissive стекла был константой
+    // 0.55 в синем тоне). Днём стекло просто отражает; с закатом окна
+    // «зажигаются» — улица ночью получает тёплые пятна вместо синевы.
+    MAT.glass.emissive.setHex(0xffb469);
+    MAT.glass.emissiveIntensity = 0.1 + night * 0.5;
     this.sun.position.set(
       me.pos.x + lightDir.x * 120,
       Math.max(24, lightDir.y * 120),

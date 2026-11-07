@@ -1556,7 +1556,7 @@ export function setSnowOnSurfaces(snow: number): void {
   }
 }
 
-const MAT = {
+export const MAT = {
   sand: new THREE.MeshStandardMaterial({ color: 0xbfae8a, roughness: 1, map: sandTexture(48) }),
   stone: new THREE.MeshStandardMaterial({ color: 0x9a958c, roughness: 0.7, map: stoneTexture(4), normalMap: stoneNormalTexture(4), normalScale: new THREE.Vector2(1.2, 1.2), roughnessMap: stoneRoughnessTexture(4), displacementMap: stoneDisplacementTexture(4), displacementScale: 0.15, displacementBias: -0.07 }),
   sandstone: new THREE.MeshStandardMaterial({ color: 0xd8c298, roughness: 0.9, map: plasterTexture('#c9ab7c', 2) }),
