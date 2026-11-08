@@ -14,17 +14,31 @@ import { getSafavidAssetInstance } from '../game3d/safavidLoader';
 
 export type EquipmentSlot = 'robe' | 'turban' | 'coat' | 'mail' | 'helmet' | 'weapon';
 
+/**
+ * Стартовый набор исторической одежды.
+ *
+ * БЫЛО: все слоты по умолчанию null, и персонаж, созданный без правок
+ * панели, уезжал на сервер с пустой экипировкой — в мире он выглядел
+ * голым базовым мешем, хотя весь смысл системы в сефевидской одежде.
+ *
+ * ТЕПЕРЬ: солдатский набор рядового кызылбаша — верхний халат (чога),
+ * тюрбан и шамшир. Кольчуга и шлем остаются null: они визуально тяжёлые,
+ * их уместнее надевать по желанию. Игрок может поменять любой слот
+ * радиокнопками до «Создать».
+ */
+const ОДЕТЫЙ_СТАРТ: Record<EquipmentSlot, string | null> = {
+  robe: null,
+  turban: 'turban_safavid',
+  coat: 'chogha_outer',
+  mail: null,
+  helmet: null,
+  weapon: 'shamshir_persian',
+};
+
 /** Текущий выбор экипировки */
 export class SafavidEquipmentPanel {
   private container: HTMLElement | null = null;
-  private selected: Record<EquipmentSlot, string | null> = {
-    robe: null,
-    turban: null,
-    coat: null,
-    mail: null,
-    helmet: null,
-    weapon: null,
-  };
+  private selected: Record<EquipmentSlot, string | null> = { ...ОДЕТЫЙ_СТАРТ };
 
   /** Рендерит панель в указанный контейнер DOM */
   render(parentId: string): void {
