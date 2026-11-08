@@ -65,7 +65,14 @@ describe('Экипировка на аватаре берётся из наде�
   });
 
   it('в сессии экипировка хранится', () => {
-    expect(state).toMatch(/gear: null as null \| \{ weapon: boolean; armorColor: number \| null; swingSeconds: number \| null \}/);
+    // Плюс поля исторического костюма Сефевидов (robeAssetId и т.д.): без них
+    // 3D-экипировка не находила ассетов и прикрепляла пустоту. Проверяю кусками,
+    // а не однимregexpом: связка «три поля на строке, комментарий посередине»
+    // хрупче, чем сами поля.
+    expect(state).toMatch(/gear: null as null \| \{\s*weapon: boolean; armorColor: number \| null; swingSeconds: number \| null;/);
+    for (const поле of ['robeAssetId?', 'turbanAssetId?', 'coatAssetId?', 'mailAssetId?', 'helmetAssetId?', 'weaponAssetId?']) {
+      expect(state).toContain(поле);
+    }
   });
 });
 
@@ -99,7 +106,9 @@ describe('Экипировка: состояние доходит до 3D-сло
     // в сессию идёт через общий gearFromEquipment: у входа в мир и панели
     // нет шансов разойтись.
     expect(hud).toMatch(/session\.gear = gearFromEquipment\(/);
-    expect(hud).toMatch(/weapon: equipped\.has\('weapon'\)/);
+    // Слот weapon живёт в переменной: рядышком считается weaponAssetId —
+    // оружие набора показывается только пока предметный клинок не надет.
+    expect(hud).toMatch(/const weapon = equipped\.has\('weapon'\)/);
   });
 
   it('world.ts передаёт экипировку в 3D каждый кадр', () => {

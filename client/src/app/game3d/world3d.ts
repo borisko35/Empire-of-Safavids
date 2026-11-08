@@ -187,14 +187,24 @@ export class SafavidEquipment3D {
     let bone: THREE.Bone | null = null;
 
     switch (category) {
-      case 'weapon': // sword, dagger, mace, bow
+      // Слот weapon собирает четыре категории каталога (sword/dagger/mace/bow):
+      // сверка идёт по слоту панели, а не по имени категории — иначе меч с
+      // категорией «sword» падал в ветку одежды и висел на теле.
+      case 'weapon':
+      case 'sword':
+      case 'dagger':
+      case 'mace':
+      case 'bow':
         bone = this.playerGroup.getObjectByName('mixamorig:RightHand') as THREE.Bone;
         if (bone) {
           // Смещение оружия в руке (как в RealRig.equipWeapon)
           mesh.position.set(0, -0.05, 0.02);
           bone.add(mesh);
         } else {
+          // Кости нет (процедурный риг: подмена на настоящую модель ещё не пришла).
+          // Без позиции оружие стояло бы в ногах у нуля координат.
           this.group.add(mesh);
+          mesh.position.set(0.25, 1.05, 0.2);
         }
         break;
 

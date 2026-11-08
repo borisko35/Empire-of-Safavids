@@ -60,7 +60,7 @@ describe('Экипировка при входе в мир', () => {
   it('world.ts применяет gear из общего конвертера gearFromEquipment', () => {
     // Конверсия «что надето → вид аватара» живёт в одном месте (hud.ts).
     // Раньше world.ts считал weapon/armorColor сам и расходился с панелью.
-    expect(worldContent).toContain('gearFromEquipment(eqStateFromApi)');
+    expect(worldContent).toContain('gearFromEquipment(eqStateFromApi, eqStateFromApi.outfit)');
   });
 
   it('world.ts содержит проверку session.token', () => {

@@ -63,6 +63,60 @@ export const USE_ITEM_EFFECTS: Record<string, { hp?: number; mana?: number; stam
   food_kebab: { hp: 80 },
 };
 
+// ── Исторический набор Сефевидов ──────────────────────────────
+//
+// Панель экипировки при создании персонажа сохраняет выбор в
+// characters.equipment (JSON, слоты robe/turban/coat/mail/helmet/weapon).
+// ЭТО НЕ предметы из сумки: это визуальный исторический костюм, поэтому
+// getEquipment отдаёт его отдельным полем outfit, а не подмешивает в items —
+// иначе в панели экипировки появлялись бы строки «qaba_royal» с нулевыми
+// бонусами, а слот weapon набора делил бы одну строку с настоящим оружием.
+//
+// Список идентификаторов — зеркало SAFADIV_AVATAR_ASSETS в клиенте. Здесь он
+// нужен как белый список: JSON писался клиентом, и значения из него не должны
+// попадать в ответ без проверки.
+const SAFADIV_ASSET_SLOT: Record<string, string> = {
+  qaba_royal: 'robe',
+  turban_safavid: 'turban',
+  chogha_outer: 'coat',
+  zireh_mail: 'mail',
+  kolah_khud_helmet: 'helmet',
+  shamshir_persian: 'weapon',
+  qame_persian: 'weapon',
+  mace_safavid: 'weapon',
+  bow_persian: 'weapon',
+};
+
+/** Стартовый солдатский набор рядового кызылбаша — тем же составом, что предвыбран в панели клиента. */
+const SAFADIV_STARTER_OUTFIT: Array<{ slot: string; assetId: string }> = [
+  { slot: 'turban', assetId: 'turban_safavid' },
+  { slot: 'coat', assetId: 'chogha_outer' },
+  { slot: 'weapon', assetId: 'shamshir_persian' },
+];
+
+/** Нормализованный исторический набор: слот → ассет, попадание в белый список обязательно. */
+export interface SafavidOutfitEntry {
+  slot: string;
+  assetId: string;
+}
+
+function readSafavidOutfit(equipment: unknown): SafavidOutfitEntry[] {
+  const raw = typeof equipment === 'string' && equipment.trim() ? JSON.parse(equipment) : equipment;
+  const outfit: SafavidOutfitEntry[] = [];
+  if (raw && typeof raw === 'object') {
+    const dict = raw as Record<string, unknown>;
+    for (const [slot, value] of Object.entries(dict)) {
+      if (typeof value !== 'string') continue;
+      // Значение годится, только если белый список относит его ровно к тому же слоту
+      if (SAFADIV_ASSET_SLOT[value] !== slot) continue;
+      outfit.push({ slot, assetId: value });
+    }
+  }
+  // Набора нет (персонаж создан до панели или без выбора) — солдатский набор по умолчанию:
+  // без него старые персонажи выходят в мир голым базовым мешем, что читается как поломка.
+  return outfit.length > 0 ? outfit : SAFADIV_STARTER_OUTFIT;
+}
+
 export class CharacterService {
   private db = DatabaseService.getInstance();
   private leveling = new LevelingSystem();
@@ -1022,7 +1076,7 @@ export class CharacterService {
   };
 
   /** Экипированные предметы и агрегированные бонусы характеристик (+5% за уровень заточки). */
-  async getEquipment(characterId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats; bonuses: EquipmentBonuses }> {
+  async getEquipment(characterId: string): Promise<{ items: EquippedItem[]; stats: CharacterStats; bonuses: EquipmentBonuses; outfit: SafavidOutfitEntry[] }> {
     const rows = await this.db.query<{ slot: string; item_id: string; enhancement: number }>(
       'SELECT slot, item_id, enhancement FROM character_equipment WHERE character_id = $1',
       [characterId]
@@ -1060,7 +1114,13 @@ export class CharacterService {
       bonuses.waterSpeed = Math.min(1, bonuses.waterSpeed + (def?.waterSpeed ?? 0) * mult);
       bonuses.swimStamina = Math.min(0.75, bonuses.swimStamina + (def?.swimStamina ?? 0) * mult);
     }
-    return { items, stats, bonuses };
+    // Исторический костюм идёт отдельным полем: слоты набора (robe/turban/…)
+    // не существуют в character_equipment, и в items им нечего отдавать.
+    const outfitRow = await this.db.queryOne<{ equipment?: unknown }>(
+      'SELECT equipment FROM characters WHERE id = $1',
+      [characterId]
+    );
+    return { items, stats, bonuses, outfit: readSafavidOutfit(outfitRow?.equipment) };
   }
 
   /** Надеть предмет: списывается из сумки, предыдущий предмет слота возвращается в неё. */

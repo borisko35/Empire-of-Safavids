@@ -726,7 +726,7 @@ export async function enterWorld(character: Character): Promise<void> {
   if (session.token && eqStateFromApi) {
     const equipped = new Set(eqStateFromApi.items.map((i) => i.slot));
     world3d.setLocalGear({
-      ...gearFromEquipment(eqStateFromApi),
+      ...gearFromEquipment(eqStateFromApi, eqStateFromApi.outfit),
       mail: equipped.has('mail'),
       helmet: equipped.has('helmet'),
       robe: equipped.has('robe'),

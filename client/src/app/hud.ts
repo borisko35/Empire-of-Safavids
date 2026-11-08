@@ -563,6 +563,12 @@ function invBtn(label: string, onClick: () => Promise<void>): HTMLButtonElement 
  * Экипировка → вид аватара (weapon/цвет груди/замах).
  * Общая функция для hud-панели и для восстановления экипировки при входе
  * в мир: раньше оба места считали это по-разному и расходились.
+ *
+ * outfit — исторический костюм Сефевидов (robe/turban/…): это отдельное
+ * поле ответа /equipment, а не items. Без его передачи 3D-экипировка
+ * (SafavidEquipment3D) не находила идентификаторов и не прикреплялась,
+ * и персонаж ходил в базовом меше. Оружие набора отдаётся только пока
+ * на аватаре нет предметного оружия — иначе в руке два клинка.
  */
 export function gearFromEquipment(equipment: {
   items: {
@@ -570,11 +576,17 @@ export function gearFromEquipment(equipment: {
     /** Время одного замаха в секундах; есть только у оружия */
     swingSeconds?: number;
   }[];
-}): { weapon: boolean; armorColor: number | null; swingSeconds: number | null } {
+}, outfit?: { slot: string; assetId: string }[]): {
+  weapon: boolean; armorColor: number | null; swingSeconds: number | null;
+  robeAssetId?: string; turbanAssetId?: string; coatAssetId?: string;
+  mailAssetId?: string; helmetAssetId?: string; weaponAssetId?: string;
+} {
   const equipped = new Map(equipment.items.map(i => [i.slot, i] as const));
   const withRarity = equipment.items.find(i => i.slot === 'armor') as { rarity: string } | undefined;
+  const вНаборе = new Map((outfit ?? []).map(o => [o.slot, o.assetId] as const));
+  const weapon = equipped.has('weapon');
   return {
-    weapon: equipped.has('weapon'),
+    weapon,
     // Время замаха приходит из данных предмета вместе с экипировкой.
     // Без него замах в 3D шёл бы по вбитому 0.45, и смена оружия на
     // более быстрое ничего бы не меняла.
@@ -583,6 +595,12 @@ export function gearFromEquipment(equipment: {
     armorColor: withRarity
       ? parseInt((RARITY_COLOR[withRarity.rarity] ?? RARITY_COLOR.common).slice(1), 16)
       : null,
+    robeAssetId: вНаборе.get('robe'),
+    turbanAssetId: вНаборе.get('turban'),
+    coatAssetId: вНаборе.get('coat'),
+    mailAssetId: вНаборе.get('mail'),
+    helmetAssetId: вНаборе.get('helmet'),
+    weaponAssetId: weapon ? undefined : вНаборе.get('weapon'),
   };
 }
 
@@ -598,12 +616,14 @@ export function renderEquipment(equipment: {
     swingSeconds?: number;
   }[];
   stats: Record<string, number>;
+  /** Исторический костюм Сефевидов — отдаётся сервером рядом с items */
+  outfit?: { slot: string; assetId: string }[];
 }): void {
   // Сначала 3D-аватар, потом панель. Раньше вид персонажа вообще не зависел
   // от надетого: оружие и щит выводились из класса, так что смена доспеха
   // была видна только в панели. Именно сюда приходит экипировка и при
   // надевании, и при снятии, и при открытии инвентаря.
-  session.gear = gearFromEquipment(equipment);
+  session.gear = gearFromEquipment(equipment, equipment.outfit);
 
   const box = $('equipment-summary');
   if (!box) return;

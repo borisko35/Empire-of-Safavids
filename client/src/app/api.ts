@@ -154,6 +154,12 @@ export interface EquipmentState {
   stats: Record<string, number>;
   /** Специальные бонусы вне характеристик: вода (сапоги/плащ) */
   bonuses?: { waterSpeed: number; swimStamina: number };
+  /**
+   * Исторический костюм Сефевидов (robe/turban/coat/mail/helmet/weapon).
+   * Это НЕ предметные вещи из character_equipment: их слоты в items не
+   * существуют, и без отдельного поля 3D-экипировка не прикреплялась.
+   */
+  outfit?: { slot: string; assetId: string }[];
 }
 
 /**
