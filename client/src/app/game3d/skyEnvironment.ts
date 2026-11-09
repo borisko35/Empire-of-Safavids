@@ -10,16 +10,30 @@
 //   • morning — утренние доли                   (env — утренний пакет)
 //   • noon    — всё остальное                   (env — полдневный пакет)
 //
-// ФОН СЦЕНЫ по-прежнему рисуется процедурной эквирект-картой — ей нужно
-// меняться со временем суток, а HDR — один кадр. Это правильное разделение:
-// HDR отвечает за отражения и рассеянный свет (которого мы вручную не ставили),
-// а фон — за видимое небо ( которое мы реновируем руками).
+// ФОН СЦЕНЫ — купол-меш, а не scene.background. Причина не эстетика:
+// видимый кадр при отложенном рендере берётся из канала 0 G-buffer,
+// а фоновая плоскость, которую three рисует для scene.background, живёт
+// НЕ в сцене (WebGLBackground держит её в замыкании) — патчем прошить её
+// нельзя, и в кадре с четырьмя draw buffer'ами небо не выживает: оно
+// чёрное при любом времени суток. Купол же — обычная геометрия сцены:
+// patchScene вставляет в его MeshBasicMaterial заглушку каналов 1–3
+// (ПУСТАЯ_ЗАПИСЬ), а канал 0 получает цвет карты — и небо видно через
+// composer, как и было раньше на прямом рендере. Глубину купол не пишет
+// (depthWrite: false), поэтому AO и SSR по-прежнему отбрасывают небо по
+// depth == 1 — ровно как при scene.background.
+// По-прежнему процедурной эквирект-картой: ей нужно меняться со временем
+// суток, а HDR — один кадр. Разделение то же: HDR отвечает за отражения и
+// рассеянный свет, купол — за видимое небо, которое реновируем руками.
+// Карта ездит по строкам с переворотом (equirectToRgba), поэтому одну и ту
+// же текстуру честно едят и PMREM, и сфера-купол: у небо-сферы UV-в ряду
+// нулевом — низ (земля), в последнем — зенит.
 //
 // ФОЛЛБЭК. .hdr может не доехать (stage без копий, dev-машина): пока ни
 // один пакет не загрузится, env собирается процедурно. Никакого «белого
 // экрана» или «отсутствия света» не наступает.
 import * as THREE from 'three';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { SKY_RADIUS } from './sky';
 import {
   buildEquirect,
   equirectToRgba,
@@ -51,7 +65,8 @@ const ПОРОГ_ПАСМУРНОСТИ = 0.05;
 const МИНИМУМ_МЕЖДУ_КАДРАМИ = 0.4;
 
 export interface SkyEnvironmentHandle {
-  update(state: SkyState, dt: number): void;
+  /** center — точка, вокруг которой стоит купол неба (позиция игрока). */
+  update(state: SkyState, dt: number, center?: { x: number; z: number }): void;
   readonly style: SkyStyle;
   readonly rebuilds: number;
   dispose(): void;
@@ -59,6 +74,8 @@ export interface SkyEnvironmentHandle {
 
 export class SkyEnvironment implements SkyEnvironmentHandle {
   private readonly pmrem: THREE.PMREMGenerator;
+  /** Купол неба: единственный элемент, который env добавляет в сцену сам. */
+  private dome: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private texture: THREE.DataTexture | null = null;     // процедурная карта фона
   private procEnv: THREE.WebGLRenderTarget | null = null; // env-цель процедурная
   private hdr: Map<Variant, THREE.WebGLRenderTarget | null> = new Map();
@@ -80,6 +97,21 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     this._style = style;
     this.pmrem = new THREE.PMREMGenerator(_renderer);
     this.pmrem.compileEquirectangularShader();
+
+    // Купол вместо scene.background: scene.background не выживает в G-buffer
+    // отложенного прохода (описано в шапке файла) и было чёрным в полдень.
+    // Радиус — небесная сфера из sky.ts: она же по-прежнему несёт светила,
+    // они стоят на CELESTIAL_RADIUS внутрь купола, и дальняя плоскость
+    // камеры в world3d держится больше SKY_RADIUS. Основание купола в y = 0
+    // и ходит за игроком через update(center) — как раньше ходила вся небо-
+    // группа. Карта навешивается в rebuild* — вместе с каждой новой.
+    this.scene.background = null;
+    this.dome = new THREE.Mesh(
+      new THREE.SphereGeometry(SKY_RADIUS, 64, 32),
+      new THREE.MeshBasicMaterial({ side: THREE.BackSide, fog: false, depthWrite: false }),
+    );
+    this.dome.name = 'eos-sky-dome';
+    this.scene.add(this.dome);
 
     // Kick off параллельную загрузку ВСЕХ вариантов. Как только каждый
     // приедет, он остаётся в кэше; применится при выборе нужного.
@@ -128,8 +160,11 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
     });
   }
 
-  update(state: SkyState, dt: number): void {
+  update(state: SkyState, dt: number, center?: { x: number; z: number }): void {
     if (this.disposed) return;
+    // Купол ходит за игроком (тот же center, что у sky.update); без center —
+    // стоит на месте (стенды без мира зовут update центром по умолчанию).
+    if (center) this.dome.position.set(center.x, 0, center.z);
     this.накоплено += dt;
 
     let изменилось = false;
@@ -199,7 +234,8 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
 
     this.texture = текстура;
     this.procEnv = цель;
-    this.scene.background = текстура;
+    this.dome.material.map = текстура;
+    this.dome.material.needsUpdate = true;
     this.scene.environment = цель.texture;
     this.last = состояние;
     this.накоплено = 0;
@@ -223,7 +259,8 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
 
     const старыйТекст = this.texture;
     this.texture = текстура;
-    this.scene.background = текстура;
+    this.dome.material.map = текстура;
+    this.dome.material.needsUpdate = true;
     this.last = состояние;
     if (старыйТекст && старыйТекст !== текстура) старыйТекст.dispose();
   }
@@ -265,8 +302,11 @@ export class SkyEnvironment implements SkyEnvironmentHandle {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    if (this.scene.background === this.texture) this.scene.background = null;
-    // Сбросим env-ссылку только если она указывает на мышечную proc или hdr.
+    // Купол убираем целиком: он был добавлен в сцену самим env.
+    this.scene.remove(this.dome);
+    this.dome.geometry.dispose();
+    this.dome.material.dispose();
+    // Сбросим env-ссылку: она указывает на процедурную proc или hdr-вариант.
     this.scene.environment = null;
     this.texture?.dispose();
     this.procEnv?.dispose();
