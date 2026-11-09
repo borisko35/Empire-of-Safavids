@@ -10,7 +10,7 @@ import {
   getSafavidAssetsByType,
   type SafavidAssetDef,
 } from '../../assets/safavid/SafavidAssets';
-import { getSafavidAssetInstance } from '../game3d/safavidLoader';
+import { getSafavidAssetInstance, getLoadedSafavidAssetIds, loadSafavidAssets } from '../game3d/safavidLoader';
 
 export type EquipmentSlot = 'robe' | 'turban' | 'coat' | 'mail' | 'helmet' | 'weapon';
 
@@ -196,6 +196,18 @@ export class SafavidEquipmentPanel {
 
   /** Применить выбранную экипировку к 3D-персонажу в сцене */
   async applyToScene(scene: any): Promise<void> {
+    // В первый раз панель открывается до всякого мира: если попытка загрузки
+    // в boot() прошла без токена и кончилась 401, здесь она повторяется —
+    // токен к этому моменту у сеанса уже есть. Иначе превью молча рисовало
+    // голого персонажа, хотя слоты выбраны.
+    if (!getLoadedSafavidAssetIds().length) {
+      try {
+        await loadSafavidAssets();
+      } catch (err) {
+        console.warn('[SafavidPanel] Asset bundle unreachable, preview without outfit:', err);
+      }
+    }
+
     // Удаляем старую экипировку если была
     const old = scene.getObjectByName('safavid-equipment');
     if (old) scene.remove(old);

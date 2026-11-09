@@ -20,7 +20,7 @@ import { loadRealPlayerRig, CLASS_WEAPON, ростПозы } from './realRig';
 import { loadRealMonsterRig, preloadModels } from './characterModels';
 import { обновитьСтражей } from './interiors';
 import { getSafavidAsset } from '../../assets/safavid/SafavidAssets';
-import { getSafavidAssetInstance, isSafavidAssetLoaded } from './safavidLoader';
+import { getSafavidAssetInstance, isSafavidAssetLoaded, getLoadedSafavidAssetIds, loadSafavidAssets } from './safavidLoader';
 import {
   groundHeight, buildTerrain, buildScatter, buildCity, buildCamp, buildWater, buildSettlements, buildRoads,
   buildRegionTowns, buildAqueduct, buildTradeTent, buildVillageForge, buildRuinGate,
@@ -144,6 +144,19 @@ export class SafavidEquipment3D {
   /** Применить полную экипировку к игроку */
   async apply(gear: LocalGear): Promise<void> {
     this.clear();
+
+    // Ассеты могли не доехать при старте страницы: пока игрок на экране
+    // входа, токена ещё нет, nginx отвечает 401, и та единственная попытка
+    // в boot() остаётся последней на весь сеанс. Кэш пуст — пробуем ещё раз
+    // прямо здесь: к моменту входа в мир токен уже лежит в localStorage.
+    // Отказ не роняем: без ассетов персонаж остаётся в базовом меше.
+    if (!getLoadedSafavidAssetIds().length) {
+      try {
+        await loadSafavidAssets();
+      } catch (err) {
+        console.warn('[Safavid3D] Asset bundle still unreachable:', err);
+      }
+    }
 
     const slots: [keyof LocalGear, string][] = [
       ['robeAssetId', 'robe'],

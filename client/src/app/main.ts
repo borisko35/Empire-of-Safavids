@@ -67,11 +67,19 @@ async function boot(): Promise<void> {
 
   // Загружаем исторические ассеты Сефевидов (одежда, доспехи, оружие из Blender)
   // Чтобы они были готовы к созданию персонажа и входу в мир.
+  // Без токена не запускаем вовсе: файлы моделей закрыты auth_request в nginx,
+  // и запрос гостя гарантированно кончается 401 — шум в консоли и нулевая
+  // польза. Подобравший ассеты вызов при входе в мир и на экране персонажей
+  // (SafavidEquipment3D.apply / applyToScene) всё равно повторяет загрузку.
   try {
-    await loadSafavidAssets();
-    console.log('[Safavid] Historical assets loaded');
+    if (localStorage.getItem('eos_token')) {
+      await loadSafavidAssets();
+      console.log('[Safavid] Historical assets loaded');
+    } else {
+      console.log('[Safavid] Historical assets deferred until login (no token yet)');
+    }
   } catch (err) {
-    console.warn('[Savfid] Failed to load historical assets:', err);
+    console.warn('[Safavid] Failed to load historical assets, will retry on world entry:', err);
   }
 
   // Индикатор состояния соединения
